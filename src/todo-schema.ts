@@ -7,7 +7,8 @@ export type TaskRow = {
   userId: string
 }
 export type UserRow = { id: string; name: string }
-export type TodoDoc = { tasks: TaskRow[]; users: UserRow[] }
+export type TaskDoc = { src: string[]; tasks: TaskRow[] }
+export type UserDoc = { users: UserRow[] }
 type TodoShape = { tasks: TaskRow; users: UserRow }
 
 const schema = defineSchema<TodoShape>({

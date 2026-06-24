@@ -6,18 +6,18 @@ import type { RelationSource } from './source.js'
 export function evaluate<T extends Record<string, Atom>, Rels extends string>(
   qb: QB<T, Rels>,
   source: RelationSource,
-): ReadonlyArray<T> {
-  return evalSpec(getSpec(qb), source) as ReadonlyArray<T>
+): Promise<ReadonlyArray<T>> {
+  return evalSpec(getSpec(qb), source) as Promise<ReadonlyArray<T>>
 }
 
-function evalSpec(
+async function evalSpec(
   spec: QuerySpec,
   source: RelationSource,
-): ReadonlyArray<Record<string, Atom>> {
-  let rows: Record<string, Atom>[] = Array.from(source.rows(spec.from))
+): Promise<ReadonlyArray<Record<string, Atom>>> {
+  let rows: Record<string, Atom>[] = Array.from(await source.rows(spec.from))
 
   for (const j of spec.joins) {
-    const rhs = evalSpec(j.spec, source)
+    const rhs = await evalSpec(j.spec, source)
     const joined: Record<string, Atom>[] = []
     for (const left of rows) {
       for (const right of rhs) {
