@@ -305,7 +305,9 @@ function SelectedDocContent({
   if (type === 'folder' && isFolderDoc(doc)) {
     return (
       <section className="detail-pane">
-        <h2>{doc.name}</h2>
+        <h2>
+          <b>title:</b> {doc.name}
+        </h2>
         <JsonDocEditor
           title="folder doc"
           handle={handle as DocHandle<FolderDoc>}
@@ -318,7 +320,9 @@ function SelectedDocContent({
   if (type === 'file' && isFileDoc(doc)) {
     return (
       <section className="detail-pane">
-        <h2>{doc.name}</h2>
+        <h2>
+          <b>title:</b> {doc.name}
+        </h2>
         <JsonDocEditor
           title="file doc"
           handle={handle as DocHandle<FileDoc>}
