@@ -106,8 +106,8 @@ export function ImmerTodoDemo() {
   return (
     <section className="demo-pane">
       <p>
-        This uses Immer state so the Automerge adapter cannot leak into the
-        relational core.
+        This todo uses Immer, so we can prove Automerge hasn't leaked into the
+        core.
       </p>
       <div className="todo-layout">
         <section className="todo-panel">
