@@ -1,5 +1,6 @@
 import { Repo, isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { AutomergeUrl, DocHandle } from '@automerge/automerge-repo'
+import mime from 'mime/lite'
 import type { JsonRecord } from '../json-doc-editor.js'
 
 type PatchworkTag<T extends string> = {
@@ -252,9 +253,5 @@ function extensionFromName(name: string): string {
 }
 
 function mimeTypeFromName(name: string): string {
-  if (name.endsWith('.json')) return 'application/json'
-  if (name.endsWith('.md')) return 'text/markdown'
-  if (name.endsWith('.svg')) return 'image/svg+xml'
-  if (name.endsWith('.ts')) return 'text/typescript'
-  return 'text/plain'
+  return mime.getType(name) ?? 'application/octet-stream'
 }
