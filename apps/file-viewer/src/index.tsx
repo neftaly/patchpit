@@ -5,7 +5,7 @@ import {
   patchJsonRecord,
 } from '@patchpit/json-doc-editor'
 import type { JsonRecord } from '@patchpit/json-doc-editor'
-import { useDocument } from '@patchpit/tarstate-automerge'
+import { useDocument } from '@patchpit/tarstate-automerge/document'
 import { useEffect, useState } from 'react'
 import {
   isAutomergeEntryUrl,

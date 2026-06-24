@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import { useDocument, useDocumentMap } from '@patchpit/tarstate-automerge'
+import { useDocument, useDocumentMap } from '@patchpit/tarstate-automerge/document'
 import {
   addEntry,
   deleteEntry,

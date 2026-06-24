@@ -2,8 +2,12 @@
   "name": "@patchpit/tarstate-automerge",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./document": "./src/document.ts",
+    "./query": "./src/query.ts",
+    "./source": "./src/source.ts"
   },
   "dependencies": {
     "@automerge/automerge-repo": "catalog:",

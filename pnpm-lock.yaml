@@ -224,15 +224,9 @@ importers:
       '@patchpit/json-doc-editor':
         specifier: workspace:*
         version: link:../../packages/json-doc-editor
-      '@patchpit/tarstate':
-        specifier: workspace:*
-        version: link:../../packages/tarstate
       '@patchpit/tarstate-automerge':
         specifier: workspace:*
         version: link:../../packages/tarstate-automerge
-      '@patchpit/tarstate-react':
-        specifier: workspace:*
-        version: link:../../packages/tarstate-react
       '@patchpit/window-manager':
         specifier: workspace:*
         version: link:../window-manager
