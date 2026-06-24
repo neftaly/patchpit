@@ -1,22 +1,23 @@
 import { defineSchema, all, where, join, select, eq } from './tarstate/index.js'
 
-export type TaskRow = {
+export type Task = {
   id: string
   title: string
   done: boolean
-  userId: string
+  assigneeId: string
 }
-export type UserRow = { id: string; name: string }
-export type TaskDoc = { userSources: string[]; tasks: TaskRow[] }
-export type UserDoc = { users: UserRow[] }
-type TodoShape = { tasks: TaskRow; users: UserRow }
+export type User = { id: string; name: string }
+export type TasksDoc = { userSources: string[]; tasks: Task[] }
+export type UsersDoc = { users: User[] }
+export const taskUserSourcesField = 'userSources' satisfies keyof TasksDoc
+type TodoShape = { tasks: Task; users: User }
 
 const schema = defineSchema<TodoShape>({
   tasks: {
     id: '',
     title: '',
     done: false,
-    userId: '',
+    assigneeId: '',
   },
   users: { id: '', name: '' },
 })
@@ -29,7 +30,7 @@ export const pendingByUser = select(
   join(
     where(schema.tasks, eq(schema.tasks.done, false)),
     schema.users,
-    eq(schema.tasks.userId, schema.users.id),
+    eq(schema.tasks.assigneeId, schema.users.id),
   ),
   'title',
   'name',

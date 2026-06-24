@@ -3,55 +3,56 @@ import type { DocHandle } from '@automerge/automerge-repo'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useAutomergeQueries, useDocument } from './tarstate/index.js'
-import { todoQueries } from './todo-schema.js'
-import type { TaskDoc, TaskRow, UserDoc, UserRow } from './todo-schema.js'
+import { taskUserSourcesField, todoQueries } from './todo-schema.js'
+import type { Task, TasksDoc, User, UsersDoc } from './todo-schema.js'
 
-const linkedUsersDoc: UserDoc = {
+const linkedUsersDoc: UsersDoc = {
   users: [
     { id: 'u1', name: 'alice' },
     { id: 'u2', name: 'bob' },
   ],
 }
 
-const unlinkedUsersDoc: UserDoc = {
+const unlinkedUsersDoc: UsersDoc = {
   users: [{ id: 'u3', name: 'cara' }],
 }
 
-function tasksDocSeed(linkedUsersDocUrl: string): TaskDoc {
+function tasksDocSeed(linkedUsersDocUrl: string): TasksDoc {
   return {
     userSources: [linkedUsersDocUrl],
     tasks: [
-      { id: '1', title: 'buy oat milk', done: false, userId: 'u1' },
-      { id: '2', title: 'read OOTTP', done: false, userId: 'u1' },
-      { id: '3', title: 'write tests', done: false, userId: 'u2' },
-      { id: '4', title: 'invite cara', done: false, userId: 'u3' },
+      { id: '1', title: 'buy oat milk', done: false, assigneeId: 'u1' },
+      { id: '2', title: 'read OOTTP', done: false, assigneeId: 'u1' },
+      { id: '3', title: 'write tests', done: false, assigneeId: 'u2' },
+      { id: '4', title: 'invite cara', done: false, assigneeId: 'u3' },
     ],
   }
 }
 
 const repo = new Repo()
-const linkedUsersHandle = repo.create<UserDoc>(linkedUsersDoc)
-const unlinkedUsersHandle = repo.create<UserDoc>(unlinkedUsersDoc)
-const tasksHandle = repo.create<TaskDoc>(tasksDocSeed(linkedUsersHandle.url))
+const linkedUsersHandle = repo.create<UsersDoc>(linkedUsersDoc)
+const unlinkedUsersHandle = repo.create<UsersDoc>(unlinkedUsersDoc)
+const tasksHandle = repo.create<TasksDoc>(tasksDocSeed(linkedUsersHandle.url))
 
 type JsonRecord = Record<string, unknown>
 type JsonArray = unknown[]
+type JsonDocValidator = (doc: JsonRecord) => string | null
 
 type TodoView = {
-  pending: ReadonlyArray<TaskRow>
-  pendingByUser: ReadonlyArray<Pick<TaskRow, 'title'> & Pick<UserRow, 'name'>>
-  users: ReadonlyArray<UserRow>
+  pending: ReadonlyArray<Task>
+  pendingByUser: ReadonlyArray<Pick<Task, 'title'> & Pick<User, 'name'>>
+  users: ReadonlyArray<User>
 }
 
-function useTodo(handle: DocHandle<TaskDoc>) {
+function useTodo(handle: DocHandle<TasksDoc>) {
   const taskDoc = useDocument(handle)
   const view = useAutomergeQueries(handle, todoQueries, {
     repo,
-    linkField: 'userSources',
+    linkField: taskUserSourcesField,
   })
   const data: TodoView = view.data
 
-  const addTask = (input: { title: string; userId: string }) => {
+  const addTask = (input: { title: string; assigneeId: string }) => {
     handle.change((d) => {
       d.tasks.push({ id: crypto.randomUUID(), done: false, ...input })
     })
@@ -86,9 +87,11 @@ function useTodo(handle: DocHandle<TaskDoc>) {
 function JsonDocEditor<T extends JsonRecord>({
   title,
   handle,
+  validate,
 }: {
   title: string
   handle: DocHandle<T>
+  validate?: JsonDocValidator
 }) {
   const doc = useDocument(handle)
   const docText = formatJson(doc)
@@ -105,7 +108,7 @@ function JsonDocEditor<T extends JsonRecord>({
   function editDraft(nextText: string) {
     setText(nextText)
     const parsed = parseJsonRecord(nextText)
-    setError(parsed.ok ? null : parsed.error)
+    setError(parsed.ok ? (validate?.(parsed.value) ?? null) : parsed.error)
   }
 
   function applyDraft() {
@@ -115,7 +118,13 @@ function JsonDocEditor<T extends JsonRecord>({
       return
     }
 
-    patchDoc(handle, parsed.value)
+    const validationError = validate?.(parsed.value)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    patchDoc(handle, parsed.value as T)
   }
 
   function resetDraft() {
@@ -228,6 +237,51 @@ function parseJsonRecord(
   return { ok: true, value }
 }
 
+function validateTasksDoc(doc: JsonRecord): string | null {
+  if (!isStringArray(doc.userSources)) {
+    return 'tasks doc needs userSources: string[].'
+  }
+  if (!Array.isArray(doc.tasks)) {
+    return 'tasks doc needs tasks: array.'
+  }
+  if (!doc.tasks.every(isTask)) {
+    return 'each task needs string id/title/assigneeId and boolean done.'
+  }
+  return null
+}
+
+function validateUsersDoc(doc: JsonRecord): string | null {
+  if (!Array.isArray(doc.users)) {
+    return 'users doc needs users: array.'
+  }
+  if (!doc.users.every(isUser)) {
+    return 'each user needs string id and name.'
+  }
+  return null
+}
+
+function isTask(value: unknown): value is Task {
+  return (
+    isJsonRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.done === 'boolean' &&
+    typeof value.assigneeId === 'string'
+  )
+}
+
+function isUser(value: unknown): value is User {
+  return (
+    isJsonRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.name === 'string'
+  )
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
 function isJsonRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -246,15 +300,15 @@ export default function App() {
     error,
   } = useTodo(tasksHandle)
   const [title, setTitle] = useState('')
-  const [userId, setUserId] = useState('')
+  const [assigneeId, setAssigneeId] = useState('')
   const [userSourceUrl, setUserSourceUrl] = useState<string>(
     unlinkedUsersHandle.url,
   )
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (!title.trim() || !userId) return
-    addTask({ title: title.trim(), userId })
+    if (!title.trim() || !assigneeId) return
+    addTask({ title: title.trim(), assigneeId })
     setTitle('')
   }
 
@@ -295,9 +349,9 @@ export default function App() {
           placeholder="new task"
         />{' '}
         <select
-          name="userId"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
+          name="assigneeId"
+          value={assigneeId}
+          onChange={(e) => setAssigneeId(e.target.value)}
         >
           <option value="">— user —</option>
           {users.map((u) => (
@@ -351,9 +405,21 @@ export default function App() {
       <hr />
 
       <h2>documents</h2>
-      <JsonDocEditor title="tasks doc" handle={tasksHandle} />
-      <JsonDocEditor title="linked users doc" handle={linkedUsersHandle} />
-      <JsonDocEditor title="unlinked users doc" handle={unlinkedUsersHandle} />
+      <JsonDocEditor
+        title="tasks doc"
+        handle={tasksHandle}
+        validate={validateTasksDoc}
+      />
+      <JsonDocEditor
+        title="linked users doc"
+        handle={linkedUsersHandle}
+        validate={validateUsersDoc}
+      />
+      <JsonDocEditor
+        title="unlinked users doc"
+        handle={unlinkedUsersHandle}
+        validate={validateUsersDoc}
+      />
     </main>
   )
 }
