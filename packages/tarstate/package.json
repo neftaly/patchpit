@@ -5,6 +5,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "fuzz:evaluate": "node scripts/evaluator-fuzz.ts"
+  },
   "devDependencies": {
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
