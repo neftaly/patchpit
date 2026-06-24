@@ -1,0 +1,192 @@
+:root {
+  color-scheme: light;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  color: #111;
+  background: #f7f7f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 1px solid #111;
+  border-radius: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+button[aria-pressed='true'],
+li[aria-selected='true'] > .tree-item {
+  color: #fff;
+  background: #111;
+}
+
+button:disabled {
+  color: #777;
+  border-color: #aaa;
+  cursor: default;
+}
+
+h2,
+h3,
+p {
+  margin: 0 0 0.75rem;
+}
+
+h2,
+h3 {
+  font-size: 1rem;
+}
+
+pre,
+textarea {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #111;
+  border-radius: 0;
+}
+
+pre {
+  padding: 0.75rem;
+}
+
+textarea {
+  padding: 0.5rem;
+  resize: vertical;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.workspace,
+.tree-pane,
+.detail-pane {
+  border: 1px solid #111;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
+  min-height: 70vh;
+  background: #fff;
+}
+
+.tree-pane,
+.detail-pane {
+  padding: 0.75rem;
+  min-width: 0;
+  border-width: 0;
+}
+
+.tree-pane {
+  border-right: 1px solid #111;
+}
+
+.tree,
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.tree {
+  padding-left: 0;
+}
+
+.tree li {
+  margin: 0.125rem 0;
+}
+
+.tree [role='treeitem'] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 0.5rem;
+}
+
+.tree [role='group'] {
+  grid-column: 1 / -1;
+}
+
+.tree-actions {
+  justify-self: end;
+}
+
+.tree-action {
+  border: 0;
+  padding: 0 0.25rem;
+  color: #555;
+  background: transparent;
+}
+
+.tree-action:hover,
+.tree-action:focus {
+  color: #111;
+  text-decoration: underline;
+}
+
+.tree-item {
+  border: 0;
+  background: transparent;
+  padding: 0 0.25rem;
+}
+
+.tree-item {
+  display: inline-flex;
+  gap: 0.5ch;
+  align-items: baseline;
+}
+
+.tree-folder {
+  font-weight: 700;
+}
+
+.tree-file {
+  color: #333;
+}
+
+.tree-file[aria-pressed='true'] {
+  color: #fff;
+}
+
+.asset-preview {
+  padding: 0.75rem;
+  border: 1px solid #111;
+  background: #fff;
+}
+
+.asset-preview img {
+  display: block;
+  width: min(100%, 20rem);
+}
+
+.file-preview {
+  min-height: 10rem;
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .tree-pane {
+    border-right: 0;
+    border-bottom: 1px solid #111;
+  }
+}

@@ -75,7 +75,17 @@ export async function collectLinkedObjects(
 export function linkValues(value: unknown): string[] {
   if (typeof value === 'string') return [value]
   if (Array.isArray(value)) {
-    return value.filter((src): src is string => typeof src === 'string')
+    return value.flatMap(linkValues)
   }
+  if (isLinkRecord(value)) return [value.url]
   return []
+}
+
+function isLinkRecord(value: unknown): value is { url: string } {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'url' in value &&
+    typeof value.url === 'string'
+  )
 }
