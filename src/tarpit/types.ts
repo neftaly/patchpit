@@ -34,11 +34,6 @@ export type QB<T extends Record<string, Atom>, Rels extends string> = {
   readonly [_qb]: Rels
 } & { readonly [K in keyof T]: FieldRef<T[K] & Atom, Rels> }
 
-export type Constraint =
-  | { readonly kind: 'primaryKey'; readonly ref: FieldRef<Atom, string> }
-  | { readonly kind: 'unique'; readonly ref: FieldRef<Atom, string> }
-  | { readonly kind: 'foreignKey'; readonly pred: Predicate<string> }
-
 export type SchemaShape = Record<string, Record<string, Atom>>
 
 export type Schema<S extends SchemaShape> = {
@@ -50,16 +45,13 @@ export type Observer<T extends Record<string, Atom>> = (
 ) => void
 
 export type App<
-  S extends SchemaShape,
   D extends Record<string, QB<any, any>>,
   F extends Record<string, (doc: any, input: any) => any> = Record<
     string,
     never
   >,
 > = {
-  readonly schema: Schema<S>
   readonly derived: D
-  readonly constraints: readonly Constraint[]
   readonly feeders: F
   readonly observers: {
     readonly [K in keyof D]?: (rows: ReadonlyArray<any>) => void

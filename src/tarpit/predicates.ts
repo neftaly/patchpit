@@ -1,11 +1,4 @@
-import type {
-  Atom,
-  BinaryOp,
-  FieldRef,
-  Predicate,
-  Constraint,
-  UnionRels,
-} from './types.js'
+import type { Atom, BinaryOp, FieldRef, Predicate, UnionRels } from './types.js'
 
 function ref(f: FieldRef<Atom, string>): FieldRef<Atom, string> {
   return { _rel: f._rel, _field: f._field }
@@ -102,16 +95,4 @@ export function or<Ps extends [Predicate<string>, ...Predicate<string>[]]>(
 
 export function not<R extends string>(p: Predicate<R>): Predicate<R> {
   return { _rels: p._rels, op: 'not', operand: p }
-}
-
-export function primaryKey(ref: FieldRef<Atom, string>): Constraint {
-  return { kind: 'primaryKey', ref }
-}
-
-export function unique(ref: FieldRef<Atom, string>): Constraint {
-  return { kind: 'unique', ref }
-}
-
-export function foreignKey(pred: Predicate<string>): Constraint {
-  return { kind: 'foreignKey', pred }
 }

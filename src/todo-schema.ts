@@ -5,9 +5,6 @@ import {
   join,
   select,
   eq,
-  primaryKey,
-  unique,
-  foreignKey,
 } from './tarpit/index.js'
 import { produce } from 'immer'
 
@@ -49,17 +46,8 @@ export const pendingByUser = select(
   'name',
 )
 
-const constraints = [
-  primaryKey(schema.tasks.id),
-  primaryKey(schema.users.id),
-  unique(schema.users.name),
-  foreignKey(eq(schema.tasks.userId, schema.users.id)),
-] as const
-
 export const app = defineApp({
-  schema,
   derived: { pending, tasksByUser, pendingByUser },
-  constraints,
 
   feeders: {
     addTask: (doc: TodoDoc, input: { title: string; userId: string }) =>

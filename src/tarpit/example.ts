@@ -11,9 +11,6 @@ import {
   lt,
   and,
   not,
-  primaryKey,
-  unique,
-  foreignKey,
 } from './index.js'
 
 type TaskRow = { id: string; title: string; done: boolean; userId: string }
@@ -61,15 +58,7 @@ const withUser = <T extends Record<string, string | boolean | number | null>>(
 const allByUser = withUser(schema.tasks)
 const urgentByUser = withUser(where(schema.tasks, lt(schema.tasks.title, 'z')))
 
-const constraints = [
-  primaryKey(schema.tasks.id),
-  primaryKey(schema.users.id),
-  unique(schema.users.name),
-  foreignKey(eq(schema.tasks.userId, schema.users.id)),
-] as const
-
 const app = defineApp({
-  schema,
   derived: {
     pending,
     tasksByUser,
@@ -78,7 +67,6 @@ const app = defineApp({
     allByUser,
     urgentByUser,
   },
-  constraints,
 
   feeders: {
     addTask: (doc: ExampleDoc, input: { title: string; userId: string }) => ({

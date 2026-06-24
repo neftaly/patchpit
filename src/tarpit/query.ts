@@ -3,10 +3,8 @@ import type {
   FieldRef,
   QB,
   Predicate,
-  SchemaShape,
   Schema,
   App,
-  Constraint,
   Observer,
 } from './types.js'
 import { makeQB, getSpec, fieldsOf } from './internal.js'
@@ -90,25 +88,20 @@ export function select<
 }
 
 export function defineApp<
-  S extends SchemaShape,
   D extends Record<string, QB<any, any>>,
   F extends Record<string, (doc: any, input: any) => any> = Record<
     string,
     never
   >,
 >(spec: {
-  schema: Schema<S>
   derived: D
-  constraints: readonly Constraint[]
   feeders?: F
   observers?: {
     [K in keyof D]?: Observer<D[K] extends QB<infer T, any> ? T : never>
   }
-}): App<S, D, F> {
+}): App<D, F> {
   return {
-    schema: spec.schema,
     derived: spec.derived,
-    constraints: spec.constraints,
     feeders: (spec.feeders ?? {}) as F,
     observers: spec.observers ?? {},
   }
