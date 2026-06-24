@@ -1,26 +1,12 @@
 import type { Atom, BinaryOp, FieldRef, Predicate, UnionRels } from './types.js'
 
-function ref(f: FieldRef<Atom, string>): FieldRef<Atom, string> {
-  return { _rel: f._rel, _field: f._field }
-}
-
-function rhs(v: FieldRef<Atom, string> | Atom): FieldRef<Atom, string> | Atom {
-  return isFieldRef(v) ? ref(v) : v
-}
-
-function isFieldRef(
-  v: FieldRef<Atom, string> | Atom,
-): v is FieldRef<Atom, string> {
-  return v !== null && typeof v === 'object' && '_rel' in v && '_field' in v
-}
-
 function binary<Rels extends string>(
   op: BinaryOp,
   lhs: FieldRef<Atom, string>,
   r: FieldRef<Atom, string> | Atom,
   rels: Rels,
 ): Predicate<Rels> {
-  return { _rels: rels, op, lhs: ref(lhs), rhs: rhs(r) }
+  return { _rels: rels, op, lhs, rhs: r }
 }
 
 export function eq<T extends Atom, R1 extends string, R2 extends string>(

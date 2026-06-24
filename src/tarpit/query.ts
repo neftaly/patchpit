@@ -1,13 +1,6 @@
 import type { Atom, FieldRef, QB, Predicate, Schema } from './types.js'
 import { makeQB, getSpec, fieldsOf } from './internal.js'
 
-type ReservedField = '_rel' | '_field' | '_rels'
-
-type AssertNoReserved<T extends Record<string, Atom>> = keyof T &
-  ReservedField extends never
-  ? T
-  : never
-
 type SafeSchemaShape = {
   [K: string]: { [F: string]: Atom } & {
     _rel?: never
@@ -16,9 +9,7 @@ type SafeSchemaShape = {
   }
 }
 
-export function defineSchema<S extends SafeSchemaShape>(shape: {
-  readonly [K in keyof S]: AssertNoReserved<S[K]>
-}): Schema<S> {
+export function defineSchema<S extends SafeSchemaShape>(shape: S): Schema<S> {
   const schema: Partial<Schema<S>> = {}
   for (const relName in shape) {
     const fieldRefs: Record<string, FieldRef<Atom, string>> = {}
