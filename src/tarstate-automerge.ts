@@ -1,30 +1,16 @@
 import { isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { AnyDocumentId, DocHandle, Repo } from '@automerge/automerge-repo'
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { evaluate } from './evaluate.js'
-import { fromObjects, linkValues } from './source.js'
-import type { ObjectDoc, RelationSource } from './source.js'
-import type { Atom, QB } from './types.js'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useQueries } from './tarstate-react.js'
+import type {
+  QueryMap,
+  QueryResults,
+  QueryState,
+} from './tarstate-react.js'
+import { fromObjects, linkValues } from './tarstate/source.js'
+import type { ObjectDoc, RelationSource } from './tarstate/source.js'
 
-type QueryMap = Record<string, QB<Record<string, Atom>, string>>
 type StringDocumentId = Extract<AnyDocumentId, string>
-const queryIds = new WeakMap<object, number>()
-let nextQueryId = 1
-
-type QueryRows<Q> = Q extends QB<infer Row, string> ? ReadonlyArray<Row> : never
-
-type QueryResults<Queries extends QueryMap> = {
-  readonly [Name in keyof Queries]: QueryRows<Queries[Name]>
-}
-
-export type QueryStatus = 'loading' | 'success' | 'error'
-
-export type QueryState<Data> = {
-  readonly data: Data
-  readonly status: QueryStatus
-  readonly error: unknown
-  readonly isLoading: boolean
-}
 
 export type AutomergeSourceOptions = {
   readonly repo: Repo
@@ -132,56 +118,6 @@ export function useAutomergeQueries<
   return query
 }
 
-export function useQueries<Queries extends QueryMap>(
-  source: RelationSource,
-  queries: Queries,
-): QueryState<QueryResults<Queries>> {
-  const signature = querySignature(queries)
-  const empty = useMemo(() => emptyResults(queries), [signature])
-  const [state, setState] = useState<QueryState<QueryResults<Queries>>>(() => ({
-    data: empty,
-    status: 'loading',
-    error: null,
-    isLoading: true,
-  }))
-
-  useEffect(() => {
-    let alive = true
-    setState((current) => ({ ...current, status: 'loading', isLoading: true }))
-
-    Promise.all(
-      Object.entries(queries).map(async ([name, query]) => {
-        return [name, await evaluate(query, source)] as const
-      }),
-    ).then(
-      (entries) => {
-        if (!alive) return
-        setState({
-          data: Object.fromEntries(entries) as QueryResults<Queries>,
-          status: 'success',
-          error: null,
-          isLoading: false,
-        })
-      },
-      (error) => {
-        if (!alive) return
-        setState({
-          data: empty,
-          status: 'error',
-          error,
-          isLoading: false,
-        })
-      },
-    )
-
-    return () => {
-      alive = false
-    }
-  }, [empty, signature, source])
-
-  return state
-}
-
 function readySource(
   docs: ReadonlyArray<ObjectDoc>,
 ): QueryState<RelationSource> {
@@ -191,14 +127,6 @@ function readySource(
     error: null,
     isLoading: false,
   }
-}
-
-function emptyResults<Queries extends QueryMap>(
-  queries: Queries,
-): QueryResults<Queries> {
-  return Object.fromEntries(
-    Object.keys(queries).map((name) => [name, []]),
-  ) as unknown as QueryResults<Queries>
 }
 
 async function collectAutomergeSnapshot(
@@ -232,20 +160,4 @@ async function collectAutomergeSnapshot(
   }
 
   return { docs, handles }
-}
-
-function querySignature(queries: QueryMap): string {
-  return Object.entries(queries)
-    .map(([name, query]) => `${name}:${queryId(query)}`)
-    .join('|')
-}
-
-function queryId(query: object): number {
-  const existing = queryIds.get(query)
-  if (existing) return existing
-
-  const id = nextQueryId
-  nextQueryId += 1
-  queryIds.set(query, id)
-  return id
 }

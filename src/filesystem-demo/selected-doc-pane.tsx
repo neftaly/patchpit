@@ -1,6 +1,6 @@
 import type { DocHandle, Repo } from '@automerge/automerge-repo'
 import { JsonDocEditor } from '../json-doc-editor.js'
-import { useDocument } from '../tarstate/index.js'
+import { useDocument } from '../tarstate-automerge.js'
 import { useResolvedHandle } from './hooks.js'
 import {
   imageDataUrl,

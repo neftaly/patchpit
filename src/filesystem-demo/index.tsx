@@ -88,26 +88,24 @@ export function FilesystemDemo() {
   }
 
   return (
-    <main className="app" onClick={() => setContextMenu(null)}>
-      <div className="workspace">
-        <nav className="tree-pane" aria-label="project explorer">
-          <ul className="tree" role="tree" aria-label="project files">
-            <FolderTreeItem
-              repo={repo}
-              handle={rootHandle}
-              entryName={rootEntryName}
-              parentUrl={null}
-              selectedUrl={selected.url}
-              closedUrls={closedUrls}
-              onToggle={toggleFolder}
-              onSelect={select}
-              onContextMenu={openContextMenu}
-            />
-          </ul>
-        </nav>
+    <div className="workspace" onClick={() => setContextMenu(null)}>
+      <nav className="tree-pane" aria-label="project explorer">
+        <ul className="tree" role="tree" aria-label="project files">
+          <FolderTreeItem
+            repo={repo}
+            handle={rootHandle}
+            entryName={rootEntryName}
+            parentUrl={null}
+            selectedUrl={selected.url}
+            closedUrls={closedUrls}
+            onToggle={toggleFolder}
+            onSelect={select}
+            onContextMenu={openContextMenu}
+          />
+        </ul>
+      </nav>
 
-        <SelectedDocPane repo={repo} selected={selected} />
-      </div>
+      <SelectedDocPane repo={repo} selected={selected} />
       {contextMenu && (
         <TreeContextMenu
           state={contextMenu}
@@ -116,7 +114,7 @@ export function FilesystemDemo() {
           onDelete={promptAndDelete}
         />
       )}
-    </main>
+    </div>
   )
 }
 

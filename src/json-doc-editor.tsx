@@ -1,6 +1,6 @@
 import type { DocHandle } from '@automerge/automerge-repo'
 import { useEffect, useState } from 'react'
-import { useDocument } from './tarstate/index.js'
+import { useDocument } from './tarstate-automerge.js'
 
 export type JsonRecord = Record<string, unknown>
 type JsonArray = unknown[]

@@ -1,6 +1,6 @@
 import type { AutomergeUrl, DocHandle, Repo } from '@automerge/automerge-repo'
 import type { MouseEvent } from 'react'
-import { useDocument } from '../tarstate/index.js'
+import { useDocument } from '../tarstate-automerge.js'
 import { useResolvedHandle } from './hooks.js'
 import type { FolderDoc, FolderEntry, SelectedDoc } from './model.js'
 
