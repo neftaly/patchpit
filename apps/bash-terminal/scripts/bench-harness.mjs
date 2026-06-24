@@ -262,11 +262,11 @@ export async function runTerminalBenchInPage({
   }
 
   function setInputValue(input, value, inputType = 'insertText') {
-    const setter = Object.getOwnPropertyDescriptor(
+    const valueDescriptor = Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,
       'value',
-    ).set
-    setter.call(input, value)
+    )
+    valueDescriptor.set.call(input, value)
     input.dispatchEvent(
       new InputEvent('input', {
         bubbles: true,
