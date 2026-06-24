@@ -1,4 +1,4 @@
-import { defineSchema, where, join, select, eq } from './tarstate/index.js'
+import { defineSchema, all, where, join, select, eq } from './tarstate/index.js'
 
 export type TaskRow = {
   id: string
@@ -23,6 +23,8 @@ const schema = defineSchema<TodoShape>({
 
 export const pending = where(schema.tasks, eq(schema.tasks.done, false))
 
+export const users = all(schema.users)
+
 export const pendingByUser = select(
   join(
     where(schema.tasks, eq(schema.tasks.done, false)),
@@ -32,3 +34,9 @@ export const pendingByUser = select(
   'title',
   'name',
 )
+
+export const todoQueries = {
+  pending,
+  pendingByUser,
+  users,
+}

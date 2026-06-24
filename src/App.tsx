@@ -1,10 +1,9 @@
 import { Repo, isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { DocHandle } from '@automerge/automerge-repo'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { evaluate, fromLinkedObjects } from './tarstate/index.js'
-import type { ObjectDoc, Row } from './tarstate/index.js'
-import { pending, pendingByUser } from './todo-schema.js'
+import { useAutomergeQueries, useDocument } from './tarstate/index.js'
+import { todoQueries } from './todo-schema.js'
 import type { TaskDoc, TaskRow, UserDoc, UserRow } from './todo-schema.js'
 
 const primaryUsers: UserDoc = {
@@ -41,60 +40,10 @@ type TodoView = {
   users: ReadonlyArray<UserRow>
 }
 
-const emptyView: TodoView = {
-  pending: [],
-  pendingByUser: [],
-  users: [],
-}
-
-function useHandleDoc<T>(handle: DocHandle<T>): T {
-  return useSyncExternalStore(
-    (notify) => {
-      handle.on('change', notify)
-      handle.on('delete', notify)
-      return () => {
-        handle.off('change', notify)
-        handle.off('delete', notify)
-      }
-    },
-    () => handle.doc() as T,
-    () => handle.doc() as T,
-  )
-}
-
 function useTodo(handle: DocHandle<TaskDoc>) {
-  const taskDoc = useHandleDoc(handle)
-  const [view, setView] = useState<TodoView>(emptyView)
-
-  useEffect(() => {
-    let alive = true
-    const source = fromLinkedObjects(taskDoc, async (src) => {
-      if (!isValidAutomergeUrl(src)) return undefined
-
-      const linked = await repo.find<ObjectDoc>(src)
-      return linked.doc()
-    })
-
-    async function runQuery() {
-      const [nextPending, nextPendingByUser, userRows] = await Promise.all([
-        evaluate(pending, source),
-        evaluate(pendingByUser, source),
-        source.rows('users'),
-      ])
-
-      if (!alive) return
-      setView({
-        pending: nextPending,
-        pendingByUser: nextPendingByUser,
-        users: Array.from(userRows).filter(isUserRow),
-      })
-    }
-
-    void runQuery()
-    return () => {
-      alive = false
-    }
-  }, [taskDoc])
+  const taskDoc = useDocument(handle)
+  const view = useAutomergeQueries(handle, todoQueries, { repo })
+  const data: TodoView = view.data
 
   const addTask = (input: { title: string; userId: string }) => {
     handle.change((d) => {
@@ -116,17 +65,16 @@ function useTodo(handle: DocHandle<TaskDoc>) {
   }
 
   return {
-    ...view,
+    ...data,
+    status: view.status,
+    error: view.error,
+    isLoading: view.isLoading,
     taskDocUrl: handle.url,
     linkedDocUrls: taskDoc.src,
     addTask,
     complete,
     addSource,
   }
-}
-
-function isUserRow(row: Row): row is UserRow {
-  return typeof row.id === 'string' && typeof row.name === 'string'
 }
 
 export default function App() {
@@ -139,6 +87,8 @@ export default function App() {
     addTask,
     complete,
     addSource,
+    status,
+    error,
   } = useTodo(tasksHandle)
   const [title, setTitle] = useState('')
   const [userId, setUserId] = useState('')
@@ -203,6 +153,7 @@ export default function App() {
       </form>
 
       <h2>pending by user</h2>
+      {status === 'error' && <p role="alert">{String(error)}</p>}
       <table>
         <thead>
           <tr>

@@ -37,6 +37,12 @@ export function where<T extends Record<string, Atom>, Rels extends string>(
   })
 }
 
+export function all<T extends Record<string, Atom>, Rels extends string>(
+  qb: QB<T, Rels>,
+): QB<T, Rels> {
+  return makeQB(fieldsOf(qb), getSpec(qb))
+}
+
 export function join<
   T extends Record<string, Atom>,
   Rels extends string,

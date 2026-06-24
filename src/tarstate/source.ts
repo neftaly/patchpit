@@ -9,15 +9,16 @@ export interface RelationSource {
 
 export type ObjectDoc = Readonly<Record<string, unknown>>
 
-export type LinkResolver = (
-  src: string,
-) => MaybePromise<ObjectDoc | undefined>
+export type LinkResolver = (src: string) => MaybePromise<ObjectDoc | undefined>
 
 export function fromObject(doc: ObjectDoc): RelationSource {
+  return fromObjects([doc])
+}
+
+export function fromObjects(docs: ReadonlyArray<ObjectDoc>): RelationSource {
   return {
     rows(relation) {
-      const value = doc[relation]
-      return Array.isArray(value) ? (value as ReadonlyArray<Row>) : []
+      return rowsFromDocs(docs, relation)
     },
   }
 }
@@ -30,7 +31,7 @@ export function fromLinkedObjects(
   return {
     async rows(relation) {
       return rowsFromDocs(
-        await collectLinkedDocs(root, resolve, linkField),
+        await collectLinkedObjects(root, resolve, linkField),
         relation,
       )
     },
@@ -43,11 +44,11 @@ function* rowsFromDocs(
 ): Iterable<Row> {
   for (const doc of docs) {
     const rows = doc[relation]
-    if (Array.isArray(rows)) yield* (rows as ReadonlyArray<Row>)
+    if (Array.isArray(rows)) yield* rows as ReadonlyArray<Row>
   }
 }
 
-async function collectLinkedDocs(
+export async function collectLinkedObjects(
   root: ObjectDoc,
   resolve: LinkResolver,
   linkField: string,
@@ -56,8 +57,8 @@ async function collectLinkedDocs(
   const pending = [root]
   const docs: ObjectDoc[] = []
 
-  while (pending.length > 0) {
-    const doc = pending.shift()
+  for (let index = 0; index < pending.length; index += 1) {
+    const doc = pending[index]
     if (!doc || seen.has(doc)) continue
     seen.add(doc)
     docs.push(doc)
