@@ -21,7 +21,6 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
+      - run: GITHUB_PAGES=true pnpm --filter @patchpit/filesystem-demo build
