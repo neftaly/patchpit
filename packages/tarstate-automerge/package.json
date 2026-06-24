@@ -1,0 +1,21 @@
+{
+  "name": "@patchpit/tarstate-automerge",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@automerge/automerge-repo": "catalog:",
+    "@patchpit/tarstate": "workspace:*",
+    "@patchpit/tarstate-links": "workspace:*",
+    "@patchpit/tarstate-react": "workspace:*",
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

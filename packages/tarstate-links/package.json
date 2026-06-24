@@ -1,0 +1,16 @@
+{
+  "name": "@patchpit/tarstate-links",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@patchpit/tarstate": "workspace:*"
+  },
+  "devDependencies": {
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

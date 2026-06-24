@@ -1,0 +1,26 @@
+{
+  "name": "@patchpit/todo-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && vite build",
+    "dev": "vite --host 127.0.0.1 --port 5320",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@patchpit/tarstate": "workspace:*",
+    "@patchpit/tarstate-react": "workspace:*",
+    "immer": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

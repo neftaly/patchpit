@@ -18,3 +18,9 @@ Keep separating incidental coupling around the touched code until the next chang
 Prefer clearer ownership, simpler flow, and explicit policy boundaries over speculative machinery. Internal API breaks are fine when they simplify the shape; keep aliases only when asked.
 
 In plans, include decomplection after each meaningful step and before handoff.
+
+## Monorepo
+
+Keep the root package as orchestration only. Apps live in `apps/*`, reusable code lives in `packages/*`, and shared compiler defaults live in `tsconfig.base.json`.
+
+When a change spans unrelated app/package boundaries, split the work into independent claims or sub-agents with disjoint write sets.

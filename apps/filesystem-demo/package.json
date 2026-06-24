@@ -1,0 +1,33 @@
+{
+  "name": "@patchpit/filesystem-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && vite build",
+    "dev": "vite --host 127.0.0.1 --port 5310",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@automerge/automerge-repo": "catalog:",
+    "@patchpit/json-doc-editor": "workspace:*",
+    "@patchpit/tarstate": "workspace:*",
+    "@patchpit/tarstate-automerge": "workspace:*",
+    "@patchpit/tarstate-react": "workspace:*",
+    "mime": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tm-themes": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-top-level-await": "catalog:",
+    "vite-plugin-wasm": "catalog:"
+  }
+}

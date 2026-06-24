@@ -1,44 +1,24 @@
 {
-  "name": "filepit",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "patchpit",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "build": "pnpm --filter './packages/*' exec tsc && pnpm --filter './apps/*' build",
     "claims:check": "node scripts/claims.mjs check",
     "claims:take": "node scripts/claims.mjs take",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "dev": "pnpm --filter @patchpit/filesystem-demo dev",
+    "dev:todo": "pnpm --filter @patchpit/todo-demo dev",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "typecheck": "tsc --noEmit"
+    "lint": "pnpm --filter './apps/*' --filter './packages/*' exec oxlint --type-aware",
+    "lint:fix": "pnpm --filter './apps/*' --filter './packages/*' exec oxlint --type-aware --fix",
+    "preview": "pnpm --filter @patchpit/filesystem-demo preview",
+    "test": "pnpm build && node scripts/smoke.mjs",
+    "typecheck": "pnpm --filter './apps/*' --filter './packages/*' exec tsc"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.2.0",
-    "eslint": "^10.5.0",
-    "globals": "^17.7.0",
-    "prettier": "^3.8.4",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.0",
-    "vite": "^7.3.5",
-    "vite-plugin-top-level-await": "1.6.0",
-    "vite-plugin-wasm": "3.6.0"
-  },
-  "dependencies": {
-    "@automerge/automerge-repo": "^2.5.6",
-    "immer": "^11.0.1",
-    "mime": "^4.1.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "tm-themes": "^1.12.2"
+    "playwright": "catalog:",
+    "prettier": "catalog:"
   }
 }
