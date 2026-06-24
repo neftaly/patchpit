@@ -40,16 +40,5 @@ export type Schema<S extends SchemaShape> = {
   readonly [K in keyof S]: QB<S[K], K & string>
 }
 
-export type App<
-  D extends Record<string, QB<any, any>>,
-  F extends Record<string, (doc: any, input: any) => any> = Record<
-    string,
-    never
-  >,
-> = {
-  readonly derived: D
-  readonly feeders: F
-}
-
 export type UnionRels<Ps extends readonly Predicate<string>[]> =
   Ps[number] extends Predicate<infer R> ? R : never

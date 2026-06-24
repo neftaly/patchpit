@@ -1,11 +1,4 @@
-import {
-  defineSchema,
-  defineApp,
-  where,
-  join,
-  select,
-  eq,
-} from './tarpit/index.js'
+import { defineSchema, where, join, select, eq } from './tarpit/index.js'
 import { produce } from 'immer'
 
 export type TaskRow = {
@@ -46,24 +39,20 @@ export const pendingByUser = select(
   'name',
 )
 
-export const app = defineApp({
-  derived: { pending, tasksByUser, pendingByUser },
+export const feeders = {
+  addTask: (doc: TodoDoc, input: { title: string; userId: string }) =>
+    produce(doc, (d) => {
+      d.tasks.push({ id: crypto.randomUUID(), done: false, ...input })
+    }),
 
-  feeders: {
-    addTask: (doc: TodoDoc, input: { title: string; userId: string }) =>
-      produce(doc, (d) => {
-        d.tasks.push({ id: crypto.randomUUID(), done: false, ...input })
-      }),
+  complete: (doc: TodoDoc, id: string) =>
+    produce(doc, (d) => {
+      const task = d.tasks.find((t) => t.id === id)
+      if (task) task.done = true
+    }),
 
-    complete: (doc: TodoDoc, id: string) =>
-      produce(doc, (d) => {
-        const task = d.tasks.find((t) => t.id === id)
-        if (task) task.done = true
-      }),
-
-    addUser: (doc: TodoDoc, name: string) =>
-      produce(doc, (d) => {
-        d.users.push({ id: crypto.randomUUID(), name })
-      }),
-  },
-})
+  addUser: (doc: TodoDoc, name: string) =>
+    produce(doc, (d) => {
+      d.users.push({ id: crypto.randomUUID(), name })
+    }),
+}

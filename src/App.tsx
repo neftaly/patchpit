@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { evaluate } from './tarpit/index.js'
-import { app, pending, pendingByUser } from './todo-schema.js'
+import { feeders, pending, pendingByUser } from './todo-schema.js'
 import type { TodoDoc } from './todo-schema.js'
 
 const seed: TodoDoc = {
@@ -18,12 +18,12 @@ const seed: TodoDoc = {
 function useTodo() {
   const [doc, setDoc] = useState<TodoDoc>(seed)
 
-  function dispatch<K extends keyof typeof app.feeders>(
+  function dispatch<K extends keyof typeof feeders>(
     feeder: K,
-    input: Parameters<(typeof app.feeders)[K]>[1],
+    input: Parameters<(typeof feeders)[K]>[1],
   ) {
     setDoc((prev) =>
-      (app.feeders[feeder] as (d: TodoDoc, i: typeof input) => TodoDoc)(
+      (feeders[feeder] as (d: TodoDoc, i: typeof input) => TodoDoc)(
         prev,
         input,
       ),

@@ -1,4 +1,4 @@
-import type { Atom, FieldRef, QB, Predicate, Schema, App } from './types.js'
+import type { Atom, FieldRef, QB, Predicate, Schema } from './types.js'
 import { makeQB, getSpec, fieldsOf } from './internal.js'
 
 type ReservedField = '_rel' | '_field' | '_rels'
@@ -77,17 +77,4 @@ export function select<
     picked[key as string] = qb[key]
   }
   return makeQB(picked, { ...spec, projection: keys as string[] })
-}
-
-export function defineApp<
-  D extends Record<string, QB<any, any>>,
-  F extends Record<string, (doc: any, input: any) => any> = Record<
-    string,
-    never
-  >,
->(spec: { derived: D; feeders?: F }): App<D, F> {
-  return {
-    derived: spec.derived,
-    feeders: (spec.feeders ?? {}) as F,
-  }
 }
