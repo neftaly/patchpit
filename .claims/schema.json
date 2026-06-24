@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Repo Claim",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "protocol",
+    "owner",
+    "client",
+    "task",
+    "mode",
+    "scope",
+    "created_at",
+    "updated_at",
+    "expires_at"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "repo-claims/v1"
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "client": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "enum": ["read", "edit"]
+    },
+    "scope": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
