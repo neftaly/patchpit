@@ -1,4 +1,4 @@
-import type { Atom, QB, Predicate, SchemaShape, Schema, App, Constraint } from './types.js'
+import type { Atom, QB, Predicate, SchemaShape, Schema, App, Constraint, Observer } from './types.js'
 import { _spec, makeQB, getSpec, fieldsOf } from './internal.js'
 
 // ---------------------------------------------------------------------------
@@ -84,10 +84,21 @@ export function pipe(a: any, ...fns: ((x: any) => any)[]): any {
 export function defineApp<
   S extends SchemaShape,
   D extends Record<string, QB<any, any>>,
+  F extends Record<string, (doc: any, input: any) => any> = Record<string, never>,
 >(spec: {
   schema:      Schema<S>
   derived:     D
   constraints: readonly Constraint[]
-}): App<S, D> {
-  return spec
+  feeders?:    F
+  // Observers are keyed by derived-query name; each receives the correctly-typed rows.
+  // The inline conditional infers the row type from the corresponding QB.
+  observers?:  { [K in keyof D]?: Observer<D[K] extends QB<infer T, any> ? T : never> }
+}): App<S, D, F> {
+  return {
+    schema:      spec.schema,
+    derived:     spec.derived,
+    constraints: spec.constraints,
+    feeders:     (spec.feeders  ?? {}) as F,
+    observers:    spec.observers ?? {},
+  }
 }

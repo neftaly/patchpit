@@ -1,19 +1,21 @@
 import type { QB, Doc } from './index.js'
-import { defineSchema, defineApp, where, join, select, pipe, evaluate,
-         eq, lt, and, not, primaryKey, unique, foreignKey } from './index.js'
+import { defineSchema, defineApp, createRuntime, evaluate,
+         where, join, select, pipe,
+         eq, lt, and, not,
+         primaryKey, unique, foreignKey } from './index.js'
 
-// ---------------------------------------------------------------------------
-// Schema
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Layer 1 — Essential State (base relations)
+// ===========================================================================
 
 const schema = defineSchema({
   tasks: { id: '' as string, title: '' as string, done: false as boolean, userId: '' as string },
   users: { id: '' as string, name: '' as string },
 })
 
-// ---------------------------------------------------------------------------
-// Derived queries
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Layer 2 — Essential Logic (derived queries + integrity constraints)
+// ===========================================================================
 
 const pending = where(schema.tasks, eq(schema.tasks.done, false))
 
@@ -47,10 +49,6 @@ const withUser = <T extends Record<string, string | boolean | number | null>>(
 const allByUser    = withUser(schema.tasks)
 const urgentByUser = withUser(where(schema.tasks, lt(schema.tasks.title, 'z')))
 
-// ---------------------------------------------------------------------------
-// Constraints
-// ---------------------------------------------------------------------------
-
 const constraints = [
   primaryKey(schema.tasks.id),
   primaryKey(schema.users.id),
@@ -58,22 +56,81 @@ const constraints = [
   foreignKey(eq(schema.tasks.userId, schema.users.id)),
 ] as const
 
-// ---------------------------------------------------------------------------
-// App spec
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Layer 3 — Infrastructure (feeders + observers)
+//
+// Feeders: the only mutation path into essential state.
+//   Signature: (doc, input) → doc'
+//   For Automerge: swap the spread with A.change(doc, d => { d.tasks.push(...) })
+//
+// Observers: the only effect path out of derived state.
+//   Keyed by derived-query name; TypeScript checks the row type per key.
+// ===========================================================================
 
 const app = defineApp({
   schema,
-  derived: { pending, tasksByUser, pendingByUser, complex, pendingByUserViaP, allByUser, urgentByUser },
+  derived:     { pending, tasksByUser, pendingByUser, complex, pendingByUserViaP, allByUser, urgentByUser },
   constraints,
+
+  feeders: {
+    // `doc: any` lets users plug in any doc representation (plain object,
+    // Automerge A.Doc, Immer draft, …). The input type is what dispatch enforces.
+    addTask: (doc: any, input: { title: string; userId: string }) => ({
+      ...doc,
+      tasks: [...doc.tasks, { id: `t${doc.tasks.length + 1}`, done: false, ...input }],
+    }),
+    complete: (doc: any, id: string) => ({
+      ...doc,
+      tasks: doc.tasks.map((t: any) => t.id === id ? { ...t, done: true } : t),
+    }),
+    addUser: (doc: any, input: { name: string }) => ({
+      ...doc,
+      users: [...doc.users, { id: `u${doc.users.length + 1}`, ...input }],
+    }),
+  },
+
+  observers: {
+    // TypeScript checks that `rows` matches the pendingByUser QB's row type: { title, name }
+    pendingByUser: rows => console.log('pending:', rows.map(r => `${r.name} / ${r.title}`)),
+  },
 })
 
-// ---------------------------------------------------------------------------
-// evaluate — pure function over an immutable doc snapshot.
-//
-// An Automerge doc (A.Doc<{ tasks: Task[], users: User[] }>) satisfies Doc
-// at read time — pass it directly instead of the plain object below.
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Runtime — binds the App spec to a live mutable doc
+// ===========================================================================
+
+const rt = createRuntime(app, {
+  tasks: [
+    { id: 't1', title: 'buy oat milk', done: false, userId: 'u1' },
+    { id: 't2', title: 'read OOTTP',   done: true,  userId: 'u1' },
+  ],
+  users: [
+    { id: 'u1', name: 'alice' },
+  ],
+})
+
+// Synchronous snapshot read — typed from the QB's row type
+const snapshot = rt.query('pending')  // ReadonlyArray<{ id, title, done, userId }>
+snapshot[0]?.title                    // 'buy oat milk'
+
+// Dispatch feeders — doc updates, derived re-evaluates, observers fire
+rt.dispatch('addUser', { name: 'bob' })
+rt.dispatch('addTask', { title: 'write tests', userId: 'u2' })
+// console: "pending: alice / buy oat milk, bob / write tests"
+
+rt.dispatch('complete', 't1')
+// console: "pending: bob / write tests"  (alice's task is done)
+
+// ===========================================================================
+// Proof of Rule 1 — cross-relation predicate rejected at the call site
+// ===========================================================================
+
+// @ts-expect-error Predicate<'users'> is not assignable to Predicate<NoInfer<'tasks'>>
+where(schema.tasks, eq(schema.users.name, 'alice'))
+
+// ===========================================================================
+// evaluate — pure snapshot read, no runtime needed
+// ===========================================================================
 
 const doc: Doc = {
   tasks: [
@@ -87,18 +144,10 @@ const doc: Doc = {
   ],
 }
 
-const pendingRows    = evaluate(pending,      doc)  // Task[]
-const byUserRows     = evaluate(tasksByUser,  doc)  // (Task & User)[]
-const pendingByURows = evaluate(pendingByUser, doc) // { title, name }[]
+const pendingRows    = evaluate(pending,       doc)
+const byUserRows     = evaluate(tasksByUser,   doc)
+const pendingByURows = evaluate(pendingByUser, doc)
 
-// Verify shapes
-pendingRows[0]?.title
-byUserRows[0]?.name
-pendingByURows[0]?.title
-
-// ---------------------------------------------------------------------------
-// Rule 1 — cross-relation predicate rejected at call site
-// ---------------------------------------------------------------------------
-
-// @ts-expect-error Predicate<'users'> not assignable to Predicate<NoInfer<'tasks'>>
-where(schema.tasks, eq(schema.users.name, 'alice'))
+pendingRows[0]?.title     // typed: string
+byUserRows[0]?.name       // typed: string
+pendingByURows[0]?.title  // typed: string

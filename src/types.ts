@@ -69,13 +69,32 @@ export type Schema<S extends SchemaShape> = {
 }
 
 // ---------------------------------------------------------------------------
-// App — the assembled spec: schema + derived queries + constraints
+// Observer — called with the current derived rows whenever the doc changes.
+// Lives in the infrastructure (accidental) layer — the only place where
+// effects from derived state belong.
 // ---------------------------------------------------------------------------
 
-export type App<S extends SchemaShape, D extends Record<string, QB<any, any>>> = {
+export type Observer<T extends Record<string, Atom>> =
+  (rows: ReadonlyArray<T>) => void
+
+// ---------------------------------------------------------------------------
+// App — essential model (schema + logic) + infrastructure boundary types.
+//
+// Feeders: the only input path to essential state — (doc, input) → doc'.
+// Observers: the only output path from derived state — (rows) → effects.
+// The doc type is left generic so Automerge and plain-object docs both fit.
+// ---------------------------------------------------------------------------
+
+export type App<
+  S extends SchemaShape,
+  D extends Record<string, QB<any, any>>,
+  F extends Record<string, (doc: any, input: any) => any> = Record<string, never>,
+> = {
   readonly schema:      Schema<S>
   readonly derived:     D
   readonly constraints: readonly Constraint[]
+  readonly feeders:     F
+  readonly observers:   { readonly [K in keyof D]?: (rows: ReadonlyArray<any>) => void }
 }
 
 // ---------------------------------------------------------------------------
