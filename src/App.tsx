@@ -6,8 +6,8 @@ import type { TodoDoc } from './todo-schema.js'
 const seed: TodoDoc = {
   tasks: [
     { id: '1', title: 'buy oat milk', done: false, userId: 'u1' },
-    { id: '2', title: 'read OOTTP',   done: false, userId: 'u1' },
-    { id: '3', title: 'write tests',  done: false, userId: 'u2' },
+    { id: '2', title: 'read OOTTP', done: false, userId: 'u1' },
+    { id: '3', title: 'write tests', done: false, userId: 'u2' },
   ],
   users: [
     { id: 'u1', name: 'alice' },
@@ -20,17 +20,20 @@ function useTodo() {
 
   function dispatch<K extends keyof typeof app.feeders>(
     feeder: K,
-    input:  Parameters<(typeof app.feeders)[K]>[1],
+    input: Parameters<(typeof app.feeders)[K]>[1],
   ) {
-    setDoc(prev =>
-      (app.feeders[feeder] as (d: TodoDoc, i: typeof input) => TodoDoc)(prev, input)
+    setDoc((prev) =>
+      (app.feeders[feeder] as (d: TodoDoc, i: typeof input) => TodoDoc)(
+        prev,
+        input,
+      ),
     )
   }
 
   return {
-    pending:      evaluate(pending,       doc as never),
-    pendingByUser: evaluate(pendingByUser, doc as never),
-    users:        doc.users,
+    pending: evaluate(pending, doc),
+    pendingByUser: evaluate(pendingByUser, doc),
+    users: doc.users,
     dispatch,
   }
 }
@@ -52,34 +55,57 @@ export default function App() {
       <h1>tarpit todo</h1>
 
       <form onSubmit={submit}>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="new task" />
-        {' '}
-        <select value={userId} onChange={e => setUserId(e.target.value)}>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="new task"
+        />{' '}
+        <select value={userId} onChange={(e) => setUserId(e.target.value)}>
           <option value="">— user —</option>
-          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-        {' '}
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </select>{' '}
         <button type="submit">add</button>
       </form>
 
       <h2>pending by user</h2>
       <table>
-        <thead><tr><th>user</th><th>task</th></tr></thead>
+        <thead>
+          <tr>
+            <th>user</th>
+            <th>task</th>
+          </tr>
+        </thead>
         <tbody>
           {pendingByUser.map((row, i) => (
-            <tr key={i}><td>{row.name}</td><td>{row.title}</td></tr>
+            <tr key={i}>
+              <td>{row.name}</td>
+              <td>{row.title}</td>
+            </tr>
           ))}
         </tbody>
       </table>
 
       <h2>pending tasks</h2>
       <table>
-        <thead><tr><th>task</th><th></th></tr></thead>
+        <thead>
+          <tr>
+            <th>task</th>
+            <th></th>
+          </tr>
+        </thead>
         <tbody>
-          {pending.map(task => (
+          {pending.map((task) => (
             <tr key={task.id}>
               <td>{task.title}</td>
-              <td><button onClick={() => dispatch('complete', task.id)}>done</button></td>
+              <td>
+                <button onClick={() => dispatch('complete', task.id)}>
+                  done
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

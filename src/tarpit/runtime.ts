@@ -1,84 +1,60 @@
-import type { QB }  from './types.js'
-import type { Doc }  from './evaluate.js'
-import { evaluate }  from './evaluate.js'
+import type { QB } from './types.js'
+import type { Doc } from './evaluate.js'
+import { evaluate } from './evaluate.js'
 
-// ---------------------------------------------------------------------------
-// Runtime — a live instance of an App bound to a mutable doc.
-//
-// query(name)           — synchronous read of the current derived rows.
-// dispatch(name, input) — apply feeder → re-evaluate derived → fire observers.
-//
-// This is the infrastructure (accidental) layer. All mutation lives here;
-// the essential model (schema, derived, constraints) remains pure data.
-// ---------------------------------------------------------------------------
+type RowsByDerived<D extends Record<string, QB<any, any>>> = {
+  [K in keyof D]: D[K] extends QB<infer T, any> ? ReadonlyArray<T> : never
+}
 
 export type Runtime<
   D extends Record<string, QB<any, any>>,
   F extends Record<string, (doc: any, input: any) => any>,
 > = {
-  query<K extends keyof D>(
-    name: K
-  ): D[K] extends QB<infer T, any> ? ReadonlyArray<T> : never
+  query<K extends keyof D>(name: K): RowsByDerived<D>[K]
 
-  dispatch<K extends keyof F>(
-    feeder: K,
-    input:  Parameters<F[K]>[1],
-  ): void
+  dispatch<K extends keyof F>(feeder: K, input: Parameters<F[K]>[1]): void
 }
-
-// ---------------------------------------------------------------------------
-// createRuntime
-//
-// DocType is intentionally not constrained against F's doc parameter — the
-// feeder doc type is up to the user (plain object, Automerge A.Doc, Immer
-// draft, etc.). The only invariant enforced here is that F carries the right
-// input types for dispatch().
-// ---------------------------------------------------------------------------
 
 export function createRuntime<
   D extends Record<string, QB<any, any>>,
   F extends Record<string, (doc: any, input: any) => any>,
 >(
   app: {
-    derived:    D
-    feeders:    F
-    observers?: { [K in keyof D]?: (rows: ReadonlyArray<any>) => void }
+    derived: D
+    feeders: F
+    observers?: { [K in keyof D]?: (rows: RowsByDerived<D>[K]) => void }
   },
   initialDoc: Doc,
 ): Runtime<D, F> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let doc: any = initialDoc
   let cache = evalAll(app.derived, doc)
 
   return {
     query(name) {
-      return (cache[name as string] ?? []) as any
+      return cache[name]
     },
 
     dispatch(feeder, input) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      doc   = (app.feeders[feeder] as (doc: any, input: any) => any)(doc, input)
+      doc = (app.feeders[feeder] as (doc: any, input: any) => any)(doc, input)
       cache = evalAll(app.derived, doc)
 
-      const obs = app.observers
-      if (obs) {
-        for (const key in obs) {
-          const fn = obs[key as keyof typeof obs]
-          fn?.(cache[key] ?? [])
-        }
+      for (const key in app.observers) {
+        const fn = app.observers[key]
+        fn?.(cache[key])
       }
     },
   }
 }
 
-function evalAll(
-  derived: Record<string, QB<any, any>>,
-  doc:     Doc,
-): Record<string, ReadonlyArray<any>> {
-  const out: Record<string, ReadonlyArray<any>> = {}
+function evalAll<D extends Record<string, QB<any, any>>>(
+  derived: D,
+  doc: Doc,
+): RowsByDerived<D> {
+  const out = {} as RowsByDerived<D>
   for (const key in derived) {
     const qb = derived[key]
-    if (qb) out[key] = evaluate(qb, doc)
+    if (qb)
+      out[key] = evaluate(qb, doc) as unknown as RowsByDerived<D>[typeof key]
   }
   return out
 }

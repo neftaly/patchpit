@@ -7,5 +7,5 @@ if (!el) throw new Error('no #root')
 createRoot(el).render(
   <StrictMode>
     <App />
-  </StrictMode>
+  </StrictMode>,
 )
