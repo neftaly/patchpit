@@ -1,5 +1,6 @@
-import type { QB } from './types.js'
-import { defineSchema, defineApp, where, join, select, pipe, eq, lt, and, not, primaryKey, unique, foreignKey } from './index.js'
+import type { QB, Doc } from './index.js'
+import { defineSchema, defineApp, where, join, select, pipe, evaluate,
+         eq, lt, and, not, primaryKey, unique, foreignKey } from './index.js'
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -29,13 +30,9 @@ const pendingByUser = select(
 
 const complex = where(
   schema.tasks,
-  and(
-    eq(schema.tasks.done, false),
-    not(eq(schema.tasks.title, '')),
-  ),
+  and(eq(schema.tasks.done, false), not(eq(schema.tasks.title, ''))),
 )
 
-// pipe: lambdas thread the QB, TypeScript infers each qb type from the overload
 const pendingByUserViaP = pipe(
   schema.tasks,
   qb => where(qb, eq(schema.tasks.done, false)),
@@ -43,9 +40,6 @@ const pendingByUserViaP = pipe(
   qb => select(qb, 'title', 'name'),
 )
 
-// reusable step: a typed function.
-// Rels extends 'tasks' constrains the QB to task-relations, which is required
-// because the join predicate references schema.tasks fields.
 const withUser = <T extends Record<string, string | boolean | number | null>>(
   qb: QB<T, 'tasks'>
 ) => join(qb, schema.users, eq(schema.tasks.userId, schema.users.id))
@@ -73,6 +67,34 @@ const app = defineApp({
   derived: { pending, tasksByUser, pendingByUser, complex, pendingByUserViaP, allByUser, urgentByUser },
   constraints,
 })
+
+// ---------------------------------------------------------------------------
+// evaluate — pure function over an immutable doc snapshot.
+//
+// An Automerge doc (A.Doc<{ tasks: Task[], users: User[] }>) satisfies Doc
+// at read time — pass it directly instead of the plain object below.
+// ---------------------------------------------------------------------------
+
+const doc: Doc = {
+  tasks: [
+    { id: 't1', title: 'buy oat milk', done: false,  userId: 'u1' },
+    { id: 't2', title: 'read OOTTP',   done: true,   userId: 'u1' },
+    { id: 't3', title: 'write tests',  done: false,  userId: 'u2' },
+  ],
+  users: [
+    { id: 'u1', name: 'alice' },
+    { id: 'u2', name: 'bob'   },
+  ],
+}
+
+const pendingRows    = evaluate(pending,      doc)  // Task[]
+const byUserRows     = evaluate(tasksByUser,  doc)  // (Task & User)[]
+const pendingByURows = evaluate(pendingByUser, doc) // { title, name }[]
+
+// Verify shapes
+pendingRows[0]?.title
+byUserRows[0]?.name
+pendingByURows[0]?.title
 
 // ---------------------------------------------------------------------------
 // Rule 1 — cross-relation predicate rejected at call site
