@@ -11,7 +11,7 @@ export type {
 } from './types.js'
 export type { Doc } from './evaluate.js'
 export type { Runtime } from './runtime.js'
-export { defineSchema, defineApp, where, join, select, pipe } from './query.js'
+export { defineSchema, defineApp, where, join, select } from './query.js'
 export {
   eq,
   ne,

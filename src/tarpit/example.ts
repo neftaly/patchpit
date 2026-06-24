@@ -7,7 +7,6 @@ import {
   where,
   join,
   select,
-  pipe,
   eq,
   lt,
   and,
@@ -55,13 +54,6 @@ const complex = where(
   and(eq(schema.tasks.done, false), not(eq(schema.tasks.title, ''))),
 )
 
-const pendingByUserViaP = pipe(
-  schema.tasks,
-  (qb) => where(qb, eq(schema.tasks.done, false)),
-  (qb) => join(qb, schema.users, eq(schema.tasks.userId, schema.users.id)),
-  (qb) => select(qb, 'title', 'name'),
-)
-
 const withUser = <T extends Record<string, string | boolean | number | null>>(
   qb: QB<T, 'tasks'>,
 ) => join(qb, schema.users, eq(schema.tasks.userId, schema.users.id))
@@ -83,7 +75,6 @@ const app = defineApp({
     tasksByUser,
     pendingByUser,
     complex,
-    pendingByUserViaP,
     allByUser,
     urgentByUser,
   },
