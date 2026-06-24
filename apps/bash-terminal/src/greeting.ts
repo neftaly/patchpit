@@ -8,13 +8,26 @@ export function terminalHelpText(): string {
   ].join('\n')
 }
 
-export function terminalWelcomeText(): string {
-  return 'Welcome to Patchpit Shell.\nType "help" for commands.'
+export function terminalWelcomeText(now: Date = new Date()): string {
+  return [
+    'Welcome to Patchpit Shell',
+    `Last login: ${formatLoginTime(now)} on automergefs`,
+    'Type "help" for commands.',
+  ].join('\n')
 }
 
-export function terminalLoginGreeting(): TerminalLineDraft {
+export function terminalLoginGreeting(
+  now: Date = new Date(),
+): TerminalLineDraft {
   return {
     kind: 'output',
-    text: terminalWelcomeText(),
+    text: terminalWelcomeText(now),
   }
+}
+
+function formatLoginTime(date: Date): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
 }
