@@ -19,7 +19,7 @@ const unlinkedUsersDoc: UserDoc = {
 
 function tasksDocSeed(linkedUsersDocUrl: string): TaskDoc {
   return {
-    src: [linkedUsersDocUrl],
+    userSources: [linkedUsersDocUrl],
     tasks: [
       { id: '1', title: 'buy oat milk', done: false, userId: 'u1' },
       { id: '2', title: 'read OOTTP', done: false, userId: 'u1' },
@@ -45,7 +45,10 @@ type TodoView = {
 
 function useTodo(handle: DocHandle<TaskDoc>) {
   const taskDoc = useDocument(handle)
-  const view = useAutomergeQueries(handle, todoQueries, { repo })
+  const view = useAutomergeQueries(handle, todoQueries, {
+    repo,
+    linkField: 'userSources',
+  })
   const data: TodoView = view.data
 
   const addTask = (input: { title: string; userId: string }) => {
@@ -59,11 +62,11 @@ function useTodo(handle: DocHandle<TaskDoc>) {
       if (task) task.done = true
     })
   }
-  const addSource = (src: string) => {
-    if (!isValidAutomergeUrl(src)) return
+  const addUserSource = (url: string) => {
+    if (!isValidAutomergeUrl(url)) return
 
     handle.change((d) => {
-      if (!d.src.includes(src)) d.src.push(src)
+      if (!d.userSources.includes(url)) d.userSources.push(url)
     })
   }
 
@@ -73,10 +76,10 @@ function useTodo(handle: DocHandle<TaskDoc>) {
     error: view.error,
     isLoading: view.isLoading,
     taskDocUrl: handle.url,
-    linkedDocUrls: taskDoc.src,
+    linkedUserSourceUrls: taskDoc.userSources,
     addTask,
     complete,
-    addSource,
+    addUserSource,
   }
 }
 
@@ -131,6 +134,7 @@ function JsonDocEditor<T extends JsonRecord>({
         onChange={(e) => editDraft(e.target.value)}
         rows={Math.max(8, text.split('\n').length + 1)}
         spellCheck={false}
+        style={{ boxSizing: 'border-box', width: '100%' }}
       />
       <p>
         <button
@@ -234,16 +238,18 @@ export default function App() {
     pendingByUser,
     users,
     taskDocUrl,
-    linkedDocUrls,
+    linkedUserSourceUrls,
     addTask,
     complete,
-    addSource,
+    addUserSource,
     status,
     error,
   } = useTodo(tasksHandle)
   const [title, setTitle] = useState('')
   const [userId, setUserId] = useState('')
-  const [src, setSrc] = useState<string>(unlinkedUsersHandle.url)
+  const [userSourceUrl, setUserSourceUrl] = useState<string>(
+    unlinkedUsersHandle.url,
+  )
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -254,8 +260,8 @@ export default function App() {
 
   function submitSource(e: FormEvent) {
     e.preventDefault()
-    if (!src.trim()) return
-    addSource(src.trim())
+    if (!userSourceUrl.trim()) return
+    addUserSource(userSourceUrl.trim())
   }
 
   return (
@@ -265,20 +271,20 @@ export default function App() {
       <dl>
         <dt>tasks doc</dt>
         <dd>{taskDocUrl}</dd>
-        <dt>linked source docs</dt>
-        <dd>{linkedDocUrls.join(', ')}</dd>
+        <dt>linked user sources</dt>
+        <dd>{linkedUserSourceUrls.join(', ')}</dd>
         <dt>unlinked users doc</dt>
         <dd>{unlinkedUsersHandle.url}</dd>
       </dl>
 
       <form onSubmit={submitSource}>
         <input
-          name="src"
-          value={src}
-          onChange={(e) => setSrc(e.target.value)}
-          placeholder="automerge doc url"
+          name="userSourceUrl"
+          value={userSourceUrl}
+          onChange={(e) => setUserSourceUrl(e.target.value)}
+          placeholder="user doc automerge url"
         />{' '}
-        <button type="submit">link doc</button>
+        <button type="submit">link user source</button>
       </form>
 
       <form onSubmit={submit}>

@@ -7,7 +7,7 @@ export type TaskRow = {
   userId: string
 }
 export type UserRow = { id: string; name: string }
-export type TaskDoc = { src: string[]; tasks: TaskRow[] }
+export type TaskDoc = { userSources: string[]; tasks: TaskRow[] }
 export type UserDoc = { users: UserRow[] }
 type TodoShape = { tasks: TaskRow; users: UserRow }
 
