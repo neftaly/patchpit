@@ -28,7 +28,7 @@ function useTodo() {
   }
 
   return {
-    pending:      evaluate(pending,      doc as never),
+    pending:      evaluate(pending,       doc as never),
     pendingByUser: evaluate(pendingByUser, doc as never),
     users:        doc.users,
     dispatch,
@@ -48,53 +48,42 @@ export default function App() {
   }
 
   return (
-    <main style={{ fontFamily: 'monospace', maxWidth: 600, margin: '2rem auto', padding: '0 1rem' }}>
+    <main>
       <h1>tarpit todo</h1>
 
-      <form onSubmit={submit} style={{ display: 'flex', gap: 8, marginBottom: '1.5rem' }}>
-        <input
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="new task"
-          style={{ flex: 1, padding: '4px 8px' }}
-        />
+      <form onSubmit={submit}>
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="new task" />
+        {' '}
         <select value={userId} onChange={e => setUserId(e.target.value)}>
           <option value="">— user —</option>
-          {users.map(u => (
-            <option key={u.id} value={u.id}>{u.name}</option>
-          ))}
+          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
+        {' '}
         <button type="submit">add</button>
       </form>
 
-      <section>
-        <h2>pending by user <small style={{ fontWeight: 'normal', fontSize: '0.75em' }}>(join)</small></h2>
-        {pendingByUser.length === 0
-          ? <p style={{ color: '#888' }}>none</p>
-          : <ul style={{ padding: 0, listStyle: 'none' }}>
-              {pendingByUser.map((row, i) => (
-                <li key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #eee' }}>
-                  <span><strong>{row.name}</strong> / {row.title}</span>
-                </li>
-              ))}
-            </ul>
-        }
-      </section>
+      <h2>pending by user</h2>
+      <table>
+        <thead><tr><th>user</th><th>task</th></tr></thead>
+        <tbody>
+          {pendingByUser.map((row, i) => (
+            <tr key={i}><td>{row.name}</td><td>{row.title}</td></tr>
+          ))}
+        </tbody>
+      </table>
 
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>pending tasks <small style={{ fontWeight: 'normal', fontSize: '0.75em' }}>(where done = false)</small></h2>
-        {pending.length === 0
-          ? <p style={{ color: '#888' }}>all done!</p>
-          : <ul style={{ padding: 0, listStyle: 'none' }}>
-              {pending.map(task => (
-                <li key={task.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #eee' }}>
-                  <span>{task.title}</span>
-                  <button onClick={() => dispatch('complete', task.id)}>✓</button>
-                </li>
-              ))}
-            </ul>
-        }
-      </section>
+      <h2>pending tasks</h2>
+      <table>
+        <thead><tr><th>task</th><th></th></tr></thead>
+        <tbody>
+          {pending.map(task => (
+            <tr key={task.id}>
+              <td>{task.title}</td>
+              <td><button onClick={() => dispatch('complete', task.id)}>done</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </main>
   )
 }
