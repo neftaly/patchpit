@@ -1,59 +1,9 @@
 import { Repo } from '@automerge/automerge-repo'
 import type { AutomergeUrl, DocHandle } from '@automerge/automerge-repo'
 import mime from 'mime/lite'
-import { filesystemFixture } from './fixture.js'
-import type {
-  FilesystemFixtureEntry,
-  FilesystemFixtureFolder,
-  FilesystemFixtureFile,
-} from './fixture.js'
-import type { EntryType, FileDoc, FolderDoc, FolderEntry } from './model.js'
+import type { EntryType, FileDoc, FolderDoc, FolderEntry } from './index.js'
 
 type JsonRecord = Record<string, unknown>
-
-export type FilesystemDemoState = {
-  repo: Repo
-  rootHandle: DocHandle<FolderDoc>
-  uiHandle: DocHandle<FilesystemUiDoc>
-  rootEntryName: string
-}
-
-export type FilesystemUiDoc = {
-  '@patchwork': {
-    type: 'filesystem-ui'
-    version: 1
-  }
-  selected: SelectedEntry
-  closedFolderEntryIds: string[]
-  colorMode: 'light' | 'auto' | 'dark'
-}
-
-export type SelectedEntry = {
-  entryId: string | null
-  type: EntryType
-  url: string
-  parentUrl: AutomergeUrl | null
-  name: string
-}
-
-export function createFilesystemDemoState(
-  repo = new Repo(),
-): FilesystemDemoState {
-  const rootHandle = createFixtureFolder(repo, filesystemFixture)
-  const uiHandle = repo.create<FilesystemUiDoc>({
-    '@patchwork': { type: 'filesystem-ui', version: 1 },
-    selected: {
-      entryId: null,
-      type: 'folder',
-      url: rootHandle.url,
-      parentUrl: null,
-      name: filesystemFixture.name,
-    },
-    closedFolderEntryIds: [],
-    colorMode: 'auto',
-  })
-  return { repo, rootHandle, uiHandle, rootEntryName: filesystemFixture.name }
-}
 
 export function createFolder(
   repo: Repo,
@@ -83,6 +33,32 @@ export function createFile(
     mimeType: mime.getType(name) ?? 'application/octet-stream',
     content: text,
     metadata: { role },
+  })
+}
+
+export function addLinkedAutomergeFile(
+  folderHandle: DocHandle<FolderDoc>,
+  name: string,
+  url: AutomergeUrl,
+) {
+  folderHandle.change((draft) => {
+    const existing = draft.entries.find((entry) => entry.name === name)
+    if (existing) {
+      existing.type = 'file'
+      existing.url = url
+      return
+    }
+    draft.entries.push({ name, type: 'file', url })
+  })
+}
+
+export function removeLinkedAutomergeFile(
+  folderHandle: DocHandle<FolderDoc>,
+  url: AutomergeUrl,
+) {
+  folderHandle.change((draft) => {
+    const index = draft.entries.findIndex((entry) => entry.url === url)
+    if (index !== -1) draft.entries.splice(index, 1)
   })
 }
 
@@ -123,33 +99,6 @@ export async function deleteEntry(
   })
 }
 
-function createFixtureFolder(
-  repo: Repo,
-  folder: FilesystemFixtureFolder,
-): DocHandle<FolderDoc> {
-  return createFolder(
-    repo,
-    folder.name,
-    folder.entries.map((entry) => createFixtureEntry(repo, entry)),
-  )
-}
-
-function createFixtureEntry(
-  repo: Repo,
-  entry: FilesystemFixtureEntry,
-): FolderEntry {
-  if (entry.type === 'file' && isUrlFile(entry)) {
-    return { name: entry.name, type: entry.type, url: entry.url }
-  }
-
-  const handle =
-    entry.type === 'folder'
-      ? createFixtureFolder(repo, entry)
-      : createFile(repo, entry.name, entry.role, entry.content)
-
-  return { name: entry.name, type: entry.type, url: handle.url }
-}
-
 function createEmptyEntry(
   repo: Repo,
   type: EntryType,
@@ -166,10 +115,4 @@ function createEmptyEntry(
 function extensionFromName(name: string): string {
   const index = name.lastIndexOf('.')
   return index === -1 ? '' : name.slice(index + 1)
-}
-
-function isUrlFile(
-  entry: FilesystemFixtureFile,
-): entry is FilesystemFixtureFile & { url: string } {
-  return 'url' in entry
 }

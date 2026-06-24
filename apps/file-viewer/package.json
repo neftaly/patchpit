@@ -1,0 +1,26 @@
+{
+  "name": "@patchpit/file-viewer",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@automerge/automerge-repo": "catalog:",
+    "@patchpit/filesystem": "workspace:*",
+    "@patchpit/json-doc-editor": "workspace:*",
+    "@patchpit/tarstate-automerge": "workspace:*",
+    "@patchpit/workspace": "workspace:*",
+    "react": "catalog:",
+    "renderer": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

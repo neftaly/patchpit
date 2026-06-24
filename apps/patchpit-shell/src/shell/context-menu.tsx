@@ -1,6 +1,6 @@
 import type { AutomergeUrl } from '@automerge/automerge-repo'
-import { isAutomergeEntryUrl } from './model.js'
-import type { EntryType } from './model.js'
+import { isAutomergeEntryUrl } from '@patchpit/filesystem'
+import type { EntryType } from '@patchpit/filesystem'
 import { useFilesystemDemo } from './state.js'
 import type { TreeContextTarget } from './state.js'
 

@@ -1,7 +1,7 @@
 import type { AutomergeUrl } from '@automerge/automerge-repo'
 import type { ObjID } from '@automerge/automerge'
-import type { EntryType } from './model.js'
-import type { SelectedEntry } from './repo.js'
+import type { EntryType } from '@patchpit/filesystem'
+import type { SelectedEntry } from '@patchpit/workspace'
 
 export type TreeNodeRef = {
   entryId: ObjID | null

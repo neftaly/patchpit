@@ -1,0 +1,165 @@
+import type { DocHandle, Repo } from '@automerge/automerge-repo'
+import { sameJsonValue } from './json.js'
+import {
+  normalizeFileExplorerAppState,
+  normalizeFileViewerAppState,
+  normalizeOsAppState,
+  normalizeWorkspaceAppState,
+} from './index.js'
+import type {
+  ColorMode,
+  FileExplorerAppState,
+  FileViewerAppState,
+  JsonRecord,
+  SelectedEntry,
+  ViewerMode,
+  WorkspaceAppState,
+  WorkspaceAppStateDoc,
+  WorkspaceAppStates,
+  WorkspacePaneId,
+  WorkspacePanes,
+  WorkspaceProgramRef,
+} from './index.js'
+
+export type WorkspaceAppStateHandles = Record<
+  WorkspacePaneId,
+  DocHandle<WorkspaceAppStateDoc>
+>
+
+export type WorkspaceAppStateDocs = Readonly<
+  Record<WorkspacePaneId, WorkspaceAppStateDoc | undefined>
+>
+
+export function createWorkspaceAppState(
+  repo: Repo,
+  paneId: WorkspacePaneId,
+  program: WorkspaceProgramRef,
+  state: JsonRecord,
+): DocHandle<WorkspaceAppStateDoc> {
+  return repo.create<WorkspaceAppStateDoc>({
+    '@patchwork': { type: 'workspace-app-state', version: 1 },
+    paneId,
+    program,
+    state,
+  })
+}
+
+export function workspaceAppStatesFromDocs(
+  panes: WorkspacePanes,
+  docs: WorkspaceAppStateDocs,
+): WorkspaceAppStates {
+  return Object.fromEntries(
+    Object.entries(panes).map(([paneId, pane]) => [
+      paneId,
+      normalizeWorkspaceAppState(pane.program.id, docs[paneId]?.state),
+    ]),
+  ) as WorkspaceAppStates
+}
+
+export function repairWorkspaceAppStateDocs({
+  docs,
+  handles,
+  panes,
+}: {
+  docs: WorkspaceAppStateDocs
+  handles: WorkspaceAppStateHandles
+  panes: WorkspacePanes
+}) {
+  for (const [paneId, pane] of Object.entries(panes)) {
+    const handle = handles[paneId]
+    if (!handle) continue
+    repairAppStateDoc(
+      handle,
+      pane.program,
+      normalizeWorkspaceAppState(pane.program.id, docs[paneId]?.state),
+    )
+  }
+}
+
+export function fileExplorerStateForPane(
+  docs: WorkspaceAppStateDocs,
+  paneId: WorkspacePaneId,
+): FileExplorerAppState {
+  return normalizeFileExplorerAppState(docs[paneId]?.state)
+}
+
+export function fileViewerStateForPane(
+  docs: WorkspaceAppStateDocs,
+  paneId: WorkspacePaneId,
+): FileViewerAppState {
+  return normalizeFileViewerAppState(docs[paneId]?.state)
+}
+
+export function changeFileExplorerState(
+  handles: WorkspaceAppStateHandles,
+  paneId: WorkspacePaneId,
+  update: (state: FileExplorerAppState) => void,
+) {
+  handles[paneId]?.change((draft) => {
+    const state = normalizeFileExplorerAppState(draft.state)
+    update(state)
+    draft.state = state
+  })
+}
+
+export function changeFileViewerState(
+  handles: WorkspaceAppStateHandles,
+  paneId: WorkspacePaneId,
+  update: (state: FileViewerAppState) => void,
+) {
+  handles[paneId]?.change((draft) => {
+    const state = normalizeFileViewerAppState(draft.state)
+    update(state)
+    draft.state = state
+  })
+}
+
+export function setOsColorMode(
+  handles: WorkspaceAppStateHandles,
+  mode: ColorMode,
+) {
+  handles.state?.change((draft) => {
+    const state = normalizeOsAppState(draft.state)
+    state.colorMode = mode
+    draft.state = state
+  })
+}
+
+export function setFileViewerMode(
+  handles: WorkspaceAppStateHandles,
+  paneId: WorkspacePaneId,
+  mode: ViewerMode,
+) {
+  changeFileViewerState(handles, paneId, (state) => {
+    state.mode = mode
+  })
+}
+
+export function setFileViewerSelection(
+  handles: WorkspaceAppStateHandles,
+  paneId: WorkspacePaneId,
+  selected: SelectedEntry,
+) {
+  changeFileViewerState(handles, paneId, (state) => {
+    state.selected = selected
+    state.selectedUrl = selected.url
+  })
+}
+
+function repairAppStateDoc(
+  handle: DocHandle<WorkspaceAppStateDoc>,
+  program: WorkspaceAppStateDoc['program'],
+  state: WorkspaceAppState,
+) {
+  const doc = handle.doc()
+  if (
+    !doc ||
+    (sameJsonValue(doc.program, program) && sameJsonValue(doc.state, state))
+  ) {
+    return
+  }
+  handle.change((draft) => {
+    draft.program = program
+    draft.state = state
+  })
+}

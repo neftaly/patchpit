@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - uses: pnpm/action-setup@v6
         with:
           version: 10.33.2
@@ -30,11 +32,11 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter './packages/*' exec tsc
-      - run: GITHUB_PAGES=true pnpm --filter @patchpit/filesystem-demo build
+      - run: GITHUB_PAGES=true pnpm --filter @patchpit/shell build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/filesystem-demo/dist
+          path: apps/patchpit-shell/dist
 
   deploy:
     environment:

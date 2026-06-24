@@ -1,22 +1,30 @@
 {
-  "name": "@patchpit/filesystem-demo",
+  "name": "@patchpit/shell",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && vite build",
-    "dev": "vite --host 127.0.0.1 --port 5310",
+    "build": "pnpm --filter renderer build && tsc && vite build",
+    "dev": "pnpm --filter renderer build && vite --host 127.0.0.1 --port 5310",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
     "@automerge/automerge": "catalog:",
     "@automerge/automerge-repo": "catalog:",
+    "@patchpit/bash-terminal": "workspace:*",
+    "@patchpit/file-explorer": "workspace:*",
+    "@patchpit/file-viewer": "workspace:*",
+    "@patchpit/filesystem": "workspace:*",
     "@patchpit/json-doc-editor": "workspace:*",
     "@patchpit/tarstate": "workspace:*",
     "@patchpit/tarstate-automerge": "workspace:*",
     "@patchpit/tarstate-react": "workspace:*",
+    "@patchpit/window-manager": "workspace:*",
+    "@patchpit/workspace": "workspace:*",
     "mime": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-mosaic-component": "catalog:",
+    "renderer": "workspace:*",
     "tm-themes": "catalog:"
   },
   "devDependencies": {

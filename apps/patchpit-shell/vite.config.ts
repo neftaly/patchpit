@@ -9,6 +9,6 @@ export default defineConfig({
   build: {
     target: 'safari17',
     sourcemap: true,
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 1200,
   },
 })

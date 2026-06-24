@@ -24,7 +24,7 @@ export type FilesystemFixtureEntry =
   | ({ type: 'folder' } & FilesystemFixtureFolder)
   | ({ type: 'file' } & FilesystemFixtureFile)
 
-export const filesystemFixture: FilesystemFixtureFolder = {
+const tinyCheckersFixture: FilesystemFixtureFolder = {
   name: 'tiny-checkers',
   entries: [
     {
@@ -85,6 +85,12 @@ export const filesystemFixture: FilesystemFixtureFolder = {
           role: 'asset',
           url: 'https://www.w3.org/assets/logos/w3c-2025-transitional/w3c-72x48.png',
         },
+        {
+          type: 'file',
+          name: 'DamagedHelmet.glb',
+          role: 'asset',
+          url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb',
+        },
       ],
     },
     {
@@ -93,6 +99,77 @@ export const filesystemFixture: FilesystemFixtureFolder = {
       role: 'notes',
       content:
         '# Notes\n\nThe folder owns path resolution. File docs keep stable identity.\n',
+    },
+  ],
+}
+
+const systemProgramsFixture: FilesystemFixtureFolder = {
+  name: 'bin',
+  entries: [
+    {
+      type: 'file',
+      name: 'file-explorer.patchpit-program.json',
+      role: 'program',
+      content: {
+        id: 'patchpit:file-explorer',
+        title: 'File explorer',
+        entry: 'builtin:file-explorer',
+      },
+    },
+    {
+      type: 'file',
+      name: 'patchpit-os.patchpit-program.json',
+      role: 'program',
+      content: {
+        id: 'patchpit:os',
+        title: 'Patchpit OS',
+        entry: 'builtin:os',
+      },
+    },
+    {
+      type: 'file',
+      name: 'file-viewer.patchpit-program.json',
+      role: 'program',
+      content: {
+        id: 'patchpit:file-viewer',
+        title: 'File viewer',
+        entry: 'builtin:file-viewer',
+      },
+    },
+    {
+      type: 'file',
+      name: 'bash.patchpit-program.json',
+      role: 'program',
+      content: {
+        id: 'patchpit:bash',
+        title: 'Bash',
+        entry: 'builtin:bash',
+      },
+    },
+  ],
+}
+
+export const filesystemFixture: FilesystemFixtureFolder = {
+  name: 'root',
+  entries: [
+    {
+      type: 'folder',
+      name: 'home',
+      entries: [{ type: 'folder', ...tinyCheckersFixture }],
+    },
+    {
+      type: 'folder',
+      ...systemProgramsFixture,
+    },
+    {
+      type: 'folder',
+      name: 'mnt',
+      entries: [],
+    },
+    {
+      type: 'folder',
+      name: 'tmp',
+      entries: [],
     },
   ],
 }

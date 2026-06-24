@@ -8,10 +8,15 @@ import { chromium } from 'playwright'
 const root = process.cwd()
 const apps = [
   {
-    name: 'filesystem demo',
-    dist: path.join(root, 'apps/filesystem-demo/dist'),
+    name: 'patchpit shell',
+    dist: path.join(root, 'apps/patchpit-shell/dist'),
     port: 5410,
-    expectedText: ['tiny-checkers', 'w3c-logo.png', 'title: tiny-checkers'],
+    expectedText: [
+      'tiny-checkers',
+      'w3c-logo.png',
+      'DamagedHelmet.glb',
+      'title: tiny-checkers',
+    ],
   },
   {
     name: 'todo demo',

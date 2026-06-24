@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - uses: pnpm/action-setup@v6
         with:
           version: 10.33.2
@@ -23,4 +25,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: GITHUB_PAGES=true pnpm --filter @patchpit/filesystem-demo build
+      - run: GITHUB_PAGES=true pnpm --filter @patchpit/shell build
