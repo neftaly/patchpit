@@ -145,21 +145,30 @@ body {
   gap: 0.5ch;
   align-items: baseline;
   border: 0;
-  background: transparent;
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(1rem - 1px),
+    #ddd calc(1rem - 1px),
+    #ddd 1rem
+  );
+  background-repeat: no-repeat;
+  background-size: var(--tree-indent, 0rem) 100%;
   padding: 1px 0.25rem 1px calc(var(--tree-indent, 0rem) + 0.25rem);
   text-align: left;
 }
 
 .tree-item:hover,
 .tree-item:focus {
-  background: #eee;
+  background-color: #eee;
 }
 
 .app li[aria-selected='true'] > .tree-item,
 .app li[aria-selected='true'] > .tree-item:hover,
 .app li[aria-selected='true'] > .tree-item:focus {
   color: #fff;
-  background: #111;
+  background-color: #111;
 }
 
 .tree-folder {
