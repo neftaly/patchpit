@@ -18,7 +18,6 @@ for (let run = 0; run < config.repeat; run += 1) {
       followProbeLines: config.followProbeLines,
       lineCount: config.lineCount,
       probes: config.probes,
-      terminalSource: config.terminalSource,
     }),
   )
   results.push(result)

@@ -1,0 +1,14 @@
+<!doctype html>
+<title>Terminal Bench</title>
+<div id="terminal-bench-root"></div>
+<script type="module">
+  import * as React from 'react'
+  import * as ReactDomClient from 'react-dom/client'
+  import * as terminalModule from '../src/index.tsx'
+
+  window.__terminalBenchModules = {
+    React,
+    ReactDomClient,
+    terminalModule,
+  }
+</script>

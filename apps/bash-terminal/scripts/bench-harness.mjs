@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { createServer } from 'vite'
 
 export const defaultProbeNames = [
   'key',
@@ -17,19 +18,21 @@ export function benchConfigFromEnv({ appRoot, env }) {
     : defaultProbeNames
 
   return {
+    appRoot,
     burstLines: numberFromEnv(env.TERMINAL_BENCH_BURST_LINES, 1_000),
     chromiumExecutablePath: env.CHROMIUM_EXECUTABLE_PATH ?? '/usr/bin/chromium',
     followProbeLines: numberFromEnv(env.TERMINAL_BENCH_FOLLOW_LINES, 25),
     lineCount: numberFromEnv(env.TERMINAL_BENCH_LINES, 10_000),
-    origin: env.TERMINAL_BENCH_ORIGIN ?? 'http://127.0.0.1:5312',
+    origin: env.TERMINAL_BENCH_ORIGIN,
     probes,
     repeat: numberFromEnv(env.TERMINAL_BENCH_REPEAT, 1),
-    routePath: '/terminal-bench-harness',
-    terminalSource: `${appRoot}/src/index.tsx`,
+    routePath: '/scripts/bench-page.html',
   }
 }
 
 export async function withTerminalBenchPage(config, run) {
+  const viteServer = await startTerminalBenchServer(config)
+  const origin = terminalBenchOrigin(config, viteServer)
   const browser = await chromium.launch({
     executablePath: config.chromiumExecutablePath,
     headless: true,
@@ -39,19 +42,50 @@ export async function withTerminalBenchPage(config, run) {
     const page = await browser.newPage({
       viewport: { width: 1200, height: 720 },
     })
-    await page.route(`${config.origin}${config.routePath}`, async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: '<!doctype html><title>Terminal Bench</title><div id="terminal-bench-root"></div>',
-      })
-    })
-    await page.goto(`${config.origin}${config.routePath}`, {
+    await page.goto(`${origin}${config.routePath}`, {
       waitUntil: 'domcontentloaded',
     })
+    await page.waitForFunction(() => window.__terminalBenchModules)
     return await run(page)
   } finally {
     await browser.close()
+    await viteServer.close()
   }
+}
+
+async function startTerminalBenchServer(config) {
+  const serverOptions = terminalBenchServerOptions(config.origin)
+  const server = await createServer({
+    appType: 'mpa',
+    root: config.appRoot,
+    server: serverOptions,
+  })
+  await server.listen()
+  return server
+}
+
+function terminalBenchServerOptions(origin) {
+  if (!origin) {
+    return { host: '127.0.0.1', port: 0 }
+  }
+
+  const url = new URL(origin)
+  return {
+    host: url.hostname,
+    port: Number(url.port || defaultPortForProtocol(url.protocol)),
+    strictPort: true,
+  }
+}
+
+function terminalBenchOrigin(config, server) {
+  if (config.origin) return config.origin
+  const localUrl = server.resolvedUrls?.local[0]
+  if (!localUrl) throw new Error('terminal bench server did not expose a URL')
+  return localUrl.replace(/\/$/, '')
+}
+
+function defaultPortForProtocol(protocol) {
+  return protocol === 'https:' ? 443 : 80
 }
 
 export async function runTerminalBenchInPage({
@@ -59,7 +93,6 @@ export async function runTerminalBenchInPage({
   followProbeLines,
   lineCount,
   probes,
-  terminalSource,
 }) {
   window.__vite_plugin_react_preamble_installed__ = true
   window.$RefreshReg$ = () => {}
@@ -243,10 +276,8 @@ export async function runTerminalBenchInPage({
     )
   }
 
-  const React = await import('/node_modules/.vite/deps/react.js')
-  const ReactDomClient =
-    await import('/node_modules/.vite/deps/react-dom_client.js')
-  const terminalModule = await import(`/@fs${terminalSource}?t=${Date.now()}`)
+  const { React, ReactDomClient, terminalModule } =
+    window.__terminalBenchModules
   const terminalRowHeightPx =
     terminalModule.defaultTerminalViewportSettings.rowHeightPx
 
@@ -267,7 +298,7 @@ export async function runTerminalBenchInPage({
 
   const rootElement = document.getElementById('terminal-bench-root')
   rootElement.className = 'terminal-bench-host'
-  const root = ReactDomClient.default.createRoot(rootElement)
+  const root = ReactDomClient.createRoot(rootElement)
   const rows = Array.from({ length: lineCount }, (_, index) => ({
     id: index,
     kind: 'output',

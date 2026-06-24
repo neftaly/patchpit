@@ -19,6 +19,8 @@
     "@types/react": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "typescript": "catalog:"
+    "react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }
