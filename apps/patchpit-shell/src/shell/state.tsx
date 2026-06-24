@@ -11,22 +11,17 @@ import type { ReactNode } from 'react'
 import { useDocument, useDocumentMap } from '@patchpit/tarstate-automerge'
 import {
   addEntry,
-  addLinkedAutomergeFile,
   deleteEntry,
-  removeLinkedAutomergeFile,
   renameEntry,
 } from '@patchpit/filesystem/repo'
 import { createFilesystemDemoState } from './repo.js'
 import {
   addPaneToWorkspaceLayout,
-  createWorkspacePaneInstance,
-  defaultWorkspaceAppState,
   defaultWorkspaceLayout,
   normalizeOsAppState,
   normalizeWorkspaceLayout,
   normalizeWorkspacePanes,
   removePaneFromWorkspaceLayout,
-  workspaceStateFileName,
 } from '@patchpit/workspace'
 import type { FilesystemUiDoc } from './repo.js'
 import type {
@@ -51,7 +46,6 @@ import type {
 } from '@patchpit/file-explorer/tree-state'
 import {
   changeFileExplorerState,
-  createWorkspaceAppState,
   fileExplorerStateForPane,
   fileViewerStateForPane,
   repairWorkspaceAppStateDocs,
@@ -61,6 +55,7 @@ import {
   workspaceAppStatesFromDocs,
 } from '@patchpit/workspace/state'
 import type { WorkspaceAppStateHandles } from '@patchpit/workspace/state'
+import { createAppInstanceStore } from './app-instance-store.js'
 
 const demoState = createFilesystemDemoState()
 
@@ -133,6 +128,16 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     WorkspaceAppStateHandles
   >(() => demoState.workspaceAppStateHandles)
   const workspaceAppStateDocs = useDocumentMap(workspaceAppStateHandles)
+  const appInstanceStore = useMemo(
+    () =>
+      createAppInstanceStore({
+        defaultWorkspacePanes,
+        osInstancesHandle,
+        repo,
+        workspaceProgramRefs,
+      }),
+    [defaultWorkspacePanes, osInstancesHandle, repo, workspaceProgramRefs],
+  )
   const workspacePanes = useMemo(
     () => normalizeWorkspacePanes(ui.workspacePanes, defaultWorkspacePanes),
     [defaultWorkspacePanes, ui.workspacePanes],
@@ -266,25 +271,12 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
 
   function launchWorkspaceProgram(programId: WorkspaceProgramId) {
     const paneId = `app-${nextInstanceId.current++}`
-    const stateHandle = createWorkspaceAppState(
-      repo,
-      paneId,
-      workspaceProgramRefs[programId],
-      defaultWorkspaceAppState(programId, selectedForPane('files')),
-    )
-    const pane = createWorkspacePaneInstance(
-      defaultWorkspacePanes,
+    const { pane, stateHandle } = appInstanceStore.create({
       paneId,
       programId,
-      stateHandle.url,
-      workspaceProgramRefs[programId],
-    )
+      selected: selectedForPane('files'),
+    })
 
-    addLinkedAutomergeFile(
-      osInstancesHandle,
-      workspaceStateFileName(paneId),
-      stateHandle.url,
-    )
     setWorkspaceAppStateHandles((handles) => ({
       ...handles,
       [paneId]: stateHandle,
@@ -309,7 +301,7 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     const pane = workspacePanes[paneId]
     if (!pane) return
 
-    removeLinkedAutomergeFile(osInstancesHandle, pane.state.url)
+    appInstanceStore.close(pane)
     if (selectedForPane('files').url === pane.state.url) {
       select('files', rootSelection)
     }
