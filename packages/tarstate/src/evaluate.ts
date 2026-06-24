@@ -1,4 +1,4 @@
-import type { Atom, FieldRef, Predicate, QB } from './types.js'
+import type { Atom, FieldRef, Predicate, Query } from './types.js'
 import { getSpec } from './internal.js'
 import type { QuerySpec } from './internal.js'
 import type { RelationSource } from './source.js'
@@ -6,7 +6,7 @@ import type { RelationSource } from './source.js'
 type EvalRow = Record<string, Record<string, Atom>>
 
 export function evaluate<T extends Record<string, Atom>, Rels extends string>(
-  qb: QB<T, Rels>,
+  qb: Query<T, Rels>,
   source: RelationSource,
 ): Promise<ReadonlyArray<T>> {
   return evalSpec(getSpec(qb), source).then((rows) =>
@@ -59,7 +59,14 @@ function evalPred(pred: Predicate<string>, row: EvalRow): boolean {
 }
 
 function resolve(ref: FieldRef<Atom, string> | Atom, row: EvalRow): Atom {
-  return isFieldRef(ref) ? (row[ref._rel]?.[ref._field] ?? null) : ref
+  if (!isFieldRef(ref)) return ref
+
+  const relation = row[ref._rel]
+  if (!relation) throw new Error(`relation not joined: ${ref._rel}`)
+  if (!(ref._field in relation)) {
+    throw new Error(`field not found: ${ref._rel}.${ref._field}`)
+  }
+  return relation[ref._field] ?? null
 }
 
 function isFieldRef(

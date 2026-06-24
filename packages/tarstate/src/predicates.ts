@@ -12,5 +12,13 @@ export function eq(
   lhs: FieldRef<Atom, string>,
   r: FieldRef<Atom, string> | Atom,
 ): Predicate<string> {
-  return { _rels: lhs._rel, lhs, rhs: r }
+  return {
+    _rels: isFieldRef(r) ? `${lhs._rel}|${r._rel}` : lhs._rel,
+    lhs,
+    rhs: r,
+  }
+}
+
+function isFieldRef(value: FieldRef<Atom, string> | Atom): value is FieldRef<Atom, string> {
+  return value !== null && typeof value === 'object' && '_field' in value
 }

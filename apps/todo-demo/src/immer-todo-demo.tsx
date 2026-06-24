@@ -1,7 +1,15 @@
 import { produce } from 'immer'
 import { useState } from 'react'
 import { useObjectQuery } from '@patchpit/tarstate-react'
-import { defineSchema, eq, join, select, where } from '@patchpit/tarstate'
+import {
+  defineSchema,
+  eq,
+  from,
+  join,
+  project,
+  relation,
+  where,
+} from '@patchpit/tarstate'
 import { todoFixture } from './fixture.js'
 import type { Task, TodoDoc } from './fixture.js'
 
@@ -11,19 +19,21 @@ type TodoView = {
 }
 
 const schema = defineSchema({
-  users: { id: '', name: '' },
-  tasks: { id: '', title: '', done: false, assigneeId: '' },
+  users: relation({ key: 'id', fields: { id: '', name: '' } }),
+  tasks: relation({
+    key: 'id',
+    fields: { id: '', title: '', done: false, assigneeId: '' },
+  }),
 })
 
-const pendingTasks = where(schema.tasks, eq(schema.tasks.done, false))
-const pendingByUser = select(
+const pendingTasks = where(from(schema.tasks), eq(schema.tasks.done, false))
+const pendingByUser = project(
   join(
     pendingTasks,
-    schema.users,
+    from(schema.users),
     eq(schema.tasks.assigneeId, schema.users.id),
   ),
-  'title',
-  'name',
+  { title: schema.tasks.title, name: schema.users.name },
 )
 
 export function ImmerTodoDemo() {

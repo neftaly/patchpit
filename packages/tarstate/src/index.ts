@@ -2,12 +2,54 @@ export type {
   Atom,
   FieldRef,
   Predicate,
+  Query,
   QB,
+  RelationDefinition,
+  RelationRef,
   Schema,
+  SchemaInput,
   SchemaShape,
 } from './types.js'
 export type { ObjectDoc, RelationSource, Row } from './source.js'
-export { defineSchema, all, where, join, select } from './query.js'
+export {
+  defineSchema,
+  relation,
+  string,
+  number,
+  boolean,
+  nullable,
+  from,
+  relationName,
+  relationKey,
+  all,
+  where,
+  join,
+  select,
+  project,
+} from './query.js'
 export { eq } from './predicates.js'
 export { evaluate } from './evaluate.js'
 export { fromObject, fromObjects } from './source.js'
+export type {
+  Command,
+  CommandContext,
+  CommandInput,
+  CommandResult,
+  IdGenerator,
+  InsertOperation,
+  Operation,
+  RemoveOperation,
+  RowPatch,
+  Transaction,
+  UpdateOperation,
+} from './command.js'
+export {
+  createTransaction,
+  defineCommand,
+  dispatch,
+  insert,
+  newId,
+  remove,
+  run,
+  update,
+} from './command.js'

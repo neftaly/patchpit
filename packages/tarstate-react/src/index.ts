@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { evaluate, fromObject } from '@patchpit/tarstate'
-import type { Atom, ObjectDoc, QB, RelationSource } from '@patchpit/tarstate'
+import type { Atom, ObjectDoc, Query, RelationSource } from '@patchpit/tarstate'
 
-export type QueryMap = Record<string, QB<Record<string, Atom>, string>>
+export type QueryMap = Record<string, Query<Record<string, Atom>, string>>
 const queryIds = new WeakMap<object, number>()
 let nextQueryId = 1
 
 export type QueryRows<Q> =
-  Q extends QB<infer Row, string> ? ReadonlyArray<Row> : never
+  Q extends Query<infer Row, string> ? ReadonlyArray<Row> : never
 
 export type QueryResults<Queries extends QueryMap> = {
   readonly [Name in keyof Queries]: QueryRows<Queries[Name]>
@@ -72,10 +72,10 @@ export function useQueries<Queries extends QueryMap>(
   return state
 }
 
-export function useQuery<Query extends QB<Record<string, Atom>, string>>(
+export function useQuery<TQuery extends Query<Record<string, Atom>, string>>(
   source: RelationSource,
-  query: Query,
-): QueryState<QueryRows<Query>> {
+  query: TQuery,
+): QueryState<QueryRows<TQuery>> {
   const state = useQueries(source, { query })
   return {
     data: state.data.query,
@@ -87,8 +87,8 @@ export function useQuery<Query extends QB<Record<string, Atom>, string>>(
 
 export function useObjectQuery<
   Doc extends ObjectDoc,
-  Query extends QB<Record<string, Atom>, string>,
->(doc: Doc, query: Query): QueryState<QueryRows<Query>> {
+  TQuery extends Query<Record<string, Atom>, string>,
+>(doc: Doc, query: TQuery): QueryState<QueryRows<TQuery>> {
   const source = useMemo(() => fromObject(doc), [doc])
   return useQuery(source, query)
 }
