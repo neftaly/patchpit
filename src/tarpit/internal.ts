@@ -6,7 +6,7 @@ export interface QuerySpec {
   from: string
   predicates: Predicate<string>[]
   joins: JoinNode[]
-  projection: string[] | null
+  projection?: string[]
 }
 
 export interface JoinNode {

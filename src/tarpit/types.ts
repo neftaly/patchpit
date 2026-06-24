@@ -14,11 +14,9 @@ export type Predicate<Rels extends string> = {
   readonly rhs: FieldRef<Atom, string> | Atom
 }
 
-declare const _qb: unique symbol
-
 export type QB<T extends Record<string, Atom>, Rels extends string> = {
-  readonly [_qb]: Rels
-} & { readonly [K in keyof T]: FieldRef<T[K] & Atom, Rels> }
+  readonly [K in keyof T]: FieldRef<T[K] & Atom, Rels>
+}
 
 export type SchemaShape = Record<string, Record<string, Atom>>
 

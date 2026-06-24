@@ -21,8 +21,7 @@ export function defineSchema<S extends SafeSchemaShape>(shape: S): Schema<S> {
       from: relName,
       predicates: [],
       joins: [],
-      projection: null,
-    }) as Schema<S>[typeof relName]
+    })
   }
   return schema as Schema<S>
 }
