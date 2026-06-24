@@ -4,18 +4,16 @@ import type { QuerySpec } from './internal.js'
 
 type Row = Readonly<Record<string, Atom>>
 
-export type Doc = Readonly<object>
-
 export function evaluate<T extends Record<string, Atom>, Rels extends string>(
   qb: QB<T, Rels>,
-  doc: Doc,
+  doc: Readonly<object>,
 ): ReadonlyArray<T> {
   return evalSpec(getSpec(qb), doc) as ReadonlyArray<T>
 }
 
 function evalSpec(
   spec: QuerySpec,
-  doc: Doc,
+  doc: Readonly<object>,
 ): ReadonlyArray<Record<string, Atom>> {
   let rows: Record<string, Atom>[] = Array.from(relationRows(doc, spec.from))
 
@@ -64,7 +62,10 @@ function isFieldRef(
   return value !== null && typeof value === 'object' && '_field' in value
 }
 
-function relationRows(doc: Doc, relation: string): ReadonlyArray<Row> {
+function relationRows(
+  doc: Readonly<object>,
+  relation: string,
+): ReadonlyArray<Row> {
   const value = (doc as Record<string, unknown>)[relation]
   return Array.isArray(value) ? (value as ReadonlyArray<Row>) : []
 }
