@@ -161,6 +161,31 @@ export async function addEntry(
   })
 }
 
+export async function renameEntry(
+  repo: Repo,
+  folderUrl: AutomergeUrl,
+  entryUrl: AutomergeUrl,
+  name: string,
+) {
+  const folderHandle = await repo.find<FolderDoc>(folderUrl)
+  folderHandle.change((draft) => {
+    const entry = draft.entries.find((item) => item.url === entryUrl)
+    if (entry) entry.name = name
+  })
+}
+
+export async function deleteEntry(
+  repo: Repo,
+  folderUrl: AutomergeUrl,
+  entryUrl: AutomergeUrl,
+) {
+  const folderHandle = await repo.find<FolderDoc>(folderUrl)
+  folderHandle.change((draft) => {
+    const index = draft.entries.findIndex((item) => item.url === entryUrl)
+    if (index !== -1) draft.entries.splice(index, 1)
+  })
+}
+
 export function validateFolderDoc(doc: JsonRecord): string | null {
   if (!isPatchworkDoc(doc, 'folder')) {
     return 'folder doc needs @patchwork.type: "folder".'

@@ -1,9 +1,12 @@
 import type { AutomergeUrl, DocHandle, Repo } from '@automerge/automerge-repo'
+import type { MouseEvent } from 'react'
 import { useDocument } from '../tarstate/index.js'
 import { useResolvedHandle } from './hooks.js'
-import type { EntryType, FolderDoc, FolderEntry, SelectedDoc } from './model.js'
+import type { FolderDoc, FolderEntry, SelectedDoc } from './model.js'
 
-type AddEntryHandler = (folderUrl: AutomergeUrl, type: EntryType) => void
+export type TreeContextTarget = SelectedDoc & {
+  entryName: string
+}
 
 export function FolderTreeItem({
   repo,
@@ -14,7 +17,7 @@ export function FolderTreeItem({
   closedUrls,
   onToggle,
   onSelect,
-  onAddEntry,
+  onContextMenu,
 }: {
   repo: Repo
   handle: DocHandle<FolderDoc>
@@ -24,7 +27,7 @@ export function FolderTreeItem({
   closedUrls: ReadonlySet<AutomergeUrl>
   onToggle: (url: AutomergeUrl) => void
   onSelect: (doc: SelectedDoc) => void
-  onAddEntry: AddEntryHandler
+  onContextMenu: (event: MouseEvent, target: TreeContextTarget) => void
 }) {
   const folder = useDocument(handle)
   const isOpen = !closedUrls.has(handle.url)
@@ -39,11 +42,18 @@ export function FolderTreeItem({
           onToggle(handle.url)
           onSelect({ type: 'folder', url: handle.url, parentUrl })
         }}
+        onContextMenu={(event) =>
+          onContextMenu(event, {
+            type: 'folder',
+            url: handle.url,
+            parentUrl,
+            entryName,
+          })
+        }
         aria-pressed={isSelected}
       >
         <span aria-hidden="true">{isOpen ? '📂' : '📁'}</span> {entryName}
       </button>
-      <TreeActions folderUrl={handle.url} onAddEntry={onAddEntry} />
       {isOpen && (
         <ul role="group">
           {folder.entries.map((entry) =>
@@ -57,7 +67,7 @@ export function FolderTreeItem({
                 closedUrls={closedUrls}
                 onToggle={onToggle}
                 onSelect={onSelect}
-                onAddEntry={onAddEntry}
+                onContextMenu={onContextMenu}
               />
             ) : (
               <FileTreeItem
@@ -66,6 +76,7 @@ export function FolderTreeItem({
                 parentUrl={handle.url}
                 selectedUrl={selectedUrl}
                 onSelect={onSelect}
+                onContextMenu={onContextMenu}
               />
             ),
           )}
@@ -83,7 +94,7 @@ function ResolvedFolderTreeItem({
   closedUrls,
   onToggle,
   onSelect,
-  onAddEntry,
+  onContextMenu,
 }: {
   repo: Repo
   entry: FolderEntry
@@ -92,7 +103,7 @@ function ResolvedFolderTreeItem({
   closedUrls: ReadonlySet<AutomergeUrl>
   onToggle: (url: AutomergeUrl) => void
   onSelect: (doc: SelectedDoc) => void
-  onAddEntry: AddEntryHandler
+  onContextMenu: (event: MouseEvent, target: TreeContextTarget) => void
 }) {
   const handle = useResolvedHandle<FolderDoc>(repo, entry.url)
   if (!handle) return <li role="treeitem">folder {entry.name} loading</li>
@@ -107,7 +118,7 @@ function ResolvedFolderTreeItem({
       closedUrls={closedUrls}
       onToggle={onToggle}
       onSelect={onSelect}
-      onAddEntry={onAddEntry}
+      onContextMenu={onContextMenu}
     />
   )
 }
@@ -117,11 +128,13 @@ function FileTreeItem({
   parentUrl,
   selectedUrl,
   onSelect,
+  onContextMenu,
 }: {
   entry: FolderEntry
   parentUrl: AutomergeUrl
   selectedUrl: AutomergeUrl
   onSelect: (doc: SelectedDoc) => void
+  onContextMenu: (event: MouseEvent, target: TreeContextTarget) => void
 }) {
   const isSelected = selectedUrl === entry.url
   return (
@@ -130,39 +143,18 @@ function FileTreeItem({
         className="tree-item tree-file"
         type="button"
         onClick={() => onSelect({ type: 'file', url: entry.url, parentUrl })}
+        onContextMenu={(event) =>
+          onContextMenu(event, {
+            type: 'file',
+            url: entry.url,
+            parentUrl,
+            entryName: entry.name,
+          })
+        }
         aria-pressed={isSelected}
       >
         <span aria-hidden="true">📄</span> {entry.name}
       </button>
     </li>
-  )
-}
-
-function TreeActions({
-  folderUrl,
-  onAddEntry,
-}: {
-  folderUrl: AutomergeUrl
-  onAddEntry: AddEntryHandler
-}) {
-  return (
-    <span className="tree-actions">
-      <button
-        className="tree-action"
-        type="button"
-        aria-label="add file"
-        onClick={() => onAddEntry(folderUrl, 'file')}
-      >
-        +f
-      </button>
-      <button
-        className="tree-action"
-        type="button"
-        aria-label="add folder"
-        onClick={() => onAddEntry(folderUrl, 'folder')}
-      >
-        +d
-      </button>
-    </span>
   )
 }
