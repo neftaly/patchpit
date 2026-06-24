@@ -26,7 +26,6 @@ import {
   normalizeWorkspaceLayout,
   normalizeWorkspacePanes,
   removePaneFromWorkspaceLayout,
-  workspaceProgramFor,
   workspaceStateFileName,
 } from '@patchpit/workspace'
 import type { FilesystemUiDoc } from './repo.js'
@@ -126,6 +125,7 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     osInstancesHandle,
     rootEntryName,
     defaultWorkspacePanes,
+    workspaceProgramRefs,
   } = demoState
   const ui = useDocument(uiHandle)
   const nextInstanceId = useRef(1)
@@ -269,7 +269,7 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     const stateHandle = createWorkspaceAppState(
       repo,
       paneId,
-      workspaceProgramFor(defaultWorkspacePanes, programId),
+      workspaceProgramRefs[programId],
       defaultWorkspaceAppState(programId, selectedForPane('files')),
     )
     const pane = createWorkspacePaneInstance(
@@ -277,6 +277,7 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
       paneId,
       programId,
       stateHandle.url,
+      workspaceProgramRefs[programId],
     )
 
     addLinkedAutomergeFile(

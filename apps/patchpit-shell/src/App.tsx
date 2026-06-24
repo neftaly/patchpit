@@ -17,6 +17,7 @@ const launchableApps: { id: WorkspaceProgramId; label: string }[] = [
   { id: 'patchpit:file-explorer', label: 'files' },
   { id: 'patchpit:file-viewer', label: 'viewer' },
   { id: 'patchpit:bash', label: 'bash' },
+  { id: 'patchpit:state-explorer', label: 'state' },
   { id: 'patchpit:os', label: 'wm' },
 ]
 

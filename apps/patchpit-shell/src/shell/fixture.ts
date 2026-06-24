@@ -146,6 +146,16 @@ const systemProgramsFixture: FilesystemFixtureFolder = {
         entry: 'builtin:bash',
       },
     },
+    {
+      type: 'file',
+      name: 'state-explorer.patchpit-program.json',
+      role: 'program',
+      content: {
+        id: 'patchpit:state-explorer',
+        title: 'State explorer',
+        entry: 'builtin:state-explorer',
+      },
+    },
   ],
 }
 

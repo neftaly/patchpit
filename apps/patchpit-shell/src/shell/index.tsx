@@ -4,6 +4,7 @@ import { BashTerminal } from '@patchpit/bash-terminal'
 import { FileExplorer } from '@patchpit/file-explorer'
 import { FileViewer } from '@patchpit/file-viewer'
 import { rootNode } from '@patchpit/file-explorer/tree-state'
+import { StateExplorer } from '@patchpit/state-explorer'
 import { Mosaic } from 'react-mosaic-component'
 import { TreeContextMenu } from './context-menu.js'
 import { useFilesystemDemo } from './state.js'
@@ -26,7 +27,9 @@ export function FilesystemDemo({ statePane }: { statePane?: ReactNode }) {
     setViewerMode,
     toggleFolder,
     viewerModeForPane,
+    workspaceAppStateHandles,
     workspaceLayout,
+    workspacePaneIds,
     workspacePanes,
   } = useFilesystemDemo()
   const terminalFileSystem = useMemo(
@@ -79,6 +82,14 @@ export function FilesystemDemo({ statePane }: { statePane?: ReactNode }) {
               )
             case 'patchpit:bash':
               return <BashTerminal fileSystem={terminalFileSystem} />
+            case 'patchpit:state-explorer':
+              return (
+                <StateExplorer
+                  workspaceAppStateHandles={workspaceAppStateHandles}
+                  workspacePaneIds={workspacePaneIds}
+                  workspacePanes={workspacePanes}
+                />
+              )
             default:
               return <div />
           }

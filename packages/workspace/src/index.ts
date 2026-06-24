@@ -36,6 +36,7 @@ export type WorkspaceProgramId =
   | 'patchpit:os'
   | 'patchpit:file-viewer'
   | 'patchpit:bash'
+  | 'patchpit:state-explorer'
 
 export const workspacePrograms: Record<
   WorkspaceProgramId,
@@ -60,6 +61,11 @@ export const workspacePrograms: Record<
     name: 'Bash',
     entry: 'builtin:bash',
     fileName: 'bash.patchpit-program.automerge',
+  },
+  'patchpit:state-explorer': {
+    name: 'State explorer',
+    entry: 'builtin:state-explorer',
+    fileName: 'state-explorer.patchpit-program.automerge',
   },
 }
 
@@ -129,12 +135,14 @@ export type FileViewerAppState = {
 }
 
 export type BashAppState = Record<string, never>
+export type StateExplorerAppState = Record<string, never>
 
 export type WorkspaceAppState =
   | BashAppState
   | FileExplorerAppState
   | FileViewerAppState
   | OsAppState
+  | StateExplorerAppState
 
 export type WorkspaceAppStates = Record<WorkspacePaneId, WorkspaceAppState>
 
@@ -193,15 +201,16 @@ export function createWorkspacePaneInstance(
   paneId: WorkspacePaneId,
   programId: WorkspaceProgramId,
   stateUrl: AutomergeUrl,
+  program: WorkspaceProgramRef = workspaceProgramFor(defaults, programId),
 ): WorkspacePane {
   const sourcePane = workspacePaneWithProgram(defaults, programId)
   const pane: WorkspacePane = {
     id: paneId,
-    program: workspaceProgramFor(defaults, programId),
+    program,
     state: { url: stateUrl },
     closable: true,
   }
-  if (sourcePane.subject) {
+  if (sourcePane?.subject) {
     pane.subject = JSON.parse(
       JSON.stringify(sourcePane.subject),
     ) as WorkspaceSubjectRef
@@ -213,7 +222,7 @@ export function workspaceProgramFor(
   panes: WorkspacePanes,
   programId: WorkspaceProgramId,
 ): WorkspaceProgramRef {
-  return { ...workspacePaneWithProgram(panes, programId).program }
+  return { ...requiredWorkspacePaneWithProgram(panes, programId).program }
 }
 
 export function addPaneToWorkspaceLayout(
@@ -305,6 +314,8 @@ export function normalizeWorkspaceAppState(
       return normalizeOsAppState(state)
     case 'patchpit:bash':
       return normalizeBashAppState(state)
+    case 'patchpit:state-explorer':
+      return normalizeBashAppState(state)
   }
 }
 
@@ -321,6 +332,8 @@ export function defaultWorkspaceAppState(
       return { colorMode: 'auto' }
     case 'patchpit:bash':
       return {}
+    case 'patchpit:state-explorer':
+      return {}
   }
 }
 
@@ -335,7 +348,8 @@ export function isWorkspaceProgramId(
     value === 'patchpit:file-explorer' ||
     value === 'patchpit:os' ||
     value === 'patchpit:file-viewer' ||
-    value === 'patchpit:bash'
+    value === 'patchpit:bash' ||
+    value === 'patchpit:state-explorer'
   )
 }
 
@@ -350,16 +364,21 @@ function cloneWorkspacePanes(panes: WorkspacePanes): WorkspacePanes {
 function workspacePaneWithProgram(
   panes: WorkspacePanes,
   programId: WorkspaceProgramId,
+): WorkspacePane | undefined {
+  return workspacePaneIds
+    .map((paneId) => panes[paneId])
+    .find((pane) => pane?.program.id === programId)
+}
+
+function requiredWorkspacePaneWithProgram(
+  panes: WorkspacePanes,
+  programId: WorkspaceProgramId,
 ): WorkspacePane {
   const fallbackPane = panes.viewer ?? Object.values(panes)[0]
   if (!fallbackPane) {
     throw new Error('workspace needs at least one pane')
   }
-  return (
-    workspacePaneIds
-      .map((paneId) => panes[paneId])
-      .find((pane) => pane?.program.id === programId) ?? fallbackPane
-  )
+  return workspacePaneWithProgram(panes, programId) ?? fallbackPane
 }
 
 function migrateLegacyWorkspaceLayout(layout: unknown): unknown {

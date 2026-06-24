@@ -375,6 +375,44 @@ body {
   min-height: 10rem;
 }
 
+.state-explorer-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.state-explorer-list {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.state-explorer-list button {
+  display: grid;
+  width: 100%;
+  gap: 0.125rem;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+
+.state-explorer-list small {
+  overflow: hidden;
+  color: var(--control-disabled-fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state-explorer-doc {
+  min-height: 16rem;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .folder-preview {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));

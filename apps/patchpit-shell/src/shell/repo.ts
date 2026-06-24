@@ -90,6 +90,7 @@ export type FilesystemDemoState = {
     DocHandle<WorkspaceAppStateDoc>
   >
   defaultWorkspacePanes: WorkspacePanes
+  workspaceProgramRefs: Record<WorkspaceProgramId, WorkspaceProgramRef>
   rootEntryName: string
 }
 
@@ -114,12 +115,15 @@ export function createFilesystemDemoState(
     filesystemFixture,
     fixtureContext,
   )
+  const workspaceProgramRefs = createWorkspaceProgramRefs(
+    fixtureContext.programUrls,
+  )
   const { panes: defaultWorkspacePanes, stateHandles } =
     createDefaultWorkspacePanes(
       repo,
       rootHandle.url,
       filesystemFixture.name,
-      fixtureContext.programUrls,
+      workspaceProgramRefs,
     )
   const uiHandle = repo.create<FilesystemUiDoc>({
     '@patchwork': { type: 'filesystem-ui', version: 1 },
@@ -143,6 +147,7 @@ export function createFilesystemDemoState(
     osInstancesHandle,
     workspaceAppStateHandles: stateHandles,
     defaultWorkspacePanes,
+    workspaceProgramRefs,
     rootEntryName: filesystemFixture.name,
   }
 }
@@ -151,7 +156,7 @@ function createDefaultWorkspacePanes(
   repo: Repo,
   rootUrl: AutomergeUrl,
   rootName: string,
-  programUrls: Partial<Record<WorkspaceProgramId, AutomergeUrl>>,
+  programRefs: Record<WorkspaceProgramId, WorkspaceProgramRef>,
 ): {
   panes: WorkspacePanes
   stateHandles: Record<BaseWorkspacePaneId, DocHandle<WorkspaceAppStateDoc>>
@@ -167,11 +172,7 @@ function createDefaultWorkspacePanes(
     files: createWorkspaceAppState(
       repo,
       'files',
-      workspaceProgramRef(
-        'patchpit:file-explorer',
-        'File explorer',
-        programUrls,
-      ),
+      programRefs['patchpit:file-explorer'],
       {
         selected: rootSelection,
         closedFolderEntryIds: [],
@@ -180,7 +181,7 @@ function createDefaultWorkspacePanes(
     state: createWorkspaceAppState(
       repo,
       'state',
-      workspaceProgramRef('patchpit:os', 'Patchpit OS', programUrls),
+      programRefs['patchpit:os'],
       {
         colorMode: 'auto',
       },
@@ -188,7 +189,7 @@ function createDefaultWorkspacePanes(
     viewer: createWorkspaceAppState(
       repo,
       'viewer',
-      workspaceProgramRef('patchpit:file-viewer', 'File viewer', programUrls),
+      programRefs['patchpit:file-viewer'],
       {
         mode: 'view',
         selected: rootSelection,
@@ -198,7 +199,7 @@ function createDefaultWorkspacePanes(
     terminal: createWorkspaceAppState(
       repo,
       'terminal',
-      workspaceProgramRef('patchpit:bash', 'Bash', programUrls),
+      programRefs['patchpit:bash'],
       {},
     ),
   }
@@ -207,11 +208,9 @@ function createDefaultWorkspacePanes(
     panes: {
       files: {
         id: 'files',
-        program: stateHandles.files.doc()?.program ?? workspaceProgramRef(
-          'patchpit:file-explorer',
-          'File explorer',
-          programUrls,
-        ),
+        program:
+          stateHandles.files.doc()?.program ??
+          programRefs['patchpit:file-explorer'],
         state: { url: stateHandles.files.url },
         subject: { kind: 'doc', url: rootUrl, type: 'folder' },
       },
@@ -219,16 +218,14 @@ function createDefaultWorkspacePanes(
         id: 'state',
         program:
           stateHandles.state.doc()?.program ??
-          workspaceProgramRef('patchpit:os', 'Patchpit OS', programUrls),
+          programRefs['patchpit:os'],
         state: { url: stateHandles.state.url },
       },
       viewer: {
         id: 'viewer',
-        program: stateHandles.viewer.doc()?.program ?? workspaceProgramRef(
-          'patchpit:file-viewer',
-          'File viewer',
-          programUrls,
-        ),
+        program:
+          stateHandles.viewer.doc()?.program ??
+          programRefs['patchpit:file-viewer'],
         state: { url: stateHandles.viewer.url },
         subject: { kind: 'selection', paneId: 'files' },
       },
@@ -236,7 +233,7 @@ function createDefaultWorkspacePanes(
         id: 'terminal',
         program:
           stateHandles.terminal.doc()?.program ??
-          workspaceProgramRef('patchpit:bash', 'Bash', programUrls),
+          programRefs['patchpit:bash'],
         state: { url: stateHandles.terminal.url },
         subject: { kind: 'doc', url: rootUrl, type: 'folder' },
       },
@@ -277,20 +274,22 @@ function createPatchpitMount(
   return { patchpitHandle, instancesHandle }
 }
 
-function workspaceProgramRef(
-  id: WorkspaceProgramId,
-  name: string,
+function createWorkspaceProgramRefs(
   urls: Partial<Record<WorkspaceProgramId, AutomergeUrl>>,
-): WorkspaceProgramRef {
-  const fallback = workspacePrograms[id]
-  return {
-    id,
-    name: fallback?.name ?? name,
-    url: urls[id] ?? createEphemeralProgramUrl(id),
-  }
+): Record<WorkspaceProgramId, WorkspaceProgramRef> {
+  return Object.fromEntries(
+    Object.entries(workspacePrograms).map(([id, program]) => [
+      id,
+      {
+        id,
+        name: program.name,
+        url: urls[id as WorkspaceProgramId] ?? createEphemeralProgramUrl(id),
+      },
+    ]),
+  ) as Record<WorkspaceProgramId, WorkspaceProgramRef>
 }
 
-function createEphemeralProgramUrl(id: WorkspaceProgramId): AutomergeUrl {
+function createEphemeralProgramUrl(id: string): AutomergeUrl {
   throw new Error(`missing Automerge program doc for ${id}`)
 }
 
