@@ -104,83 +104,70 @@ export function ImmerTodoDemo() {
   }
 
   return (
-    <section className="demo-pane">
+    <main>
       <p>
         This todo uses Immer, so we can prove Automerge hasn't leaked into the
         core.
       </p>
-      <div className="todo-layout">
-        <section className="todo-panel">
-          <h2>immer todo</h2>
-          <form
-            className="todo-form"
-            onSubmit={(event) => {
-              event.preventDefault()
-              addTask()
-            }}
-          >
-            <input
-              id="todo-title"
-              name="todo-title"
-              value={draftTitle}
-              onChange={(event) => setDraftTitle(event.target.value)}
-              placeholder="task"
-            />
-            <select
-              id="todo-assignee"
-              name="todo-assignee"
-              value={assigneeId}
-              onChange={(event) => setAssigneeId(event.target.value)}
-            >
-              {doc.users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-            <button type="submit">add</button>
-          </form>
+      <h1>immer todo</h1>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          addTask()
+        }}
+      >
+        <input
+          id="todo-title"
+          name="todo-title"
+          value={draftTitle}
+          onChange={(event) => setDraftTitle(event.target.value)}
+          placeholder="task"
+        />
+        <select
+          id="todo-assignee"
+          name="todo-assignee"
+          value={assigneeId}
+          onChange={(event) => setAssigneeId(event.target.value)}
+        >
+          {doc.users.map((user) => (
+            <option key={user.id} value={user.id}>
+              {user.name}
+            </option>
+          ))}
+        </select>
+        <button type="submit">add</button>
+      </form>
 
-          <ul className="todo-list">
-            {doc.tasks.map((task) => (
-              <li key={task.id}>
-                <label>
-                  <input
-                    id={`todo-${task.id}`}
-                    name={`todo-${task.id}`}
-                    type="checkbox"
-                    checked={task.done}
-                    onChange={() => toggleTask(task.id)}
-                  />{' '}
-                  {task.title}
-                </label>
-              </li>
-            ))}
-          </ul>
-        </section>
+      <h2>todos</h2>
+      <ul>
+        {doc.tasks.map((task) => (
+          <li key={task.id}>
+            <label>
+              <input
+                id={`todo-${task.id}`}
+                name={`todo-${task.id}`}
+                type="checkbox"
+                checked={task.done}
+                onChange={() => toggleTask(task.id)}
+              />{' '}
+              {task.title}
+            </label>
+          </li>
+        ))}
+      </ul>
 
-        <section className="todo-panel">
-          <h2>tarstate view</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>task</th>
-                <th>assignee</th>
-              </tr>
-            </thead>
-            <tbody>
-              {view.pendingByUser.map((task) => (
-                <tr key={`${task.name}:${task.title}`}>
-                  <td>{task.title}</td>
-                  <td>{task.name}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <pre>{JSON.stringify({ doc, pending: view.pending }, null, 2)}</pre>
-        </section>
-      </div>
-    </section>
+      <h2>pending by assignee</h2>
+      <ul>
+        {view.pendingByUser.map((task) => (
+          <li key={`${task.name}:${task.title}`}>
+            {task.title}: {task.name}
+          </li>
+        ))}
+      </ul>
+
+      <h2>state</h2>
+      <pre>{JSON.stringify({ doc, pending: view.pending }, null, 2)}</pre>
+    </main>
   )
 }
 

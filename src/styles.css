@@ -1,9 +1,5 @@
 :root {
   color-scheme: light;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  color: #111;
-  background: #f7f7f7;
 }
 
 html,
@@ -13,7 +9,8 @@ body,
   height: 100%;
 }
 
-* {
+.app,
+.app * {
   box-sizing: border-box;
 }
 
@@ -21,10 +18,10 @@ body {
   margin: 0;
 }
 
-button,
-input,
-select,
-textarea {
+.app button,
+.app input,
+.app select,
+.app textarea {
   font: inherit;
   color: inherit;
   background: #fff;
@@ -32,30 +29,30 @@ textarea {
   border-radius: 0;
 }
 
-button {
+.app button {
   cursor: pointer;
 }
 
-button[aria-pressed='true'],
-li[aria-selected='true'] > .tree-item {
+.app button[aria-pressed='true'],
+.app li[aria-selected='true'] > .tree-item {
   color: #fff;
   background: #111;
 }
 
-button:disabled {
+.app button:disabled {
   color: #777;
   border-color: #aaa;
   cursor: default;
 }
 
-h2,
-h3,
-p {
+.app h2,
+.app h3,
+.app p {
   margin: 0 0 0.75rem;
 }
 
-h2,
-h3 {
+.app h2,
+.app h3 {
   font-size: 1rem;
 }
 
@@ -67,8 +64,8 @@ h3 {
   font-weight: 700;
 }
 
-pre,
-textarea {
+.app pre,
+.app textarea {
   width: 100%;
   max-width: 100%;
   overflow: auto;
@@ -77,28 +74,23 @@ textarea {
   border-radius: 0;
 }
 
-pre {
+.app pre {
   padding: 0.75rem;
 }
 
-textarea {
+.app textarea {
   padding: 0.5rem;
   resize: vertical;
 }
 
 .app {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  position: relative;
   width: 100%;
   height: 100%;
-}
-
-.demo-tabs {
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  background: #fff;
-  border-bottom: 1px solid #111;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  color: #111;
+  background: #f7f7f7;
 }
 
 .workspace,
@@ -116,51 +108,6 @@ textarea {
   background: #fff;
 }
 
-.demo-pane {
-  min-width: 0;
-  min-height: 0;
-  padding: 0.75rem;
-  overflow: auto;
-  background: #fff;
-}
-
-.todo-layout {
-  display: grid;
-  grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
-  gap: 1rem;
-  min-height: 0;
-}
-
-.todo-panel {
-  min-width: 0;
-}
-
-.todo-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.todo-list {
-  margin: 0;
-  padding-left: 1.25rem;
-}
-
-table {
-  width: 100%;
-  margin-bottom: 1rem;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 0.25rem 0.5rem;
-  text-align: left;
-  border: 1px solid #111;
-}
-
-.tree-pane,
 .detail-pane {
   padding: 0.75rem;
   min-width: 0;
@@ -170,6 +117,10 @@ td {
 }
 
 .tree-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-width: 0;
   border-right: 1px solid #111;
 }
 
@@ -177,35 +128,38 @@ td {
 .tree ul {
   list-style: none;
   margin: 0;
-  padding-left: 1rem;
-}
-
-.tree {
   padding-left: 0;
 }
 
 .tree li {
-  margin: 0.125rem 0;
+  margin: 0;
 }
 
 .tree [role='treeitem'] {
   display: block;
 }
 
-.tree [role='group'] {
-  grid-column: 1 / -1;
-}
-
-.tree-item {
-  border: 0;
-  background: transparent;
-  padding: 0 0.25rem;
-}
-
-.tree-item {
-  display: inline-flex;
+.app .tree-item {
+  display: flex;
+  width: 100%;
   gap: 0.5ch;
   align-items: baseline;
+  border: 0;
+  background: transparent;
+  padding: 0 0.25rem 0 calc(var(--tree-indent, 0rem) + 0.25rem);
+  text-align: left;
+}
+
+.tree-item:hover,
+.tree-item:focus {
+  background: #eee;
+}
+
+.app li[aria-selected='true'] > .tree-item,
+.app li[aria-selected='true'] > .tree-item:hover,
+.app li[aria-selected='true'] > .tree-item:focus {
+  color: #fff;
+  background: #111;
 }
 
 .tree-folder {
@@ -259,6 +213,15 @@ td {
   background: #111;
 }
 
+.todo-link {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  z-index: 5;
+  color: inherit;
+  background: #fff;
+}
+
 @media (max-width: 760px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -267,10 +230,5 @@ td {
   .tree-pane {
     border-right: 0;
     border-bottom: 1px solid #111;
-  }
-
-  .todo-layout,
-  .todo-form {
-    grid-template-columns: 1fr;
   }
 }

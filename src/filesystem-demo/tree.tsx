@@ -1,49 +1,45 @@
-import type { AutomergeUrl, DocHandle, Repo } from '@automerge/automerge-repo'
-import type { MouseEvent } from 'react'
+import type { AutomergeUrl, DocHandle } from '@automerge/automerge-repo'
+import type { CSSProperties, MouseEvent } from 'react'
 import { useDocument } from '../tarstate-automerge.js'
 import { useResolvedHandle } from './hooks.js'
-import type { FolderDoc, FolderEntry, SelectedDoc } from './model.js'
-
-export type TreeContextTarget = SelectedDoc & {
-  entryName: string
-}
+import type { FolderDoc, FolderEntry } from './model.js'
+import { useFilesystemDemo } from './state.js'
+import type { TreeContextTarget } from './state.js'
 
 export function FolderTreeItem({
-  repo,
   handle,
   entryName,
   parentUrl,
-  selectedUrl,
-  closedUrls,
-  onToggle,
-  onSelect,
-  onContextMenu,
+  depth = 0,
 }: {
-  repo: Repo
   handle: DocHandle<FolderDoc>
   entryName: string
   parentUrl: AutomergeUrl | null
-  selectedUrl: AutomergeUrl
-  closedUrls: ReadonlySet<AutomergeUrl>
-  onToggle: (url: AutomergeUrl) => void
-  onSelect: (doc: SelectedDoc) => void
-  onContextMenu: (event: MouseEvent, target: TreeContextTarget) => void
+  depth?: number
 }) {
+  const {
+    selected,
+    isFolderOpen,
+    openContextMenu,
+    select,
+    toggleFolder,
+  } = useFilesystemDemo()
   const folder = useDocument(handle)
-  const isOpen = !closedUrls.has(handle.url)
-  const isSelected = selectedUrl === handle.url
+  const isOpen = isFolderOpen(handle.url)
+  const isSelected = selected.url === handle.url
 
   return (
     <li role="treeitem" aria-expanded={isOpen} aria-selected={isSelected}>
       <button
         className="tree-item tree-folder"
+        style={treeItemStyle(depth)}
         type="button"
         onClick={() => {
-          onToggle(handle.url)
-          onSelect({ type: 'folder', url: handle.url, parentUrl })
+          toggleFolder(handle.url)
+          select({ type: 'folder', url: handle.url, parentUrl })
         }}
         onContextMenu={(event) =>
-          onContextMenu(event, {
+          openTreeContextMenu(event, openContextMenu, {
             type: 'folder',
             url: handle.url,
             parentUrl,
@@ -60,23 +56,16 @@ export function FolderTreeItem({
             entry.type === 'folder' ? (
               <ResolvedFolderTreeItem
                 key={entry.url}
-                repo={repo}
                 entry={entry}
                 parentUrl={handle.url}
-                selectedUrl={selectedUrl}
-                closedUrls={closedUrls}
-                onToggle={onToggle}
-                onSelect={onSelect}
-                onContextMenu={onContextMenu}
+                depth={depth + 1}
               />
             ) : (
               <FileTreeItem
                 key={entry.url}
                 entry={entry}
                 parentUrl={handle.url}
-                selectedUrl={selectedUrl}
-                onSelect={onSelect}
-                onContextMenu={onContextMenu}
+                depth={depth + 1}
               />
             ),
           )}
@@ -87,38 +76,24 @@ export function FolderTreeItem({
 }
 
 function ResolvedFolderTreeItem({
-  repo,
   entry,
   parentUrl,
-  selectedUrl,
-  closedUrls,
-  onToggle,
-  onSelect,
-  onContextMenu,
+  depth,
 }: {
-  repo: Repo
   entry: FolderEntry
   parentUrl: AutomergeUrl
-  selectedUrl: AutomergeUrl
-  closedUrls: ReadonlySet<AutomergeUrl>
-  onToggle: (url: AutomergeUrl) => void
-  onSelect: (doc: SelectedDoc) => void
-  onContextMenu: (event: MouseEvent, target: TreeContextTarget) => void
+  depth: number
 }) {
+  const { repo } = useFilesystemDemo()
   const handle = useResolvedHandle<FolderDoc>(repo, entry.url)
   if (!handle) return <li role="treeitem">folder {entry.name} loading</li>
 
   return (
     <FolderTreeItem
-      repo={repo}
       handle={handle}
       entryName={entry.name}
       parentUrl={parentUrl}
-      selectedUrl={selectedUrl}
-      closedUrls={closedUrls}
-      onToggle={onToggle}
-      onSelect={onSelect}
-      onContextMenu={onContextMenu}
+      depth={depth}
     />
   )
 }
@@ -126,25 +101,23 @@ function ResolvedFolderTreeItem({
 function FileTreeItem({
   entry,
   parentUrl,
-  selectedUrl,
-  onSelect,
-  onContextMenu,
+  depth,
 }: {
   entry: FolderEntry
   parentUrl: AutomergeUrl
-  selectedUrl: AutomergeUrl
-  onSelect: (doc: SelectedDoc) => void
-  onContextMenu: (event: MouseEvent, target: TreeContextTarget) => void
+  depth: number
 }) {
-  const isSelected = selectedUrl === entry.url
+  const { openContextMenu, selected, select } = useFilesystemDemo()
+  const isSelected = selected.url === entry.url
   return (
     <li role="treeitem" aria-selected={isSelected}>
       <button
         className="tree-item tree-file"
+        style={treeItemStyle(depth)}
         type="button"
-        onClick={() => onSelect({ type: 'file', url: entry.url, parentUrl })}
+        onClick={() => select({ type: 'file', url: entry.url, parentUrl })}
         onContextMenu={(event) =>
-          onContextMenu(event, {
+          openTreeContextMenu(event, openContextMenu, {
             type: 'file',
             url: entry.url,
             parentUrl,
@@ -157,4 +130,17 @@ function FileTreeItem({
       </button>
     </li>
   )
+}
+
+function openTreeContextMenu(
+  event: MouseEvent,
+  openContextMenu: (x: number, y: number, target: TreeContextTarget) => void,
+  target: TreeContextTarget,
+) {
+  event.preventDefault()
+  openContextMenu(event.clientX, event.clientY, target)
+}
+
+function treeItemStyle(depth: number): CSSProperties {
+  return { '--tree-indent': `${depth}rem` } as CSSProperties
 }

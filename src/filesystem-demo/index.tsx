@@ -1,151 +1,67 @@
-import type { AutomergeUrl } from '@automerge/automerge-repo'
-import type { MouseEvent } from 'react'
-import { useState } from 'react'
-import {
-  addEntry,
-  createFilesystemDemoState,
-  deleteEntry,
-  renameEntry,
-} from './model.js'
-import type { EntryType, SelectedDoc } from './model.js'
 import { SelectedDocPane } from './selected-doc-pane.js'
+import { FilesystemDemoProvider, useFilesystemDemo } from './state.js'
 import { FolderTreeItem } from './tree.js'
-import type { TreeContextTarget } from './tree.js'
-
-const demoState = createFilesystemDemoState()
-
-type ContextMenuState = {
-  x: number
-  y: number
-  target: TreeContextTarget
-}
 
 export function FilesystemDemo() {
-  const { repo, rootHandle, rootEntryName } = demoState
-  const [closedUrls, setClosedUrls] = useState<Set<AutomergeUrl>>(
-    () => new Set(),
+  return (
+    <FilesystemDemoProvider>
+      <FilesystemWorkspace />
+    </FilesystemDemoProvider>
   )
-  const [selected, setSelected] = useState<SelectedDoc>({
-    type: 'folder',
-    url: rootHandle.url,
-    parentUrl: null,
-  })
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+}
 
-  function toggleFolder(url: AutomergeUrl) {
-    setClosedUrls((current) => {
-      const next = new Set(current)
-      if (next.has(url)) next.delete(url)
-      else next.add(url)
-      return next
-    })
-  }
-
-  function select(next: SelectedDoc) {
-    setSelected(next)
-  }
-
-  function promptAndAddEntry(folderUrl: AutomergeUrl, type: EntryType) {
-    const name = window.prompt(`new ${type} name`)?.trim()
-    if (!name) return
-
-    void addEntry(repo, folderUrl, type, name)
-    setContextMenu(null)
-  }
-
-  function promptAndRename(target: TreeContextTarget) {
-    if (!target.parentUrl) return
-
-    const name = window.prompt('rename', target.entryName)?.trim()
-    if (!name) return
-
-    void renameEntry(repo, target.parentUrl, target.url, name)
-    setContextMenu(null)
-  }
-
-  function promptAndDelete(target: TreeContextTarget) {
-    if (!target.parentUrl) return
-    if (!window.confirm(`delete ${target.entryName}?`)) return
-
-    void deleteEntry(repo, target.parentUrl, target.url)
-    setSelected({ type: 'folder', url: rootHandle.url, parentUrl: null })
-    setClosedUrls((current) => {
-      const next = new Set(current)
-      next.delete(target.url)
-      return next
-    })
-    setContextMenu(null)
-  }
-
-  function openContextMenu(event: MouseEvent, target: TreeContextTarget) {
-    event.preventDefault()
-    setSelected(
-      target.type === 'folder'
-        ? { type: 'folder', url: target.url, parentUrl: target.parentUrl }
-        : { type: 'file', url: target.url, parentUrl: target.parentUrl },
-    )
-    setContextMenu({ x: event.clientX, y: event.clientY, target })
-  }
+function FilesystemWorkspace() {
+  const { rootHandle, rootEntryName, closeContextMenu, contextMenu } =
+    useFilesystemDemo()
 
   return (
-    <div className="workspace" onClick={() => setContextMenu(null)}>
+    <div className="workspace" onClick={closeContextMenu}>
       <nav className="tree-pane" aria-label="project explorer">
         <ul className="tree" role="tree" aria-label="project files">
           <FolderTreeItem
-            repo={repo}
             handle={rootHandle}
             entryName={rootEntryName}
             parentUrl={null}
-            selectedUrl={selected.url}
-            closedUrls={closedUrls}
-            onToggle={toggleFolder}
-            onSelect={select}
-            onContextMenu={openContextMenu}
           />
         </ul>
       </nav>
 
-      <SelectedDocPane repo={repo} selected={selected} />
-      {contextMenu && (
-        <TreeContextMenu
-          state={contextMenu}
-          onAddEntry={promptAndAddEntry}
-          onRename={promptAndRename}
-          onDelete={promptAndDelete}
-        />
-      )}
+      <SelectedDocPane />
+      {contextMenu && <TreeContextMenu />}
     </div>
   )
 }
 
-function TreeContextMenu({
-  state,
-  onAddEntry,
-  onRename,
-  onDelete,
-}: {
-  state: ContextMenuState
-  onAddEntry: (folderUrl: AutomergeUrl, type: EntryType) => void
-  onRename: (target: TreeContextTarget) => void
-  onDelete: (target: TreeContextTarget) => void
-}) {
-  const { target } = state
+function TreeContextMenu() {
+  const {
+    contextMenu,
+    promptAndAddEntry,
+    promptAndRename,
+    promptAndDelete,
+  } = useFilesystemDemo()
+  if (!contextMenu) return null
+
+  const { target } = contextMenu
   const canEditEntry = target.parentUrl !== null
+  const addTargetUrl = target.type === 'folder' ? target.url : target.parentUrl
 
   return (
     <menu
       className="context-menu"
-      style={{ left: state.x, top: state.y }}
+      style={{ left: contextMenu.x, top: contextMenu.y }}
       onClick={(event) => event.stopPropagation()}
     >
-      {target.type === 'folder' && (
+      {addTargetUrl && (
         <>
-          <button type="button" onClick={() => onAddEntry(target.url, 'file')}>
+          <button
+            type="button"
+            onClick={() => promptAndAddEntry(addTargetUrl, 'file')}
+          >
             new file
           </button>
           <button
             type="button"
-            onClick={() => onAddEntry(target.url, 'folder')}
+            onClick={() => promptAndAddEntry(addTargetUrl, 'folder')}
           >
             new folder
           </button>
@@ -153,10 +69,10 @@ function TreeContextMenu({
       )}
       {canEditEntry && (
         <>
-          <button type="button" onClick={() => onRename(target)}>
+          <button type="button" onClick={() => promptAndRename(target)}>
             rename
           </button>
-          <button type="button" onClick={() => onDelete(target)}>
+          <button type="button" onClick={() => promptAndDelete(target)}>
             delete
           </button>
         </>

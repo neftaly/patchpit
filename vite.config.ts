@@ -7,5 +7,11 @@ export default defineConfig({
   plugins: [wasm(), topLevelAwait(), react()],
   build: {
     target: 'esnext',
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        todo: 'todo.html',
+      },
+    },
   },
 })
