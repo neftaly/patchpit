@@ -22,6 +22,7 @@ import {
   normalizeWorkspaceLayout,
   normalizeWorkspacePanes,
   removePaneFromWorkspaceLayout,
+  sameJsonValue,
 } from '@patchpit/workspace'
 import type { FilesystemUiDoc } from './repo.js'
 import type {
@@ -34,7 +35,6 @@ import type {
   WorkspaceProgramId,
   WorkspaceSubjectRef,
 } from '@patchpit/workspace'
-import { sameJsonValue } from './json.js'
 import { initialUrlSelection } from './initial-selection.js'
 import type { EntryType } from '@patchpit/filesystem'
 import { selectionFromNode } from '@patchpit/file-explorer/tree-state'

@@ -1,17 +1,27 @@
 export function sameJsonValue(left: unknown, right: unknown): boolean {
-  return (
-    JSON.stringify(canonicalJsonValue(left)) ===
-    JSON.stringify(canonicalJsonValue(right))
+  if (Object.is(left, right)) return true
+  if (!isJsonContainer(left) || !isJsonContainer(right)) return false
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false
+    if (left.length !== right.length) return false
+    return left.every((value, index) => sameJsonValue(value, right[index]))
+  }
+
+  const leftRecord = left as Record<string, unknown>
+  const rightRecord = right as Record<string, unknown>
+  const leftKeys = Object.keys(leftRecord)
+  const rightKeys = Object.keys(rightRecord)
+  if (leftKeys.length !== rightKeys.length) return false
+
+  return leftKeys.every(
+    (key) =>
+      Object.hasOwn(rightRecord, key) &&
+      sameJsonValue(leftRecord[key], rightRecord[key]),
   )
 }
 
-function canonicalJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJsonValue)
-  if (!value || typeof value !== 'object') return value
-
-  return Object.fromEntries(
-    Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => [key, canonicalJsonValue(child)]),
-  )
+function isJsonContainer(
+  value: unknown,
+): value is readonly unknown[] | Record<string, unknown> {
+  return value !== null && typeof value === 'object'
 }

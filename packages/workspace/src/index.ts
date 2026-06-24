@@ -4,6 +4,7 @@ import type { EntryType } from '@patchpit/filesystem'
 import { isWorkspaceProgramId } from './programs.js'
 import type { WorkspaceProgramId, WorkspaceProgramRef } from './programs.js'
 
+export { sameJsonValue } from './json.js'
 export {
   defaultWorkspaceAppState,
   normalizeBashAppState,
