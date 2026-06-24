@@ -5,15 +5,22 @@ import { useDocument } from '@patchpit/tarstate-automerge'
 import { useSelectedDocHandle } from './hooks.js'
 import {
   imageDataUrl,
+  isAutomergeEntryUrl,
   isFileDoc,
   isFolderDoc,
   validateFileDoc,
   validateFolderDoc,
 } from './model.js'
 import type { EntryType, FileDoc, FolderDoc } from './model.js'
+import { useFilesystemDemo } from './state.js'
+import type { SelectedDoc } from './state.js'
 
 export function SelectedDocPane() {
+  const { selected } = useFilesystemDemo()
   const { handle, type } = useSelectedDocHandle()
+  if (!isAutomergeEntryUrl(selected.url)) {
+    return <ExternalUrlPane selected={selected} />
+  }
   if (!handle) return null
 
   return <SelectedDocContent handle={handle} type={type} />
@@ -97,4 +104,32 @@ function FilePreview({ doc }: { doc: FileDoc }) {
       )}
     </>
   )
+}
+
+function ExternalUrlPane({ selected }: { selected: SelectedDoc }) {
+  return (
+    <section className="detail-pane">
+      <h2 className="doc-title">
+        <b>title:</b> {selected.name}
+      </h2>
+      <h3>preview</h3>
+      {isImageUrl(selected.url) ? (
+        <p className="asset-preview">
+          <img src={selected.url} alt={selected.name} />
+        </p>
+      ) : (
+        <p className="file-preview">
+          <a href={selected.url}>{selected.url}</a>
+        </p>
+      )}
+    </section>
+  )
+}
+
+function isImageUrl(url: string): boolean {
+  try {
+    return /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(new URL(url).pathname)
+  } catch {
+    return false
+  }
 }

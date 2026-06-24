@@ -1,4 +1,5 @@
 import type { AutomergeUrl } from '@automerge/automerge-repo'
+import { isAutomergeEntryUrl } from './model.js'
 import type { EntryType } from './model.js'
 import { useFilesystemDemo } from './state.js'
 import type { TreeContextTarget } from './state.js'
@@ -10,7 +11,10 @@ export function TreeContextMenu() {
 
   const { target } = contextMenu
   const canEditEntry = target.parentUrl !== null
-  const addTargetUrl = target.type === 'folder' ? target.url : target.parentUrl
+  const addTargetUrl =
+    target.type === 'folder' && isAutomergeEntryUrl(target.url)
+      ? target.url
+      : target.parentUrl
 
   return (
     <menu

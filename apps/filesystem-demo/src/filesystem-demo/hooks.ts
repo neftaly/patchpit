@@ -1,5 +1,6 @@
 import type { AnyDocumentId, DocHandle, Repo } from '@automerge/automerge-repo'
 import { useEffect, useState } from 'react'
+import { isAutomergeEntryUrl } from './model.js'
 import type { FileDoc, FolderDoc } from './model.js'
 import { useFilesystemDemo } from './state.js'
 
@@ -38,8 +39,9 @@ export function useSelectedDocHandle(): {
   type: 'folder' | 'file'
 } {
   const { selected } = useFilesystemDemo()
+  const url = isAutomergeEntryUrl(selected.url) ? selected.url : null
   return {
-    handle: useFilesystemHandle<FolderDoc | FileDoc>(selected.url),
+    handle: useFilesystemHandle<FolderDoc | FileDoc>(url),
     type: selected.type,
   }
 }

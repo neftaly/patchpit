@@ -3,11 +3,22 @@ export type FilesystemFixtureFolder = {
   entries: FilesystemFixtureEntry[]
 }
 
-export type FilesystemFixtureFile = {
+export type FilesystemFixtureFileBase = {
   name: string
   role: string
+}
+
+export type FilesystemFixtureDocFile = FilesystemFixtureFileBase & {
   content: string | Record<string, unknown>
 }
+
+export type FilesystemFixtureUrlFile = FilesystemFixtureFileBase & {
+  url: string
+}
+
+export type FilesystemFixtureFile =
+  | FilesystemFixtureDocFile
+  | FilesystemFixtureUrlFile
 
 export type FilesystemFixtureEntry =
   | ({ type: 'folder' } & FilesystemFixtureFolder)
@@ -67,6 +78,12 @@ export const filesystemFixture: FilesystemFixtureFolder = {
             '</svg>',
             '',
           ].join('\n'),
+        },
+        {
+          type: 'file',
+          name: 'w3c-logo.png',
+          role: 'asset',
+          url: 'https://www.w3.org/assets/logos/w3c-2025-transitional/w3c-72x48.png',
         },
       ],
     },

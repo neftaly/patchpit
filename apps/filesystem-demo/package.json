@@ -8,6 +8,7 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@automerge/automerge": "catalog:",
     "@automerge/automerge-repo": "catalog:",
     "@patchpit/json-doc-editor": "workspace:*",
     "@patchpit/tarstate": "workspace:*",

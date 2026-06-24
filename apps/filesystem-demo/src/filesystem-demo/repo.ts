@@ -5,6 +5,7 @@ import { filesystemFixture } from './fixture.js'
 import type {
   FilesystemFixtureEntry,
   FilesystemFixtureFolder,
+  FilesystemFixtureFile,
 } from './fixture.js'
 import type { EntryType, FileDoc, FolderDoc, FolderEntry } from './model.js'
 
@@ -13,14 +14,45 @@ type JsonRecord = Record<string, unknown>
 export type FilesystemDemoState = {
   repo: Repo
   rootHandle: DocHandle<FolderDoc>
+  uiHandle: DocHandle<FilesystemUiDoc>
   rootEntryName: string
+}
+
+export type FilesystemUiDoc = {
+  '@patchwork': {
+    type: 'filesystem-ui'
+    version: 1
+  }
+  selected: SelectedEntry
+  closedFolderEntryIds: string[]
+  colorMode: 'light' | 'auto' | 'dark'
+}
+
+export type SelectedEntry = {
+  entryId: string | null
+  type: EntryType
+  url: string
+  parentUrl: AutomergeUrl | null
+  name: string
 }
 
 export function createFilesystemDemoState(
   repo = new Repo(),
 ): FilesystemDemoState {
   const rootHandle = createFixtureFolder(repo, filesystemFixture)
-  return { repo, rootHandle, rootEntryName: filesystemFixture.name }
+  const uiHandle = repo.create<FilesystemUiDoc>({
+    '@patchwork': { type: 'filesystem-ui', version: 1 },
+    selected: {
+      entryId: null,
+      type: 'folder',
+      url: rootHandle.url,
+      parentUrl: null,
+      name: filesystemFixture.name,
+    },
+    closedFolderEntryIds: [],
+    colorMode: 'auto',
+  })
+  return { repo, rootHandle, uiHandle, rootEntryName: filesystemFixture.name }
 }
 
 export function createFolder(
@@ -43,6 +75,7 @@ export function createFile(
 ): DocHandle<FileDoc> {
   const text =
     typeof content === 'string' ? content : JSON.stringify(content, null, 2)
+
   return repo.create<FileDoc>({
     '@patchwork': { type: 'file', version: 1 },
     name,
@@ -68,7 +101,7 @@ export async function addEntry(
 export async function renameEntry(
   repo: Repo,
   folderUrl: AutomergeUrl,
-  entryUrl: AutomergeUrl,
+  entryUrl: string,
   name: string,
 ) {
   const folderHandle = await repo.find<FolderDoc>(folderUrl)
@@ -81,7 +114,7 @@ export async function renameEntry(
 export async function deleteEntry(
   repo: Repo,
   folderUrl: AutomergeUrl,
-  entryUrl: AutomergeUrl,
+  entryUrl: string,
 ) {
   const folderHandle = await repo.find<FolderDoc>(folderUrl)
   folderHandle.change((draft) => {
@@ -105,6 +138,10 @@ function createFixtureEntry(
   repo: Repo,
   entry: FilesystemFixtureEntry,
 ): FolderEntry {
+  if (entry.type === 'file' && isUrlFile(entry)) {
+    return { name: entry.name, type: entry.type, url: entry.url }
+  }
+
   const handle =
     entry.type === 'folder'
       ? createFixtureFolder(repo, entry)
@@ -129,4 +166,10 @@ function createEmptyEntry(
 function extensionFromName(name: string): string {
   const index = name.lastIndexOf('.')
   return index === -1 ? '' : name.slice(index + 1)
+}
+
+function isUrlFile(
+  entry: FilesystemFixtureFile,
+): entry is FilesystemFixtureFile & { url: string } {
+  return 'url' in entry
 }

@@ -1,17 +1,27 @@
-import { useState } from 'react'
 import { FilesystemDemo } from './filesystem-demo/index.js'
+import {
+  FilesystemDemoProvider,
+  useFilesystemDemo,
+} from './filesystem-demo/state.js'
 import {
   colorModeIcons,
   colorModes,
   colorSchemeForMode,
-  defaultColorMode,
   themeCssVars,
   themeSet,
 } from './theme.js'
 import type { ColorMode } from './theme.js'
 
 export default function App() {
-  const [colorMode, setColorMode] = useState<ColorMode>(defaultColorMode)
+  return (
+    <FilesystemDemoProvider>
+      <FilesystemApp />
+    </FilesystemDemoProvider>
+  )
+}
+
+function FilesystemApp() {
+  const { colorMode, setColorMode } = useFilesystemDemo()
 
   return (
     <main

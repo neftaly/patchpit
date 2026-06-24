@@ -7,7 +7,8 @@ export default defineConfig({
   base: process.env.GITHUB_PAGES === 'true' ? '/patchpit/' : '/',
   plugins: [wasm(), topLevelAwait(), react()],
   build: {
-    target: 'esnext',
+    target: 'safari17',
+    sourcemap: true,
     chunkSizeWarningLimit: 1000,
   },
 })

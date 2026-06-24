@@ -15,7 +15,7 @@ export type EntryType = 'folder' | 'file'
 export type FolderEntry = {
   name: string
   type: EntryType
-  url: AutomergeUrl
+  url: string
 }
 
 export type FolderDoc = PatchworkTag<'folder'> & {
@@ -27,10 +27,10 @@ export type FileDoc = PatchworkTag<'file'> & {
   name: string
   extension: string
   mimeType: string
-  content: string
   metadata: {
     role: string
   }
+  content: string
 }
 
 export function validateFolderDoc(doc: JsonRecord): string | null {
@@ -76,17 +76,36 @@ export function imageDataUrl(file: FileDoc): string {
   return `data:${file.mimeType};utf8,${encodeURIComponent(file.content)}`
 }
 
+export function isAutomergeEntryUrl(url: string): url is AutomergeUrl {
+  return isValidAutomergeUrl(url)
+}
+
+export function isExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
 function isPatchworkDoc(doc: JsonRecord, type: EntryType): boolean {
   return isJsonRecord(doc['@patchwork']) && doc['@patchwork'].type === type
 }
 
 function isFolderEntry(value: unknown): value is FolderEntry {
-  return (
-    isJsonRecord(value) &&
-    typeof value.name === 'string' &&
-    (value.type === 'folder' || value.type === 'file') &&
-    isValidAutomergeUrl(value.url)
-  )
+  if (
+    !isJsonRecord(value) ||
+    typeof value.name !== 'string' ||
+    typeof value.url !== 'string' ||
+    (value.type !== 'folder' && value.type !== 'file')
+  ) {
+    return false
+  }
+
+  return value.type === 'folder'
+    ? isAutomergeEntryUrl(value.url)
+    : isAutomergeEntryUrl(value.url) || isExternalUrl(value.url)
 }
 
 function isJsonRecord(value: unknown): value is JsonRecord {

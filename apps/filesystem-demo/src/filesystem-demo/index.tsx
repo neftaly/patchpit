@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { TreeContextMenu } from './context-menu.js'
 import { SelectedDocPane } from './selected-doc-pane.js'
-import { FilesystemDemoProvider, useFilesystemDemo } from './state.js'
+import { useFilesystemDemo } from './state.js'
 import { FolderTreeItem } from './tree.js'
 import { rootNode } from './tree-state.js'
 
@@ -10,14 +10,6 @@ export function FilesystemDemo({
 }: {
   sidebarFooter?: ReactNode
 }) {
-  return (
-    <FilesystemDemoProvider>
-      <FilesystemWorkspace sidebarFooter={sidebarFooter} />
-    </FilesystemDemoProvider>
-  )
-}
-
-function FilesystemWorkspace({ sidebarFooter }: { sidebarFooter?: ReactNode }) {
   const { rootHandle, rootEntryName, closeContextMenu, contextMenu } =
     useFilesystemDemo()
 

@@ -1,7 +1,9 @@
 import type { DocHandle } from '@automerge/automerge-repo'
 import type { CSSProperties, MouseEvent } from 'react'
 import { useResolvedHandle } from './hooks.js'
-import type { FolderDoc, FolderEntry } from './model.js'
+import { isAutomergeEntryUrl } from './model.js'
+import type { FolderDoc } from './model.js'
+import type { FolderEntryRef } from './queries.js'
 import { useFolderEntries } from './queries.js'
 import { useFilesystemDemo } from './state.js'
 import type { TreeContextTarget, TreeNodeRef } from './state.js'
@@ -17,8 +19,8 @@ export function FolderTreeItem({
   const { selected, isFolderOpen, openContextMenu, selectNode, toggleFolder } =
     useFilesystemDemo()
   const entries = useFolderEntries(handle)
-  const isOpen = isFolderOpen(handle.url)
-  const isSelected = selected.url === handle.url
+  const isOpen = isFolderOpen(node.entryId)
+  const isSelected = isSelectedNode(selected.entryId, node.entryId)
 
   return (
     <li role="treeitem" aria-expanded={isOpen} aria-selected={isSelected}>
@@ -27,7 +29,7 @@ export function FolderTreeItem({
         style={treeItemStyle(node.depth)}
         type="button"
         onClick={() => {
-          toggleFolder(handle.url)
+          toggleFolder(node.entryId)
           selectNode(node)
         }}
         onContextMenu={(event) =>
@@ -42,14 +44,14 @@ export function FolderTreeItem({
           {entries.map((entry) =>
             entry.type === 'folder' ? (
               <ResolvedFolderTreeItem
-                key={entry.url}
-                node={childNode(entry, handle.url, node.depth)}
+                key={entry.objectId}
+                node={childNode(entryNode(entry), handle.url, node.depth)}
                 entry={entry}
               />
             ) : (
               <FileTreeItem
-                key={entry.url}
-                node={childNode(entry, handle.url, node.depth)}
+                key={entry.objectId}
+                node={childNode(entryNode(entry), handle.url, node.depth)}
               />
             ),
           )}
@@ -64,10 +66,12 @@ function ResolvedFolderTreeItem({
   entry,
 }: {
   node: TreeNodeRef
-  entry: FolderEntry
+  entry: FolderEntryRef
 }) {
   const { repo } = useFilesystemDemo()
-  const handle = useResolvedHandle<FolderDoc>(repo, entry.url)
+  const folderUrl = isAutomergeEntryUrl(entry.url) ? entry.url : null
+  const handle = useResolvedHandle<FolderDoc>(repo, folderUrl)
+  if (!folderUrl) return null
   if (!handle) return <li role="treeitem">folder {entry.name} loading</li>
 
   return <FolderTreeItem handle={handle} node={node} />
@@ -75,7 +79,7 @@ function ResolvedFolderTreeItem({
 
 function FileTreeItem({ node }: { node: TreeNodeRef }) {
   const { openContextMenu, selected, selectNode } = useFilesystemDemo()
-  const isSelected = selected.url === node.url
+  const isSelected = isSelectedNode(selected.entryId, node.entryId)
   return (
     <li role="treeitem" aria-selected={isSelected}>
       <button
@@ -105,4 +109,23 @@ function openTreeContextMenu(
 
 function treeItemStyle(depth: number): CSSProperties {
   return { '--tree-indent': `${depth}rem` } as CSSProperties
+}
+
+function entryNode(entry: FolderEntryRef): Pick<
+  TreeNodeRef,
+  'entryId' | 'type' | 'url' | 'name'
+> {
+  return {
+    entryId: entry.objectId,
+    type: entry.type,
+    url: entry.url,
+    name: entry.name,
+  }
+}
+
+function isSelectedNode(
+  selectedEntryId: string | null,
+  nodeEntryId: string | null,
+): boolean {
+  return selectedEntryId === nodeEntryId
 }

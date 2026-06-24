@@ -11,7 +11,7 @@ const apps = [
     name: 'filesystem demo',
     dist: path.join(root, 'apps/filesystem-demo/dist'),
     port: 5410,
-    expectedText: ['tiny-checkers', 'title: tiny-checkers'],
+    expectedText: ['tiny-checkers', 'w3c-logo.png', 'title: tiny-checkers'],
   },
   {
     name: 'todo demo',
