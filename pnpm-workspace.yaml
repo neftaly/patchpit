@@ -7,7 +7,7 @@ catalog:
   '@types/node': ^24.13.2
   '@types/react': ^19.2.17
   '@types/react-dom': ^19.2.3
-  '@vitejs/plugin-react': ^6.0.2
+  '@vitejs/plugin-react': ^5.2.0
   immer: ^11.0.1
   mime: ^4.1.0
   oxlint: 1.71.0
@@ -18,6 +18,6 @@ catalog:
   react-dom: ^19.2.7
   tm-themes: ^1.12.2
   typescript: ^5.9.3
-  vite: ^8.1.0
+  vite: ^7.3.5
   vite-plugin-top-level-await: 1.6.0
   vite-plugin-wasm: 3.6.0
