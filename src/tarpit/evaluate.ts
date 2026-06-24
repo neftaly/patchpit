@@ -1,24 +1,23 @@
 import type { Atom, FieldRef, Predicate, QB } from './types.js'
 import { getSpec } from './internal.js'
 import type { QuerySpec } from './internal.js'
-
-type Row = Readonly<Record<string, Atom>>
+import type { RelationSource } from './source.js'
 
 export function evaluate<T extends Record<string, Atom>, Rels extends string>(
   qb: QB<T, Rels>,
-  doc: Readonly<object>,
+  source: RelationSource,
 ): ReadonlyArray<T> {
-  return evalSpec(getSpec(qb), doc) as ReadonlyArray<T>
+  return evalSpec(getSpec(qb), source) as ReadonlyArray<T>
 }
 
 function evalSpec(
   spec: QuerySpec,
-  doc: Readonly<object>,
+  source: RelationSource,
 ): ReadonlyArray<Record<string, Atom>> {
-  let rows: Record<string, Atom>[] = Array.from(relationRows(doc, spec.from))
+  let rows: Record<string, Atom>[] = Array.from(source.rows(spec.from))
 
   for (const j of spec.joins) {
-    const rhs = evalSpec(j.spec, doc)
+    const rhs = evalSpec(j.spec, source)
     const joined: Record<string, Atom>[] = []
     for (const left of rows) {
       for (const right of rhs) {
@@ -60,12 +59,4 @@ function isFieldRef(
   value: FieldRef<Atom, string> | Atom,
 ): value is FieldRef<Atom, string> {
   return value !== null && typeof value === 'object' && '_field' in value
-}
-
-function relationRows(
-  doc: Readonly<object>,
-  relation: string,
-): ReadonlyArray<Row> {
-  const value = (doc as Record<string, unknown>)[relation]
-  return Array.isArray(value) ? (value as ReadonlyArray<Row>) : []
 }

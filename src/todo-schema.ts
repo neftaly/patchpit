@@ -1,13 +1,12 @@
 import { defineSchema, where, join, select, eq } from './tarpit/index.js'
-import { produce } from 'immer'
 
-type TaskRow = {
+export type TaskRow = {
   id: string
   title: string
   done: boolean
   userId: string
 }
-type UserRow = { id: string; name: string }
+export type UserRow = { id: string; name: string }
 export type TodoDoc = { tasks: TaskRow[]; users: UserRow[] }
 type TodoShape = { tasks: TaskRow; users: UserRow }
 
@@ -32,16 +31,3 @@ export const pendingByUser = select(
   'title',
   'name',
 )
-
-export const feeders = {
-  addTask: (doc: TodoDoc, input: { title: string; userId: string }) =>
-    produce(doc, (d) => {
-      d.tasks.push({ id: crypto.randomUUID(), done: false, ...input })
-    }),
-
-  complete: (doc: TodoDoc, id: string) =>
-    produce(doc, (d) => {
-      const task = d.tasks.find((t) => t.id === id)
-      if (task) task.done = true
-    }),
-}
