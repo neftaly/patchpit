@@ -1,5 +1,8 @@
+import type { AutomergeUrl } from '@automerge/automerge-repo'
+import type { EntryType } from './model.js'
 import { SelectedDocPane } from './selected-doc-pane.js'
 import { FilesystemDemoProvider, useFilesystemDemo } from './state.js'
+import type { TreeContextTarget } from './state.js'
 import { FolderTreeItem } from './tree.js'
 
 export function FilesystemDemo() {
@@ -20,8 +23,13 @@ function FilesystemWorkspace() {
         <ul className="tree" role="tree" aria-label="project files">
           <FolderTreeItem
             handle={rootHandle}
-            entryName={rootEntryName}
-            parentUrl={null}
+            node={{
+              type: 'folder',
+              url: rootHandle.url,
+              parentUrl: null,
+              name: rootEntryName,
+              depth: 0,
+            }}
           />
         </ul>
       </nav>
@@ -35,9 +43,9 @@ function FilesystemWorkspace() {
 function TreeContextMenu() {
   const {
     contextMenu,
-    promptAndAddEntry,
-    promptAndRename,
-    promptAndDelete,
+    addEntryToFolder,
+    renameTreeEntry,
+    deleteTreeEntry,
   } = useFilesystemDemo()
   if (!contextMenu) return null
 
@@ -55,13 +63,17 @@ function TreeContextMenu() {
         <>
           <button
             type="button"
-            onClick={() => promptAndAddEntry(addTargetUrl, 'file')}
+            onClick={() =>
+              promptAndAddEntry(addTargetUrl, 'file', addEntryToFolder)
+            }
           >
             new file
           </button>
           <button
             type="button"
-            onClick={() => promptAndAddEntry(addTargetUrl, 'folder')}
+            onClick={() =>
+              promptAndAddEntry(addTargetUrl, 'folder', addEntryToFolder)
+            }
           >
             new folder
           </button>
@@ -69,14 +81,48 @@ function TreeContextMenu() {
       )}
       {canEditEntry && (
         <>
-          <button type="button" onClick={() => promptAndRename(target)}>
+          <button
+            type="button"
+            onClick={() => promptAndRename(target, renameTreeEntry)}
+          >
             rename
           </button>
-          <button type="button" onClick={() => promptAndDelete(target)}>
+          <button
+            type="button"
+            onClick={() => promptAndDelete(target, deleteTreeEntry)}
+          >
             delete
           </button>
         </>
       )}
     </menu>
   )
+}
+
+function promptAndAddEntry(
+  folderUrl: AutomergeUrl,
+  type: EntryType,
+  addEntryToFolder: (
+    folderUrl: AutomergeUrl,
+    type: EntryType,
+    name: string,
+  ) => void,
+) {
+  const name = window.prompt(`new ${type} name`)?.trim()
+  if (name) addEntryToFolder(folderUrl, type, name)
+}
+
+function promptAndRename(
+  target: TreeContextTarget,
+  renameTreeEntry: (target: TreeContextTarget, name: string) => void,
+) {
+  const name = window.prompt('rename', target.name)?.trim()
+  if (name) renameTreeEntry(target, name)
+}
+
+function promptAndDelete(
+  target: TreeContextTarget,
+  deleteTreeEntry: (target: TreeContextTarget) => void,
+) {
+  if (window.confirm(`delete ${target.name}?`)) deleteTreeEntry(target)
 }

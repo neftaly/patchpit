@@ -33,10 +33,6 @@ export type FileDoc = PatchworkTag<'file'> & {
   }
 }
 
-export type SelectedDoc =
-  | { type: 'folder'; url: AutomergeUrl; parentUrl: AutomergeUrl | null }
-  | { type: 'file'; url: AutomergeUrl; parentUrl: AutomergeUrl }
-
 export type FilesystemDemoState = {
   repo: Repo
   rootHandle: DocHandle<FolderDoc>

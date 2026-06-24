@@ -146,7 +146,7 @@ body {
   align-items: baseline;
   border: 0;
   background: transparent;
-  padding: 0 0.25rem 0 calc(var(--tree-indent, 0rem) + 0.25rem);
+  padding: 1px 0.25rem 1px calc(var(--tree-indent, 0rem) + 0.25rem);
   text-align: left;
 }
 

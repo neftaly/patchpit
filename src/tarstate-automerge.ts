@@ -7,7 +7,8 @@ import type {
   QueryResults,
   QueryState,
 } from './tarstate-react.js'
-import { fromObjects, linkValues } from './tarstate/source.js'
+import { linkValues } from './tarstate-links.js'
+import { fromObjects } from './tarstate/source.js'
 import type { ObjectDoc, RelationSource } from './tarstate/source.js'
 
 type StringDocumentId = Extract<AnyDocumentId, string>

@@ -7,13 +7,21 @@ import {
   deleteEntry,
   renameEntry,
 } from './model.js'
-import type { EntryType, SelectedDoc } from './model.js'
+import type { EntryType } from './model.js'
 
 const demoState = createFilesystemDemoState()
 
-export type TreeContextTarget = SelectedDoc & {
-  entryName: string
+export type TreeNodeRef = {
+  type: EntryType
+  url: AutomergeUrl
+  parentUrl: AutomergeUrl | null
+  name: string
+  depth: number
 }
+
+export type SelectedDoc = Pick<TreeNodeRef, 'type' | 'url' | 'parentUrl'>
+
+export type TreeContextTarget = TreeNodeRef
 
 export type ContextMenuState = {
   x: number
@@ -27,15 +35,20 @@ type FilesystemDemoContext = typeof demoState & {
   isFolderOpen: (url: AutomergeUrl) => boolean
   toggleFolder: (url: AutomergeUrl) => void
   select: (next: SelectedDoc) => void
+  selectNode: (node: TreeNodeRef) => void
   openContextMenu: (
     x: number,
     y: number,
     target: TreeContextTarget,
   ) => void
   closeContextMenu: () => void
-  promptAndAddEntry: (folderUrl: AutomergeUrl, type: EntryType) => void
-  promptAndRename: (target: TreeContextTarget) => void
-  promptAndDelete: (target: TreeContextTarget) => void
+  addEntryToFolder: (
+    folderUrl: AutomergeUrl,
+    type: EntryType,
+    name: string,
+  ) => void
+  renameTreeEntry: (target: TreeContextTarget, name: string) => void
+  deleteTreeEntry: (target: TreeContextTarget) => void
 }
 
 const FilesystemDemoContext = createContext<FilesystemDemoContext | null>(null)
@@ -69,16 +82,16 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     setSelected(next)
   }
 
+  function selectNode(node: TreeNodeRef) {
+    setSelected(selectionFromNode(node))
+  }
+
   function openContextMenu(
     x: number,
     y: number,
     target: TreeContextTarget,
   ) {
-    setSelected(
-      target.type === 'folder'
-        ? { type: 'folder', url: target.url, parentUrl: target.parentUrl }
-        : { type: 'file', url: target.url, parentUrl: target.parentUrl },
-    )
+    setSelected(selectionFromNode(target))
     setContextMenu({ x, y, target })
   }
 
@@ -86,27 +99,23 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     setContextMenu(null)
   }
 
-  function promptAndAddEntry(folderUrl: AutomergeUrl, type: EntryType) {
-    const name = window.prompt(`new ${type} name`)?.trim()
-    if (!name) return
-
+  function addEntryToFolder(
+    folderUrl: AutomergeUrl,
+    type: EntryType,
+    name: string,
+  ) {
     void addEntry(repo, folderUrl, type, name)
     closeContextMenu()
   }
 
-  function promptAndRename(target: TreeContextTarget) {
+  function renameTreeEntry(target: TreeContextTarget, name: string) {
     if (!target.parentUrl) return
-
-    const name = window.prompt('rename', target.entryName)?.trim()
-    if (!name) return
-
     void renameEntry(repo, target.parentUrl, target.url, name)
     closeContextMenu()
   }
 
-  function promptAndDelete(target: TreeContextTarget) {
+  function deleteTreeEntry(target: TreeContextTarget) {
     if (!target.parentUrl) return
-    if (!window.confirm(`delete ${target.entryName}?`)) return
 
     void deleteEntry(repo, target.parentUrl, target.url)
     setSelected({ type: 'folder', url: rootHandle.url, parentUrl: null })
@@ -127,16 +136,21 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
         isFolderOpen,
         toggleFolder,
         select,
+        selectNode,
         openContextMenu,
         closeContextMenu,
-        promptAndAddEntry,
-        promptAndRename,
-        promptAndDelete,
+        addEntryToFolder,
+        renameTreeEntry,
+        deleteTreeEntry,
       }}
     >
       {children}
     </FilesystemDemoContext.Provider>
   )
+}
+
+function selectionFromNode(node: TreeNodeRef): SelectedDoc {
+  return { type: node.type, url: node.url, parentUrl: node.parentUrl }
 }
 
 export function useFilesystemDemo() {

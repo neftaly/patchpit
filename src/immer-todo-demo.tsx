@@ -1,10 +1,9 @@
 import { produce } from 'immer'
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
+import { useObjectQuery } from './tarstate-react.js'
 import {
   defineSchema,
   eq,
-  evaluate,
-  fromObject,
   join,
   select,
   where,
@@ -65,11 +64,6 @@ const pendingByUser = select(
   'title',
   'name',
 )
-
-const emptyView: TodoView = {
-  pending: [],
-  pendingByUser: [],
-}
 
 export function ImmerTodoDemo() {
   const [doc, setDoc] = useState<TodoDoc>(seedTodo)
@@ -172,30 +166,10 @@ export function ImmerTodoDemo() {
 }
 
 function useTodoView(doc: TodoDoc): TodoView {
-  const source = useMemo(() => fromObject(doc), [doc])
-  const [view, setView] = useState<TodoView>(emptyView)
-
-  useEffect(() => {
-    let alive = true
-
-    void Promise.all([
-      evaluate(pendingTasks, source),
-      evaluate(pendingByUser, source),
-    ]).then(
-      ([pending, joined]) => {
-        if (!alive) return
-        setView({ pending, pendingByUser: joined })
-      },
-      () => {
-        if (!alive) return
-        setView(emptyView)
-      },
-    )
-
-    return () => {
-      alive = false
-    }
-  }, [source])
-
-  return view
+  const pending = useObjectQuery(doc, pendingTasks)
+  const pendingByUserResult = useObjectQuery(doc, pendingByUser)
+  return {
+    pending: pending.data,
+    pendingByUser: pendingByUserResult.data,
+  }
 }

@@ -3,22 +3,28 @@ import { getSpec } from './internal.js'
 import type { QuerySpec } from './internal.js'
 import type { RelationSource } from './source.js'
 
+type EvalRow = Record<string, Record<string, Atom>>
+
 export function evaluate<T extends Record<string, Atom>, Rels extends string>(
   qb: QB<T, Rels>,
   source: RelationSource,
 ): Promise<ReadonlyArray<T>> {
-  return evalSpec(getSpec(qb), source) as Promise<ReadonlyArray<T>>
+  return evalSpec(getSpec(qb), source).then((rows) =>
+    rows.map((row) => outputRow(getSpec(qb), row)),
+  ) as Promise<ReadonlyArray<T>>
 }
 
 async function evalSpec(
   spec: QuerySpec,
   source: RelationSource,
-): Promise<ReadonlyArray<Record<string, Atom>>> {
-  let rows: Record<string, Atom>[] = Array.from(await source.rows(spec.from))
+): Promise<ReadonlyArray<EvalRow>> {
+  let rows: EvalRow[] = Array.from(await source.rows(spec.from)).map((row) => ({
+    [spec.from]: row,
+  }))
 
   for (const j of spec.joins) {
     const rhs = await evalSpec(j.spec, source)
-    const joined: Record<string, Atom>[] = []
+    const joined: EvalRow[] = []
     for (const left of rows) {
       for (const right of rhs) {
         const row = { ...left, ...right }
@@ -30,29 +36,33 @@ async function evalSpec(
 
   rows = rows.filter((row) => spec.predicates.every((p) => evalPred(p, row)))
 
-  const projection = spec.projection
-  if (projection) {
-    rows = rows.map((row) => {
-      const projected: Record<string, Atom> = {}
-      for (const key of projection) {
-        projected[key] = row[key] ?? null
-      }
-      return projected
-    })
-  }
-
   return rows
 }
 
-function evalPred(pred: Predicate<string>, row: Record<string, Atom>): boolean {
+function outputRow(spec: QuerySpec, row: EvalRow): Record<string, Atom> {
+  const projection = spec.projection
+  if (!projection) return flattenRow(row)
+
+  const projected: Record<string, Atom> = {}
+  for (const { key, field } of projection) {
+    projected[key] = resolve(field, row)
+  }
+  return projected
+}
+
+function flattenRow(row: EvalRow): Record<string, Atom> {
+  return Object.assign({}, ...Object.values(row))
+}
+
+function evalPred(pred: Predicate<string>, row: EvalRow): boolean {
   return resolve(pred.lhs, row) === resolve(pred.rhs, row)
 }
 
 function resolve(
   ref: FieldRef<Atom, string> | Atom,
-  row: Record<string, Atom>,
+  row: EvalRow,
 ): Atom {
-  return isFieldRef(ref) ? (row[ref._field] ?? null) : ref
+  return isFieldRef(ref) ? (row[ref._rel]?.[ref._field] ?? null) : ref
 }
 
 function isFieldRef(

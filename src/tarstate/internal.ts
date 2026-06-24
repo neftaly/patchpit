@@ -6,7 +6,12 @@ export interface QuerySpec {
   from: string
   predicates: Predicate<string>[]
   joins: JoinNode[]
-  projection?: string[]
+  projection?: ProjectionField[]
+}
+
+export interface ProjectionField {
+  key: string
+  field: FieldRef<Atom, string>
 }
 
 export interface JoinNode {

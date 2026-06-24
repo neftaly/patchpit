@@ -1,7 +1,7 @@
 import type { DocHandle } from '@automerge/automerge-repo'
 import { JsonDocEditor } from '../json-doc-editor.js'
 import { useDocument } from '../tarstate-automerge.js'
-import { useResolvedHandle } from './hooks.js'
+import { useSelectedDocHandle } from './hooks.js'
 import {
   imageDataUrl,
   isFileDoc,
@@ -10,14 +10,12 @@ import {
   validateFolderDoc,
 } from './model.js'
 import type { EntryType, FileDoc, FolderDoc } from './model.js'
-import { useFilesystemDemo } from './state.js'
 
 export function SelectedDocPane() {
-  const { repo, selected } = useFilesystemDemo()
-  const handle = useResolvedHandle<FolderDoc | FileDoc>(repo, selected.url)
+  const { handle, type } = useSelectedDocHandle()
   if (!handle) return null
 
-  return <SelectedDocContent handle={handle} type={selected.type} />
+  return <SelectedDocContent handle={handle} type={type} />
 }
 
 function SelectedDocContent({

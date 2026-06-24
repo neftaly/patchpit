@@ -72,5 +72,11 @@ export function select<
   for (const key of keys) {
     picked[key as string] = qb[key]
   }
-  return makeQB(picked, { ...spec, projection: keys as string[] })
+  return makeQB(picked, {
+    ...spec,
+    projection: keys.map((key) => ({
+      key: key as string,
+      field: qb[key],
+    })),
+  })
 }

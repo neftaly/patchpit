@@ -1,30 +1,26 @@
 import type { AutomergeUrl, DocHandle } from '@automerge/automerge-repo'
 import type { CSSProperties, MouseEvent } from 'react'
-import { useDocument } from '../tarstate-automerge.js'
 import { useResolvedHandle } from './hooks.js'
 import type { FolderDoc, FolderEntry } from './model.js'
+import { useFolderEntries } from './queries.js'
 import { useFilesystemDemo } from './state.js'
-import type { TreeContextTarget } from './state.js'
+import type { TreeContextTarget, TreeNodeRef } from './state.js'
 
 export function FolderTreeItem({
   handle,
-  entryName,
-  parentUrl,
-  depth = 0,
+  node,
 }: {
   handle: DocHandle<FolderDoc>
-  entryName: string
-  parentUrl: AutomergeUrl | null
-  depth?: number
+  node: TreeNodeRef
 }) {
   const {
     selected,
     isFolderOpen,
     openContextMenu,
-    select,
+    selectNode,
     toggleFolder,
   } = useFilesystemDemo()
-  const folder = useDocument(handle)
+  const entries = useFolderEntries(handle)
   const isOpen = isFolderOpen(handle.url)
   const isSelected = selected.url === handle.url
 
@@ -32,40 +28,30 @@ export function FolderTreeItem({
     <li role="treeitem" aria-expanded={isOpen} aria-selected={isSelected}>
       <button
         className="tree-item tree-folder"
-        style={treeItemStyle(depth)}
+        style={treeItemStyle(node.depth)}
         type="button"
         onClick={() => {
           toggleFolder(handle.url)
-          select({ type: 'folder', url: handle.url, parentUrl })
+          selectNode(node)
         }}
-        onContextMenu={(event) =>
-          openTreeContextMenu(event, openContextMenu, {
-            type: 'folder',
-            url: handle.url,
-            parentUrl,
-            entryName,
-          })
-        }
+        onContextMenu={(event) => openTreeContextMenu(event, openContextMenu, node)}
         aria-pressed={isSelected}
       >
-        <span aria-hidden="true">{isOpen ? '📂' : '📁'}</span> {entryName}
+        <span aria-hidden="true">{isOpen ? '📂' : '📁'}</span> {node.name}
       </button>
       {isOpen && (
         <ul role="group">
-          {folder.entries.map((entry) =>
+          {entries.map((entry) =>
             entry.type === 'folder' ? (
               <ResolvedFolderTreeItem
                 key={entry.url}
+                node={childNode(entry, handle.url, node.depth)}
                 entry={entry}
-                parentUrl={handle.url}
-                depth={depth + 1}
               />
             ) : (
               <FileTreeItem
                 key={entry.url}
-                entry={entry}
-                parentUrl={handle.url}
-                depth={depth + 1}
+                node={childNode(entry, handle.url, node.depth)}
               />
             ),
           )}
@@ -76,13 +62,11 @@ export function FolderTreeItem({
 }
 
 function ResolvedFolderTreeItem({
+  node,
   entry,
-  parentUrl,
-  depth,
 }: {
+  node: TreeNodeRef
   entry: FolderEntry
-  parentUrl: AutomergeUrl
-  depth: number
 }) {
   const { repo } = useFilesystemDemo()
   const handle = useResolvedHandle<FolderDoc>(repo, entry.url)
@@ -91,45 +75,46 @@ function ResolvedFolderTreeItem({
   return (
     <FolderTreeItem
       handle={handle}
-      entryName={entry.name}
-      parentUrl={parentUrl}
-      depth={depth}
+      node={node}
     />
   )
 }
 
 function FileTreeItem({
-  entry,
-  parentUrl,
-  depth,
+  node,
 }: {
-  entry: FolderEntry
-  parentUrl: AutomergeUrl
-  depth: number
+  node: TreeNodeRef
 }) {
-  const { openContextMenu, selected, select } = useFilesystemDemo()
-  const isSelected = selected.url === entry.url
+  const { openContextMenu, selected, selectNode } = useFilesystemDemo()
+  const isSelected = selected.url === node.url
   return (
     <li role="treeitem" aria-selected={isSelected}>
       <button
         className="tree-item tree-file"
-        style={treeItemStyle(depth)}
+        style={treeItemStyle(node.depth)}
         type="button"
-        onClick={() => select({ type: 'file', url: entry.url, parentUrl })}
-        onContextMenu={(event) =>
-          openTreeContextMenu(event, openContextMenu, {
-            type: 'file',
-            url: entry.url,
-            parentUrl,
-            entryName: entry.name,
-          })
-        }
+        onClick={() => selectNode(node)}
+        onContextMenu={(event) => openTreeContextMenu(event, openContextMenu, node)}
         aria-pressed={isSelected}
       >
-        <span aria-hidden="true">📄</span> {entry.name}
+        <span aria-hidden="true">📄</span> {node.name}
       </button>
     </li>
   )
+}
+
+function childNode(
+  entry: FolderEntry,
+  parentUrl: AutomergeUrl,
+  parentDepth: number,
+): TreeNodeRef {
+  return {
+    type: entry.type,
+    url: entry.url,
+    parentUrl,
+    name: entry.name,
+    depth: parentDepth + 1,
+  }
 }
 
 function openTreeContextMenu(

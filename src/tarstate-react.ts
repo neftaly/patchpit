@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { evaluate } from './tarstate/evaluate.js'
-import type { RelationSource } from './tarstate/source.js'
+import { fromObject } from './tarstate/source.js'
+import type { ObjectDoc, RelationSource } from './tarstate/source.js'
 import type { Atom, QB } from './tarstate/types.js'
 
 export type QueryMap = Record<string, QB<Record<string, Atom>, string>>
 const queryIds = new WeakMap<object, number>()
 let nextQueryId = 1
 
-type QueryRows<Q> = Q extends QB<infer Row, string> ? ReadonlyArray<Row> : never
+export type QueryRows<Q> =
+  Q extends QB<infer Row, string> ? ReadonlyArray<Row> : never
 
 export type QueryResults<Queries extends QueryMap> = {
   readonly [Name in keyof Queries]: QueryRows<Queries[Name]>
@@ -70,6 +72,27 @@ export function useQueries<Queries extends QueryMap>(
   }, [empty, signature, source])
 
   return state
+}
+
+export function useQuery<Query extends QB<Record<string, Atom>, string>>(
+  source: RelationSource,
+  query: Query,
+): QueryState<QueryRows<Query>> {
+  const state = useQueries(source, { query })
+  return {
+    data: state.data.query,
+    status: state.status,
+    error: state.error,
+    isLoading: state.isLoading,
+  }
+}
+
+export function useObjectQuery<
+  Doc extends ObjectDoc,
+  Query extends QB<Record<string, Atom>, string>,
+>(doc: Doc, query: Query): QueryState<QueryRows<Query>> {
+  const source = useMemo(() => fromObject(doc), [doc])
+  return useQuery(source, query)
 }
 
 function emptyResults<Queries extends QueryMap>(
