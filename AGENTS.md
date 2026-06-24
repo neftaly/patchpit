@@ -1,21 +1,10 @@
 # Agent Instructions
 
-## Coordination Claims
+## Claims
 
-Before editing shared or high-churn code, follow the repo-claims protocol in `.claims/README.md`.
+Before editing shared or high-churn code, follow `.claims/README.md`.
 
-### Quick Check
-
-Before editing specific files, check the intended paths:
-
-```bash
-pnpm claims:check -- path/to/file.ts
-```
-
-Before handing work back, check current changed files:
-
-```bash
-pnpm claims:check
-```
-
-Use `CLAIMS_OWNER=<owner> pnpm claims:check` to ignore your own active claim while checking local changed files.
+- Check intended paths before editing: `pnpm claims:check -- path/to/file.ts`
+- Take or refresh an edit claim: `CLAIMS_OWNER=<owner> pnpm claims:take -- "short task" path/to/file.ts`
+- Check current changes before handoff: `pnpm claims:check`
+- Ignore your own active claim when needed: `CLAIMS_OWNER=<owner> pnpm claims:check`

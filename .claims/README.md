@@ -44,8 +44,9 @@ The protocol name is `repo-claims/v1`.
 ```bash
 pnpm claims:check
 pnpm claims:check -- path/to/file.ts path/to/other-file.ts
+CLAIMS_OWNER=codex-name pnpm claims:take -- "short task" path/to/file.ts
 ```
 
-Create, refresh, and archive claims by editing or moving the JSON files directly. The helper script only checks for active edit-claim conflicts.
+`claims:take` creates or refreshes one edit claim for `CLAIMS_OWNER` with a 10 minute TTL. Archive finished claims by moving them from `.claims/active/` to `.claims/archived/`.
 
 The helper script lives in `scripts/claims.mjs` because it is repo tooling. `.claims/` holds the protocol, schema, and ledger data.
