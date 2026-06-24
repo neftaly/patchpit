@@ -1,6 +1,15 @@
 import { isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { AutomergeUrl } from '@automerge/automerge-repo'
 import type { EntryType } from '@patchpit/filesystem'
+import { isWorkspaceProgramId } from './programs.js'
+import type { WorkspaceProgramId, WorkspaceProgramRef } from './programs.js'
+
+export { isWorkspaceProgramId, workspacePrograms } from './programs.js'
+export type {
+  WorkspaceProgramDoc,
+  WorkspaceProgramId,
+  WorkspaceProgramRef,
+} from './programs.js'
 
 export type JsonRecord = Record<string, unknown>
 
@@ -31,53 +40,6 @@ export type WorkspaceSplitLayout = {
 }
 export type ColorMode = 'light' | 'auto' | 'dark'
 export type ViewerMode = (typeof viewerModes)[number]
-export type WorkspaceProgramId =
-  | 'patchpit:file-explorer'
-  | 'patchpit:os'
-  | 'patchpit:file-viewer'
-  | 'patchpit:bash'
-
-export const workspacePrograms: Record<
-  WorkspaceProgramId,
-  { name: string; entry: string; fileName: string }
-> = {
-  'patchpit:file-explorer': {
-    name: 'File explorer',
-    entry: 'builtin:file-explorer',
-    fileName: 'file-explorer.patchpit-program.automerge',
-  },
-  'patchpit:os': {
-    name: 'Patchpit WM',
-    entry: 'builtin:os',
-    fileName: 'patchpit-os.patchpit-program.automerge',
-  },
-  'patchpit:file-viewer': {
-    name: 'File viewer',
-    entry: 'builtin:file-viewer',
-    fileName: 'file-viewer.patchpit-program.automerge',
-  },
-  'patchpit:bash': {
-    name: 'Bash',
-    entry: 'builtin:bash',
-    fileName: 'bash.patchpit-program.automerge',
-  },
-}
-
-export type WorkspaceProgramRef = {
-  id: WorkspaceProgramId
-  name: string
-  url: AutomergeUrl
-}
-
-export type WorkspaceProgramDoc = {
-  '@patchwork': {
-    type: 'patchpit-program'
-    version: 1
-  }
-  id: WorkspaceProgramId
-  name: string
-  entry: string
-}
 
 export type WorkspaceSubjectRef =
   | { kind: 'doc'; url: string; type: EntryType }
@@ -327,17 +289,6 @@ export function defaultWorkspaceAppState(
 
 export function workspaceStateFileName(paneId: WorkspacePaneId): string {
   return `${paneId}.automerge`
-}
-
-export function isWorkspaceProgramId(
-  value: unknown,
-): value is WorkspaceProgramId {
-  return (
-    value === 'patchpit:file-explorer' ||
-    value === 'patchpit:os' ||
-    value === 'patchpit:file-viewer' ||
-    value === 'patchpit:bash'
-  )
 }
 
 function cloneWorkspaceLayout(layout: WorkspaceLayout): WorkspaceLayout {
