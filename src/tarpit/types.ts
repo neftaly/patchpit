@@ -8,25 +8,11 @@ export type FieldRef<T extends Atom, Rel extends string> = {
   readonly [_fieldValue]?: T
 }
 
-export type BinaryOp = 'eq' | 'ne' | 'lt' | 'gt' | 'lte' | 'gte'
-
-export type Predicate<Rels extends string> =
-  | {
-      readonly _rels: Rels
-      readonly op: BinaryOp
-      readonly lhs: FieldRef<Atom, string>
-      readonly rhs: FieldRef<Atom, string> | Atom
-    }
-  | {
-      readonly _rels: Rels
-      readonly op: 'and' | 'or'
-      readonly operands: readonly Predicate<string>[]
-    }
-  | {
-      readonly _rels: Rels
-      readonly op: 'not'
-      readonly operand: Predicate<string>
-    }
+export type Predicate<Rels extends string> = {
+  readonly _rels: Rels
+  readonly lhs: FieldRef<Atom, string>
+  readonly rhs: FieldRef<Atom, string> | Atom
+}
 
 declare const _qb: unique symbol
 
@@ -39,6 +25,3 @@ export type SchemaShape = Record<string, Record<string, Atom>>
 export type Schema<S extends SchemaShape> = {
   readonly [K in keyof S]: QB<S[K], K & string>
 }
-
-export type UnionRels<Ps extends readonly Predicate<string>[]> =
-  Ps[number] extends Predicate<infer R> ? R : never

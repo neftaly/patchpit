@@ -48,33 +48,7 @@ function evalSpec(
 }
 
 function evalPred(pred: Predicate<string>, row: Record<string, Atom>): boolean {
-  switch (pred.op) {
-    case 'eq':
-      return resolve(pred.lhs, row) === resolve(pred.rhs, row)
-    case 'ne':
-      return resolve(pred.lhs, row) !== resolve(pred.rhs, row)
-    case 'lt':
-      return comparable(pred.lhs, row) < comparable(pred.rhs, row)
-    case 'gt':
-      return comparable(pred.lhs, row) > comparable(pred.rhs, row)
-    case 'lte':
-      return comparable(pred.lhs, row) <= comparable(pred.rhs, row)
-    case 'gte':
-      return comparable(pred.lhs, row) >= comparable(pred.rhs, row)
-    case 'and':
-      return pred.operands.every((p) => evalPred(p, row))
-    case 'or':
-      return pred.operands.some((p) => evalPred(p, row))
-    case 'not':
-      return !evalPred(pred.operand, row)
-  }
-}
-
-function comparable(
-  ref: FieldRef<Atom, string> | Atom,
-  row: Record<string, Atom>,
-): string | number {
-  return resolve(ref, row) as string | number
+  return resolve(pred.lhs, row) === resolve(pred.rhs, row)
 }
 
 function resolve(
