@@ -1,5 +1,7 @@
 import { produce } from 'immer'
 import { useState } from 'react'
+import { todoFixture } from './immer-todo-fixture.js'
+import type { Task, TodoDoc } from './immer-todo-fixture.js'
 import { useObjectQuery } from './tarstate-react.js'
 import {
   defineSchema,
@@ -9,48 +11,9 @@ import {
   where,
 } from './tarstate/index.js'
 
-type User = {
-  id: string
-  name: string
-}
-
-type Task = {
-  id: string
-  title: string
-  done: boolean
-  assigneeId: string
-}
-
-type TodoDoc = {
-  users: User[]
-  tasks: Task[]
-}
-
 type TodoView = {
   pending: readonly Task[]
   pendingByUser: readonly { title: string; name: string }[]
-}
-
-const seedTodo: TodoDoc = {
-  users: [
-    { id: 'ada', name: 'Ada' },
-    { id: 'grace', name: 'Grace' },
-  ],
-  tasks: [
-    { id: 'task-1', title: 'sketch file tree', done: false, assigneeId: 'ada' },
-    {
-      id: 'task-2',
-      title: 'separate automerge adapter',
-      done: true,
-      assigneeId: 'grace',
-    },
-    {
-      id: 'task-3',
-      title: 'prove plain object source',
-      done: false,
-      assigneeId: 'grace',
-    },
-  ],
 }
 
 const schema = defineSchema({
@@ -66,9 +29,9 @@ const pendingByUser = select(
 )
 
 export function ImmerTodoDemo() {
-  const [doc, setDoc] = useState<TodoDoc>(seedTodo)
+  const [doc, setDoc] = useState<TodoDoc>(todoFixture)
   const [draftTitle, setDraftTitle] = useState('')
-  const [assigneeId, setAssigneeId] = useState(seedTodo.users[0]?.id ?? '')
+  const [assigneeId, setAssigneeId] = useState(todoFixture.users[0]?.id ?? '')
   const view = useTodoView(doc)
 
   function addTask() {

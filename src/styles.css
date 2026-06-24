@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
 }
 
 html,
@@ -24,8 +24,8 @@ body {
 .app textarea {
   font: inherit;
   color: inherit;
-  background: #fff;
-  border: 1px solid #111;
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
   border-radius: 0;
 }
 
@@ -35,13 +35,13 @@ body {
 
 .app button[aria-pressed='true'],
 .app li[aria-selected='true'] > .tree-item {
-  color: #fff;
-  background: #111;
+  color: var(--list-active-selection-foreground);
+  background: var(--list-active-selection-background);
 }
 
 .app button:disabled {
-  color: #777;
-  border-color: #aaa;
+  color: var(--control-disabled-fg);
+  border-color: var(--control-disabled-border);
   cursor: default;
 }
 
@@ -69,8 +69,8 @@ body {
   width: 100%;
   max-width: 100%;
   overflow: auto;
-  background: #fff;
-  border: 1px solid #111;
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
   border-radius: 0;
 }
 
@@ -89,14 +89,14 @@ body {
   height: 100%;
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  color: #111;
-  background: #f7f7f7;
+  color: var(--app-fg);
+  background: var(--app-bg);
 }
 
 .workspace,
 .tree-pane,
 .detail-pane {
-  border: 1px solid #111;
+  border: 1px solid var(--border-color);
 }
 
 .workspace {
@@ -105,7 +105,7 @@ body {
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: #fff;
+  background: var(--panel-bg);
 }
 
 .detail-pane {
@@ -121,7 +121,7 @@ body {
   min-height: 0;
   overflow: auto;
   border-width: 0;
-  border-right: 1px solid #111;
+  border-right: 1px solid var(--border-color);
 }
 
 .tree,
@@ -150,8 +150,8 @@ body {
     to right,
     transparent 0,
     transparent calc(1rem - 1px),
-    #ddd calc(1rem - 1px),
-    #ddd 1rem
+    var(--tree-indent-guide) calc(1rem - 1px),
+    var(--tree-indent-guide) 1rem
   );
   background-repeat: no-repeat;
   background-size: var(--tree-indent, 0rem) 100%;
@@ -161,14 +161,16 @@ body {
 
 .tree-item:hover,
 .tree-item:focus {
-  background-color: #eee;
+  --tree-indent-guide: var(--tree-indent-guide-hover);
+  background-color: var(--list-hover-background);
 }
 
 .app li[aria-selected='true'] > .tree-item,
 .app li[aria-selected='true'] > .tree-item:hover,
 .app li[aria-selected='true'] > .tree-item:focus {
-  color: #fff;
-  background-color: #111;
+  --tree-indent-guide: var(--tree-indent-guide-active);
+  color: var(--list-active-selection-foreground);
+  background-color: var(--list-active-selection-background);
 }
 
 .tree-folder {
@@ -176,17 +178,17 @@ body {
 }
 
 .tree-file {
-  color: #333;
+  color: inherit;
 }
 
 .tree-file[aria-pressed='true'] {
-  color: #fff;
+  color: var(--list-active-selection-foreground);
 }
 
 .asset-preview {
   padding: 0.75rem;
-  border: 1px solid #111;
-  background: #fff;
+  border: 1px solid var(--border-color);
+  background: var(--panel-bg);
 }
 
 .asset-preview img {
@@ -206,8 +208,8 @@ body {
   gap: 0;
   padding: 0.25rem;
   margin: 0;
-  background: #fff;
-  border: 1px solid #111;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
 }
 
 .context-menu button {
@@ -218,8 +220,8 @@ body {
 
 .context-menu button:hover,
 .context-menu button:focus {
-  color: #fff;
-  background: #111;
+  color: var(--list-active-selection-foreground);
+  background: var(--list-active-selection-background);
 }
 
 .todo-link {
@@ -228,7 +230,7 @@ body {
   left: 0.75rem;
   z-index: 5;
   color: inherit;
-  background: #fff;
+  background: var(--panel-bg);
 }
 
 @media (max-width: 760px) {
@@ -238,6 +240,6 @@ body {
 
   .tree-pane {
     border-right: 0;
-    border-bottom: 1px solid #111;
+    border-bottom: 1px solid var(--border-color);
   }
 }

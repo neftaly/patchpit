@@ -2,6 +2,8 @@ import { Repo, isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { AutomergeUrl, DocHandle } from '@automerge/automerge-repo'
 import mime from 'mime/lite'
 import type { JsonRecord } from '../json-doc-editor.js'
+import { filesystemFixture } from './fixture.js'
+import type { FilesystemFixtureEntry, FilesystemFixtureFolder } from './fixture.js'
 
 type PatchworkTag<T extends string> = {
   '@patchwork': {
@@ -42,65 +44,8 @@ export type FilesystemDemoState = {
 export function createFilesystemDemoState(
   repo = new Repo(),
 ): FilesystemDemoState {
-  const manifestHandle = createFile(repo, 'probability.json', 'manifest', {
-    title: 'Tiny Checkers',
-    board: 'assets/board.md',
-    rules: 'src/rules.ts',
-  })
-  const rulesHandle = createFile(
-    repo,
-    'rules.ts',
-    'source',
-    [
-      'export function legalMove(from: string, to: string) {',
-      '  return from !== to',
-      '}',
-      '',
-    ].join('\n'),
-  )
-  const boardHandle = createFile(
-    repo,
-    'board.md',
-    'asset',
-    '# Board\n\n8x8 grid, alternating dark and light squares.\n',
-  )
-  const coverHandle = createFile(
-    repo,
-    'cover.svg',
-    'asset',
-    [
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100">',
-      '<rect width="160" height="100" fill="#f8f8f8"/>',
-      '<rect x="20" y="20" width="120" height="60" fill="#fff" stroke="#111"/>',
-      '<circle cx="58" cy="50" r="14" fill="#c33"/>',
-      '<circle cx="102" cy="50" r="14" fill="#222"/>',
-      '<text x="80" y="88" text-anchor="middle" font-family="monospace" font-size="10">tiny checkers</text>',
-      '</svg>',
-      '',
-    ].join('\n'),
-  )
-  const notesHandle = createFile(
-    repo,
-    'notes.md',
-    'notes',
-    '# Notes\n\nThe folder owns path resolution. File docs keep stable identity.\n',
-  )
-
-  const srcHandle = createFolder(repo, 'src', [
-    { name: 'rules.ts', type: 'file', url: rulesHandle.url },
-  ])
-  const assetsHandle = createFolder(repo, 'assets', [
-    { name: 'board.md', type: 'file', url: boardHandle.url },
-    { name: 'cover.svg', type: 'file', url: coverHandle.url },
-  ])
-  const rootHandle = createFolder(repo, 'tiny-checkers', [
-    { name: 'probability.json', type: 'file', url: manifestHandle.url },
-    { name: 'src', type: 'folder', url: srcHandle.url },
-    { name: 'assets', type: 'folder', url: assetsHandle.url },
-    { name: 'notes.md', type: 'file', url: notesHandle.url },
-  ])
-
-  return { repo, rootHandle, rootEntryName: 'tiny-checkers' }
+  const rootHandle = createFixtureFolder(repo, filesystemFixture)
+  return { repo, rootHandle, rootEntryName: filesystemFixture.name }
 }
 
 export function createFolder(
@@ -131,6 +76,29 @@ export function createFile(
     content: text,
     metadata: { role },
   })
+}
+
+function createFixtureFolder(
+  repo: Repo,
+  folder: FilesystemFixtureFolder,
+): DocHandle<FolderDoc> {
+  return createFolder(
+    repo,
+    folder.name,
+    folder.entries.map((entry) => createFixtureEntry(repo, entry)),
+  )
+}
+
+function createFixtureEntry(
+  repo: Repo,
+  entry: FilesystemFixtureEntry,
+): FolderEntry {
+  const handle =
+    entry.type === 'folder'
+      ? createFixtureFolder(repo, entry)
+      : createFile(repo, entry.name, entry.role, entry.content)
+
+  return { name: entry.name, type: entry.type, url: handle.url }
 }
 
 export async function addEntry(
