@@ -1,0 +1,24 @@
+{
+  "name": "@patchpit/bash-terminal",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "bench": "node scripts/bench-terminal.mjs",
+    "bench:huge": "TERMINAL_BENCH_LINES=100000 TERMINAL_BENCH_BURST_LINES=10000 node scripts/bench-terminal.mjs",
+    "bench:quick": "TERMINAL_BENCH_PROBES=follow,dispatch node scripts/bench-terminal.mjs",
+    "bench:repeat": "TERMINAL_BENCH_REPEAT=3 node scripts/bench-terminal.mjs",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:"
+  }
+}
