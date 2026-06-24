@@ -1,4 +1,4 @@
-import type { DocHandle, Repo } from '@automerge/automerge-repo'
+import type { AutomergeUrl, DocHandle, Repo } from '@automerge/automerge-repo'
 import type { TerminalFileSystem } from '@patchpit/bash-terminal'
 import { createFile, createFolder } from '@patchpit/filesystem/repo'
 import { isAutomergeEntryUrl, isFileDoc, isFolderDoc } from '@patchpit/filesystem'
@@ -18,6 +18,14 @@ type ResolvedPath =
       parentHandle: DocHandle<FolderDoc>
     }
 
+type PathResolver = {
+  resolvePath: (path: readonly string[]) => Promise<ResolvedPath>
+  resolveOptionalPath: (path: readonly string[]) => Promise<ResolvedPath | null>
+  resolveParentFolder: (
+    path: readonly string[],
+  ) => Promise<{ folderHandle: DocHandle<FolderDoc>; name: string }>
+}
+
 export function createAutomergeTerminalFileSystem({
   repo,
   rootHandle,
@@ -27,10 +35,12 @@ export function createAutomergeTerminalFileSystem({
   rootHandle: DocHandle<FolderDoc>
   rootName: string
 }): TerminalFileSystem {
+  const resolver = createPathResolver(repo, rootHandle)
+
   return {
     rootName,
     async list(path) {
-      const resolved = await resolvePath(repo, rootHandle, path)
+      const resolved = await resolver.resolvePath(path)
       if (resolved.type !== 'folder') {
         throw new Error(`${formatPath(path)}: not a directory`)
       }
@@ -42,7 +52,7 @@ export function createAutomergeTerminalFileSystem({
       }))
     },
     async readFile(path) {
-      const resolved = await resolvePath(repo, rootHandle, path)
+      const resolved = await resolver.resolvePath(path)
       if (resolved.type !== 'file')
         throw new Error(`${formatPath(path)}: not a file`)
 
@@ -50,7 +60,7 @@ export function createAutomergeTerminalFileSystem({
       return file.content
     },
     async writeFile(path, content, options) {
-      const existing = await resolveOptionalPath(repo, rootHandle, path)
+      const existing = await resolver.resolveOptionalPath(path)
       if (existing) {
         if (existing.type !== 'file') {
           throw new Error(`${formatPath(path)}: not a file`)
@@ -63,31 +73,23 @@ export function createAutomergeTerminalFileSystem({
         return
       }
 
-      const { folderHandle, name } = await resolveParentFolder(
-        repo,
-        rootHandle,
-        path,
-      )
+      const { folderHandle, name } = await resolver.resolveParentFolder(path)
       folderHandle.change((draft) => {
         draft.entries.push(createFileEntry(repo, name, content))
       })
     },
     async makeDirectory(path) {
-      if (await resolveOptionalPath(repo, rootHandle, path)) {
+      if (await resolver.resolveOptionalPath(path)) {
         throw new Error(`${formatPath(path)}: file exists`)
       }
 
-      const { folderHandle, name } = await resolveParentFolder(
-        repo,
-        rootHandle,
-        path,
-      )
+      const { folderHandle, name } = await resolver.resolveParentFolder(path)
       folderHandle.change((draft) => {
         draft.entries.push(createFolderEntry(repo, name))
       })
     },
     async touchFile(path) {
-      const existing = await resolveOptionalPath(repo, rootHandle, path)
+      const existing = await resolver.resolveOptionalPath(path)
       if (existing) {
         if (existing.type !== 'file') {
           throw new Error(`${formatPath(path)}: not a file`)
@@ -95,11 +97,7 @@ export function createAutomergeTerminalFileSystem({
         return
       }
 
-      const { folderHandle, name } = await resolveParentFolder(
-        repo,
-        rootHandle,
-        path,
-      )
+      const { folderHandle, name } = await resolver.resolveParentFolder(path)
       folderHandle.change((draft) => {
         draft.entries.push(createFileEntry(repo, name, ''))
       })
@@ -109,7 +107,7 @@ export function createAutomergeTerminalFileSystem({
       const parentPath = path.slice(0, -1)
       if (!name) throw new Error('rm: cannot remove root')
 
-      const parent = await resolvePath(repo, rootHandle, parentPath)
+      const parent = await resolver.resolvePath(parentPath)
       if (parent.type !== 'folder') {
         throw new Error(`${formatPath(parentPath)}: not a directory`)
       }
@@ -123,72 +121,83 @@ export function createAutomergeTerminalFileSystem({
   }
 }
 
-async function resolveOptionalPath(
+function createPathResolver(
   repo: Repo,
   rootHandle: DocHandle<FolderDoc>,
-  path: readonly string[],
-): Promise<ResolvedPath | null> {
-  try {
-    return await resolvePath(repo, rootHandle, path)
-  } catch (error) {
-    if (error instanceof MissingPathError) return null
-    throw error
-  }
-}
+): PathResolver {
+  const handles = new Map<string, Promise<DocHandle<unknown>>>()
 
-async function resolvePath(
-  repo: Repo,
-  rootHandle: DocHandle<FolderDoc>,
-  path: readonly string[],
-): Promise<ResolvedPath> {
-  let folderHandle = rootHandle
-  let parentHandle: DocHandle<FolderDoc> | undefined
-  let entry: FolderEntry | undefined
-
-  if (path.length === 0) return { type: 'folder', handle: rootHandle }
-
-  for (const [index, segment] of path.entries()) {
-    const folder = currentFolderDoc(folderHandle, path.slice(0, index))
-    entry = folder.entries.find((item) => item.name === segment)
-    if (!entry) throw new MissingPathError(`${formatPath(path)}: no such file`)
-    if (!isAutomergeEntryUrl(entry.url)) {
-      throw new Error(`${formatPath(path.slice(0, index + 1))}: external file`)
+  async function resolveOptionalPath(
+    path: readonly string[],
+  ): Promise<ResolvedPath | null> {
+    try {
+      return await resolvePath(path)
+    } catch (error) {
+      if (error instanceof MissingPathError) return null
+      throw error
     }
+  }
 
-    parentHandle = folderHandle
-    if (entry.type === 'file') {
-      const fileHandle = await repo.find<FileDoc>(entry.url)
-      if (index !== path.length - 1) {
+  async function resolvePath(path: readonly string[]): Promise<ResolvedPath> {
+    let folderHandle = rootHandle
+    let parentHandle: DocHandle<FolderDoc> | undefined
+    let entry: FolderEntry | undefined
+
+    if (path.length === 0) return { type: 'folder', handle: rootHandle }
+
+    for (const [index, segment] of path.entries()) {
+      const folder = currentFolderDoc(folderHandle, path.slice(0, index))
+      entry = folder.entries.find((item) => item.name === segment)
+      if (!entry)
+        throw new MissingPathError(`${formatPath(path)}: no such file`)
+      if (!isAutomergeEntryUrl(entry.url)) {
         throw new Error(
-          `${formatPath(path.slice(0, index + 1))}: not a directory`,
+          `${formatPath(path.slice(0, index + 1))}: external file`,
         )
       }
-      return { type: 'file', handle: fileHandle, entry, parentHandle }
+
+      parentHandle = folderHandle
+      if (entry.type === 'file') {
+        const fileHandle = await findHandle<FileDoc>(entry.url)
+        if (index !== path.length - 1) {
+          throw new Error(
+            `${formatPath(path.slice(0, index + 1))}: not a directory`,
+          )
+        }
+        return { type: 'file', handle: fileHandle, entry, parentHandle }
+      }
+
+      folderHandle = await findHandle<FolderDoc>(entry.url)
     }
 
-    folderHandle = await repo.find<FolderDoc>(entry.url)
+    const resolved: ResolvedPath = { type: 'folder', handle: folderHandle }
+    if (entry) resolved.entry = entry
+    if (parentHandle) resolved.parentHandle = parentHandle
+    return resolved
   }
 
-  const resolved: ResolvedPath = { type: 'folder', handle: folderHandle }
-  if (entry) resolved.entry = entry
-  if (parentHandle) resolved.parentHandle = parentHandle
-  return resolved
-}
+  async function resolveParentFolder(path: readonly string[]) {
+    const name = basename(path)
+    if (!name) throw new Error('missing file name')
 
-async function resolveParentFolder(
-  repo: Repo,
-  rootHandle: DocHandle<FolderDoc>,
-  path: readonly string[],
-) {
-  const name = basename(path)
-  if (!name) throw new Error('missing file name')
+    const parent = await resolvePath(path.slice(0, -1))
+    if (parent.type !== 'folder') {
+      throw new Error(`${formatPath(path.slice(0, -1))}: not a directory`)
+    }
 
-  const parent = await resolvePath(repo, rootHandle, path.slice(0, -1))
-  if (parent.type !== 'folder') {
-    throw new Error(`${formatPath(path.slice(0, -1))}: not a directory`)
+    return { folderHandle: parent.handle, name }
   }
 
-  return { folderHandle: parent.handle, name }
+  function findHandle<T>(url: AutomergeUrl): Promise<DocHandle<T>> {
+    const cached = handles.get(url)
+    if (cached) return cached as Promise<DocHandle<T>>
+
+    const next = repo.find<T>(url)
+    handles.set(url, next as Promise<DocHandle<unknown>>)
+    return next
+  }
+
+  return { resolveOptionalPath, resolveParentFolder, resolvePath }
 }
 
 function createFileEntry(
