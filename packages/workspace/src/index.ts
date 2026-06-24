@@ -142,9 +142,7 @@ export function createWorkspacePaneInstance(
     state: { url: stateUrl },
   }
   if (sourcePane?.subject) {
-    pane.subject = JSON.parse(
-      JSON.stringify(sourcePane.subject),
-    ) as WorkspaceSubjectRef
+    pane.subject = cloneSubject(sourcePane.subject)
   }
   return pane
 }
@@ -188,11 +186,25 @@ export function workspaceStateFileName(paneId: WorkspacePaneId): string {
 }
 
 function cloneWorkspaceLayout(layout: WorkspaceLayout): WorkspaceLayout {
-  return JSON.parse(JSON.stringify(layout)) as WorkspaceLayout
+  if (typeof layout === 'string') return layout
+  const next: WorkspaceSplitLayout = {
+    direction: layout.direction,
+    first: cloneWorkspaceLayout(layout.first),
+    second: cloneWorkspaceLayout(layout.second),
+  }
+  if (layout.splitPercentage !== undefined) {
+    next.splitPercentage = layout.splitPercentage
+  }
+  return next
 }
 
 function cloneWorkspacePanes(panes: WorkspacePanes): WorkspacePanes {
-  return JSON.parse(JSON.stringify(panes)) as WorkspacePanes
+  return Object.fromEntries(
+    Object.entries(panes).map(([paneId, pane]) => [
+      paneId,
+      cloneWorkspacePane(pane),
+    ]),
+  )
 }
 
 function workspacePaneWithProgram(
@@ -289,7 +301,13 @@ function normalizeWorkspacePane(
 }
 
 function cloneWorkspacePane(pane: WorkspacePane): WorkspacePane {
-  return JSON.parse(JSON.stringify(pane)) as WorkspacePane
+  const next: WorkspacePane = {
+    id: pane.id,
+    program: { ...pane.program },
+    state: { ...pane.state },
+  }
+  if (pane.subject) next.subject = cloneSubject(pane.subject)
+  return next
 }
 
 function normalizeProgramRef(
@@ -338,9 +356,11 @@ function normalizeSubjectRef(
 function cloneOptionalSubject(
   subject: WorkspaceSubjectRef | undefined,
 ): WorkspaceSubjectRef | undefined {
-  return subject
-    ? (JSON.parse(JSON.stringify(subject)) as WorkspaceSubjectRef)
-    : undefined
+  return subject ? cloneSubject(subject) : undefined
+}
+
+function cloneSubject(subject: WorkspaceSubjectRef): WorkspaceSubjectRef {
+  return { ...subject }
 }
 
 function leafValues(layout: unknown): unknown[] {
