@@ -1,5 +1,39 @@
 import { useState } from 'react'
-import { useTodo } from './hooks/useTodo.js'
+import { evaluate } from './tarpit/index.js'
+import { app, pending, pendingByUser } from './todo-schema.js'
+import type { TodoDoc } from './todo-schema.js'
+
+const seed: TodoDoc = {
+  tasks: [
+    { id: '1', title: 'buy oat milk', done: false, userId: 'u1' },
+    { id: '2', title: 'read OOTTP',   done: false, userId: 'u1' },
+    { id: '3', title: 'write tests',  done: false, userId: 'u2' },
+  ],
+  users: [
+    { id: 'u1', name: 'alice' },
+    { id: 'u2', name: 'bob' },
+  ],
+}
+
+function useTodo() {
+  const [doc, setDoc] = useState<TodoDoc>(seed)
+
+  function dispatch<K extends keyof typeof app.feeders>(
+    feeder: K,
+    input:  Parameters<(typeof app.feeders)[K]>[1],
+  ) {
+    setDoc(prev =>
+      (app.feeders[feeder] as (d: TodoDoc, i: typeof input) => TodoDoc)(prev, input)
+    )
+  }
+
+  return {
+    pending:      evaluate(pending,      doc as never),
+    pendingByUser: evaluate(pendingByUser, doc as never),
+    users:        doc.users,
+    dispatch,
+  }
+}
 
 export default function App() {
   const { pending, pendingByUser, users, dispatch } = useTodo()
