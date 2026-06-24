@@ -1,4 +1,4 @@
-import { defineSchema, where, join, select, eq } from './tarpit/index.js'
+import { defineSchema, where, join, select, eq } from './tarstate/index.js'
 
 export type TaskRow = {
   id: string

@@ -2,8 +2,8 @@ import { Repo, isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { DocHandle } from '@automerge/automerge-repo'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { FormEvent } from 'react'
-import { evaluate, fromLinkedObjects } from './tarpit/index.js'
-import type { ObjectDoc, Row } from './tarpit/index.js'
+import { evaluate, fromLinkedObjects } from './tarstate/index.js'
+import type { ObjectDoc, Row } from './tarstate/index.js'
 import { pending, pendingByUser } from './todo-schema.js'
 import type { TaskDoc, TaskRow, UserDoc, UserRow } from './todo-schema.js'
 
@@ -159,7 +159,7 @@ export default function App() {
 
   return (
     <main>
-      <h1>tarpit todo</h1>
+      <h1>tarstate todo</h1>
 
       <dl>
         <dt>task doc</dt>
