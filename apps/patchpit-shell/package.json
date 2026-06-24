@@ -15,7 +15,6 @@
     "@patchpit/file-viewer": "workspace:*",
     "@patchpit/filesystem": "workspace:*",
     "@patchpit/json-doc-editor": "workspace:*",
-    "@patchpit/state-explorer": "workspace:*",
     "@patchpit/tarstate": "workspace:*",
     "@patchpit/tarstate-automerge": "workspace:*",
     "@patchpit/tarstate-react": "workspace:*",

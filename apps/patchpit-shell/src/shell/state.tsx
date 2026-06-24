@@ -307,7 +307,7 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
 
   function closeWorkspacePane(paneId: WorkspacePaneId) {
     const pane = workspacePanes[paneId]
-    if (!pane?.closable) return
+    if (!pane) return
 
     removeLinkedAutomergeFile(osInstancesHandle, pane.state.url)
     if (selectedForPane('files').url === pane.state.url) {
@@ -322,6 +322,7 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
       draft.workspacePanes = nextPanes
       draft.workspaceLayout =
         removePaneFromWorkspaceLayout(draft.workspaceLayout, paneId) ??
+        Object.keys(nextPanes)[0] ??
         defaultWorkspaceLayout()
     })
     setWorkspaceAppStateHandles((handles) => {

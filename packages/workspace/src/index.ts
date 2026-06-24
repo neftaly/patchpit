@@ -36,7 +36,6 @@ export type WorkspaceProgramId =
   | 'patchpit:os'
   | 'patchpit:file-viewer'
   | 'patchpit:bash'
-  | 'patchpit:state-explorer'
 
 export const workspacePrograms: Record<
   WorkspaceProgramId,
@@ -48,7 +47,7 @@ export const workspacePrograms: Record<
     fileName: 'file-explorer.patchpit-program.automerge',
   },
   'patchpit:os': {
-    name: 'Patchpit OS',
+    name: 'Patchpit WM',
     entry: 'builtin:os',
     fileName: 'patchpit-os.patchpit-program.automerge',
   },
@@ -61,11 +60,6 @@ export const workspacePrograms: Record<
     name: 'Bash',
     entry: 'builtin:bash',
     fileName: 'bash.patchpit-program.automerge',
-  },
-  'patchpit:state-explorer': {
-    name: 'State explorer',
-    entry: 'builtin:state-explorer',
-    fileName: 'state-explorer.patchpit-program.automerge',
   },
 }
 
@@ -95,7 +89,6 @@ export type WorkspacePane = {
   state: {
     url: AutomergeUrl
   }
-  closable?: boolean
   subject?: WorkspaceSubjectRef
 }
 
@@ -135,14 +128,12 @@ export type FileViewerAppState = {
 }
 
 export type BashAppState = Record<string, never>
-export type StateExplorerAppState = Record<string, never>
 
 export type WorkspaceAppState =
   | BashAppState
   | FileExplorerAppState
   | FileViewerAppState
   | OsAppState
-  | StateExplorerAppState
 
 export type WorkspaceAppStates = Record<WorkspacePaneId, WorkspaceAppState>
 
@@ -173,6 +164,8 @@ export function normalizeWorkspaceLayout(
   if (isCompleteWorkspaceLayout(migrated, panes)) {
     return cloneWorkspaceLayout(migrated)
   }
+  const firstPaneId = Object.keys(panes)[0]
+  if (firstPaneId) return firstPaneId
   return defaultWorkspaceLayout()
 }
 
@@ -184,7 +177,7 @@ export function normalizeWorkspacePanes(
   if (!defaultPane) return {}
   if (!isJsonRecord(panes)) return cloneWorkspacePanes(defaults)
 
-  const next = cloneWorkspacePanes(defaults)
+  const next: WorkspacePanes = {}
   for (const [paneId, pane] of Object.entries(panes)) {
     const normalized = normalizeWorkspacePane(
       pane,
@@ -208,7 +201,6 @@ export function createWorkspacePaneInstance(
     id: paneId,
     program,
     state: { url: stateUrl },
-    closable: true,
   }
   if (sourcePane?.subject) {
     pane.subject = JSON.parse(
@@ -314,8 +306,6 @@ export function normalizeWorkspaceAppState(
       return normalizeOsAppState(state)
     case 'patchpit:bash':
       return normalizeBashAppState(state)
-    case 'patchpit:state-explorer':
-      return normalizeBashAppState(state)
   }
 }
 
@@ -332,8 +322,6 @@ export function defaultWorkspaceAppState(
       return { colorMode: 'auto' }
     case 'patchpit:bash':
       return {}
-    case 'patchpit:state-explorer':
-      return {}
   }
 }
 
@@ -348,8 +336,7 @@ export function isWorkspaceProgramId(
     value === 'patchpit:file-explorer' ||
     value === 'patchpit:os' ||
     value === 'patchpit:file-viewer' ||
-    value === 'patchpit:bash' ||
-    value === 'patchpit:state-explorer'
+    value === 'patchpit:bash'
   )
 }
 
@@ -450,7 +437,6 @@ function normalizeWorkspacePane(
     program: normalizeProgramRef(pane.program, fallback.program),
     state: normalizePaneStateRef(pane.state, fallback.state),
   }
-  if (typeof pane.closable === 'boolean') next.closable = pane.closable
   if (subject) next.subject = subject
   return next
 }

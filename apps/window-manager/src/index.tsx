@@ -86,15 +86,13 @@ function AppLauncher({
           return (
             <li key={paneId}>
               <span>{pane.program.name}</span>
-              {pane.closable && (
-                <button
-                  type="button"
-                  aria-label={`close ${pane.program.name}`}
-                  onClick={() => onClosePane(paneId)}
-                >
-                  [x]
-                </button>
-              )}
+              <button
+                type="button"
+                aria-label={`close ${pane.program.name}`}
+                onClick={() => onClosePane(paneId)}
+              >
+                [x]
+              </button>
             </li>
           )
         })}

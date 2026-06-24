@@ -122,7 +122,7 @@ const systemProgramsFixture: FilesystemFixtureFolder = {
       role: 'program',
       content: {
         id: 'patchpit:os',
-        title: 'Patchpit OS',
+        title: 'Patchpit WM',
         entry: 'builtin:os',
       },
     },
@@ -144,16 +144,6 @@ const systemProgramsFixture: FilesystemFixtureFolder = {
         id: 'patchpit:bash',
         title: 'Bash',
         entry: 'builtin:bash',
-      },
-    },
-    {
-      type: 'file',
-      name: 'state-explorer.patchpit-program.json',
-      role: 'program',
-      content: {
-        id: 'patchpit:state-explorer',
-        title: 'State explorer',
-        entry: 'builtin:state-explorer',
       },
     },
   ],
