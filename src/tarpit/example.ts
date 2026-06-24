@@ -85,14 +85,6 @@ const app = defineApp({
       users: [...doc.users, { id: `u${doc.users.length + 1}`, ...input }],
     }),
   },
-
-  observers: {
-    pendingByUser: (rows) =>
-      console.log(
-        'pending:',
-        rows.map((r) => `${r.name} / ${r.title}`),
-      ),
-  },
 })
 
 const rt = createRuntime(app, {

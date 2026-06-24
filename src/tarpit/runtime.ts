@@ -22,7 +22,6 @@ export function createRuntime<
   app: {
     derived: D
     feeders: F
-    observers?: { [K in keyof D]?: (rows: RowsByDerived<D>[K]) => void }
   },
   initialDoc: Doc,
 ): Runtime<D, F> {
@@ -37,11 +36,6 @@ export function createRuntime<
     dispatch(feeder, input) {
       doc = (app.feeders[feeder] as (doc: any, input: any) => any)(doc, input)
       cache = evalAll(app.derived, doc)
-
-      for (const key in app.observers) {
-        const fn = app.observers[key]
-        fn?.(cache[key])
-      }
     },
   }
 }

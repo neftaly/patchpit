@@ -1,12 +1,4 @@
-import type {
-  Atom,
-  FieldRef,
-  QB,
-  Predicate,
-  Schema,
-  App,
-  Observer,
-} from './types.js'
+import type { Atom, FieldRef, QB, Predicate, Schema, App } from './types.js'
 import { makeQB, getSpec, fieldsOf } from './internal.js'
 
 type ReservedField = '_rel' | '_field' | '_rels'
@@ -93,16 +85,9 @@ export function defineApp<
     string,
     never
   >,
->(spec: {
-  derived: D
-  feeders?: F
-  observers?: {
-    [K in keyof D]?: Observer<D[K] extends QB<infer T, any> ? T : never>
-  }
-}): App<D, F> {
+>(spec: { derived: D; feeders?: F }): App<D, F> {
   return {
     derived: spec.derived,
     feeders: (spec.feeders ?? {}) as F,
-    observers: spec.observers ?? {},
   }
 }

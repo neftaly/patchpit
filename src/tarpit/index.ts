@@ -6,7 +6,6 @@ export type {
   Schema,
   App,
   SchemaShape,
-  Observer,
 } from './types.js'
 export type { Doc } from './evaluate.js'
 export type { Runtime } from './runtime.js'

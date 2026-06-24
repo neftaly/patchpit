@@ -40,10 +40,6 @@ export type Schema<S extends SchemaShape> = {
   readonly [K in keyof S]: QB<S[K], K & string>
 }
 
-export type Observer<T extends Record<string, Atom>> = (
-  rows: ReadonlyArray<T>,
-) => void
-
 export type App<
   D extends Record<string, QB<any, any>>,
   F extends Record<string, (doc: any, input: any) => any> = Record<
@@ -53,9 +49,6 @@ export type App<
 > = {
   readonly derived: D
   readonly feeders: F
-  readonly observers: {
-    readonly [K in keyof D]?: (rows: ReadonlyArray<any>) => void
-  }
 }
 
 export type UnionRels<Ps extends readonly Predicate<string>[]> =
