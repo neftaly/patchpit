@@ -4,6 +4,28 @@ import type { EntryType } from '@patchpit/filesystem'
 import { isWorkspaceProgramId } from './programs.js'
 import type { WorkspaceProgramId, WorkspaceProgramRef } from './programs.js'
 
+export {
+  defaultWorkspaceAppState,
+  normalizeBashAppState,
+  normalizeFileExplorerAppState,
+  normalizeFileViewerAppState,
+  normalizeOsAppState,
+  normalizeWorkspaceAppState,
+  viewerModes,
+} from './app-state.js'
+export type {
+  BashAppState,
+  ColorMode,
+  FileExplorerAppState,
+  FileViewerAppState,
+  JsonRecord,
+  OsAppState,
+  SelectedEntry,
+  ViewerMode,
+  WorkspaceAppState,
+  WorkspaceAppStateDoc,
+  WorkspaceAppStates,
+} from './app-state.js'
 export { isWorkspaceProgramId, workspacePrograms } from './programs.js'
 export type {
   WorkspaceProgramDoc,
@@ -11,7 +33,7 @@ export type {
   WorkspaceProgramRef,
 } from './programs.js'
 
-export type JsonRecord = Record<string, unknown>
+type JsonRecord = Record<string, unknown>
 
 type MosaicParentLike = {
   direction: 'row' | 'column'
@@ -27,7 +49,6 @@ export const workspacePaneIds = [
   'terminal',
 ] as const
 export const baseWorkspacePaneIds = workspacePaneIds
-export const viewerModes = ['view', 'source'] as const
 
 export type WorkspacePaneId = string
 export type BaseWorkspacePaneId = (typeof baseWorkspacePaneIds)[number]
@@ -38,8 +59,6 @@ export type WorkspaceSplitLayout = {
   second: WorkspaceLayout
   splitPercentage?: number
 }
-export type ColorMode = 'light' | 'auto' | 'dark'
-export type ViewerMode = (typeof viewerModes)[number]
 
 export type WorkspaceSubjectRef =
   | { kind: 'doc'; url: string; type: EntryType }
@@ -55,49 +74,6 @@ export type WorkspacePane = {
 }
 
 export type WorkspacePanes = Record<string, WorkspacePane>
-
-export type WorkspaceAppStateDoc = {
-  '@patchwork': {
-    type: 'workspace-app-state'
-    version: 1
-  }
-  paneId: WorkspacePaneId
-  program: WorkspaceProgramRef
-  state: JsonRecord
-}
-
-export type SelectedEntry = {
-  entryId: string | null
-  type: EntryType
-  url: string
-  parentUrl: AutomergeUrl | null
-  name: string
-}
-
-export type FileExplorerAppState = {
-  selected?: SelectedEntry
-  closedFolderEntryIds: string[]
-}
-
-export type OsAppState = {
-  colorMode: ColorMode
-}
-
-export type FileViewerAppState = {
-  mode: ViewerMode
-  selected?: SelectedEntry
-  selectedUrl: string | null
-}
-
-export type BashAppState = Record<string, never>
-
-export type WorkspaceAppState =
-  | BashAppState
-  | FileExplorerAppState
-  | FileViewerAppState
-  | OsAppState
-
-export type WorkspaceAppStates = Record<WorkspacePaneId, WorkspaceAppState>
 
 export function defaultWorkspaceLayout(): WorkspaceLayout {
   return {
@@ -204,87 +180,6 @@ export function removePaneFromWorkspaceLayout(
   if (!second) return first
 
   return { ...layout, first, second }
-}
-
-export function normalizeFileExplorerAppState(
-  state: unknown,
-): FileExplorerAppState {
-  if (!isJsonRecord(state)) {
-    return { closedFolderEntryIds: [] }
-  }
-
-  const selected = normalizeSelectedEntry(state.selected)
-  const next: FileExplorerAppState = {
-    closedFolderEntryIds: Array.isArray(state.closedFolderEntryIds)
-      ? state.closedFolderEntryIds.filter(
-          (value): value is string => typeof value === 'string',
-        )
-      : [],
-  }
-  if (selected) next.selected = selected
-  return next
-}
-
-export function normalizeOsAppState(state: unknown): OsAppState {
-  if (!isJsonRecord(state) || !isColorMode(state.colorMode)) {
-    return { colorMode: 'auto' }
-  }
-
-  return { colorMode: state.colorMode }
-}
-
-export function normalizeFileViewerAppState(
-  state: unknown,
-): FileViewerAppState {
-  const selected = isJsonRecord(state)
-    ? normalizeSelectedEntry(state.selected)
-    : undefined
-  const next: FileViewerAppState = {
-    mode: isJsonRecord(state) && isViewerMode(state.mode) ? state.mode : 'view',
-    selectedUrl:
-      isJsonRecord(state) &&
-      (typeof state.selectedUrl === 'string' || state.selectedUrl === null)
-        ? state.selectedUrl
-        : null,
-  }
-  if (selected) next.selected = selected
-  return next
-}
-
-export function normalizeBashAppState(_state: unknown): BashAppState {
-  return {}
-}
-
-export function normalizeWorkspaceAppState(
-  programId: WorkspaceProgramId,
-  state: unknown,
-): WorkspaceAppState {
-  switch (programId) {
-    case 'patchpit:file-explorer':
-      return normalizeFileExplorerAppState(state)
-    case 'patchpit:file-viewer':
-      return normalizeFileViewerAppState(state)
-    case 'patchpit:os':
-      return normalizeOsAppState(state)
-    case 'patchpit:bash':
-      return normalizeBashAppState(state)
-  }
-}
-
-export function defaultWorkspaceAppState(
-  programId: WorkspaceProgramId,
-  selected: SelectedEntry,
-): WorkspaceAppState {
-  switch (programId) {
-    case 'patchpit:file-explorer':
-      return { selected, closedFolderEntryIds: [] }
-    case 'patchpit:file-viewer':
-      return { mode: 'view', selected, selectedUrl: selected.url }
-    case 'patchpit:os':
-      return { colorMode: 'auto' }
-    case 'patchpit:bash':
-      return {}
-  }
 }
 
 export function workspaceStateFileName(paneId: WorkspacePaneId): string {
@@ -445,35 +340,6 @@ function cloneOptionalSubject(
   return subject
     ? (JSON.parse(JSON.stringify(subject)) as WorkspaceSubjectRef)
     : undefined
-}
-
-function isColorMode(value: unknown): value is ColorMode {
-  return value === 'light' || value === 'auto' || value === 'dark'
-}
-
-function isViewerMode(value: unknown): value is ViewerMode {
-  return value === 'view' || value === 'source'
-}
-
-function normalizeSelectedEntry(value: unknown): SelectedEntry | undefined {
-  if (!isJsonRecord(value)) return undefined
-  if (
-    (value.type !== 'folder' && value.type !== 'file') ||
-    typeof value.url !== 'string' ||
-    typeof value.name !== 'string' ||
-    (typeof value.entryId !== 'string' && value.entryId !== null) ||
-    (typeof value.parentUrl !== 'string' && value.parentUrl !== null)
-  ) {
-    return undefined
-  }
-
-  return {
-    entryId: value.entryId,
-    type: value.type,
-    url: value.url,
-    parentUrl: value.parentUrl as AutomergeUrl | null,
-    name: value.name,
-  }
 }
 
 function leafValues(layout: unknown): unknown[] {

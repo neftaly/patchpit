@@ -5,7 +5,7 @@ import {
   normalizeFileViewerAppState,
   normalizeOsAppState,
   normalizeWorkspaceAppState,
-} from './index.js'
+} from './app-state.js'
 import type {
   ColorMode,
   FileExplorerAppState,
@@ -16,10 +16,12 @@ import type {
   WorkspaceAppState,
   WorkspaceAppStateDoc,
   WorkspaceAppStates,
+} from './app-state.js'
+import type {
   WorkspacePaneId,
   WorkspacePanes,
-  WorkspaceProgramRef,
 } from './index.js'
+import type { WorkspaceProgramRef } from './programs.js'
 
 export type WorkspaceAppStateHandles = Record<
   WorkspacePaneId,
