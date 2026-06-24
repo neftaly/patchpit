@@ -17,36 +17,31 @@ const seed: TodoDoc = {
 
 function useTodo() {
   const [doc, setDoc] = useState<TodoDoc>(seed)
-
-  function dispatch<K extends keyof typeof feeders>(
-    feeder: K,
-    input: Parameters<(typeof feeders)[K]>[1],
-  ) {
-    setDoc((prev) =>
-      (feeders[feeder] as (d: TodoDoc, i: typeof input) => TodoDoc)(
-        prev,
-        input,
-      ),
-    )
+  const addTask = (input: { title: string; userId: string }) => {
+    setDoc((prev) => feeders.addTask(prev, input))
+  }
+  const complete = (id: string) => {
+    setDoc((prev) => feeders.complete(prev, id))
   }
 
   return {
     pending: evaluate(pending, doc),
     pendingByUser: evaluate(pendingByUser, doc),
     users: doc.users,
-    dispatch,
+    addTask,
+    complete,
   }
 }
 
 export default function App() {
-  const { pending, pendingByUser, users, dispatch } = useTodo()
+  const { pending, pendingByUser, users, addTask, complete } = useTodo()
   const [title, setTitle] = useState('')
   const [userId, setUserId] = useState('')
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!title.trim() || !userId) return
-    dispatch('addTask', { title: title.trim(), userId })
+    addTask({ title: title.trim(), userId })
     setTitle('')
   }
 
@@ -102,9 +97,7 @@ export default function App() {
             <tr key={task.id}>
               <td>{task.title}</td>
               <td>
-                <button onClick={() => dispatch('complete', task.id)}>
-                  done
-                </button>
+                <button onClick={() => complete(task.id)}>done</button>
               </td>
             </tr>
           ))}
