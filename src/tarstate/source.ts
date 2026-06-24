@@ -72,7 +72,7 @@ export async function collectLinkedObjects(
   return docs
 }
 
-function linkValues(value: unknown): string[] {
+export function linkValues(value: unknown): string[] {
   if (typeof value === 'string') return [value]
   if (Array.isArray(value)) {
     return value.filter((src): src is string => typeof src === 'string')

@@ -1,7 +1,9 @@
 import { Repo, isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { DocHandle } from '@automerge/automerge-repo'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { JsonDocEditor, isJsonRecord } from './json-doc-editor.js'
+import type { JsonRecord } from './json-doc-editor.js'
 import { useAutomergeQueries, useDocument } from './tarstate/index.js'
 import { taskUserSourcesField, todoQueries } from './todo-schema.js'
 import type { Task, TasksDoc, User, UsersDoc } from './todo-schema.js'
@@ -33,10 +35,6 @@ const repo = new Repo()
 const linkedUsersHandle = repo.create<UsersDoc>(linkedUsersDoc)
 const unlinkedUsersHandle = repo.create<UsersDoc>(unlinkedUsersDoc)
 const tasksHandle = repo.create<TasksDoc>(tasksDocSeed(linkedUsersHandle.url))
-
-type JsonRecord = Record<string, unknown>
-type JsonArray = unknown[]
-type JsonDocValidator = (doc: JsonRecord) => string | null
 
 type TodoView = {
   pending: ReadonlyArray<Task>
@@ -84,159 +82,6 @@ function useTodo(handle: DocHandle<TasksDoc>) {
   }
 }
 
-function JsonDocEditor<T extends JsonRecord>({
-  title,
-  handle,
-  validate,
-}: {
-  title: string
-  handle: DocHandle<T>
-  validate?: JsonDocValidator
-}) {
-  const doc = useDocument(handle)
-  const docText = formatJson(doc)
-  const fieldName = `${title.toLowerCase().replaceAll(' ', '-')}-json`
-  const [text, setText] = useState(() => docText)
-  const [error, setError] = useState<string | null>(null)
-  const isChanged = text !== docText
-
-  useEffect(() => {
-    setText(docText)
-    setError(null)
-  }, [docText])
-
-  function editDraft(nextText: string) {
-    setText(nextText)
-    const parsed = parseJsonRecord(nextText)
-    setError(parsed.ok ? (validate?.(parsed.value) ?? null) : parsed.error)
-  }
-
-  function applyDraft() {
-    const parsed = parseJsonRecord(text)
-    if (!parsed.ok) {
-      setError(parsed.error)
-      return
-    }
-
-    const validationError = validate?.(parsed.value)
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-
-    patchDoc(handle, parsed.value as T)
-  }
-
-  function resetDraft() {
-    setText(docText)
-    setError(null)
-  }
-
-  return (
-    <section>
-      <h3>{title}</h3>
-      <p>{handle.url}</p>
-      <textarea
-        id={fieldName}
-        name={fieldName}
-        value={text}
-        onChange={(e) => editDraft(e.target.value)}
-        rows={Math.max(8, text.split('\n').length + 1)}
-        spellCheck={false}
-        style={{ boxSizing: 'border-box', width: '100%' }}
-      />
-      <p>
-        <button
-          type="button"
-          onClick={applyDraft}
-          disabled={!isChanged || !!error}
-        >
-          apply json
-        </button>{' '}
-        <button type="button" onClick={resetDraft} disabled={!isChanged}>
-          reset
-        </button>
-      </p>
-      {error && <p role="alert">{error}</p>}
-    </section>
-  )
-}
-
-function patchDoc<T extends JsonRecord>(handle: DocHandle<T>, next: T) {
-  handle.change((draft) => {
-    patchRecord(draft, next)
-  })
-}
-
-function patchRecord(target: JsonRecord, next: JsonRecord) {
-  for (const key of Object.keys(target)) {
-    if (!(key in next)) delete target[key]
-  }
-
-  for (const [key, value] of Object.entries(next)) {
-    patchRecordValue(target, key, value)
-  }
-}
-
-function patchArray(target: JsonArray, next: JsonArray) {
-  target.splice(next.length)
-  for (let index = 0; index < next.length; index += 1) {
-    patchArrayValue(target, index, next[index])
-  }
-}
-
-function patchRecordValue(target: JsonRecord, key: string, next: unknown) {
-  const current = target[key]
-  if (patchComposite(current, next)) return
-
-  target[key] = next
-}
-
-function patchArrayValue(target: JsonArray, index: number, next: unknown) {
-  const current = target[index]
-  if (patchComposite(current, next)) return
-
-  target[index] = next
-}
-
-function patchComposite(current: unknown, next: unknown): boolean {
-  if (isJsonRecord(current) && isJsonRecord(next)) {
-    patchRecord(current, next)
-    return true
-  }
-
-  if (Array.isArray(current) && Array.isArray(next)) {
-    patchArray(current, next)
-    return true
-  }
-
-  return false
-}
-
-function formatJson(value: unknown): string {
-  return JSON.stringify(value, null, 2)
-}
-
-function parseJsonRecord(
-  text: string,
-): { ok: true; value: JsonRecord } | { ok: false; error: string } {
-  let value: unknown
-  try {
-    value = JSON.parse(text)
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    }
-  }
-
-  if (!isJsonRecord(value)) {
-    return { ok: false, error: 'Root value must be a JSON object.' }
-  }
-
-  return { ok: true, value }
-}
-
 function validateTasksDoc(doc: JsonRecord): string | null {
   if (!isStringArray(doc.userSources)) {
     return 'tasks doc needs userSources: string[].'
@@ -280,10 +125,6 @@ function isUser(value: unknown): value is User {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
-}
-
-function isJsonRecord(value: unknown): value is JsonRecord {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 export default function App() {

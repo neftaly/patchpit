@@ -2,7 +2,7 @@ import { isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { AnyDocumentId, DocHandle, Repo } from '@automerge/automerge-repo'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { evaluate } from './evaluate.js'
-import { fromObjects } from './source.js'
+import { fromObjects, linkValues } from './source.js'
 import type { ObjectDoc, RelationSource } from './source.js'
 import type { Atom, QB } from './types.js'
 
@@ -232,14 +232,6 @@ async function collectAutomergeSnapshot(
   }
 
   return { docs, handles }
-}
-
-function linkValues(value: unknown): string[] {
-  if (typeof value === 'string') return [value]
-  if (Array.isArray(value)) {
-    return value.filter((src): src is string => typeof src === 'string')
-  }
-  return []
 }
 
 function querySignature(queries: QueryMap): string {
