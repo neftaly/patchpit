@@ -3,7 +3,6 @@ export type {
   FieldRef,
   Predicate,
   Query,
-  QB,
   RelationDefinition,
   RelationRef,
   Schema,

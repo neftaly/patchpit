@@ -37,11 +37,6 @@ export type Query<T extends Record<string, Atom>, Rels extends string> = {
   }
 }
 
-export type QB<T extends Record<string, Atom>, Rels extends string> = Query<
-  T,
-  Rels
->
-
 export type SchemaShape = Record<string, Record<string, Atom>>
 
 export type RelationDefinition<
