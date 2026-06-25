@@ -84,13 +84,6 @@ export function normalizeWorkspaceLayout(
   return defaultWorkspaceLayout()
 }
 
-export function normalizeWorkspacePanes(
-  panes: unknown,
-  defaults: WorkspacePanes,
-): WorkspacePanes {
-  return normalizeWorkspacePanesWithProgramUrlPolicy(panes, defaults, () => true)
-}
-
 export function normalizeWorkspacePanesWithProgramUrlPolicy(
   panes: unknown,
   defaults: WorkspacePanes,
