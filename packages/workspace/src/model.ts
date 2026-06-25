@@ -187,11 +187,6 @@ export function appInstanceStateFileName(
   return `${instanceId}${stateToken}.state.automerge`
 }
 
-/** @deprecated Use appInstanceStateFileName for /run/apps state files. */
-export function workspaceStateFileName(paneId: WorkspacePaneId): string {
-  return `${paneId}.automerge`
-}
-
 function appInstanceStateFileToken(stateUrl: AutomergeUrl): string {
   return stateUrl
     .replace(/^automerge:/, '')

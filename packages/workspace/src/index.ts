@@ -37,7 +37,6 @@ export {
   removePaneFromWorkspaceLayout,
   workspacePaneIds,
   workspaceProgramFor,
-  workspaceStateFileName,
 } from './model.js'
 export type {
   BaseWorkspacePaneId,

@@ -58,7 +58,6 @@ export {
   viewerModes,
   appInstanceStateFileName,
   workspaceProgramFor,
-  workspaceStateFileName,
 } from '@patchpit/workspace'
 export type {
   BashAppState,
