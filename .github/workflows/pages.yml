@@ -38,6 +38,8 @@ jobs:
         run: pnpm lint
       - name: Build Pages artifact
         run: GITHUB_PAGES=true pnpm --filter @patchpit/shell build
+      - name: Check shell source maps
+        run: node scripts/check-sourcemaps.mjs apps/patchpit-shell/dist
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

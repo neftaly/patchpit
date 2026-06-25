@@ -33,3 +33,5 @@ jobs:
         run: pnpm lint
       - name: Build
         run: pnpm build
+      - name: Check shell source maps
+        run: node scripts/check-sourcemaps.mjs apps/patchpit-shell/dist

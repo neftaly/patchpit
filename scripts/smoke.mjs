@@ -4,6 +4,7 @@ import { access, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { chromium } from 'playwright'
+import { assertPublicSourceMaps } from './check-sourcemaps.mjs'
 
 const root = process.cwd()
 const apps = [
@@ -17,6 +18,7 @@ const apps = [
       'DamagedHelmet.glb',
       'title: tiny-checkers',
     ],
+    publicSourceMaps: true,
   },
   {
     name: 'todo demo',
@@ -86,6 +88,10 @@ async function assertDist(app) {
   } catch {
     throw new Error(`${app.name} dist is missing. Run pnpm build first.`)
   }
+
+  if (app.publicSourceMaps) {
+    await assertPublicSourceMaps(app)
+  }
 }
 
 function serveStatic(dir, port) {
@@ -125,7 +131,15 @@ function serveStatic(dir, port) {
 
 function safePath(rootDir, pathname) {
   const resolved = path.resolve(rootDir, `.${pathname}`)
-  return resolved.startsWith(path.resolve(rootDir)) ? resolved : null
+  return isInside(rootDir, resolved) ? resolved : null
+}
+
+function isInside(rootDir, filePath) {
+  const relative = path.relative(rootDir, filePath)
+  return (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  )
 }
 
 function contentType(filePath) {
