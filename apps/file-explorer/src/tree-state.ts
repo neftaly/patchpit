@@ -38,7 +38,7 @@ export function selectionFromNode(node: TreeNodeRef): SelectedDoc {
   }
 }
 
-export function rootNode(url: AutomergeUrl, name: string): TreeNodeRef {
+export function treeRootNode(url: AutomergeUrl, name: string): TreeNodeRef {
   return {
     entryId: null,
     type: 'folder',

@@ -26,6 +26,9 @@ export type SelectedEntry = {
   name: string
 }
 
+export type SelectedEntryInput = Pick<SelectedEntry, 'type' | 'url' | 'name'> &
+  Partial<Pick<SelectedEntry, 'entryId' | 'parentUrl'>>
+
 export type FileExplorerAppState = {
   selected?: SelectedEntry
   closedFolderEntryIds: string[]
@@ -118,8 +121,9 @@ export function normalizeWorkspaceAppState(
 
 export function defaultWorkspaceAppState(
   programId: WorkspaceProgramId,
-  selected: SelectedEntry,
+  selectedInput: SelectedEntryInput,
 ): WorkspaceAppState {
+  const selected = selectedEntry(selectedInput)
   switch (programId) {
     case 'patchpit:file-explorer':
       return { selected, closedFolderEntryIds: [] }
@@ -129,6 +133,16 @@ export function defaultWorkspaceAppState(
       return { colorMode: 'auto' }
     case 'patchpit:bash':
       return {}
+  }
+}
+
+export function selectedEntry(input: SelectedEntryInput): SelectedEntry {
+  return {
+    entryId: input.entryId ?? null,
+    type: input.type,
+    url: input.url,
+    parentUrl: input.parentUrl ?? null,
+    name: input.name,
   }
 }
 

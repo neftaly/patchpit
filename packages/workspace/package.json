@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./automerge": "./src/automerge.ts",
     "./model": "./src/model.ts",
+    "./selection-state": "./src/selection-state.ts",
     "./state": "./src/state.ts"
   },
   "dependencies": {

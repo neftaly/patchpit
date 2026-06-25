@@ -16,6 +16,7 @@ import {
   isWorkspaceProgramId,
   workspacePrograms,
 } from '@patchpit/workspace'
+import { createWorkspacePane } from '@patchpit/workspace/model'
 import { createWorkspaceAppState } from '@patchpit/workspace/state'
 import type {
   BaseWorkspacePaneId,
@@ -27,6 +28,7 @@ import type {
   WorkspaceProgramDoc,
   WorkspaceProgramId,
   WorkspaceProgramRef,
+  WorkspaceSubjectRef,
 } from '@patchpit/workspace'
 
 export {
@@ -184,35 +186,52 @@ function createDefaultWorkspacePanes(
     }),
     terminal: createWorkspaceAppState(repo, {}),
   }
+  const paneDefinitions = [
+    {
+      paneId: 'files',
+      programId: 'patchpit:file-explorer',
+      stateHandle: stateHandles.files,
+      subject: { kind: 'doc', url: rootUrl, type: 'folder' },
+    },
+    {
+      paneId: 'state',
+      programId: 'patchpit:os',
+      stateHandle: stateHandles.state,
+    },
+    {
+      paneId: 'viewer',
+      programId: 'patchpit:file-viewer',
+      stateHandle: stateHandles.viewer,
+      subject: { kind: 'selection', paneId: 'files' },
+    },
+    {
+      paneId: 'terminal',
+      programId: 'patchpit:bash',
+      stateHandle: stateHandles.terminal,
+      subject: { kind: 'doc', url: rootUrl, type: 'folder' },
+    },
+  ] satisfies readonly DefaultWorkspacePaneDefinition[]
+  const panes: WorkspacePanes = {}
+  for (const { paneId, programId, stateHandle, subject } of paneDefinitions) {
+    panes[paneId] = createWorkspacePane({
+      paneId,
+      program: programRefs[programId],
+      stateUrl: stateHandle.url,
+      subject,
+    })
+  }
 
   return {
-    panes: {
-      files: {
-        id: 'files',
-        program: programRefs['patchpit:file-explorer'],
-        state: { url: stateHandles.files.url },
-        subject: { kind: 'doc', url: rootUrl, type: 'folder' },
-      },
-      state: {
-        id: 'state',
-        program: programRefs['patchpit:os'],
-        state: { url: stateHandles.state.url },
-      },
-      viewer: {
-        id: 'viewer',
-        program: programRefs['patchpit:file-viewer'],
-        state: { url: stateHandles.viewer.url },
-        subject: { kind: 'selection', paneId: 'files' },
-      },
-      terminal: {
-        id: 'terminal',
-        program: programRefs['patchpit:bash'],
-        state: { url: stateHandles.terminal.url },
-        subject: { kind: 'doc', url: rootUrl, type: 'folder' },
-      },
-    },
+    panes,
     stateHandles,
   }
+}
+
+type DefaultWorkspacePaneDefinition = {
+  paneId: BaseWorkspacePaneId
+  programId: WorkspaceProgramId
+  stateHandle: DocHandle<WorkspaceAppStateDoc>
+  subject?: WorkspaceSubjectRef
 }
 
 function createPatchpitMount(

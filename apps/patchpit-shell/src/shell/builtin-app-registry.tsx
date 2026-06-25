@@ -3,7 +3,7 @@ import { BashTerminal } from '@patchpit/bash-terminal'
 import type { TerminalFileSystem } from '@patchpit/bash-terminal'
 import { FileExplorer } from '@patchpit/file-explorer'
 import type { FileExplorerProps } from '@patchpit/file-explorer'
-import { rootNode } from '@patchpit/file-explorer/tree-state'
+import { treeRootNode } from '@patchpit/file-explorer/tree-state'
 import { FileViewer } from '@patchpit/file-viewer'
 import type { FileViewerProps } from '@patchpit/file-viewer'
 import type { WorkspacePaneId, WorkspaceProgramId } from '@patchpit/workspace'
@@ -48,7 +48,7 @@ export const builtinAppRegistry = {
     <FileExplorer
       handle={rootHandle}
       isFolderOpen={isFolderOpen}
-      node={rootNode(rootHandle.url, rootEntryName)}
+      node={treeRootNode(rootHandle.url, rootEntryName)}
       onContextMenu={openContextMenu}
       onSelectNode={selectNode}
       onToggleFolder={toggleFolder}

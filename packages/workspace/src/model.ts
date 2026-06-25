@@ -45,6 +45,13 @@ export type WorkspacePane = {
 
 export type WorkspacePanes = Record<string, WorkspacePane>
 
+export type CreateWorkspacePaneInput = {
+  paneId: WorkspacePaneId
+  program: WorkspaceProgramRef
+  stateUrl: AutomergeUrl
+  subject?: WorkspaceSubjectRef | undefined
+}
+
 export function defaultWorkspaceLayout(): WorkspaceLayout {
   return {
     direction: 'row',
@@ -114,14 +121,27 @@ export function createWorkspacePaneInstance(
   program: WorkspaceProgramRef = workspaceProgramFor(defaults, programId),
 ): WorkspacePane {
   const sourcePane = workspacePaneWithProgram(defaults, programId)
+  return createWorkspacePane({
+    paneId,
+    program,
+    stateUrl,
+    subject: sourcePane?.subject,
+  })
+}
+
+export function createWorkspacePane({
+  paneId,
+  program,
+  stateUrl,
+  subject,
+}: CreateWorkspacePaneInput): WorkspacePane {
   const pane: WorkspacePane = {
     id: paneId,
-    program,
+    program: { ...program },
     state: { url: stateUrl },
   }
-  if (sourcePane?.subject) {
-    pane.subject = cloneSubject(sourcePane.subject)
-  }
+  const clonedSubject = cloneOptionalSubject(subject)
+  if (clonedSubject) pane.subject = clonedSubject
   return pane
 }
 
