@@ -9,7 +9,7 @@ import {
   project,
   relation,
   where,
-} from '@patchpit/tarstate'
+} from '@patchpit/tarstate/query'
 import { todoFixture } from './fixture.js'
 import type { Task, TodoDoc } from './fixture.js'
 

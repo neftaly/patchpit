@@ -1,5 +1,5 @@
-import { fromObjects } from '@patchpit/tarstate'
-import type { ObjectDoc, RelationSource } from '@patchpit/tarstate'
+import { fromObjects } from '@patchpit/tarstate/source'
+import type { ObjectDoc, RelationSource } from '@patchpit/tarstate/source'
 
 type MaybePromise<T> = T | Promise<T>
 
