@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { evaluate, fromObject } from '@patchpit/tarstate'
+import { evaluateMany, fromObject } from '@patchpit/tarstate'
 import type { Atom, ObjectDoc, Query, RelationSource } from '@patchpit/tarstate'
 
 export type QueryMap = Record<string, Query<Record<string, Atom>, string>>
@@ -39,15 +39,11 @@ export function useQueries<Queries extends QueryMap>(
     let alive = true
     setState((current) => ({ ...current, status: 'loading', isLoading: true }))
 
-    Promise.all(
-      Object.entries(queries).map(async ([name, query]) => {
-        return [name, await evaluate(query, source)] as const
-      }),
-    ).then(
-      (entries) => {
+    evaluateQueryMap(queries, source).then(
+      (data) => {
         if (!alive) return
         setState({
-          data: Object.fromEntries(entries) as QueryResults<Queries>,
+          data,
           status: 'success',
           error: null,
           isLoading: false,
@@ -98,6 +94,21 @@ function emptyResults<Queries extends QueryMap>(
 ): QueryResults<Queries> {
   return Object.fromEntries(
     Object.keys(queries).map((name) => [name, []]),
+  ) as unknown as QueryResults<Queries>
+}
+
+async function evaluateQueryMap<Queries extends QueryMap>(
+  queries: Queries,
+  source: RelationSource,
+): Promise<QueryResults<Queries>> {
+  const entries = Object.entries(queries)
+  const rows = await evaluateMany(
+    entries.map(([, query]) => query),
+    source,
+  )
+
+  return Object.fromEntries(
+    entries.map(([name], index) => [name, rows[index]]),
   ) as unknown as QueryResults<Queries>
 }
 
