@@ -10,11 +10,11 @@ import type {
 import { createFile, createFolder } from '@patchpit/filesystem/repo'
 import type { FolderDoc, FolderEntry } from '@patchpit/filesystem'
 import {
+  appInstanceStateFileName,
   baseWorkspacePaneIds,
   defaultWorkspaceLayout,
   isWorkspaceProgramId,
   workspacePrograms,
-  workspaceStateFileName,
 } from '@patchpit/workspace'
 import { createWorkspaceAppState } from '@patchpit/workspace/state'
 import type {
@@ -54,6 +54,7 @@ export {
   normalizeWorkspacePanes,
   removePaneFromWorkspaceLayout,
   viewerModes,
+  appInstanceStateFileName,
   workspaceProgramFor,
   workspaceStateFileName,
 } from '@patchpit/workspace'
@@ -130,7 +131,7 @@ export function createFilesystemDemoState(
     workspaceLayout: defaultWorkspaceLayout(),
     workspacePanes: defaultWorkspacePanes,
   })
-  const { instancesHandle: osInstancesHandle, patchpitHandle } =
+  const { appInstancesHandle: osInstancesHandle, patchpitHandle } =
     createPatchpitMount(repo, uiHandle.url, stateHandles)
   const mountHandle = fixtureContext.mountHandles.mnt ?? rootHandle
   mountHandle.change((draft) => {
@@ -248,30 +249,44 @@ function createPatchpitMount(
   stateHandles: Record<BaseWorkspacePaneId, DocHandle<WorkspaceAppStateDoc>>,
 ): {
   patchpitHandle: DocHandle<FolderDoc>
-  instancesHandle: DocHandle<FolderDoc>
+  appInstancesHandle: DocHandle<FolderDoc>
 } {
-  const instancesHandle = createFolder(
+  const appInstancesHandle = createFolder(
     repo,
-    'instances',
+    'apps',
     baseWorkspacePaneIds.map((paneId) => ({
-      name: workspaceStateFileName(paneId),
+      name: appInstanceStateFileName(paneId),
       type: 'file',
       url: stateHandles[paneId].url,
     })),
   )
-  const patchpitHandle = createFolder(repo, 'patchpit', [
+  const runHandle = createFolder(repo, 'run', [
     {
-      name: 'workspace.automerge',
+      name: 'apps',
+      type: 'folder',
+      url: appInstancesHandle.url,
+    },
+  ])
+  const wmHandle = createFolder(repo, 'wm', [
+    {
+      name: 'state.automerge',
       type: 'file',
       url: workspaceUrl,
     },
+  ])
+  const patchpitHandle = createFolder(repo, 'patchpit', [
     {
-      name: 'instances',
+      name: 'wm',
       type: 'folder',
-      url: instancesHandle.url,
+      url: wmHandle.url,
+    },
+    {
+      name: 'run',
+      type: 'folder',
+      url: runHandle.url,
     },
   ])
-  return { patchpitHandle, instancesHandle }
+  return { patchpitHandle, appInstancesHandle }
 }
 
 function createWorkspaceProgramRefs(

@@ -159,6 +159,13 @@ export function removePaneFromWorkspaceLayout(
   return { ...layout, first, second }
 }
 
+export function appInstanceStateFileName(
+  instanceId: WorkspacePaneId,
+): string {
+  return `${instanceId}.state.automerge`
+}
+
+/** @deprecated Use appInstanceStateFileName for /run/apps state files. */
 export function workspaceStateFileName(paneId: WorkspacePaneId): string {
   return `${paneId}.automerge`
 }

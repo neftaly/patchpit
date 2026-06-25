@@ -5,9 +5,9 @@ import {
 } from '@patchpit/filesystem/repo'
 import type { FolderDoc } from '@patchpit/filesystem'
 import {
+  appInstanceStateFileName,
   createWorkspacePaneInstance,
   defaultWorkspaceAppState,
-  workspaceStateFileName,
 } from '@patchpit/workspace'
 import { createWorkspaceAppState } from '@patchpit/workspace/state'
 import type {
@@ -38,7 +38,7 @@ export type AppInstance = {
 
 export function createAppInstanceStore({
   defaultWorkspacePanes,
-  osInstancesHandle,
+  osInstancesHandle: appInstancesHandle,
   repo,
   workspaceProgramRefs,
 }: {
@@ -65,14 +65,14 @@ export function createAppInstanceStore({
       )
 
       addLinkedAutomergeFile(
-        osInstancesHandle,
-        workspaceStateFileName(paneId),
+        appInstancesHandle,
+        appInstanceStateFileName(paneId),
         stateHandle.url,
       )
       return { pane, stateHandle }
     },
     close(pane) {
-      removeLinkedAutomergeFile(osInstancesHandle, pane.state.url)
+      removeLinkedAutomergeFile(appInstancesHandle, pane.state.url)
     },
   }
 }

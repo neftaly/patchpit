@@ -29,6 +29,7 @@ export type {
 } from './programs.js'
 export {
   addPaneToWorkspaceLayout,
+  appInstanceStateFileName,
   baseWorkspacePaneIds,
   createWorkspacePaneInstance,
   defaultWorkspaceLayout,
