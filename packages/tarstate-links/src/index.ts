@@ -10,11 +10,18 @@ export function fromLinkedObjects(
   resolve: LinkResolver,
   linkField = 'src',
 ): RelationSource {
+  let source: Promise<RelationSource> | undefined
+
   return {
     async rows(relation) {
-      return fromObjects(
-        await collectLinkedObjects(root, resolve, linkField),
-      ).rows(relation)
+      source ??= collectLinkedObjects(root, resolve, linkField).then(
+        fromObjects,
+        (error: unknown) => {
+          source = undefined
+          throw error
+        },
+      )
+      return (await source).rows(relation)
     },
   }
 }
