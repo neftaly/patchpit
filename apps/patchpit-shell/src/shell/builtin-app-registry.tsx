@@ -1,10 +1,7 @@
-import type { ReactNode } from 'react'
-import { BashTerminal } from '@patchpit/bash-terminal'
+import { Suspense, lazy } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { TerminalFileSystem } from '@patchpit/bash-terminal'
-import { FileExplorer } from '@patchpit/file-explorer'
 import type { FileExplorerProps } from '@patchpit/file-explorer'
-import { treeRootNode } from '@patchpit/file-explorer/tree-state'
-import { FileViewer } from '@patchpit/file-viewer'
 import type { FileViewerProps } from '@patchpit/file-viewer'
 import type { WorkspacePaneId, WorkspaceProgramId } from '@patchpit/workspace'
 
@@ -33,54 +30,60 @@ export type BuiltinAppRegistry = Readonly<
   Record<WorkspaceProgramId, BuiltinAppRenderer>
 >
 
+const BashTerminalBuiltinApp = lazy(
+  () => import('./builtin-apps/bash-terminal.js'),
+)
+const FileExplorerBuiltinApp = lazy(
+  () => import('./builtin-apps/file-explorer.js'),
+)
+const FileViewerBuiltinApp = lazy(() => import('./builtin-apps/file-viewer.js'))
+
 export const builtinAppRegistry = {
-  'patchpit:file-explorer': ({
-    isFolderOpen,
-    openContextMenu,
-    paneId,
-    repo,
-    rootEntryName,
-    rootHandle,
-    selectNode,
-    selected,
-    toggleFolder,
-  }) => (
-    <FileExplorer
-      handle={rootHandle}
-      isFolderOpen={isFolderOpen}
-      node={treeRootNode(rootHandle.url, rootEntryName)}
-      onContextMenu={openContextMenu}
-      onSelectNode={selectNode}
-      onToggleFolder={toggleFolder}
-      paneId={paneId}
-      repo={repo}
-      selected={selected}
-    />
-  ),
+  'patchpit:file-explorer': lazyBuiltinApp(FileExplorerBuiltinApp, {
+    className: 'tree-pane',
+    label: 'Loading file explorer',
+  }),
   'patchpit:os': ({ statePane }) => (
     <aside className="state-pane" aria-label="workspace state">
       {statePane}
     </aside>
   ),
-  'patchpit:file-viewer': ({
-    paneId,
-    repo,
-    selectedForPane,
-    setViewerMode,
-    viewerModeForPane,
-  }) => (
-    <FileViewer
-      mode={viewerModeForPane(paneId)}
-      paneId={paneId}
-      repo={repo}
-      selected={selectedForPane(paneId)}
-      onModeChange={setViewerMode}
-    />
-  ),
-  'patchpit:bash': ({ terminalFileSystem }) => (
-    <BashTerminal fileSystem={terminalFileSystem} />
-  ),
+  'patchpit:file-viewer': lazyBuiltinApp(FileViewerBuiltinApp, {
+    className: 'detail-pane',
+    label: 'Loading file viewer',
+  }),
+  'patchpit:bash': lazyBuiltinApp(BashTerminalBuiltinApp, {
+    className: 'terminal-pane',
+    label: 'Loading terminal',
+  }),
 } satisfies BuiltinAppRegistry
+
+function lazyBuiltinApp(
+  App: ComponentType<BuiltinAppRenderContext>,
+  loading: BuiltinAppLoadingPaneProps,
+): BuiltinAppRenderer {
+  return (context) => (
+    <Suspense fallback={<BuiltinAppLoadingPane {...loading} />}>
+      <App {...context} />
+    </Suspense>
+  )
+}
+
+type BuiltinAppLoadingPaneProps = {
+  className: string
+  label: string
+}
+
+function BuiltinAppLoadingPane({
+  className,
+  label,
+}: BuiltinAppLoadingPaneProps) {
+  return (
+    <div className={className} aria-busy="true" aria-label={label}>
+      {label}
+    </div>
+  )
+}
 
 export function renderBuiltinApp(
   registry: BuiltinAppRegistry,
@@ -88,5 +91,7 @@ export function renderBuiltinApp(
   context: BuiltinAppRenderContext,
 ): ReactNode {
   if (!programId) return <div />
-  return registry[programId](context)
+  const renderApp = registry[programId]
+  if (!renderApp) return <div />
+  return renderApp(context)
 }
