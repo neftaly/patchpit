@@ -33,9 +33,9 @@ import type {
   WorkspacePanes,
   WorkspacePaneId,
   WorkspaceProgramId,
-  WorkspaceSubjectRef,
 } from '@patchpit/workspace'
 import { initialUrlSelection } from './initial-selection.js'
+import { folderOpenId, selectionFromSubject } from './selection-state.js'
 import type { EntryType } from '@patchpit/filesystem'
 import { selectionFromNode } from '@patchpit/file-explorer/tree-state'
 import type {
@@ -226,12 +226,24 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     if (pane.program.id === 'patchpit:file-viewer') {
       return (
         fileViewerState(paneId).selected ??
-        selectedFromSubject(pane.subject, new Set([paneId])) ??
+        selectionFromSubject(pane.subject, {
+          rootSelection,
+          rootUrl: rootHandle.url,
+          seen: new Set([paneId]),
+          selectedForPane,
+        }) ??
         rootSelection
       )
     }
 
-    return selectedFromSubject(pane.subject, new Set([paneId])) ?? rootSelection
+    return (
+      selectionFromSubject(pane.subject, {
+        rootSelection,
+        rootUrl: rootHandle.url,
+        seen: new Set([paneId]),
+        selectedForPane,
+      }) ?? rootSelection
+    )
   }
 
   function select(paneId: WorkspacePaneId, next: SelectedDoc) {
@@ -332,27 +344,6 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     return fileViewerStateForPane(workspaceAppStateDocs, paneId)
   }
 
-  function selectedFromSubject(
-    subject: WorkspaceSubjectRef | undefined,
-    seen: Set<WorkspacePaneId>,
-  ): SelectedDoc | null {
-    if (!subject) return null
-    if (subject.kind === 'doc') {
-      return subject.url === rootHandle.url
-        ? rootSelection
-        : {
-            entryId: null,
-            type: subject.type,
-            url: subject.url,
-            parentUrl: null,
-            name: subject.type,
-          }
-    }
-    if (seen.has(subject.paneId)) return null
-    seen.add(subject.paneId)
-    return selectedForPane(subject.paneId)
-  }
-
   function openContextMenu(
     paneId: WorkspacePaneId,
     x: number,
@@ -451,10 +442,4 @@ export function useFilesystemDemo() {
     throw new Error('useFilesystemDemo must be used inside FilesystemDemo')
   }
   return context
-}
-
-const rootFolderOpenId = 'root'
-
-function folderOpenId(entryId: string | null): string {
-  return entryId ?? rootFolderOpenId
 }

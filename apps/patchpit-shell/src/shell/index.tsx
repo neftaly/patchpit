@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { Mosaic } from 'react-mosaic-component'
+import { builtinAppRegistry } from './builtin-app-registry.js'
 import { BuiltinAppHost } from './builtin-app-host.js'
 import { TreeContextMenu } from './context-menu.js'
 import { useFilesystemDemo } from './state.js'
@@ -34,6 +35,7 @@ export function FilesystemDemo({ statePane }: { statePane?: ReactNode }) {
         renderTile={(paneId) => (
           <BuiltinAppHost
             paneId={paneId}
+            registry={builtinAppRegistry}
             statePane={statePane}
             terminalFileSystem={terminalFileSystem}
           />
