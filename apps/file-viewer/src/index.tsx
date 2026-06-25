@@ -15,16 +15,24 @@ import {
   validateFolderDoc,
 } from '@patchpit/filesystem'
 import type { FileDoc, FolderDoc } from '@patchpit/filesystem'
-import { viewerModes } from '@patchpit/workspace'
-import type { SelectedEntry, ViewerMode, WorkspacePaneId } from '@patchpit/workspace'
 import { ExternalUrlPreview, FilePreview, FolderPreview } from './preview.js'
 
+const viewerModes = ['view', 'source'] as const
+
+export type FileViewerMode = (typeof viewerModes)[number]
+export type FileViewerPaneId = string
+export type FileViewerSelectedResource = {
+  type: 'file' | 'folder'
+  url: string
+  name: string
+}
+
 export type FileViewerProps = {
-  paneId: WorkspacePaneId
+  paneId: FileViewerPaneId
   repo: Repo
-  selected: SelectedEntry
-  mode: ViewerMode
-  onModeChange: (paneId: WorkspacePaneId, mode: ViewerMode) => void
+  selected: FileViewerSelectedResource
+  mode: FileViewerMode
+  onModeChange: (paneId: FileViewerPaneId, mode: FileViewerMode) => void
 }
 
 export function FileViewer({
@@ -66,9 +74,9 @@ function SelectedDocContent({
   onModeChange,
 }: {
   handle: DocHandle<JsonRecord>
-  mode: ViewerMode
-  selected: SelectedEntry
-  onModeChange: (mode: ViewerMode) => void
+  mode: FileViewerMode
+  selected: FileViewerSelectedResource
+  onModeChange: (mode: FileViewerMode) => void
 }) {
   const doc = useDocument(handle)
 
@@ -147,9 +155,9 @@ function ViewerHeader({
   title,
   onModeChange,
 }: {
-  mode: ViewerMode
+  mode: FileViewerMode
   title: string
-  onModeChange: (mode: ViewerMode) => void
+  onModeChange: (mode: FileViewerMode) => void
 }) {
   return (
     <header className="doc-header">
@@ -161,7 +169,7 @@ function ViewerHeader({
         aria-label="file viewer mode"
         value={mode}
         onChange={(event) =>
-          onModeChange(event.currentTarget.value as ViewerMode)
+          onModeChange(event.currentTarget.value as FileViewerMode)
         }
       >
         {viewerModes.map((viewerMode) => (
@@ -215,9 +223,9 @@ function GenericAutomergeDocContent({
 }: {
   doc: JsonRecord
   handle: DocHandle<JsonRecord>
-  mode: ViewerMode
-  selected: SelectedEntry
-  onModeChange: (mode: ViewerMode) => void
+  mode: FileViewerMode
+  selected: FileViewerSelectedResource
+  onModeChange: (mode: FileViewerMode) => void
 }) {
   return (
     <section className="detail-pane">
@@ -245,9 +253,9 @@ function ExternalUrlPane({
   selected,
   onModeChange,
 }: {
-  mode: ViewerMode
-  selected: SelectedEntry
-  onModeChange: (mode: ViewerMode) => void
+  mode: FileViewerMode
+  selected: FileViewerSelectedResource
+  onModeChange: (mode: FileViewerMode) => void
 }) {
   return (
     <section className="detail-pane">

@@ -14,7 +14,6 @@
     "@patchpit/filesystem": "workspace:*",
     "@patchpit/json-doc-editor": "workspace:*",
     "@patchpit/tarstate-automerge": "workspace:*",
-    "@patchpit/workspace": "workspace:*",
     "react": "catalog:",
     "renderer": "workspace:*"
   },

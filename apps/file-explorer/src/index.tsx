@@ -6,25 +6,46 @@ import type { FolderDoc } from '@patchpit/filesystem'
 import type { FolderEntryRef } from './queries.js'
 import { useFolderEntries } from './queries.js'
 import { fileIconForName } from './file-icons.js'
-import type { SelectedEntry, WorkspacePaneId } from '@patchpit/workspace'
-import type { TreeContextTarget, TreeNodeRef } from './tree-state.js'
+import type {
+  FileExplorerPaneId,
+  ResourceSelection,
+  TreeContextTarget,
+  TreeNodeRef,
+} from './tree-state.js'
 import { childNode } from './tree-state.js'
+
+export type FolderOpenReader = (
+  paneId: FileExplorerPaneId,
+  entryId: string | null,
+) => boolean
+
+export type FolderToggleHandler = (
+  paneId: FileExplorerPaneId,
+  entryId: string | null,
+) => void
+
+export type TreeSelectionHandler = (
+  paneId: FileExplorerPaneId,
+  node: TreeNodeRef,
+) => void
+
+export type TreeContextMenuHandler = (
+  paneId: FileExplorerPaneId,
+  x: number,
+  y: number,
+  target: TreeContextTarget,
+) => void
 
 export type FileExplorerProps = {
   handle: DocHandle<FolderDoc>
   node: TreeNodeRef
-  paneId: WorkspacePaneId
+  paneId: FileExplorerPaneId
   repo: Repo
-  selected: SelectedEntry
-  isFolderOpen: (paneId: WorkspacePaneId, entryId: string | null) => boolean
-  onContextMenu: (
-    paneId: WorkspacePaneId,
-    x: number,
-    y: number,
-    target: TreeContextTarget,
-  ) => void
-  onSelectNode: (paneId: WorkspacePaneId, node: TreeNodeRef) => void
-  onToggleFolder: (paneId: WorkspacePaneId, entryId: string | null) => void
+  selected: ResourceSelection
+  isFolderOpen: FolderOpenReader
+  onContextMenu: TreeContextMenuHandler
+  onSelectNode: TreeSelectionHandler
+  onToggleFolder: FolderToggleHandler
 }
 
 export function FileExplorer(props: FileExplorerProps) {
@@ -120,9 +141,9 @@ function ResolvedFolderTreeItem({
   onContextMenu: FileExplorerProps['onContextMenu']
   onSelectNode: FileExplorerProps['onSelectNode']
   onToggleFolder: FileExplorerProps['onToggleFolder']
-  paneId: WorkspacePaneId
+  paneId: FileExplorerPaneId
   repo: Repo
-  selected: SelectedEntry
+  selected: ResourceSelection
 }) {
   const folderUrl = isAutomergeEntryUrl(entry.url) ? entry.url : null
   const handle = useResolvedHandle<FolderDoc>(repo, folderUrl)
@@ -160,8 +181,8 @@ function FileTreeItem({
   node: TreeNodeRef
   onContextMenu: FileExplorerProps['onContextMenu']
   onSelectNode: FileExplorerProps['onSelectNode']
-  paneId: WorkspacePaneId
-  selected: SelectedEntry
+  paneId: FileExplorerPaneId
+  selected: ResourceSelection
 }) {
   const isSelected = isSelectedNode(selected.entryId, node.entryId)
   return (
@@ -208,13 +229,8 @@ function useResolvedHandle<T>(
 
 function openTreeContextMenu(
   event: MouseEvent,
-  openContextMenu: (
-    paneId: string,
-    x: number,
-    y: number,
-    target: TreeContextTarget,
-  ) => void,
-  paneId: string,
+  openContextMenu: TreeContextMenuHandler,
+  paneId: FileExplorerPaneId,
   target: TreeContextTarget,
 ) {
   event.preventDefault()

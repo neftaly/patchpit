@@ -15,7 +15,6 @@
     "@automerge/automerge-repo": "catalog:",
     "@patchpit/filesystem": "workspace:*",
     "@patchpit/tarstate-automerge": "workspace:*",
-    "@patchpit/workspace": "workspace:*",
     "mime": "catalog:",
     "react": "catalog:"
   },

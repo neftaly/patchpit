@@ -1,20 +1,26 @@
 import type { AutomergeUrl } from '@automerge/automerge-repo'
-import type { ObjID } from '@automerge/automerge'
-import type { EntryType } from '@patchpit/filesystem'
-import type { SelectedEntry } from '@patchpit/workspace'
 
-export type TreeNodeRef = {
-  entryId: ObjID | null
-  type: EntryType
+export type FileExplorerPaneId = string
+
+export type ResourceEntryType = 'folder' | 'file'
+
+export type ResourceSelection = {
+  entryId: string | null
+  type: ResourceEntryType
   url: string
   parentUrl: AutomergeUrl | null
   name: string
+}
+
+export type TreeNodeRef = ResourceSelection & {
   depth: number
 }
 
-export type SelectedDoc = SelectedEntry
+export type SelectedDoc = ResourceSelection
 
-export type TreeContextTarget = TreeNodeRef
+export type ResourceActionTarget = TreeNodeRef
+
+export type TreeContextTarget = ResourceActionTarget
 
 export type ContextMenuState = {
   x: number

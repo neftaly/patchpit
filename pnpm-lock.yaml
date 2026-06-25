@@ -141,9 +141,6 @@ importers:
       '@patchpit/tarstate-automerge':
         specifier: workspace:*
         version: link:../../packages/tarstate-automerge
-      '@patchpit/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
       mime:
         specifier: 'catalog:'
         version: 4.1.0
@@ -178,9 +175,6 @@ importers:
       '@patchpit/tarstate-automerge':
         specifier: workspace:*
         version: link:../../packages/tarstate-automerge
-      '@patchpit/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
       react:
         specifier: 'catalog:'
         version: 18.3.1
@@ -221,9 +215,6 @@ importers:
       '@patchpit/filesystem':
         specifier: workspace:*
         version: link:../../packages/filesystem
-      '@patchpit/json-doc-editor':
-        specifier: workspace:*
-        version: link:../../packages/json-doc-editor
       '@patchpit/tarstate-automerge':
         specifier: workspace:*
         version: link:../../packages/tarstate-automerge
@@ -233,9 +224,6 @@ importers:
       '@patchpit/workspace':
         specifier: workspace:*
         version: link:../../packages/workspace
-      mime:
-        specifier: 'catalog:'
-        version: 4.1.0
       react:
         specifier: 'catalog:'
         version: 18.3.1
@@ -325,9 +313,6 @@ importers:
 
   apps/window-manager:
     dependencies:
-      '@patchpit/workspace':
-        specifier: workspace:*
-        version: link:../../packages/workspace
       react:
         specifier: 'catalog:'
         version: 18.3.1
