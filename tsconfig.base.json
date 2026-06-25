@@ -11,6 +11,9 @@
     "noUncheckedSideEffectImports": true,
     "paths": {
       "renderer": ["./vendor/royal/packages/renderer/src/index.ts"],
+      "renderer/patchpit-offscreen-react-root": [
+        "./vendor/royal/packages/renderer/src/patchpit-offscreen-react-root.ts"
+      ],
       "renderer/react": ["./vendor/royal/packages/renderer/src/react.tsx"]
     },
     "skipLibCheck": true,

@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Rgba } from 'renderer'
-import type { RendererRoot } from 'renderer/react'
 import type {} from 'renderer/react'
 import {
   createRoot as createRendererRoot,
-  RendererProvider,
-} from 'renderer/react'
+  type RendererRoot,
+} from 'renderer/patchpit-offscreen-react-root'
 
 const GLTF_CLEAR_COLOR: Rgba = [0.02, 0.024, 0.03, 1]
 
@@ -54,7 +53,7 @@ function RoyalPreviewStage({
     if (!root) return
 
     try {
-      root.render(<RendererProvider root={root}>{children}</RendererProvider>)
+      root.render(children)
       setError(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -63,7 +62,11 @@ function RoyalPreviewStage({
 
   return (
     <div className="royal-preview">
-      <div ref={hostRef} className="royal-preview-host" aria-label={ariaLabel} />
+      <div
+        ref={hostRef}
+        className="royal-preview-host"
+        aria-label={ariaLabel}
+      />
       {error && (
         <p className="royal-preview-error" role="alert">
           {error}
