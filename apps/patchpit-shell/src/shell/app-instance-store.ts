@@ -38,7 +38,7 @@ export type AppInstance = {
 
 export function createAppInstanceStore({
   defaultWorkspacePanes,
-  osInstancesHandle: appInstancesHandle,
+  osInstancesHandle: runAppsFolderHandle,
   repo,
   workspaceProgramRefs,
 }: {
@@ -63,14 +63,14 @@ export function createAppInstanceStore({
       )
 
       addLinkedAutomergeFile(
-        appInstancesHandle,
-        appInstanceStateFileName(paneId),
+        runAppsFolderHandle,
+        appInstanceStateFileName(paneId, stateHandle.url),
         stateHandle.url,
       )
       return { pane, stateHandle }
     },
     close(pane) {
-      removeLinkedAutomergeFile(appInstancesHandle, pane.state.url)
+      removeLinkedAutomergeFile(runAppsFolderHandle, pane.state.url)
     },
   }
 }
