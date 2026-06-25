@@ -15,6 +15,7 @@ type AnyQuery = Query<Record<string, Atom>, string>
 type EvalRow = Record<string, Row>
 type QueryRows<TQuery> =
   TQuery extends Query<infer Row, string> ? ReadonlyArray<Row> : never
+const compiledPlans = new WeakMap<object, QueryPlan>()
 
 interface RowConstraint {
   readonly field: string
@@ -35,7 +36,7 @@ export async function evaluateMany<const Queries extends readonly AnyQuery[]>(
   source: RelationSource,
 ): Promise<{ readonly [Index in keyof Queries]: QueryRows<Queries[Index]> }> {
   const context = new EvaluationContext(source)
-  const plans = queries.map((query) => compilePlan(getSpec(query)))
+  const plans = queries.map(compiledPlanFor)
   const results = await Promise.all(
     plans.map(async (plan) => {
       const rows = await evalPlan(plan, context)
@@ -46,6 +47,15 @@ export async function evaluateMany<const Queries extends readonly AnyQuery[]>(
   return results as {
     readonly [Index in keyof Queries]: QueryRows<Queries[Index]>
   }
+}
+
+function compiledPlanFor(query: AnyQuery): QueryPlan {
+  let plan = compiledPlans.get(query)
+  if (!plan) {
+    plan = compilePlan(getSpec(query))
+    compiledPlans.set(query, plan)
+  }
+  return plan
 }
 
 async function evalPlan(
