@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter renderer build && tsc && vite build",
-    "dev": "pnpm --filter renderer build && vite --host 127.0.0.1 --port 5310",
+    "build": "tsc && vite build",
+    "dev": "vite --host 127.0.0.1 --port 5310",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

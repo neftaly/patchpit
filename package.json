@@ -12,11 +12,11 @@
     "dev:todo": "pnpm --filter @patchpit/todo-demo dev",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "lint": "pnpm build:royal && pnpm --filter './apps/*' --filter './packages/*' exec oxlint --type-aware",
+    "lint": "pnpm --filter './apps/*' --filter './packages/*' exec oxlint --type-aware",
     "lint:fix": "pnpm --filter './apps/*' --filter './packages/*' exec oxlint --type-aware --fix",
     "preview": "pnpm --filter @patchpit/shell preview",
     "test": "pnpm build && node scripts/smoke.mjs",
-    "typecheck": "pnpm build:royal && pnpm --filter './apps/*' --filter './packages/*' exec tsc"
+    "typecheck": "pnpm --filter './apps/*' --filter './packages/*' exec tsc"
   },
   "devDependencies": {
     "playwright": "catalog:",

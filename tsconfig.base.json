@@ -9,6 +9,10 @@
     "moduleResolution": "bundler",
     "noUncheckedIndexedAccess": true,
     "noUncheckedSideEffectImports": true,
+    "paths": {
+      "renderer": ["./vendor/royal/packages/renderer/src/index.ts"],
+      "renderer/react": ["./vendor/royal/packages/renderer/src/react.tsx"]
+    },
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2022",

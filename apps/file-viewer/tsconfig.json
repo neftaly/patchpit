@@ -3,5 +3,5 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "../../vendor/royal/packages/renderer/src/shader-modules.d.ts"]
 }
