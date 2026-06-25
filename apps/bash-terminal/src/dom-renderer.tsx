@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { ReactNode } from 'react'
 import type { TerminalLine } from './buffer.js'
@@ -13,6 +13,12 @@ export function DomTerminalRenderer({
   viewport,
   visibleRows,
 }: TerminalRendererProps) {
+  const virtualContentStyle = useMemo(
+    () =>
+      terminalVirtualContentStyle(viewport.totalRows, settings.rowHeightPx),
+    [settings.rowHeightPx, viewport.totalRows],
+  )
+
   return (
     <section
       className="terminal-pane"
@@ -26,10 +32,7 @@ export function DomTerminalRenderer({
       >
         <div
           className="terminal-virtual-content"
-          style={{
-            height: viewport.totalRows * settings.rowHeightPx,
-            position: 'relative',
-          }}
+          style={virtualContentStyle}
         >
           {visibleRows.map((row) => (
             <TerminalVirtualRow
@@ -74,6 +77,16 @@ export function DomTerminalRenderer({
       </div>
     </section>
   )
+}
+
+function terminalVirtualContentStyle(
+  totalRows: number,
+  rowHeightPx: number,
+): CSSProperties {
+  return {
+    height: totalRows * rowHeightPx,
+    position: 'relative',
+  }
 }
 
 function TerminalVirtualRow({
@@ -133,7 +146,10 @@ const TerminalLineView = memo(function TerminalLineView({
 })
 
 function terminalOutputLineStyle(rowHeightPx: number): CSSProperties {
-  return {
+  const cached = terminalOutputLineStyles.get(rowHeightPx)
+  if (cached) return cached
+
+  const style: CSSProperties = {
     display: 'block',
     height: rowHeightPx,
     lineHeight: `${rowHeightPx}px`,
@@ -142,7 +158,11 @@ function terminalOutputLineStyle(rowHeightPx: number): CSSProperties {
     overflow: 'visible',
     whiteSpace: 'pre',
   }
+  terminalOutputLineStyles.set(rowHeightPx, style)
+  return style
 }
+
+const terminalOutputLineStyles = new Map<number, CSSProperties>()
 
 const terminalLineTextStyle: CSSProperties = {
   display: 'inline-block',

@@ -30,7 +30,9 @@ export function createTerminalLineBuffer(
   let lines: TerminalLine[] = []
 
   function append(drafts: readonly TerminalLineDraft[]): number {
-    lines.push(...terminalLines(drafts, () => nextLineId++))
+    for (const draft of drafts) {
+      appendTerminalLineDraft(lines, draft, () => nextLineId++)
+    }
     return lines.length
   }
 
@@ -52,24 +54,40 @@ export function createTerminalLineBuffer(
   return buffer
 }
 
-function terminalLines(
-  drafts: readonly TerminalLineDraft[],
+function appendTerminalLineDraft(
+  lines: TerminalLine[],
+  draft: TerminalLineDraft,
   nextId: () => number,
-): TerminalLine[] {
-  const lines: TerminalLine[] = []
-  for (const line of drafts) {
-    if (line.kind === 'input') {
-      lines.push({ ...line, id: nextId() })
-      continue
-    }
-
-    for (const text of splitOutputText(line.text)) {
-      lines.push({ kind: line.kind, text, id: nextId() })
-    }
+): void {
+  if (draft.kind === 'input') {
+    lines.push({ ...draft, id: nextId() })
+    return
   }
-  return lines
+
+  appendOutputLines(lines, draft, nextId)
 }
 
-function splitOutputText(text: string): string[] {
-  return text.split('\n')
+function appendOutputLines(
+  lines: TerminalLine[],
+  draft: ShellOutputLine,
+  nextId: () => number,
+): void {
+  let start = 0
+  while (start <= draft.text.length) {
+    const end = draft.text.indexOf('\n', start)
+    if (end === -1) {
+      lines.push({
+        kind: draft.kind,
+        text: draft.text.slice(start),
+        id: nextId(),
+      })
+      return
+    }
+    lines.push({
+      kind: draft.kind,
+      text: draft.text.slice(start, end),
+      id: nextId(),
+    })
+    start = end + 1
+  }
 }

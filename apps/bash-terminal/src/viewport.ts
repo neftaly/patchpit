@@ -39,17 +39,24 @@ export function useTerminalViewportController({
   const promptRowIndex = lineCount
   const isPromptVisible = rangeContainsRow(visibleRange, promptRowIndex)
 
+  const commitVisibleRange = useCallback(
+    (scrollElement: HTMLElement) => {
+      setVisibleRangeFromScroll(
+        scrollElement,
+        totalRows,
+        settings,
+        setVisibleRange,
+      )
+    },
+    [settings, totalRows],
+  )
+
   const updateVisibleRange = useCallback(() => {
     const scrollElement = scrollRef.current
     if (!scrollElement) return
 
-    setVisibleRangeFromScroll(
-      scrollElement,
-      totalRows,
-      settings,
-      setVisibleRange,
-    )
-  }, [settings, totalRows])
+    commitVisibleRange(scrollElement)
+  }, [commitVisibleRange])
 
   const updateAfterScroll = useCallback(() => {
     const scrollElement = scrollRef.current
@@ -59,23 +66,21 @@ export function useTerminalViewportController({
       scrollElement,
       settings.bottomStickPx,
     )
-    setVisibleRangeFromScroll(
-      scrollElement,
-      totalRows,
-      settings,
-      setVisibleRange,
-    )
-  }, [settings, totalRows])
+    commitVisibleRange(scrollElement)
+  }, [commitVisibleRange, settings.bottomStickPx])
 
   const scheduleVisibleRangeUpdate = useCallback(() => {
     scheduleUpdate(updateVisibleRange)
   }, [scheduleUpdate, updateVisibleRange])
 
   const followPrompt = useCallback(() => {
+    const scrollElement = scrollRef.current
+    if (!scrollElement) return
+
     shouldScrollToBottom.current = true
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-    updateVisibleRange()
-  }, [updateVisibleRange])
+    scrollElement.scrollTo({ top: scrollElement.scrollHeight })
+    commitVisibleRange(scrollElement)
+  }, [commitVisibleRange])
 
   const handleScroll = useCallback(() => {
     scheduleUpdate(updateAfterScroll)
@@ -94,8 +99,8 @@ export function useTerminalViewportController({
       scrollElement.scrollTop = scrollElement.scrollHeight
       shouldScrollToBottom.current = false
     }
-    updateVisibleRange()
-  }, [lineCount, updateVisibleRange])
+    commitVisibleRange(scrollElement)
+  }, [commitVisibleRange, lineCount])
 
   useEffect(() => {
     const scrollElement = scrollRef.current

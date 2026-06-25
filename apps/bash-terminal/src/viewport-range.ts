@@ -38,11 +38,8 @@ export function visibleItemsForRange<T>(
   range: VisibleRange,
 ): readonly VisibleRangeItem<T>[] {
   const items: VisibleRangeItem<T>[] = []
-  for (
-    let index = range.start;
-    index < Math.min(range.end, itemCount);
-    index += 1
-  ) {
+  const end = Math.min(range.end, itemCount)
+  for (let index = range.start; index < end; index += 1) {
     const item = itemAt(index)
     if (item) items.push({ index, item })
   }
