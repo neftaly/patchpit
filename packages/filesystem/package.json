@@ -7,10 +7,12 @@
     ".": "./src/index.ts",
     "./automerge": "./src/automerge.ts",
     "./model": "./src/model.ts",
-    "./repo": "./src/repo.ts"
+    "./repo": "./src/repo.ts",
+    "./write": "./src/write.ts"
   },
   "dependencies": {
     "@automerge/automerge-repo": "catalog:",
+    "@patchpit/tarstate": "workspace:*",
     "mime": "catalog:"
   },
   "devDependencies": {

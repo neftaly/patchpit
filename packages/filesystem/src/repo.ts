@@ -2,6 +2,12 @@ import { Repo } from '@automerge/automerge-repo'
 import type { AutomergeUrl, DocHandle } from '@automerge/automerge-repo'
 import mime from 'mime/lite'
 import type { EntryType, FileDoc, FolderDoc, FolderEntry } from './model.js'
+import {
+  addFolderEntry,
+  removeFolderEntryByUrl,
+  renameFolderEntryByUrl,
+  upsertFolderEntryByName,
+} from './write.js'
 
 type JsonRecord = Record<string, unknown>
 
@@ -41,25 +47,14 @@ export function addLinkedAutomergeFile(
   name: string,
   url: AutomergeUrl,
 ) {
-  folderHandle.change((draft) => {
-    const existing = draft.entries.find((entry) => entry.name === name)
-    if (existing) {
-      existing.type = 'file'
-      existing.url = url
-      return
-    }
-    draft.entries.push({ name, type: 'file', url })
-  })
+  upsertFolderEntryByName(folderHandle, { name, type: 'file', url })
 }
 
 export function removeLinkedAutomergeFile(
   folderHandle: DocHandle<FolderDoc>,
   url: AutomergeUrl,
 ) {
-  folderHandle.change((draft) => {
-    const index = draft.entries.findIndex((entry) => entry.url === url)
-    if (index !== -1) draft.entries.splice(index, 1)
-  })
+  removeFolderEntryByUrl(folderHandle, url)
 }
 
 export async function addEntry(
@@ -69,9 +64,7 @@ export async function addEntry(
   name: string,
 ) {
   const folderHandle = await repo.find<FolderDoc>(folderUrl)
-  folderHandle.change((draft) => {
-    draft.entries.push(createEmptyEntry(repo, type, name))
-  })
+  addFolderEntry(folderHandle, createEmptyEntry(repo, type, name))
 }
 
 export async function renameEntry(
@@ -81,10 +74,7 @@ export async function renameEntry(
   name: string,
 ) {
   const folderHandle = await repo.find<FolderDoc>(folderUrl)
-  folderHandle.change((draft) => {
-    const entry = draft.entries.find((item) => item.url === entryUrl)
-    if (entry) entry.name = name
-  })
+  renameFolderEntryByUrl(folderHandle, entryUrl, name)
 }
 
 export async function deleteEntry(
@@ -93,10 +83,7 @@ export async function deleteEntry(
   entryUrl: string,
 ) {
   const folderHandle = await repo.find<FolderDoc>(folderUrl)
-  folderHandle.change((draft) => {
-    const index = draft.entries.findIndex((item) => item.url === entryUrl)
-    if (index !== -1) draft.entries.splice(index, 1)
-  })
+  removeFolderEntryByUrl(folderHandle, entryUrl)
 }
 
 function createEmptyEntry(

@@ -19,3 +19,9 @@ export {
   isFolderDoc,
   validateFolderDoc,
 } from './automerge.js'
+export {
+  addFolderEntry,
+  removeFolderEntryByUrl,
+  renameFolderEntryByUrl,
+  upsertFolderEntryByName,
+} from './write.js'

@@ -335,6 +335,9 @@ importers:
       '@automerge/automerge-repo':
         specifier: 'catalog:'
         version: 2.5.6
+      '@patchpit/tarstate':
+        specifier: workspace:*
+        version: link:../tarstate
       mime:
         specifier: 'catalog:'
         version: 4.1.0
