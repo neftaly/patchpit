@@ -17,11 +17,7 @@ import type {
   WorkspaceAppStateDoc,
   WorkspaceAppStates,
 } from './app-state.js'
-import type {
-  WorkspacePaneId,
-  WorkspacePanes,
-} from './model.js'
-import type { WorkspaceProgramRef } from './programs.js'
+import type { WorkspacePaneId, WorkspacePanes } from './model.js'
 
 export type WorkspaceAppStateHandles = Record<
   WorkspacePaneId,
@@ -34,14 +30,10 @@ export type WorkspaceAppStateDocs = Readonly<
 
 export function createWorkspaceAppState(
   repo: Repo,
-  paneId: WorkspacePaneId,
-  program: WorkspaceProgramRef,
   state: JsonRecord,
 ): DocHandle<WorkspaceAppStateDoc> {
   return repo.create<WorkspaceAppStateDoc>({
     '@patchwork': { type: 'workspace-app-state', version: 1 },
-    paneId,
-    program,
     state,
   })
 }
@@ -72,7 +64,6 @@ export function repairWorkspaceAppStateDocs({
     if (!handle) continue
     repairAppStateDoc(
       handle,
-      pane.program,
       normalizeWorkspaceAppState(pane.program.id, docs[paneId]?.state),
     )
   }
@@ -150,18 +141,11 @@ export function setFileViewerSelection(
 
 function repairAppStateDoc(
   handle: DocHandle<WorkspaceAppStateDoc>,
-  program: WorkspaceAppStateDoc['program'],
   state: WorkspaceAppState,
 ) {
   const doc = handle.doc()
-  if (
-    !doc ||
-    (sameJsonValue(doc.program, program) && sameJsonValue(doc.state, state))
-  ) {
-    return
-  }
+  if (!doc || sameJsonValue(doc.state, state)) return
   handle.change((draft) => {
-    draft.program = program
     draft.state = state
   })
 }

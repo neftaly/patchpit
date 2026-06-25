@@ -170,71 +170,43 @@ function createDefaultWorkspacePanes(
     name: rootName,
   }
   const stateHandles = {
-    files: createWorkspaceAppState(
-      repo,
-      'files',
-      programRefs['patchpit:file-explorer'],
-      {
-        selected: rootSelection,
-        closedFolderEntryIds: [],
-      },
-    ),
-    state: createWorkspaceAppState(
-      repo,
-      'state',
-      programRefs['patchpit:os'],
-      {
-        colorMode: 'auto',
-      },
-    ),
-    viewer: createWorkspaceAppState(
-      repo,
-      'viewer',
-      programRefs['patchpit:file-viewer'],
-      {
-        mode: 'view',
-        selected: rootSelection,
-        selectedUrl: rootUrl,
-      },
-    ),
-    terminal: createWorkspaceAppState(
-      repo,
-      'terminal',
-      programRefs['patchpit:bash'],
-      {},
-    ),
+    files: createWorkspaceAppState(repo, {
+      selected: rootSelection,
+      closedFolderEntryIds: [],
+    }),
+    state: createWorkspaceAppState(repo, {
+      colorMode: 'auto',
+    }),
+    viewer: createWorkspaceAppState(repo, {
+      mode: 'view',
+      selected: rootSelection,
+      selectedUrl: rootUrl,
+    }),
+    terminal: createWorkspaceAppState(repo, {}),
   }
 
   return {
     panes: {
       files: {
         id: 'files',
-        program:
-          stateHandles.files.doc()?.program ??
-          programRefs['patchpit:file-explorer'],
+        program: programRefs['patchpit:file-explorer'],
         state: { url: stateHandles.files.url },
         subject: { kind: 'doc', url: rootUrl, type: 'folder' },
       },
       state: {
         id: 'state',
-        program:
-          stateHandles.state.doc()?.program ??
-          programRefs['patchpit:os'],
+        program: programRefs['patchpit:os'],
         state: { url: stateHandles.state.url },
       },
       viewer: {
         id: 'viewer',
-        program:
-          stateHandles.viewer.doc()?.program ??
-          programRefs['patchpit:file-viewer'],
+        program: programRefs['patchpit:file-viewer'],
         state: { url: stateHandles.viewer.url },
         subject: { kind: 'selection', paneId: 'files' },
       },
       terminal: {
         id: 'terminal',
-        program:
-          stateHandles.terminal.doc()?.program ??
-          programRefs['patchpit:bash'],
+        program: programRefs['patchpit:bash'],
         state: { url: stateHandles.terminal.url },
         subject: { kind: 'doc', url: rootUrl, type: 'folder' },
       },

@@ -52,8 +52,6 @@ export function createAppInstanceStore({
       const program = workspaceProgramRefs[programId]
       const stateHandle = createWorkspaceAppState(
         repo,
-        paneId,
-        program,
         defaultWorkspaceAppState(programId, selected),
       )
       const pane = createWorkspacePaneInstance(
