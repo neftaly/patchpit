@@ -42,6 +42,15 @@ export type {
   Transaction,
   UpdateOperation,
 } from './command.js'
+export type {
+  MaybePromise,
+  OperationSink,
+  RelationInsert,
+  RelationRemove,
+  RelationUpdate,
+  RelationWriter,
+  TransactionWriter,
+} from './write.js'
 export {
   createTransaction,
   defineCommand,
@@ -52,3 +61,4 @@ export {
   run,
   update,
 } from './command.js'
+export { applyOperation, applyTransaction } from './write.js'
