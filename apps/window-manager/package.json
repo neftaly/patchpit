@@ -2,6 +2,7 @@
   "name": "@patchpit/window-manager",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.tsx"
   },
@@ -9,7 +10,6 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@patchpit/workspace": "workspace:*",
     "react": "catalog:"
   },
   "devDependencies": {
