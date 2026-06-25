@@ -1,6 +1,10 @@
 import { getObjectId } from '@automerge/automerge'
 import type { ObjID } from '@automerge/automerge'
-import { isValidAutomergeUrl } from '@automerge/automerge-repo'
+import {
+  isValidAutomergeUrl,
+  parseAutomergeUrl,
+  stringifyAutomergeUrl,
+} from '@automerge/automerge-repo'
 import type { AutomergeUrl } from '@automerge/automerge-repo'
 import {
   isExternalUrl,
@@ -27,6 +31,17 @@ export function isFolderDoc(value: unknown): value is FolderDoc {
 
 export function isAutomergeEntryUrl(url: string): url is AutomergeUrl {
   return isValidAutomergeUrl(url)
+}
+
+export function folderEntryUrlKey(url: string): string | null {
+  if (!isAutomergeEntryUrl(url)) return url
+
+  try {
+    const { documentId } = parseAutomergeUrl(url)
+    return stringifyAutomergeUrl({ documentId })
+  } catch {
+    return null
+  }
 }
 
 export function folderEntryObjectId(entry: FolderEntry): ObjID | null {

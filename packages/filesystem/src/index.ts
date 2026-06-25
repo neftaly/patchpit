@@ -16,6 +16,7 @@ export type {
 } from './model.js'
 export {
   folderEntryObjectId,
+  folderEntryUrlKey,
   isAutomergeEntryUrl,
   isFolderDoc,
   validateFolderDoc,

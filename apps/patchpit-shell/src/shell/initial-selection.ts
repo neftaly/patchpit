@@ -1,9 +1,9 @@
-import {
-  parseAutomergeUrl,
-  stringifyAutomergeUrl,
-} from '@automerge/automerge-repo'
 import type { DocHandle, Repo } from '@automerge/automerge-repo'
-import { folderEntryObjectId, isAutomergeEntryUrl } from '@patchpit/filesystem'
+import {
+  folderEntryObjectId,
+  folderEntryUrlKey,
+  isAutomergeEntryUrl,
+} from '@patchpit/filesystem'
 import type { FolderDoc } from '@patchpit/filesystem'
 import type { SelectedDoc } from '@patchpit/file-explorer/tree-state'
 
@@ -19,7 +19,7 @@ export async function initialUrlSelection({
   const requestedUrl = initialRequestedUrl()
   if (!requestedUrl) return null
 
-  const targetKey = entryUrlKey(requestedUrl)
+  const targetKey = folderEntryUrlKey(requestedUrl)
   if (!targetKey) return null
 
   const matches = await findEntriesByUrl({
@@ -47,7 +47,7 @@ async function findEntriesByUrl({
   rootEntryName: string
   targetKey: string
 }): Promise<SelectedDoc[]> {
-  const rootKey = entryUrlKey(rootHandle.url)
+  const rootKey = folderEntryUrlKey(rootHandle.url)
   const matches: SelectedDoc[] =
     rootKey === targetKey
       ? [
@@ -77,7 +77,7 @@ async function collectEntryMatches(
     const entryId = folderEntryObjectId(entry)
     if (!entryId) continue
 
-    if (entryUrlKey(entry.url) === targetKey) {
+    if (folderEntryUrlKey(entry.url) === targetKey) {
       matches.push({
         entryId,
         type: entry.type,
@@ -91,16 +91,5 @@ async function collectEntryMatches(
       const childHandle = await repo.find<FolderDoc>(entry.url)
       await collectEntryMatches(repo, childHandle, targetKey, matches)
     }
-  }
-}
-
-function entryUrlKey(url: string): string | null {
-  if (!isAutomergeEntryUrl(url)) return url
-
-  try {
-    const { documentId } = parseAutomergeUrl(url)
-    return stringifyAutomergeUrl({ documentId })
-  } catch {
-    return null
   }
 }
