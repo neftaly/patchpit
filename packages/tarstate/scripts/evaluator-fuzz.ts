@@ -20,6 +20,10 @@ type TarstateApi = {
     query: object,
     source: object,
   ) => Promise<ReadonlyArray<Record<string, Atom>>>
+  readonly evaluateMany: (
+    queries: readonly object[],
+    source: object,
+  ) => Promise<ReadonlyArray<ReadonlyArray<Record<string, Atom>>>>
   readonly from: (relation: object) => object
   readonly fromObjects: (docs: readonly object[]) => object
   readonly join: (query: object, otherQuery: object, on: object) => object
@@ -78,22 +82,53 @@ async function main(): Promise<void> {
   const started = performance.now()
   let comparedRows = 0
 
+  await assertLookupAccessPaths(api, schema)
+
   for (let index = 0; index < options.cases; index += 1) {
     const doc = randomDoc(random, options.maxRows)
-    const plan = randomQuery(random)
-    const actual = await api.evaluate(
-      buildPublicQuery(api, schema, plan),
-      api.fromObjects([doc]),
+    const plans = Array.from(
+      { length: 1 + randomInt(random, 3) },
+      () => randomQuery(random),
     )
-    const expected = referenceEvaluate(plan, doc)
+    const queries = plans.map((plan) => buildPublicQuery(api, schema, plan))
+    const scanSource = scanOnlySource(api, [doc])
+    const lookupSource = api.fromObjects([doc])
+    const scanRows = await api.evaluateMany(queries, scanSource)
+    const lookupRows = await api.evaluateMany(queries, lookupSource)
 
-    comparedRows += actual.length
-    assertSameRows(actual as readonly OutputRow[], expected, {
-      caseIndex: index,
-      seed: options.seed,
-      doc,
-      plan,
-    })
+    for (let queryIndex = 0; queryIndex < plans.length; queryIndex += 1) {
+      const plan = plans[queryIndex]
+      const query = queries[queryIndex]
+      if (!plan || !query) continue
+
+      const expected = referenceEvaluate(plan, doc)
+      const individualRows = await api.evaluate(query, scanOnlySource(api, [doc]))
+      const scanActual = scanRows[queryIndex] ?? []
+      const lookupActual = lookupRows[queryIndex] ?? []
+
+      comparedRows += lookupActual.length
+      assertSameRows(lookupActual as readonly OutputRow[], expected, {
+        caseIndex: index,
+        seed: options.seed,
+        doc,
+        plan,
+        label: `lookup batch query ${queryIndex}`,
+      })
+      assertSameRows(scanActual as readonly OutputRow[], expected, {
+        caseIndex: index,
+        seed: options.seed,
+        doc,
+        plan,
+        label: `scan batch query ${queryIndex}`,
+      })
+      assertSameRows(individualRows as readonly OutputRow[], expected, {
+        caseIndex: index,
+        seed: options.seed,
+        doc,
+        plan,
+        label: `individual query ${queryIndex}`,
+      })
+    }
   }
 
   const elapsed = performance.now() - started
@@ -236,6 +271,133 @@ function buildPublicQuery(
   return api.project(query, projection)
 }
 
+async function assertLookupAccessPaths(
+  api: TarstateApi,
+  schema: PublicSchema,
+): Promise<void> {
+  const doc: Doc = {
+    r0: [
+      { id: 'r0-0', group: 1, value: 2, flag: true, note: null },
+      { id: 'r0-1', group: 2, value: 2, flag: false, note: 'a' },
+    ],
+    r1: [],
+    r2: [],
+  }
+  const plan: QueryPlan = {
+    from: 'r0',
+    joins: [],
+    predicates: [{ lhs: { relation: 'r0', field: 'group' }, rhs: 1 }],
+    projection: [{ relation: 'r0', field: 'id' }],
+  }
+  const query = buildPublicQuery(api, schema, plan)
+  const expected = referenceEvaluate(plan, doc)
+
+  const supported = trackedLookupSource(api, [doc], 'supported')
+  const supportedRows = await api.evaluateMany([query, query], supported.source)
+  assertSameRows(supportedRows[0] as readonly OutputRow[], expected, {
+    caseIndex: -1,
+    seed: defaults.seed,
+    doc,
+    plan,
+    label: 'supported lookup first query',
+  })
+  assertSameRows(supportedRows[1] as readonly OutputRow[], expected, {
+    caseIndex: -1,
+    seed: defaults.seed,
+    doc,
+    plan,
+    label: 'supported lookup second query',
+  })
+  if (supported.lookupCalls !== 1 || supported.rowCalls !== 0) {
+    throw new Error(
+      [
+        'expected supported lookup to be memoized without row scan',
+        `lookupCalls=${supported.lookupCalls}`,
+        `rowCalls=${supported.rowCalls}`,
+      ].join(' '),
+    )
+  }
+
+  const unsupported = trackedLookupSource(api, [doc], 'unsupported')
+  const unsupportedRows = await api.evaluateMany(
+    [query, query],
+    unsupported.source,
+  )
+  assertSameRows(unsupportedRows[0] as readonly OutputRow[], expected, {
+    caseIndex: -1,
+    seed: defaults.seed,
+    doc,
+    plan,
+    label: 'unsupported lookup first query',
+  })
+  assertSameRows(unsupportedRows[1] as readonly OutputRow[], expected, {
+    caseIndex: -1,
+    seed: defaults.seed,
+    doc,
+    plan,
+    label: 'unsupported lookup second query',
+  })
+  if (unsupported.lookupCalls !== 1 || unsupported.rowCalls !== 1) {
+    throw new Error(
+      [
+        'expected unsupported lookup to fall back through one row index',
+        `lookupCalls=${unsupported.lookupCalls}`,
+        `rowCalls=${unsupported.rowCalls}`,
+      ].join(' '),
+    )
+  }
+}
+
+function scanOnlySource(api: TarstateApi, docs: readonly object[]): object {
+  const source = api.fromObjects(docs) as {
+    readonly rows: (relation: string) => Iterable<OutputRow>
+  }
+
+  return {
+    rows(relation: string) {
+      return source.rows(relation)
+    },
+  }
+}
+
+function trackedLookupSource(
+  api: TarstateApi,
+  docs: readonly object[],
+  mode: 'supported' | 'unsupported',
+): {
+  readonly source: object
+  readonly lookupCalls: number
+  readonly rowCalls: number
+} {
+  const source = api.fromObjects(docs) as {
+    readonly rows: (relation: string) => Iterable<OutputRow>
+    readonly lookup: (lookup: object) => Iterable<OutputRow> | undefined
+  }
+  const stats = {
+    lookupCalls: 0,
+    rowCalls: 0,
+  }
+
+  return {
+    source: {
+      rows(relation: string) {
+        stats.rowCalls += 1
+        return source.rows(relation)
+      },
+      lookup(lookup: object) {
+        stats.lookupCalls += 1
+        return mode === 'supported' ? source.lookup(lookup) : undefined
+      },
+    },
+    get lookupCalls() {
+      return stats.lookupCalls
+    },
+    get rowCalls() {
+      return stats.rowCalls
+    },
+  }
+}
+
 function referenceEvaluate(plan: QueryPlan, doc: Doc): OutputRow[] {
   let rows = doc[plan.from].map((row) => ({ [plan.from]: row }) as EvalRow)
 
@@ -302,6 +464,7 @@ function assertSameRows(
     readonly seed: number
     readonly doc: Doc
     readonly plan: QueryPlan
+    readonly label?: string
   },
 ): void {
   const actualRows = canonicalRows(actual)
@@ -311,11 +474,12 @@ function assertSameRows(
   throw new Error(
     [
       `tarstate evaluator mismatch in case ${context.caseIndex} (seed=${context.seed})`,
+      context.label ? `label: ${context.label}` : undefined,
       `plan: ${JSON.stringify(context.plan, null, 2)}`,
       `doc: ${JSON.stringify(context.doc, null, 2)}`,
       `actual: ${JSON.stringify(actual, null, 2)}`,
       `expected: ${JSON.stringify(expected, null, 2)}`,
-    ].join('\n'),
+    ].filter((line) => line !== undefined).join('\n'),
   )
 }
 

@@ -19,6 +19,11 @@ export interface EquijoinPlan {
   readonly right: FieldRef<Atom, string>
 }
 
+export interface FieldValuePredicate {
+  readonly field: FieldRef<Atom, string>
+  readonly value: Atom
+}
+
 export function compilePlan(spec: QuerySpec): QueryPlan {
   const joins = spec.joins.map((join) => ({
     plan: compilePlan(join.spec),
@@ -76,6 +81,16 @@ export function equijoinPlan(
   return null
 }
 
+export function fieldValuePredicate(
+  predicate: Predicate<string>,
+): FieldValuePredicate | null {
+  if (isFieldRef(predicate.rhs)) return null
+  return {
+    field: predicate.lhs,
+    value: predicate.rhs,
+  }
+}
+
 export function addAll<T>(target: Set<T>, values: Iterable<T>): void {
   for (const value of values) target.add(value)
 }
@@ -93,7 +108,7 @@ function predicateRelations(predicate: Predicate<string>): string[] {
   return relations
 }
 
-function isFieldRef(
+export function isFieldRef(
   value: FieldRef<Atom, string> | Atom,
 ): value is FieldRef<Atom, string> {
   return value !== null && typeof value === 'object' && '_field' in value

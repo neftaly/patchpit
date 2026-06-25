@@ -1,42 +1,80 @@
 import type { Atom, FieldRef, Predicate, Query } from './types.js'
 import { getSpec } from './internal.js'
-import type { RelationSource } from './source.js'
+import type { RelationLookup, RelationSource, Row } from './source.js'
 import {
   addAll,
   compilePlan,
   equijoinPlan,
+  fieldValuePredicate,
+  isFieldRef,
   readyPredicates,
 } from './plan.js'
 import type { QueryPlan } from './plan.js'
 
-type EvalRow = Record<string, Record<string, Atom>>
+type AnyQuery = Query<Record<string, Atom>, string>
+type EvalRow = Record<string, Row>
+type QueryRows<TQuery> =
+  TQuery extends Query<infer Row, string> ? ReadonlyArray<Row> : never
+
+interface RowConstraint {
+  readonly field: string
+  readonly value: Atom
+}
 
 export function evaluate<T extends Record<string, Atom>, Rels extends string>(
   qb: Query<T, Rels>,
   source: RelationSource,
 ): Promise<ReadonlyArray<T>> {
-  const plan = compilePlan(getSpec(qb))
-  return evalPlan(plan, source).then((rows) =>
-    rows.map((row) => outputRow(plan, row)),
-  ) as Promise<ReadonlyArray<T>>
+  return evaluateMany([qb] as const, source).then(
+    ([rows]) => rows as unknown as ReadonlyArray<T>,
+  )
+}
+
+export async function evaluateMany<const Queries extends readonly AnyQuery[]>(
+  queries: Queries,
+  source: RelationSource,
+): Promise<{ readonly [Index in keyof Queries]: QueryRows<Queries[Index]> }> {
+  const context = new EvaluationContext(source)
+  const plans = queries.map((query) => compilePlan(getSpec(query)))
+  const results = await Promise.all(
+    plans.map(async (plan) => {
+      const rows = await evalPlan(plan, context)
+      return rows.map((row) => outputRow(plan, row))
+    }),
+  )
+
+  return results as {
+    readonly [Index in keyof Queries]: QueryRows<Queries[Index]>
+  }
 }
 
 async function evalPlan(
   plan: QueryPlan,
-  source: RelationSource,
+  context: EvaluationContext,
+  baseRows?: ReadonlyArray<Row>,
 ): Promise<ReadonlyArray<EvalRow>> {
-  let rows: EvalRow[] = Array.from(await source.rows(plan.from)).map((row) => ({
+  const pendingPredicates = [...plan.predicates]
+  const sourceRows = baseRows ?? await context.rowsFor(
+    plan.from,
+    accessConstraint(plan.from, pendingPredicates),
+  )
+  let rows: EvalRow[] = sourceRows.map((row) => ({
     [plan.from]: row,
   }))
   const joinedRelations = new Set<string>([plan.from])
-  const pendingPredicates = [...plan.predicates]
 
   rows = applyReadyPredicates(rows, joinedRelations, pendingPredicates)
 
   for (const j of plan.joins) {
-    const rhs = await evalPlan(j.plan, source)
     const rightRelations = j.plan.relations
-    rows = joinRows(rows, rhs, joinedRelations, rightRelations, j.on)
+    rows = await joinRows(
+      context,
+      rows,
+      j.plan,
+      joinedRelations,
+      rightRelations,
+      j.on,
+    )
     addAll(joinedRelations, rightRelations)
     rows = applyReadyPredicates(rows, joinedRelations, pendingPredicates)
   }
@@ -50,16 +88,29 @@ async function evalPlan(
   return rows
 }
 
-function joinRows(
+async function joinRows(
+  context: EvaluationContext,
   leftRows: ReadonlyArray<EvalRow>,
-  rightRows: ReadonlyArray<EvalRow>,
+  rightPlan: QueryPlan,
   leftRelations: ReadonlySet<string>,
   rightRelations: ReadonlySet<string>,
   predicate: Predicate<string>,
-): EvalRow[] {
+): Promise<EvalRow[]> {
   const indexPlan = equijoinPlan(predicate, leftRelations, rightRelations)
-  if (!indexPlan) return nestedJoin(leftRows, rightRows, predicate)
+  if (!indexPlan) {
+    return nestedJoin(leftRows, await evalPlan(rightPlan, context), predicate)
+  }
 
+  const lookupRows = await lookupJoinRows(
+    context,
+    leftRows,
+    rightPlan,
+    leftRelations,
+    predicate,
+  )
+  if (lookupRows) return lookupRows
+
+  const rightRows = await evalPlan(rightPlan, context)
   const rightIndex = indexRows(rightRows, indexPlan.right)
   const rows: EvalRow[] = []
 
@@ -69,6 +120,44 @@ function joinRows(
 
     for (const right of candidates) {
       rows.push({ ...left, ...right })
+    }
+  }
+
+  return rows
+}
+
+async function lookupJoinRows(
+  context: EvaluationContext,
+  leftRows: ReadonlyArray<EvalRow>,
+  rightPlan: QueryPlan,
+  leftRelations: ReadonlySet<string>,
+  predicate: Predicate<string>,
+): Promise<EvalRow[] | null> {
+  const indexPlan = equijoinPlan(predicate, leftRelations, rightPlan.relations)
+  if (!indexPlan || indexPlan.right._rel !== rightPlan.from) return null
+
+  const rows: EvalRow[] = []
+  const rightRowsByValue = new Map<Atom, Promise<ReadonlyArray<EvalRow>>>()
+
+  for (const left of leftRows) {
+    const value = resolveField(indexPlan.left, left)
+    let rightRows = rightRowsByValue.get(value)
+
+    if (!rightRows) {
+      const sourceRows = await context.lookupRows({
+        relation: rightPlan.from,
+        field: indexPlan.right._field,
+        value,
+      })
+      if (sourceRows === undefined) return null
+
+      rightRows = evalPlan(rightPlan, context, sourceRows)
+      rightRowsByValue.set(value, rightRows)
+    }
+
+    for (const right of await rightRows) {
+      const row = { ...left, ...right }
+      if (evalPred(predicate, row)) rows.push(row)
     }
   }
 
@@ -90,6 +179,22 @@ function nestedJoin(
   }
 
   return rows
+}
+
+function accessConstraint(
+  relation: string,
+  predicates: ReadonlyArray<Predicate<string>>,
+): RowConstraint | undefined {
+  for (const predicate of predicates) {
+    const fieldValue = fieldValuePredicate(predicate)
+    if (fieldValue?.field._rel === relation) {
+      return {
+        field: fieldValue.field._field,
+        value: fieldValue.value,
+      }
+    }
+  }
+  return undefined
 }
 
 function indexRows(
@@ -155,8 +260,79 @@ function resolveField(ref: FieldRef<Atom, string>, row: EvalRow): Atom {
   return relation[ref._field] ?? null
 }
 
-function isFieldRef(
-  value: FieldRef<Atom, string> | Atom,
-): value is FieldRef<Atom, string> {
-  return value !== null && typeof value === 'object' && '_field' in value
+class EvaluationContext {
+  readonly #source: RelationSource
+  readonly #rows = new Map<string, Promise<ReadonlyArray<Row>>>()
+  readonly #fallbackIndexes = new Map<string, Promise<Map<Atom, Row[]>>>()
+  readonly #lookups = new Map<string, Promise<ReadonlyArray<Row> | undefined>>()
+
+  constructor(source: RelationSource) {
+    this.#source = source
+  }
+
+  async rowsFor(
+    relation: string,
+    constraint?: RowConstraint,
+  ): Promise<ReadonlyArray<Row>> {
+    if (!constraint) return this.rows(relation)
+
+    const lookupRows = await this.lookupRows({
+      relation,
+      field: constraint.field,
+      value: constraint.value,
+    })
+    if (lookupRows !== undefined) return lookupRows
+
+    const index = await this.fallbackIndex(relation, constraint.field)
+    return index.get(constraint.value) ?? []
+  }
+
+  async lookupRows(
+    lookup: RelationLookup,
+  ): Promise<ReadonlyArray<Row> | undefined> {
+    if (!this.#source.lookup) return undefined
+
+    const key = JSON.stringify([lookup.relation, lookup.field, lookup.value])
+    let rows = this.#lookups.get(key)
+    if (!rows) {
+      rows = Promise.resolve(this.#source.lookup(lookup)).then((result) =>
+        result === undefined ? undefined : Array.from(result),
+      )
+      this.#lookups.set(key, rows)
+    }
+    return rows
+  }
+
+  private rows(relation: string): Promise<ReadonlyArray<Row>> {
+    let rows = this.#rows.get(relation)
+    if (!rows) {
+      rows = Promise.resolve(this.#source.rows(relation)).then((result) =>
+        Array.from(result),
+      )
+      this.#rows.set(relation, rows)
+    }
+    return rows
+  }
+
+  private fallbackIndex(
+    relation: string,
+    field: string,
+  ): Promise<Map<Atom, Row[]>> {
+    const key = `${relation}\0${field}`
+    let index = this.#fallbackIndexes.get(key)
+    if (!index) {
+      index = this.rows(relation).then((rows) => {
+        const byValue = new Map<Atom, Row[]>()
+        for (const row of rows) {
+          const value = row[field] ?? null
+          const bucket = byValue.get(value)
+          if (bucket) bucket.push(row)
+          else byValue.set(value, [row])
+        }
+        return byValue
+      })
+      this.#fallbackIndexes.set(key, index)
+    }
+    return index
+  }
 }
