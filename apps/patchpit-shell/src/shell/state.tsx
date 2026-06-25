@@ -14,7 +14,6 @@ import {
   deleteEntry,
   renameEntry,
 } from '@patchpit/filesystem/repo'
-import { createFilesystemDemoState } from './repo.js'
 import {
   addPaneToWorkspaceLayout,
   defaultWorkspaceLayout,
@@ -38,6 +37,8 @@ import { initialUrlSelection } from './initial-selection.js'
 import { folderOpenId, selectionFromSubject } from './selection-state.js'
 import type { EntryType } from '@patchpit/filesystem'
 import { selectionFromNode } from '@patchpit/file-explorer/tree-state'
+import { getFilesystemDemoState } from './demo-state-runtime.js'
+import type { FilesystemDemoState } from './repo.js'
 import type {
   ContextMenuState,
   SelectedDoc,
@@ -57,8 +58,6 @@ import {
 import type { WorkspaceAppStateHandles } from '@patchpit/workspace/state'
 import { createAppInstanceStore } from './app-instance-store.js'
 
-const demoState = createFilesystemDemoState()
-
 export type {
   ContextMenuState,
   SelectedDoc,
@@ -67,7 +66,7 @@ export type {
 } from '@patchpit/file-explorer/tree-state'
 
 type FilesystemDemoContext = Omit<
-  typeof demoState,
+  FilesystemDemoState,
   'workspaceAppStateHandles'
 > & {
   workspaceAppStateHandles: WorkspaceAppStateHandles
@@ -113,6 +112,7 @@ type FilesystemUiSnapshot = FilesystemUiDoc & {
 const FilesystemDemoContext = createContext<FilesystemDemoContext | null>(null)
 
 export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
+  const demoState = getFilesystemDemoState()
   const {
     repo,
     rootHandle,
