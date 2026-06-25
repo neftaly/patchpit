@@ -4,7 +4,9 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./query": "./src/query.ts",
+    "./object": "./src/object.ts"
   },
   "dependencies": {
     "@patchpit/tarstate": "workspace:*",
