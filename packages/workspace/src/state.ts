@@ -20,7 +20,7 @@ import type {
 import type {
   WorkspacePaneId,
   WorkspacePanes,
-} from './index.js'
+} from './model.js'
 import type { WorkspaceProgramRef } from './programs.js'
 
 export type WorkspaceAppStateHandles = Record<

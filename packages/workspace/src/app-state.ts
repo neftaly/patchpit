@@ -1,6 +1,6 @@
 import type { AutomergeUrl } from '@automerge/automerge-repo'
 import type { EntryType } from '@patchpit/filesystem'
-import type { WorkspacePaneId } from './index.js'
+import type { WorkspacePaneId } from './model.js'
 import type { WorkspaceProgramId, WorkspaceProgramRef } from './programs.js'
 
 export type JsonRecord = Record<string, unknown>

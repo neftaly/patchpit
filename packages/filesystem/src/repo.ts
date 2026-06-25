@@ -1,7 +1,7 @@
 import { Repo } from '@automerge/automerge-repo'
 import type { AutomergeUrl, DocHandle } from '@automerge/automerge-repo'
 import mime from 'mime/lite'
-import type { EntryType, FileDoc, FolderDoc, FolderEntry } from './index.js'
+import type { EntryType, FileDoc, FolderDoc, FolderEntry } from './model.js'
 
 type JsonRecord = Record<string, unknown>
 
