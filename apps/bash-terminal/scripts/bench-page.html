@@ -4,11 +4,19 @@
 <script type="module">
   import * as React from 'react'
   import * as ReactDomClient from 'react-dom/client'
-  import * as terminalModule from '../src/index.tsx'
+  import {
+    TerminalViewport,
+  } from '@patchpit/bash-terminal/internal/terminal-viewport'
+  import {
+    defaultTerminalViewportSettings,
+  } from '@patchpit/bash-terminal/internal/settings'
 
   window.__terminalBenchModules = {
     React,
     ReactDomClient,
-    terminalModule,
+    terminalModule: {
+      defaultTerminalViewportSettings,
+      TerminalViewport,
+    },
   }
 </script>

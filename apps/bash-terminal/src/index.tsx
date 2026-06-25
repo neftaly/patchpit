@@ -1,46 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { createTerminalLineBuffer } from './buffer.js'
-import type { TerminalLine, TerminalLineDraft } from './buffer.js'
-import { DomTerminalRenderer } from './dom-renderer.js'
-import { useTerminalInput } from './input.js'
+import type { TerminalLineDraft } from './buffer.js'
 import type { TerminalRenderer } from './renderers.js'
 import { terminalLoginGreeting } from './greeting.js'
-import { terminalViewportSettings } from './settings.js'
-import type { TerminalViewportSettings } from './settings.js'
 import { displayPath, runShellCommand } from './shell.js'
 import type { TerminalFileSystem } from './shell.js'
-import { useTerminalViewportController } from './viewport.js'
-import { visibleItemsForRange } from './viewport-range.js'
+import { TerminalViewport } from './terminal-viewport.js'
 
 export type {
-  TerminalInputLine,
-  TerminalLine,
-  TerminalLineBuffer,
-  TerminalLineDraft,
-  TerminalOutputLine,
-} from './buffer.js'
-export { useTerminalInput } from './input.js'
-export type { TerminalInputController } from './input.js'
-export { DomTerminalRenderer } from './dom-renderer.js'
-export { terminalLoginGreeting } from './greeting.js'
-export type { TerminalRenderer, TerminalRendererProps } from './renderers.js'
-export {
-  defaultTerminalViewportSettings,
-  terminalViewportSettings,
-} from './settings.js'
-export type { TerminalViewportSettings } from './settings.js'
-export {
-  visibleItemsForRange,
-  visibleRangeForScroll,
-} from './viewport-range.js'
-export type { VisibleRange, VisibleRangeItem } from './viewport-range.js'
-export type {
-  TerminalEntry,
-  TerminalEntryType,
   TerminalFileSystem,
 } from './shell.js'
-
-export type TerminalViewportLine = TerminalLine
 
 export function BashTerminal({
   fileSystem,
@@ -114,56 +83,6 @@ export function BashTerminal({
   }
 
   return <TerminalViewport {...viewportProps} />
-}
-
-export function TerminalViewport({
-  isRunning,
-  lineAt,
-  lineCount,
-  onCommand,
-  prompt,
-  renderer: Renderer = DomTerminalRenderer,
-  settings,
-  title = 'bash',
-}: {
-  isRunning: boolean
-  lineAt: (index: number) => TerminalViewportLine | undefined
-  lineCount: number
-  onCommand: (command: string) => void | Promise<void>
-  prompt: string
-  renderer?: TerminalRenderer
-  settings?: Partial<TerminalViewportSettings>
-  title?: string
-}) {
-  const viewportSettings = useMemo(
-    () => terminalViewportSettings(settings),
-    [settings],
-  )
-  const viewport = useTerminalViewportController({
-    lineCount,
-    settings: viewportSettings,
-  })
-  const input = useTerminalInput({
-    beforeSubmit: viewport.noteSubmit,
-    onCommand,
-  })
-  const visibleRows = visibleItemsForRange(
-    lineAt,
-    lineCount,
-    viewport.visibleRange,
-  )
-
-  return (
-    <Renderer
-      input={input}
-      isRunning={isRunning}
-      prompt={prompt}
-      settings={viewportSettings}
-      title={title}
-      viewport={viewport}
-      visibleRows={visibleRows}
-    />
-  )
 }
 
 function errorMessage(error: unknown): string {

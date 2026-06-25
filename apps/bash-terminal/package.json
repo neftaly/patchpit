@@ -4,7 +4,10 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.tsx"
+    ".": "./src/index.tsx",
+    "./internal/renderers": "./src/renderers.tsx",
+    "./internal/settings": "./src/settings.ts",
+    "./internal/terminal-viewport": "./src/terminal-viewport.tsx"
   },
   "scripts": {
     "bench": "node scripts/bench-terminal.mjs",
