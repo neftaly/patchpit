@@ -117,7 +117,7 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     repo,
     rootHandle,
     uiHandle,
-    osInstancesHandle,
+    runAppsHandle,
     rootEntryName,
     defaultWorkspacePanes,
     workspaceProgramRefs,
@@ -132,11 +132,11 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     () =>
       createAppInstanceStore({
         defaultWorkspacePanes,
-        osInstancesHandle,
         repo,
+        runAppsHandle,
         workspaceProgramRefs,
       }),
-    [defaultWorkspacePanes, osInstancesHandle, repo, workspaceProgramRefs],
+    [defaultWorkspacePanes, repo, runAppsHandle, workspaceProgramRefs],
   )
   const workspacePanes = useMemo(
     () => normalizeWorkspacePanes(ui.workspacePanes, defaultWorkspacePanes),

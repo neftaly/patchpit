@@ -86,7 +86,7 @@ export type FilesystemDemoState = {
   repo: Repo
   rootHandle: DocHandle<FolderDoc>
   uiHandle: DocHandle<FilesystemUiDoc>
-  osInstancesHandle: DocHandle<FolderDoc>
+  runAppsHandle: DocHandle<FolderDoc>
   workspaceAppStateHandles: Record<
     BaseWorkspacePaneId,
     DocHandle<WorkspaceAppStateDoc>
@@ -132,8 +132,11 @@ export function createFilesystemDemoState(
     workspaceLayout: defaultWorkspaceLayout(),
     workspacePanes: defaultWorkspacePanes,
   })
-  const { appInstancesHandle: osInstancesHandle, patchpitHandle } =
-    createPatchpitMount(repo, uiHandle.url, stateHandles)
+  const { patchpitHandle, runAppsHandle } = createPatchpitMount(
+    repo,
+    uiHandle.url,
+    stateHandles,
+  )
   const mountHandle = fixtureContext.mountHandles.mnt ?? rootHandle
   mountHandle.change((draft) => {
     draft.entries.push({
@@ -146,7 +149,7 @@ export function createFilesystemDemoState(
     repo,
     rootHandle,
     uiHandle,
-    osInstancesHandle,
+    runAppsHandle,
     workspaceAppStateHandles: stateHandles,
     defaultWorkspacePanes,
     workspaceProgramRefs,
@@ -239,9 +242,9 @@ function createPatchpitMount(
   stateHandles: Record<BaseWorkspacePaneId, DocHandle<WorkspaceAppStateDoc>>,
 ): {
   patchpitHandle: DocHandle<FolderDoc>
-  appInstancesHandle: DocHandle<FolderDoc>
+  runAppsHandle: DocHandle<FolderDoc>
 } {
-  const appInstancesHandle = createFolder(
+  const runAppsHandle = createFolder(
     repo,
     'apps',
     baseWorkspacePaneIds.map((paneId) => ({
@@ -254,7 +257,7 @@ function createPatchpitMount(
     {
       name: 'apps',
       type: 'folder',
-      url: appInstancesHandle.url,
+      url: runAppsHandle.url,
     },
   ])
   const wmHandle = createFolder(repo, 'wm', [
@@ -276,7 +279,7 @@ function createPatchpitMount(
       url: runHandle.url,
     },
   ])
-  return { patchpitHandle, appInstancesHandle }
+  return { patchpitHandle, runAppsHandle }
 }
 
 function createWorkspaceProgramRefs(
