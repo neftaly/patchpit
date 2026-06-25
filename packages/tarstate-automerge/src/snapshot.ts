@@ -13,34 +13,88 @@ export type AutomergeLinkPolicy = {
 export type AutomergeSnapshot = {
   readonly docs: ReadonlyArray<ObjectDoc>
   readonly handles: ReadonlyArray<DocHandle<ObjectDoc>>
+  subscribe(onChange: () => void): AutomergeSnapshotSubscription
+}
+
+export type AutomergeSnapshotSubscription = {
+  unsubscribe(): void
 }
 
 export async function collectAutomergeSnapshot(
   root: ObjectDoc,
   { repo, linkField, isLink }: AutomergeLinkPolicy,
 ): Promise<AutomergeSnapshot> {
-  const seenDocs = new Set<ObjectDoc>()
-  const seenLinks = new Set<string>()
+  const collection = new AutomergeSnapshotCollection()
   const pending = [root]
-  const docs: ObjectDoc[] = []
-  const handles: DocHandle<ObjectDoc>[] = []
 
   for (let index = 0; index < pending.length; index += 1) {
     const doc = pending[index]
-    if (!doc || seenDocs.has(doc)) continue
-
-    seenDocs.add(doc)
-    docs.push(doc)
+    if (!collection.addDoc(doc)) continue
 
     for (const src of linkValues(doc[linkField])) {
-      if (!isLink(src) || seenLinks.has(src)) continue
+      if (!isLink(src) || !collection.addLink(src)) continue
 
-      seenLinks.add(src)
       const handle = await repo.find<ObjectDoc>(src)
-      handles.push(handle)
+      collection.addHandle(handle)
       pending.push(handle.doc())
     }
   }
 
-  return { docs, handles }
+  return collection.snapshot()
+}
+
+class AutomergeSnapshotCollection {
+  readonly #seenDocs = new Set<ObjectDoc>()
+  readonly #seenLinks = new Set<string>()
+  readonly #docs: ObjectDoc[] = []
+  readonly #handles: DocHandle<ObjectDoc>[] = []
+
+  addDoc(doc: ObjectDoc | undefined): doc is ObjectDoc {
+    if (!doc || this.#seenDocs.has(doc)) return false
+
+    this.#seenDocs.add(doc)
+    this.#docs.push(doc)
+    return true
+  }
+
+  addLink(src: string): boolean {
+    if (this.#seenLinks.has(src)) return false
+
+    this.#seenLinks.add(src)
+    return true
+  }
+
+  addHandle(handle: DocHandle<ObjectDoc>): void {
+    this.#handles.push(handle)
+  }
+
+  snapshot(): AutomergeSnapshot {
+    const docs = [...this.#docs]
+    const handles = [...this.#handles]
+
+    return {
+      docs,
+      handles,
+      subscribe: (onChange) => subscribeSnapshotHandles(handles, onChange),
+    }
+  }
+}
+
+function subscribeSnapshotHandles(
+  handles: ReadonlyArray<DocHandle<ObjectDoc>>,
+  onChange: () => void,
+): AutomergeSnapshotSubscription {
+  for (const handle of handles) {
+    handle.on('change', onChange)
+    handle.on('delete', onChange)
+  }
+
+  return {
+    unsubscribe() {
+      for (const handle of handles) {
+        handle.off('change', onChange)
+        handle.off('delete', onChange)
+      }
+    },
+  }
 }

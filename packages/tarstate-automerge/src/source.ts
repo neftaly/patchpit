@@ -6,6 +6,7 @@ import type { ObjectDoc, RelationSource } from '@patchpit/tarstate'
 import type { QueryState } from '@patchpit/tarstate-react'
 import { useDocument } from './document.js'
 import { collectAutomergeSnapshot } from './snapshot.js'
+import type { AutomergeSnapshotSubscription } from './snapshot.js'
 
 type StringDocumentId = Extract<AnyDocumentId, string>
 
@@ -31,22 +32,16 @@ export function useAutomergeSource<T extends ObjectDoc>(
 
   useEffect(() => {
     let alive = true
-    const unsubs: Array<() => void> = []
+    let subscription: AutomergeSnapshotSubscription | null = null
+    const refreshVersion = () => setVersion((current) => current + 1)
+
     setState((current) => ({ ...current, status: 'loading', isLoading: true }))
 
     collectAutomergeSnapshot(root, { repo, linkField, isLink }).then(
-      ({ docs, handles }) => {
+      (snapshot) => {
         if (!alive) return
-        for (const linked of handles) {
-          const notify = () => setVersion((current) => current + 1)
-          linked.on('change', notify)
-          linked.on('delete', notify)
-          unsubs.push(() => {
-            linked.off('change', notify)
-            linked.off('delete', notify)
-          })
-        }
-        setState(readySource(docs))
+        subscription = snapshot.subscribe(refreshVersion)
+        setState(readySource(snapshot.docs))
       },
       (error) => {
         if (!alive) return
@@ -61,7 +56,7 @@ export function useAutomergeSource<T extends ObjectDoc>(
 
     return () => {
       alive = false
-      for (const unsub of unsubs) unsub()
+      subscription?.unsubscribe()
     }
   }, [isLink, linkField, repo, root, version])
 
