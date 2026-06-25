@@ -2,8 +2,14 @@
   "name": "@patchpit/tarstate",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./query": "./src/query-api.ts",
+    "./source": "./src/source.ts",
+    "./evaluate": "./src/evaluate.ts",
+    "./write": "./src/write.ts",
+    "./command": "./src/command.ts"
   },
   "scripts": {
     "bench:evaluate": "node scripts/evaluator-bench.ts",

@@ -1,13 +1,13 @@
 import type { DocHandle } from '@automerge/automerge-repo'
-import { applyTransaction } from '@patchpit/tarstate'
+import { applyOperation } from '@patchpit/tarstate/write'
+import type { Atom } from '@patchpit/tarstate/query'
 import type {
-  Atom,
   RelationInsert,
   RelationRemove,
   RelationUpdate,
   RelationWriter,
   Transaction,
-} from '@patchpit/tarstate'
+} from '@patchpit/tarstate/write'
 
 export type AutomergeObjectDoc = object
 
@@ -17,11 +17,16 @@ export function createAutomergeWriter<T extends AutomergeObjectDoc>(
   return new AutomergeRelationWriter(handle)
 }
 
-export function applyAutomergeTransaction<T extends AutomergeObjectDoc>(
+export async function applyAutomergeTransaction<T extends AutomergeObjectDoc>(
   handle: DocHandle<T>,
   tx: Pick<Transaction, 'operations'>,
 ): Promise<void> {
-  return applyTransaction(createAutomergeWriter(handle), tx)
+  handle.change((doc) => {
+    const writer = new ObjectRelationWriter(mutableDoc(doc))
+    for (const operation of tx.operations) {
+      applyOperation(writer, operation)
+    }
+  })
 }
 
 class AutomergeRelationWriter<T extends AutomergeObjectDoc>

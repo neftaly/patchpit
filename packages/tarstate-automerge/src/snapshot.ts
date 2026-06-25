@@ -1,5 +1,5 @@
 import type { AnyDocumentId, DocHandle, Repo } from '@automerge/automerge-repo'
-import type { ObjectDoc } from '@patchpit/tarstate'
+import type { ObjectDoc } from '@patchpit/tarstate/source'
 import { linkValues } from '@patchpit/tarstate-links'
 
 type StringDocumentId = Extract<AnyDocumentId, string>

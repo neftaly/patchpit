@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { evaluateMany } from '@patchpit/tarstate'
-import type { Atom, Query, RelationSource } from '@patchpit/tarstate'
+import { evaluateMany } from '@patchpit/tarstate/evaluate'
+import type { Atom, Query } from '@patchpit/tarstate/query'
+import type { RelationSource } from '@patchpit/tarstate/source'
 
 export type QueryMap = Record<string, Query<Record<string, Atom>, string>>
 const queryIds = new WeakMap<object, number>()

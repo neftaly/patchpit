@@ -9,6 +9,8 @@ import type {
 } from './command.js'
 import type { Atom } from './types.js'
 
+export type { Operation, Transaction } from './command.js'
+
 export type MaybePromise<T> = T | PromiseLike<T>
 
 export type RelationInsert<RowValue extends Row = Row> = {

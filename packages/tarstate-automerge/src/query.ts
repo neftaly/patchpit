@@ -1,5 +1,5 @@
 import type { DocHandle } from '@automerge/automerge-repo'
-import type { ObjectDoc } from '@patchpit/tarstate'
+import type { ObjectDoc } from '@patchpit/tarstate/source'
 import { useQueries } from '@patchpit/tarstate-react'
 import type {
   QueryMap,

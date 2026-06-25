@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import { fromObject } from '@patchpit/tarstate'
-import type { Atom, ObjectDoc, Query } from '@patchpit/tarstate'
+import { fromObject } from '@patchpit/tarstate/source'
+import type { Atom, Query } from '@patchpit/tarstate/query'
+import type { ObjectDoc } from '@patchpit/tarstate/source'
 import { useQuery } from './query.js'
 import type { QueryRows, QueryState } from './query.js'
 
