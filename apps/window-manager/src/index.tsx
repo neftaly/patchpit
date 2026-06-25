@@ -1,5 +1,5 @@
 export type WindowManagerColorMode = string
-export type WindowManagerPaneId = string
+export type WindowManagerAppInstanceId = string
 export type WindowManagerProgramId = string
 
 export type LaunchableApp<
@@ -10,46 +10,34 @@ export type LaunchableApp<
 }
 
 export type OpenAppInstance<
-  PaneId extends WindowManagerPaneId = WindowManagerPaneId,
+  AppInstanceId extends WindowManagerAppInstanceId = WindowManagerAppInstanceId,
 > = {
-  id: PaneId
+  id: AppInstanceId
   title: string
 }
 
-export type WindowManagerPane = {
-  program: {
-    name: string
-  }
-}
-
-export type WindowManagerPanes<
-  PaneId extends WindowManagerPaneId = WindowManagerPaneId,
-> = Record<PaneId, WindowManagerPane | undefined>
-
 export type WindowManagerControlsProps<
   ColorMode extends WindowManagerColorMode = WindowManagerColorMode,
-  PaneId extends WindowManagerPaneId = WindowManagerPaneId,
+  AppInstanceId extends WindowManagerAppInstanceId = WindowManagerAppInstanceId,
   ProgramId extends WindowManagerProgramId = WindowManagerProgramId,
 > = {
   colorMode: ColorMode
   colorModeIcons: Record<ColorMode, string>
   colorModes: readonly ColorMode[]
   launchableApps: readonly LaunchableApp<ProgramId>[]
-  workspacePaneIds: readonly PaneId[]
-  workspacePanes: WindowManagerPanes<PaneId>
-  onClosePane: (paneId: PaneId) => void
+  openAppInstances: readonly OpenAppInstance<AppInstanceId>[]
+  onClosePane: (appInstanceId: AppInstanceId) => void
   onColorModeChange: (colorMode: ColorMode) => void
   onLaunchApp: (programId: ProgramId) => void
 }
 
 type AppLauncherProps<
-  PaneId extends WindowManagerPaneId,
+  AppInstanceId extends WindowManagerAppInstanceId,
   ProgramId extends WindowManagerProgramId,
 > = {
   launchableApps: readonly LaunchableApp<ProgramId>[]
-  workspacePaneIds: readonly PaneId[]
-  workspacePanes: WindowManagerPanes<PaneId>
-  onClosePane: (paneId: PaneId) => void
+  openAppInstances: readonly OpenAppInstance<AppInstanceId>[]
+  onClosePane: (appInstanceId: AppInstanceId) => void
   onLaunchApp: (programId: ProgramId) => void
 }
 
@@ -62,19 +50,18 @@ type ThemeControlsProps<ColorMode extends WindowManagerColorMode> = {
 
 export function WindowManagerControls<
   ColorMode extends WindowManagerColorMode,
-  PaneId extends WindowManagerPaneId,
+  AppInstanceId extends WindowManagerAppInstanceId,
   ProgramId extends WindowManagerProgramId,
 >({
   colorMode,
   colorModeIcons,
   colorModes,
   launchableApps,
-  workspacePaneIds,
-  workspacePanes,
+  openAppInstances,
   onClosePane,
   onColorModeChange,
   onLaunchApp,
-}: WindowManagerControlsProps<ColorMode, PaneId, ProgramId>) {
+}: WindowManagerControlsProps<ColorMode, AppInstanceId, ProgramId>) {
   return (
     <>
       <ThemeControls
@@ -85,8 +72,7 @@ export function WindowManagerControls<
       />
       <AppLauncher
         launchableApps={launchableApps}
-        workspacePaneIds={workspacePaneIds}
-        workspacePanes={workspacePanes}
+        openAppInstances={openAppInstances}
         onClosePane={onClosePane}
         onLaunchApp={onLaunchApp}
       />
@@ -95,15 +81,14 @@ export function WindowManagerControls<
 }
 
 function AppLauncher<
-  PaneId extends WindowManagerPaneId,
+  AppInstanceId extends WindowManagerAppInstanceId,
   ProgramId extends WindowManagerProgramId,
 >({
   launchableApps,
-  workspacePaneIds,
-  workspacePanes,
+  openAppInstances,
   onClosePane,
   onLaunchApp,
-}: AppLauncherProps<PaneId, ProgramId>) {
+}: AppLauncherProps<AppInstanceId, ProgramId>) {
   return (
     <div className="app-launcher">
       <div className="app-launcher-buttons" aria-label="launch app">
@@ -118,33 +103,21 @@ function AppLauncher<
         ))}
       </div>
       <ul className="app-instance-list" aria-label="open windows">
-        {workspacePaneIds.map((paneId) => {
-          const instance = openAppInstanceFor(paneId, workspacePanes[paneId])
-          if (!instance) return null
-          return (
-            <li key={instance.id}>
-              <span>{instance.title}</span>
-              <button
-                type="button"
-                aria-label={`close ${instance.title}`}
-                onClick={() => onClosePane(instance.id)}
-              >
-                [x]
-              </button>
-            </li>
-          )
-        })}
+        {openAppInstances.map((instance) => (
+          <li key={instance.id}>
+            <span>{instance.title}</span>
+            <button
+              type="button"
+              aria-label={`close ${instance.title}`}
+              onClick={() => onClosePane(instance.id)}
+            >
+              [x]
+            </button>
+          </li>
+        ))}
       </ul>
     </div>
   )
-}
-
-function openAppInstanceFor<PaneId extends WindowManagerPaneId>(
-  paneId: PaneId,
-  pane: WindowManagerPane | undefined,
-): OpenAppInstance<PaneId> | null {
-  if (!pane) return null
-  return { id: paneId, title: pane.program.name }
 }
 
 function ThemeControls<ColorMode extends WindowManagerColorMode>({

@@ -150,7 +150,10 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
     () => workspaceAppStatesFromDocs(workspacePanes, workspaceAppStateDocs),
     [workspaceAppStateDocs, workspacePanes],
   )
-  const osAppState = normalizeOsAppState(workspaceAppStates.state)
+  const osPaneId = workspacePaneIdWithProgram(workspacePanes, 'patchpit:os')
+  const osAppState = normalizeOsAppState(
+    osPaneId ? workspaceAppStates[osPaneId] : undefined,
+  )
   const rootSelection = useMemo(
     (): SelectedDoc => ({
       entryId: null,
@@ -267,7 +270,8 @@ export function FilesystemDemoProvider({ children }: { children: ReactNode }) {
   }
 
   function setColorMode(mode: ColorMode) {
-    setOsColorMode(workspaceAppStateHandles, mode)
+    if (!osPaneId) return
+    setOsColorMode(workspaceAppStateHandles, osPaneId, mode)
   }
 
   function setViewerMode(paneId: WorkspacePaneId, mode: ViewerMode) {
@@ -442,4 +446,14 @@ export function useFilesystemDemo() {
     throw new Error('useFilesystemDemo must be used inside FilesystemDemo')
   }
   return context
+}
+
+function workspacePaneIdWithProgram(
+  panes: WorkspacePanes,
+  programId: WorkspaceProgramId,
+): WorkspacePaneId | null {
+  for (const [paneId, pane] of Object.entries(panes)) {
+    if (pane.program.id === programId) return paneId
+  }
+  return null
 }

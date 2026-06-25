@@ -109,9 +109,10 @@ export function changeFileViewerState(
 
 export function setOsColorMode(
   handles: WorkspaceAppStateHandles,
+  paneId: WorkspacePaneId,
   mode: ColorMode,
 ) {
-  handles.state?.change((draft) => {
+  handles[paneId]?.change((draft) => {
     const state = normalizeOsAppState(draft.state)
     state.colorMode = mode
     draft.state = state

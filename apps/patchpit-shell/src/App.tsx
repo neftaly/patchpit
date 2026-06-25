@@ -33,10 +33,14 @@ function FilesystemApp() {
     closeWorkspacePane,
     colorMode,
     launchWorkspaceProgram,
-    workspacePaneIds,
     setColorMode,
+    workspacePaneIds,
     workspacePanes,
   } = useFilesystemDemo()
+  const openAppInstances = workspacePaneIds.flatMap((paneId) => {
+    const pane = workspacePanes[paneId]
+    return pane ? [{ id: paneId, title: pane.program.name }] : []
+  })
 
   return (
     <main
@@ -53,8 +57,7 @@ function FilesystemApp() {
             colorModeIcons={colorModeIcons}
             colorModes={colorModes}
             launchableApps={launchableApps}
-            workspacePaneIds={workspacePaneIds}
-            workspacePanes={workspacePanes}
+            openAppInstances={openAppInstances}
             onClosePane={closeWorkspacePane}
             onColorModeChange={setColorMode}
             onLaunchApp={launchWorkspaceProgram}
