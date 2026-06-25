@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "bench:evaluate": "node scripts/evaluator-bench.ts",
     "fuzz:evaluate": "node scripts/evaluator-fuzz.ts"
   },
   "devDependencies": {
