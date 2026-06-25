@@ -2,6 +2,7 @@
   "name": "@patchpit/json-doc-editor",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.tsx"
   },

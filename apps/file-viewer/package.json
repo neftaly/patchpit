@@ -2,6 +2,7 @@
   "name": "@patchpit/file-viewer",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.tsx"
   },
