@@ -1,5 +1,9 @@
-import { imageDataUrl } from '@patchpit/filesystem'
-import type { FileDoc, FolderDoc, FolderEntry } from '@patchpit/filesystem'
+import { imageDataUrl } from '@patchpit/filesystem/model'
+import type {
+  FileDoc,
+  FolderDoc,
+  FolderEntry,
+} from '@patchpit/filesystem/model'
 
 export { ExternalUrlPreview } from './url-preview.js'
 

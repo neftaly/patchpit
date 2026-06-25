@@ -1,20 +1,16 @@
 import type { AutomergeUrl, DocHandle, Repo } from '@automerge/automerge-repo'
-import {
-  JsonDocEditor,
-  isJsonRecord,
-  patchJsonRecord,
-} from '@patchpit/json-doc-editor'
+import { JsonDocEditor, isJsonRecord } from '@patchpit/json-doc-editor'
 import type { JsonRecord } from '@patchpit/json-doc-editor'
 import { useDocument } from '@patchpit/tarstate-automerge/document'
 import { useEffect, useState } from 'react'
 import {
   isAutomergeEntryUrl,
-  isFileDoc,
   isFolderDoc,
-  validateFileDoc,
   validateFolderDoc,
-} from '@patchpit/filesystem'
-import type { FileDoc, FolderDoc } from '@patchpit/filesystem'
+} from '@patchpit/filesystem/automerge'
+import { isFileDoc, validateFileDoc } from '@patchpit/filesystem/model'
+import type { FileDoc, FolderDoc } from '@patchpit/filesystem/model'
+import { patchJsonRecord } from './json-record-patch.js'
 import { ExternalUrlPreview, FilePreview, FolderPreview } from './preview.js'
 
 const viewerModes = ['view', 'source'] as const

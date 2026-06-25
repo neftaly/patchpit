@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 
 export type JsonRecord = Record<string, unknown>
-type JsonArray = unknown[]
 export type JsonDocValidator = (doc: JsonRecord) => string | null
 
 export function JsonDocEditor<T extends JsonRecord>({
@@ -83,45 +82,6 @@ export function JsonDocEditor<T extends JsonRecord>({
       {error && <p role="alert">{error}</p>}
     </section>
   )
-}
-
-export function patchJsonRecord(target: JsonRecord, next: JsonRecord) {
-  for (const key of Object.keys(target)) {
-    if (!(key in next)) delete target[key]
-  }
-
-  for (const [key, value] of Object.entries(next)) {
-    patchValue(target[key], value, (updated) => {
-      target[key] = updated
-    })
-  }
-}
-
-function patchArray(target: JsonArray, next: JsonArray) {
-  target.splice(next.length)
-  for (let index = 0; index < next.length; index += 1) {
-    patchValue(target[index], next[index], (updated) => {
-      target[index] = updated
-    })
-  }
-}
-
-function patchValue(
-  current: unknown,
-  next: unknown,
-  assign: (value: unknown) => void,
-) {
-  if (isJsonRecord(current) && isJsonRecord(next)) {
-    patchJsonRecord(current, next)
-    return
-  }
-
-  if (Array.isArray(current) && Array.isArray(next)) {
-    patchArray(current, next)
-    return
-  }
-
-  assign(next)
 }
 
 function formatJson(value: unknown): string {
