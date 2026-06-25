@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Rgba } from 'renderer'
 import type {} from 'renderer/react'
-import {
-  createRoot as createRendererRoot,
-  type RendererRoot,
-} from 'renderer/patchpit-offscreen-react-root'
+import { createRoot as createRendererRoot } from './royal-offscreen-root.js'
+import type { RendererRoot } from './royal-offscreen-root.js'
 
 const GLTF_CLEAR_COLOR: Rgba = [0.02, 0.024, 0.03, 1]
 

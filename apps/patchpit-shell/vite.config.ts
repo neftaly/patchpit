@@ -35,15 +35,6 @@ export default defineConfig({
           ),
         ),
       },
-      {
-        find: /^renderer\/patchpit-offscreen-react-root$/,
-        replacement: fileURLToPath(
-          new URL(
-            '../../vendor/royal/packages/renderer/src/patchpit-offscreen-react-root.ts',
-            import.meta.url,
-          ),
-        ),
-      },
     ],
   },
   worker: {
