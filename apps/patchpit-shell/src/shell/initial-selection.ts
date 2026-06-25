@@ -1,10 +1,9 @@
-import { getObjectId } from '@automerge/automerge'
 import {
   parseAutomergeUrl,
   stringifyAutomergeUrl,
 } from '@automerge/automerge-repo'
 import type { DocHandle, Repo } from '@automerge/automerge-repo'
-import { isAutomergeEntryUrl } from '@patchpit/filesystem'
+import { folderEntryObjectId, isAutomergeEntryUrl } from '@patchpit/filesystem'
 import type { FolderDoc } from '@patchpit/filesystem'
 import type { SelectedDoc } from '@patchpit/file-explorer/tree-state'
 
@@ -75,7 +74,7 @@ async function collectEntryMatches(
   const folder = folderHandle.doc() as FolderDoc
 
   for (const entry of folder.entries) {
-    const entryId = getObjectId(entry)
+    const entryId = folderEntryObjectId(entry)
     if (!entryId) continue
 
     if (entryUrlKey(entry.url) === targetKey) {

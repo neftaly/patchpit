@@ -1,3 +1,5 @@
+import { getObjectId } from '@automerge/automerge'
+import type { ObjID } from '@automerge/automerge'
 import { isValidAutomergeUrl } from '@automerge/automerge-repo'
 import type { AutomergeUrl } from '@automerge/automerge-repo'
 import {
@@ -7,6 +9,8 @@ import {
   validateFolderDocShape,
 } from './model.js'
 import type { FolderDoc, FolderEntry, JsonRecord } from './model.js'
+
+export type FolderEntryObjectId = ObjID
 
 export function validateFolderDoc(doc: JsonRecord): string | null {
   const shapeError = validateFolderDocShape(doc)
@@ -23,6 +27,10 @@ export function isFolderDoc(value: unknown): value is FolderDoc {
 
 export function isAutomergeEntryUrl(url: string): url is AutomergeUrl {
   return isValidAutomergeUrl(url)
+}
+
+export function folderEntryObjectId(entry: FolderEntry): ObjID | null {
+  return getObjectId(entry)
 }
 
 function isValidFolderEntryUrl(entry: FolderEntry): boolean {

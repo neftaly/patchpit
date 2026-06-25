@@ -1,11 +1,14 @@
-import { getObjectId } from '@automerge/automerge'
-import type { ObjID } from '@automerge/automerge'
 import type { DocHandle } from '@automerge/automerge-repo'
 import { useDocument } from '@patchpit/tarstate-automerge/document'
-import type { FolderDoc, FolderEntry } from '@patchpit/filesystem'
+import { folderEntryObjectId } from '@patchpit/filesystem'
+import type {
+  FolderDoc,
+  FolderEntry,
+  FolderEntryObjectId,
+} from '@patchpit/filesystem'
 
 export type FolderEntryRef = FolderEntry & {
-  objectId: ObjID
+  objectId: FolderEntryObjectId
 }
 
 export function useFolderEntries(
@@ -13,7 +16,7 @@ export function useFolderEntries(
 ): readonly FolderEntryRef[] {
   const folder = useDocument(handle)
   return folder.entries.flatMap((entry) => {
-    const objectId = getObjectId(entry)
+    const objectId = folderEntryObjectId(entry)
     return objectId ? [{ ...entry, objectId }] : []
   })
 }

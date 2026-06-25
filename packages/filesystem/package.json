@@ -11,6 +11,7 @@
     "./write": "./src/write.ts"
   },
   "dependencies": {
+    "@automerge/automerge": "catalog:",
     "@automerge/automerge-repo": "catalog:",
     "@patchpit/tarstate": "workspace:*",
     "mime": "catalog:"

@@ -15,10 +15,12 @@ export type {
   PatchworkTag,
 } from './model.js'
 export {
+  folderEntryObjectId,
   isAutomergeEntryUrl,
   isFolderDoc,
   validateFolderDoc,
 } from './automerge.js'
+export type { FolderEntryObjectId } from './automerge.js'
 export {
   addFolderEntry,
   removeFolderEntryByUrl,
