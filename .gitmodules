@@ -1,3 +1,0 @@
-[submodule "vendor/royal"]
-	path = vendor/royal
-	url = git@github.com:neftaly/royal.git

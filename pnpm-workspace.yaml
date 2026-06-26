@@ -1,34 +1,12 @@
 packages:
   - apps/*
   - packages/*
-  - vendor/royal/packages/renderer
 
 catalog:
-  '@automerge/automerge': ^3.2.6
-  '@automerge/automerge-repo': ^2.5.6
-  '@gltf-transform/core': ^4.4.0
-  '@types/node': ^24.13.2
-  '@types/react': ^18.3.31
-  '@types/react-dom': ^18.3.7
-  '@types/react-reconciler': ^0.28.9
-  '@vitejs/plugin-react': ^5.2.0
-  '@vitest/browser-playwright': 4.1.9
-  gl-matrix: ^3.4.3
-  immer: ^11.0.1
-  mime: ^4.1.0
-  oxlint: 1.71.0
-  oxlint-tsgolint: ^0.23.0
-  playwright: ^1.61.0
-  prettier: ^3.8.4
-  react: ^18.3.1
-  react-dom: ^18.3.1
-  react-mosaic-component: ^6.2.0
-  react-reconciler: ^0.29.0
-  regl: ^2.1.1
-  solid-js: ^1.9.13
-  tm-themes: ^1.12.2
-  typescript: ^5.9.3
-  vite: ^7.3.5
-  vite-plugin-top-level-await: 1.6.0
-  vite-plugin-wasm: 3.6.0
+  '@types/node': ^24.10.3
+  '@types/react': ^19.2.17
+  '@types/react-dom': ^19.2.3
+  '@vitejs/plugin-react': ^6.0.3
+  typescript: ^5.7.2
+  vite: ^8.0.16
   vitest: 4.1.9

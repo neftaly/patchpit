@@ -1,12 +1,14 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import App from './App.js'
-import './styles.css'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 
-const el = document.getElementById('root')
-if (!el) throw new Error('no #root')
-createRoot(el).render(
+const rootElement = document.getElementById('root');
+
+if (rootElement === null) {
+  throw new Error('Expected #root element');
+}
+
+createRoot(rootElement).render(
   <StrictMode>
-    <App />
-  </StrictMode>,
-)
+    🦕
+  </StrictMode>
+);

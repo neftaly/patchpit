@@ -1,38 +1,20 @@
 {
   "name": "@patchpit/shell",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc && vite build",
-    "dev": "vite --host 127.0.0.1 --port 5310",
-    "preview": "vite preview --host 127.0.0.1"
+    "build": "vite build --config ../../vite.config.ts --logLevel warn",
+    "dev": "vite --config ../../vite.config.ts"
   },
   "dependencies": {
-    "@automerge/automerge": "catalog:",
-    "@automerge/automerge-repo": "catalog:",
-    "@patchpit/bash-terminal": "workspace:*",
-    "@patchpit/file-explorer": "workspace:*",
-    "@patchpit/file-viewer": "workspace:*",
-    "@patchpit/filesystem": "workspace:*",
-    "@patchpit/tarstate-automerge": "workspace:*",
-    "@patchpit/window-manager": "workspace:*",
-    "@patchpit/workspace": "workspace:*",
-    "react": "catalog:",
-    "react-dom": "catalog:",
-    "react-mosaic-component": "catalog:",
-    "renderer": "workspace:*",
-    "tm-themes": "catalog:"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@vitejs/plugin-react": "catalog:",
-    "oxlint": "catalog:",
-    "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
-    "vite-plugin-top-level-await": "catalog:",
-    "vite-plugin-wasm": "catalog:"
+    "vite": "catalog:"
   }
 }

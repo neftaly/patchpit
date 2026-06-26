@@ -1,4 +1,27 @@
 {
-  "extends": "./tsconfig.base.json",
-  "files": []
+  "compilerOptions": {
+    "target": "ES2022",
+    "skipLibCheck": true,
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noUncheckedSideEffectImports": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "apps/*/src",
+    "apps/*/tests",
+    "packages/*/src",
+    "packages/*/tests",
+    "tests/*.ts",
+    "types/*.d.ts",
+    "vite.config.ts"
+  ]
 }

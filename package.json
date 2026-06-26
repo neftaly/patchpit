@@ -2,24 +2,25 @@
   "name": "patchpit",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=24.12.0"
+  },
   "scripts": {
-    "build:royal": "pnpm --filter renderer build",
-    "build": "pnpm --filter './packages/*' exec tsc && pnpm --filter './apps/*' build",
+    "build": "pnpm --filter @patchpit/shell build",
     "claims:check": "node scripts/claims.mjs check",
     "claims:take": "node scripts/claims.mjs take",
     "dev": "pnpm --filter @patchpit/shell dev",
-    "dev:todo": "pnpm --filter @patchpit/todo-demo dev",
-    "format": "prettier . --write",
-    "format:check": "prettier . --check",
-    "lint": "pnpm --filter './apps/*' --filter './packages/*' exec oxlint --type-aware",
-    "lint:fix": "pnpm --filter './apps/*' --filter './packages/*' exec oxlint --type-aware --fix",
-    "preview": "pnpm --filter @patchpit/shell preview",
-    "test": "pnpm build && node scripts/smoke.mjs",
-    "typecheck": "pnpm --filter './apps/*' --filter './packages/*' exec tsc"
+    "lint": "pnpm typecheck",
+    "test": "vitest run tests/*.test.ts && pnpm --filter './apps/*' --if-present test",
+    "typecheck": "tsc"
   },
   "devDependencies": {
-    "playwright": "catalog:",
-    "prettier": "catalog:"
+    "@types/node": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

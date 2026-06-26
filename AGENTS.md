@@ -21,6 +21,8 @@ In plans, include decomplection after each meaningful step and before handoff.
 
 ## Monorepo
 
-Keep the root package as orchestration only. Apps live in `apps/*`, reusable code lives in `packages/*`, and shared compiler defaults live in `tsconfig.base.json`.
+Keep the root package as orchestration only. Apps live in `apps/*`, reusable
+code lives in `packages/*`, and shared compiler defaults live in
+`tsconfig.json`.
 
 When a change spans unrelated app/package boundaries, split the work into independent claims or sub-agents with disjoint write sets.

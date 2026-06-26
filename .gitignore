@@ -10,6 +10,7 @@ dist-ssr/
 coverage/
 playwright-report/
 test-results/
+**/__screenshots__/
 
 *.log
 npm-debug.log*
@@ -35,9 +36,6 @@ Thumbs.db
 .codex/
 .cursor/
 .windsurf/
-
-.claims/active/*.json
-.claims/archived/*.json
 
 .idea/
 .vscode/
