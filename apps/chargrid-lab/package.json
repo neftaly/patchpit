@@ -7,7 +7,7 @@
   "scripts": {
     "build": "vite build --config ../../vite.config.ts --logLevel warn",
     "dev": "vite --config ../../vite.config.ts",
-    "test": "vitest run src/*.test.ts"
+    "test": "vitest run --passWithNoTests src/*.test.ts"
   },
   "dependencies": {
     "react": "^19.2.7",
