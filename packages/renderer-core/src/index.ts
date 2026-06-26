@@ -19,16 +19,22 @@ export { mesh } from './mesh';
 export type { RenderPass, RenderPassOptions } from './render-graph';
 export { pass } from './render-graph';
 export type {
+  Axis,
+  AxisDirection,
+  AxisSign,
+  CoordinateSystem,
   Direction3,
   EulerRads,
   Ms,
   Rads,
   Rgba,
+  SceneSource,
   Transform,
   TransformOptions,
   Vec3,
   Vec4
 } from './primitives';
+export { defineCoordinateSystem, sceneSource, yUpRightHanded, zUpLeftHanded } from './primitives';
 export type { RenderNode } from './render-node';
 export type { RenderElement, RenderRoot, Scene, SceneOptions } from './render-graph';
 export { scene } from './render-graph';

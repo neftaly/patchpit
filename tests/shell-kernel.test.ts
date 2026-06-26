@@ -54,6 +54,8 @@ describe('patchpit shell kernel', () => {
     expect(listPath(state, '/patchpit/apps').map((entry) => entry.name)).toEqual([
       '3d-viewer',
       'files',
+      'infinigen',
+      'roleplay',
       'source',
       'terminal',
       'ui-lab',
@@ -61,13 +63,27 @@ describe('patchpit shell kernel', () => {
     ]);
     expect(listPath(state, '/patchpit/run/apps').map((entry) => entry.name)).toEqual([
       'files-1',
-      'terminal-3',
-      'ui-lab-2'
+      'infinigen-2',
+      'terminal-3'
     ]);
     expect(readPath(state, '/patchpit/run/apps/terminal-3').kind).toBe('file');
   });
 
-  it('starts files left, UI lab main, and terminal bottom', () => {
+  it('documents iOS roleplay and budget telemetry surfaces', () => {
+    const state = createInitialKernelState();
+
+    expect(readPath(state, '/i&s/roleplay-ios.md')).toMatchObject({
+      kind: 'file',
+      mediaType: 'text/markdown'
+    });
+    expect(readPath(state, '/patchpit/run/usage/session-budget.json')).toMatchObject({
+      kind: 'file',
+      mediaType: 'application/json'
+    });
+    expect(listPath(state, '/patchpit/run').map((entry) => entry.name)).toContain('usage');
+  });
+
+  it('starts files left, Infinigen main, and terminal bottom', () => {
     const state = createInitialKernelState();
 
     expect(
@@ -81,11 +97,11 @@ describe('patchpit shell kernel', () => {
     ).toEqual([
       { id: 'files-1', region: 'left', shortcutId: 'files', kind: 'files', src: undefined },
       {
-        id: 'ui-lab-2',
+        id: 'infinigen-2',
         region: 'main',
-        shortcutId: 'ui-lab',
+        shortcutId: 'infinigen',
         kind: 'url',
-        src: '/chargrid/index.html#{"src":"/patchpit/ui/demo"}'
+        src: '/infinigen/index.html#{"preset":"linz-nz","quality":"high","seed":"tamaki"}'
       },
       { id: 'terminal-3', region: 'bottom', shortcutId: 'terminal', kind: 'terminal', src: undefined }
     ]);
@@ -158,7 +174,8 @@ describe('patchpit shell kernel', () => {
     expect(next.windows.find((window) => window.id === terminal?.id)?.state).toMatchObject({
       kind: 'terminal',
       lines: expect.arrayContaining([
-        'url shortcuts such as 3d-viewer use root pnpm dev; pnpm dev:shell serves shell only'
+        'open /i&s/roleplay-ios.md rehearses the iOS screenshot-to-app flow',
+        'url shortcuts such as 3d-viewer and infinigen use root pnpm dev; pnpm dev:shell serves shell only'
       ])
     });
   });

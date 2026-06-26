@@ -1,0 +1,23 @@
+{
+  "name": "@patchpit/infinigen",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "vite build --config ../../vite.config.ts --logLevel warn",
+    "dev": "vite --config ../../vite.config.ts",
+    "test": "vitest run src/*.test.ts"
+  },
+  "dependencies": {
+    "@patchpit/tarstate": "workspace:*",
+    "@royal/renderer-core": "workspace:*",
+    "three": "^0.185.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.0",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

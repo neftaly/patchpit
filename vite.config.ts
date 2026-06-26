@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import react from '@vitejs/plugin-react';
 import glsl from 'vite-plugin-glsl';
+import { infinigenDevStreamPlugin } from './apps/infinigen/vite-plugin';
 
 type PackageConfig = {
   readonly external?: readonly string[];
@@ -37,6 +39,14 @@ const buildConfigsByPackageName: Record<string, PackageConfig> = {
 const appPackageNames = new Set([
   '@patchpit/3d-viewer',
   '@patchpit/chargrid-lab',
+  '@patchpit/infinigen',
+  '@patchpit/shell',
+  '@patchpit/tarstate-example',
+  '@royal/examples'
+]);
+const reactAppPackageNames = new Set([
+  '@patchpit/3d-viewer',
+  '@patchpit/chargrid-lab',
   '@patchpit/shell',
   '@patchpit/tarstate-example',
   '@royal/examples'
@@ -57,6 +67,7 @@ const devAllServerConfig = Number.isNaN(devAllPort)
         }
       }
     };
+const useBasicSsl = process.env.PATCHPIT_XR_BASIC_SSL === '1';
 const repoRoot = path.dirname(new URL(import.meta.url).pathname);
 const sourceAliases = [
   {
@@ -103,8 +114,23 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
       base: appBase,
       clearScreen: false,
       ...(fixtureAppPackageNames.has(manifest.name ?? '') ? { publicDir: path.join(repoRoot, 'fixtures') } : {}),
-      ...devAllServerConfig,
-      plugins: [react(), ...sharedPlugins],
+      server: {
+        ...(devAllServerConfig.server ?? {})
+      },
+      plugins: [
+        ...(reactAppPackageNames.has(manifest.name ?? '') ? [react()] : []),
+        ...(useBasicSsl
+          ? [
+              basicSsl({
+                certDir: path.join(repoRoot, '.patchpit/basic-ssl'),
+                domains: ['xr.local', 'localhost', '127.0.0.1'],
+                name: 'patchpit-xr'
+              })
+            ]
+          : []),
+        ...sharedPlugins,
+        ...(manifest.name === '@patchpit/infinigen' ? [infinigenDevStreamPlugin()] : [])
+      ],
       resolve: {
         alias: sourceAliases
       },

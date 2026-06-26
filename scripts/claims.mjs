@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -10,12 +11,37 @@ const command = args[0] === 'take' || args[0] === 'check' ? args[0] : 'check'
 const commandArgs = command === args[0] ? args.slice(1) : args
 
 function repoRoot() {
+  const localRoot = findLocalRepoRoot(process.cwd())
+  if (localRoot !== undefined) {
+    return localRoot
+  }
+
   const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd: process.cwd(),
     encoding: 'utf8',
   })
 
   return result.status === 0 ? result.stdout.trim() : process.cwd()
+}
+
+function findLocalRepoRoot(start) {
+  let current = path.resolve(start)
+
+  for (;;) {
+    if (
+      existsSync(path.join(current, '.claims')) &&
+      existsSync(path.join(current, 'package.json'))
+    ) {
+      return current
+    }
+
+    const parent = path.dirname(current)
+    if (parent === current) {
+      return undefined
+    }
+
+    current = parent
+  }
 }
 
 function gitLines(args) {
