@@ -3,25 +3,31 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 
 const host = '127.0.0.1';
-const port = 9208;
+const port = readPort(process.env.PATCHPIT_DEV_PORT, 9208);
 const apps = [
   {
     name: 'Patchpit shell',
     path: '/shell/',
     root: 'apps/patchpit-shell',
-    port: 9209
+    port: port + 1
   },
   {
     name: 'Tarstate example',
     path: '/tarstate/',
     root: 'apps/tarstate-example',
-    port: 9210
+    port: port + 2
   },
   {
     name: 'Royal examples',
     path: '/royal/',
     root: 'apps/royal-examples',
-    port: 9211
+    port: port + 3
+  },
+  {
+    name: '3D viewer',
+    path: '/3d-viewer/',
+    root: 'apps/patchpit-3d-viewer',
+    port: port + 4
   }
 ];
 
@@ -29,6 +35,11 @@ const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const children = [];
 let shuttingDown = false;
 let server;
+
+function readPort(input, fallback) {
+  const parsed = Number.parseInt(input ?? '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 const html = `<!doctype html>
 <html lang="en">

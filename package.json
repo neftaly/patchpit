@@ -18,6 +18,7 @@
     "claims:check": "node scripts/claims.mjs check",
     "claims:take": "node scripts/claims.mjs take",
     "dev": "node scripts/dev-all.mjs",
+    "dev:3d-viewer": "pnpm --filter @patchpit/3d-viewer dev",
     "dev:shell": "pnpm --filter @patchpit/shell dev",
     "dev:royal": "pnpm --filter @royal/examples dev",
     "dev:tarstate": "pnpm --filter @patchpit/tarstate-example dev",
