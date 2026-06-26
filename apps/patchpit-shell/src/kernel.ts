@@ -14,6 +14,7 @@ export type AppShortcut = {
   readonly title: string;
   readonly app: AppKind;
   readonly args?: Record<string, unknown>;
+  readonly layoutRegion?: WindowLayoutRegion;
   readonly path?: string;
   readonly mode?: ViewerMode;
   readonly url?: string;
@@ -67,9 +68,15 @@ export type UrlState = {
 };
 
 export type AppState = TerminalState | FilesState | ViewerState | UrlState;
+export type WindowLayoutRegion = 'left' | 'main' | 'bottom';
+
+export type WindowLayout = {
+  readonly region: WindowLayoutRegion;
+};
 
 export type AppWindow = {
   readonly id: string;
+  readonly layout: WindowLayout;
   readonly shortcutId: string;
   readonly title: string;
   readonly state: AppState;
@@ -90,17 +97,18 @@ type StaticFile = {
 };
 
 const defaultShortcuts: readonly AppShortcut[] = [
-  { id: 'files', title: 'Files', app: 'files', path: '/' },
-  { id: 'terminal', title: 'Terminal', app: 'terminal' },
-  { id: 'viewer', title: 'Viewer', app: 'viewer', path: '/i&s/capture.md', mode: 'view' },
+  { id: 'files', title: 'Files', app: 'files', layoutRegion: 'left', path: '/' },
+  { id: 'terminal', title: 'Terminal', app: 'terminal', layoutRegion: 'bottom' },
+  { id: 'viewer', title: 'Viewer', app: 'viewer', layoutRegion: 'main', path: '/i&s/capture.md', mode: 'view' },
   {
     id: '3d-viewer',
     title: '3D Viewer',
     app: 'url',
+    layoutRegion: 'main',
     url: '/3d-viewer/index.html',
     args: { path: '/i&s/source.json' }
   },
-  { id: 'source', title: 'View Source', app: 'viewer', path: '/patchpit/apps/terminal', mode: 'source' }
+  { id: 'source', title: 'View Source', app: 'viewer', layoutRegion: 'main', path: '/patchpit/apps/terminal', mode: 'source' }
 ];
 
 const staticFiles: readonly StaticFile[] = [
@@ -447,12 +455,14 @@ export function parentPath(path: string): string {
 
 function createWindow(shortcut: AppShortcut, instanceNumber: number, selectedPath: string): AppWindow {
   const id = `${shortcut.id}-${instanceNumber}`;
+  const layout = { region: shortcut.layoutRegion ?? defaultLayoutRegion(shortcut.app) };
   const title = shortcut.title;
 
   switch (shortcut.app) {
     case 'files':
       return {
         id,
+        layout,
         shortcutId: shortcut.id,
         title,
         state: { kind: 'files', path: normalizePath(shortcut.path ?? '/') }
@@ -460,6 +470,7 @@ function createWindow(shortcut: AppShortcut, instanceNumber: number, selectedPat
     case 'terminal':
       return {
         id,
+        layout,
         shortcutId: shortcut.id,
         title,
         state: {
@@ -471,6 +482,7 @@ function createWindow(shortcut: AppShortcut, instanceNumber: number, selectedPat
     case 'viewer':
       return {
         id,
+        layout,
         shortcutId: shortcut.id,
         title,
         state: {
@@ -482,6 +494,7 @@ function createWindow(shortcut: AppShortcut, instanceNumber: number, selectedPat
     case 'url':
       return {
         id,
+        layout,
         shortcutId: shortcut.id,
         title,
         state: {
@@ -490,6 +503,10 @@ function createWindow(shortcut: AppShortcut, instanceNumber: number, selectedPat
         }
       };
   }
+}
+
+function defaultLayoutRegion(app: AppKind): WindowLayoutRegion {
+  return app === 'files' ? 'left' : app === 'terminal' ? 'bottom' : 'main';
 }
 
 export function appUrl(url: string, args: Record<string, unknown>): string {

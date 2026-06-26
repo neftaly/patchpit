@@ -48,19 +48,41 @@ export function App() {
           ))}
         </div>
       </nav>
-      <section className="mosaic" aria-label="open windows">
-        {kernel.windows.map((window) => (
-          <WindowPane
-            browser={browser}
-            focused={kernel.focusedWindowId === window.id}
-            key={window.id}
-            kernel={kernel}
-            setKernel={setKernel}
-            window={window}
-          />
-        ))}
+      <section className="workspace" aria-label="open windows">
+        <WindowRegion browser={browser} kernel={kernel} region="left" setKernel={setKernel} />
+        <WindowRegion browser={browser} kernel={kernel} region="main" setKernel={setKernel} />
+        <WindowRegion browser={browser} kernel={kernel} region="bottom" setKernel={setKernel} />
       </section>
     </main>
+  );
+}
+
+function WindowRegion({
+  browser,
+  kernel,
+  region,
+  setKernel
+}: {
+  readonly browser: BrowserInfo;
+  readonly kernel: KernelState;
+  readonly region: AppWindow['layout']['region'];
+  readonly setKernel: (updater: (state: KernelState) => KernelState) => void;
+}) {
+  const windows = kernel.windows.filter((window) => window.layout.region === region);
+
+  return (
+    <section className={`region ${region}`} aria-label={`${region} windows`}>
+      {windows.map((window) => (
+        <WindowPane
+          browser={browser}
+          focused={kernel.focusedWindowId === window.id}
+          key={window.id}
+          kernel={kernel}
+          setKernel={setKernel}
+          window={window}
+        />
+      ))}
+    </section>
   );
 }
 
@@ -343,22 +365,46 @@ button {
   overflow-x: auto;
 }
 
-.mosaic {
-  align-content: stretch;
-  display: flex;
+.workspace {
+  display: grid;
   flex: 1;
-  flex-wrap: wrap;
+  grid-template-columns: minmax(220px, 30%) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(160px, 28%);
   overflow: auto;
+}
+
+.region {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.left {
+  border-right: 2px solid currentColor;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.main {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.bottom {
+  border-top: 2px solid currentColor;
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 .window {
   border: 2px solid currentColor;
   display: flex;
-  flex: 1 1 420px;
+  flex: 1 1 320px;
   flex-direction: column;
-  margin: -2px 0 0 -2px;
-  min-height: 260px;
-  min-width: min(100%, 320px);
+  margin: -2px;
+  min-height: 0;
+  min-width: min(100%, 220px);
 }
 
 .focused {
@@ -441,5 +487,32 @@ button {
   flex: 1;
   min-height: 100%;
   width: 100%;
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(160px, 28%) minmax(220px, 1fr) minmax(160px, 28%);
+  }
+
+  .left,
+  .main,
+  .bottom {
+    grid-column: 1;
+  }
+
+  .left {
+    border-bottom: 2px solid currentColor;
+    border-right: 0;
+    grid-row: 1;
+  }
+
+  .main {
+    grid-row: 2;
+  }
+
+  .bottom {
+    grid-row: 3;
+  }
 }
 `;

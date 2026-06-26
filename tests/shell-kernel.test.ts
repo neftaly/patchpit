@@ -45,6 +45,22 @@ describe('patchpit shell kernel', () => {
     expect(readPath(state, '/patchpit/run/apps/terminal-3').kind).toBe('file');
   });
 
+  it('starts files left, viewer main, and terminal bottom', () => {
+    const state = createInitialKernelState();
+
+    expect(
+      state.windows.map((window) => ({
+        id: window.id,
+        region: window.layout.region,
+        kind: window.state.kind
+      }))
+    ).toEqual([
+      { id: 'files-1', region: 'left', kind: 'files' },
+      { id: 'viewer-2', region: 'main', kind: 'viewer' },
+      { id: 'terminal-3', region: 'bottom', kind: 'terminal' }
+    ]);
+  });
+
   it('launches and closes windows without hiding runtime state in the UI', () => {
     const launched = launchShortcut(createInitialKernelState(), 'viewer');
     const viewer = launched.windows.at(-1);
