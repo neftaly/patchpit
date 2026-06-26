@@ -5,6 +5,8 @@ dist/
 dist-ssr/
 .vite/
 
+apps/prob-storefront-local/
+
 *.tsbuildinfo
 
 coverage/
