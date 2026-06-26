@@ -41,9 +41,6 @@ export function App() {
               <button type="button" onClick={() => setKernel((state) => focusWindow(state, window.id))}>
                 {window.title}
               </button>
-              <button type="button" aria-label={`close ${windowTitle(window)}`} onClick={() => setKernel((state) => closeWindow(state, window.id))}>
-                x
-              </button>
             </span>
           ))}
         </div>
