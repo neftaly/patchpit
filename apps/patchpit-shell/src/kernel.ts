@@ -386,7 +386,9 @@ export function readPath(state: KernelState, path: string): FileRead {
 
 export function listPath(state: KernelState, path: string): readonly FsEntry[] {
   const normalizedPath = normalizePath(path);
-  const paths = [...allPaths(state)].filter((itemPath) => parentPath(itemPath) === normalizedPath);
+  const paths = [...allPaths(state)].filter(
+    (itemPath) => itemPath !== normalizedPath && parentPath(itemPath) === normalizedPath
+  );
 
   return paths
     .map((itemPath) => {

@@ -19,6 +19,14 @@ const browser: BrowserInfo = {
 };
 
 describe('patchpit shell kernel', () => {
+  it('lists root children without recursing into root itself', () => {
+    const state = createInitialKernelState();
+    const entries = listPath(state, '/');
+
+    expect(entries.map((entry) => entry.path)).toEqual(['/home', '/i&s', '/patchpit']);
+    expect(entries.every((entry) => entry.path !== '/')).toBe(true);
+  });
+
   it('exposes app shortcuts and running windows as paths', () => {
     const state = createInitialKernelState();
 
