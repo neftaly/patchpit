@@ -1,0 +1,164 @@
+{
+  "schema": "patchpit.scene-package/v0",
+  "name": "infinigen-single-room-demo",
+  "source": {
+    "generator": "infinigen",
+    "repo": "https://github.com/princeton-vl/infinigen",
+    "revision": "record-upstream-commit-here",
+    "seed": 0,
+    "commands": [
+      "python -m infinigen_examples.generate_indoors --seed 0 --task coarse --output_folder outputs/indoors/coarse -g fast_solve.gin singleroom.gin -p compose_indoors.terrain_enabled=False restrict_solving.solve_max_rooms=1",
+      "python -m infinigen.tools.export --input_folder outputs/indoors/coarse --output_folder outputs/patchpit-export -f usdc -r 1024"
+    ],
+    "export": {
+      "format": "usdc",
+      "textureResolution": 1024,
+      "converter": "patchpit-infinigen-converter prototype"
+    }
+  },
+  "budgets": {
+    "totalBytes": 0,
+    "geometryBytes": 0,
+    "textureBytes": 0,
+    "prototypeCount": 5,
+    "instanceCount": 140,
+    "recommendedDesktopMaxTextureSize": 1024,
+    "recommendedMobileMaxTextureSize": 512
+  },
+  "buffers": [
+    {
+      "id": "transforms",
+      "uri": "assets/buffers/transforms.f32.bin",
+      "byteLength": 8960,
+      "componentType": "float32",
+      "layout": "mat4-column-major"
+    }
+  ],
+  "prototypes": [
+    {
+      "id": "room-shell",
+      "uri": "assets/prototypes/room-shell.glb",
+      "contentHash": "sha256-placeholder",
+      "bounds": {
+        "min": [-5.0, 0.0, -4.0],
+        "max": [5.0, 3.0, 4.0]
+      },
+      "materials": ["painted-wall", "wood-floor"],
+      "features": {
+        "opaquePbr": true,
+        "normalMap": true,
+        "alpha": false,
+        "animation": false
+      }
+    },
+    {
+      "id": "cabinet-a",
+      "uri": "assets/prototypes/cabinet-a.glb",
+      "contentHash": "sha256-placeholder",
+      "bounds": {
+        "min": [-0.5, 0.0, -0.3],
+        "max": [0.5, 1.0, 0.3]
+      },
+      "materials": ["cabinet-painted"],
+      "features": {
+        "opaquePbr": true,
+        "normalMap": true,
+        "alpha": false,
+        "animation": false
+      }
+    },
+    {
+      "id": "counter-prop",
+      "uri": "assets/prototypes/counter-prop.glb",
+      "contentHash": "sha256-placeholder",
+      "bounds": {
+        "min": [-0.1, 0.0, -0.1],
+        "max": [0.1, 0.25, 0.1]
+      },
+      "materials": ["ceramic"],
+      "features": {
+        "opaquePbr": true,
+        "normalMap": false,
+        "alpha": false,
+        "animation": false
+      }
+    }
+  ],
+  "materials": [
+    {
+      "id": "painted-wall",
+      "baseColorTexture": "assets/textures/painted-wall.basecolor.webp",
+      "roughnessTexture": "assets/textures/painted-wall.roughness.webp",
+      "normalTexture": "assets/textures/painted-wall.normal.webp",
+      "alphaMode": "opaque",
+      "doubleSided": false,
+      "droppedSourceFeatures": ["procedural shader graph"]
+    },
+    {
+      "id": "ceramic",
+      "baseColorTexture": "assets/textures/ceramic.basecolor.webp",
+      "roughnessFactor": 0.55,
+      "metallicFactor": 0,
+      "alphaMode": "opaque",
+      "doubleSided": false,
+      "droppedSourceFeatures": []
+    }
+  ],
+  "instanceGroups": [
+    {
+      "id": "room-shell-static",
+      "prototype": "room-shell",
+      "count": 1,
+      "lane": "structural",
+      "transformBuffer": {
+        "buffer": "transforms",
+        "byteOffset": 0,
+        "byteStride": 64
+      },
+      "bounds": {
+        "min": [-5.0, 0.0, -4.0],
+        "max": [5.0, 3.0, 4.0]
+      }
+    },
+    {
+      "id": "cabinets",
+      "prototype": "cabinet-a",
+      "count": 18,
+      "lane": "static-instance",
+      "transformBuffer": {
+        "buffer": "transforms",
+        "byteOffset": 64,
+        "byteStride": 64
+      },
+      "bounds": {
+        "min": [-4.0, 0.0, -3.0],
+        "max": [4.0, 1.2, 3.0]
+      }
+    },
+    {
+      "id": "counter-clutter",
+      "prototype": "counter-prop",
+      "count": 121,
+      "lane": "static-instance",
+      "transformBuffer": {
+        "buffer": "transforms",
+        "byteOffset": 1216,
+        "byteStride": 64
+      },
+      "bounds": {
+        "min": [-4.2, 0.85, -3.1],
+        "max": [4.2, 1.3, 3.1]
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "code": "material-feature-dropped",
+      "message": "Only baked PBR-like texture maps are represented; procedural shader graphs are source provenance, not runtime material nodes."
+    },
+    {
+      "code": "static-only",
+      "message": "Particles, fluid, articulated objects, and deforming plants are outside the first demo scope."
+    }
+  ]
+}
