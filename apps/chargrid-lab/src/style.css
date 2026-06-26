@@ -11,6 +11,15 @@
   --color-text-secondary: #666666;
   --color-accent: mediumpurple;
   --color-accent-text: white;
+  --color-border: #d8d1c4;
+  --color-panel: #fffefa;
+  --color-dark: #141613;
+  --color-dark-panel: #1c211b;
+  --color-dark-line: #74806f;
+  --color-dark-text: #d9dccd;
+  --color-signal: #b99a52;
+  --color-media: #5f9f98;
+  --color-geometry: #bf7659;
   --font:
     ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas,
     "DejaVu Sans Mono", monospace;
@@ -79,6 +88,12 @@ button {
   font: inherit;
 }
 
+button,
+input,
+select {
+  font: inherit;
+}
+
 button:focus-visible {
   outline: calc(2 * var(--border-width)) solid var(--color-text);
   outline-offset: var(--border-width);
@@ -86,7 +101,13 @@ button:focus-visible {
 
 .flow-reset > *,
 .lab-toolbar > *,
-.lab-surface > * {
+.lab-surface > *,
+.primitive-row > *,
+.panel-grid > *,
+.stat-list > *,
+.stat-list div > *,
+.media-layout > *,
+.terminal-log > * {
   margin-top: 0;
 }
 
@@ -104,21 +125,50 @@ button:focus-visible {
 .lab-toolbar {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--grid-ch);
   min-height: var(--line);
 }
 
+.page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  align-items: flex-start;
+  min-height: var(--line);
+  margin-top: 0;
+}
+
+.page-tab,
 .grid-toggle-button {
   display: inline-flex;
   align-items: center;
   height: var(--line);
-  margin: 0 calc(-1 * var(--grid-ch)) 0 0;
+  margin: 0;
   padding: 0 var(--grid-ch);
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
   cursor: pointer;
   line-height: var(--line);
   white-space: nowrap;
+}
+
+.page-tab {
+  border: 0;
+  border-right: var(--border-width) solid var(--color-background);
+  background: var(--color-feature);
+  color: var(--color-text-secondary);
+}
+
+.page-tab:hover,
+.page-tab[aria-current='page'] {
+  background: var(--color-text);
+  color: var(--color-background);
+}
+
+.grid-toggle-button {
+  margin: 0 calc(-1 * var(--grid-ch)) 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
 }
 
 .grid-toggle-button:hover {
@@ -138,7 +188,7 @@ button:focus-visible {
   background: var(--color-background);
 }
 
-.lab-surface::before {
+.baseline-surface::before {
   content: '';
   position: absolute;
   top: 0;
@@ -147,6 +197,170 @@ button:focus-visible {
   height: calc(2 * var(--line));
   border: var(--border-width) solid var(--color-feature);
   pointer-events: none;
+}
+
+.boxes-surface,
+.media-surface {
+  display: flex;
+  flex-direction: column;
+  gap: var(--line);
+  padding: var(--line) 0;
+}
+
+.panel {
+  padding: calc(var(--line) - var(--border-width)) var(--grid-ch);
+  border: var(--border-width) solid var(--color-border);
+  background: var(--color-panel);
+}
+
+.panel-title,
+.terminal-title {
+  color: var(--color-text-secondary);
+}
+
+.panel p {
+  max-width: 68ch;
+  margin-top: var(--line);
+}
+
+.panel-wide {
+  min-height: calc(4 * var(--line));
+}
+
+.primitive-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--grid-ch);
+  min-height: var(--line);
+}
+
+.primitive-button {
+  display: inline-flex;
+  align-items: center;
+  height: var(--line);
+  padding: 0 var(--grid-ch);
+  border: var(--border-width) solid var(--color-text);
+  background: var(--color-background);
+  color: var(--color-text);
+  cursor: pointer;
+  line-height: var(--line);
+}
+
+.primitive-button:hover,
+.primitive-button-active {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(calc(24 * var(--grid-ch)), 34ch);
+  gap: calc(2 * var(--grid-ch));
+}
+
+.meter {
+  width: 100%;
+  height: var(--line);
+  margin-top: var(--line);
+  border: var(--border-width) solid var(--color-text);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 calc(var(--grid-ch) - 1px),
+      var(--color-border) calc(var(--grid-ch) - 1px) var(--grid-ch)
+    ),
+    var(--color-background);
+}
+
+.meter span {
+  display: block;
+  height: calc(var(--line) - 2 * var(--border-width));
+  margin-top: 0;
+  background: var(--color-signal);
+}
+
+.stat-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 var(--grid-ch);
+  margin: var(--line) 0 0;
+}
+
+.stat-list div {
+  display: contents;
+}
+
+.stat-list dt {
+  color: var(--color-text-secondary);
+}
+
+.stat-list dd {
+  margin-left: 0;
+  text-align: right;
+}
+
+.media-surface {
+  color: var(--color-dark-text);
+  background:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 /
+      var(--grid-ch) var(--line),
+    var(--color-dark);
+}
+
+.terminal-frame {
+  display: flex;
+  flex-direction: column;
+  gap: var(--line);
+  min-height: calc(26 * var(--line));
+  padding: calc(var(--line) - var(--border-width)) var(--grid-ch);
+  border: var(--border-width) solid var(--color-dark-line);
+  background: var(--color-dark-panel);
+}
+
+.terminal-title {
+  color: #bfc7b5;
+}
+
+.media-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(24 * var(--grid-ch));
+  gap: calc(2 * var(--grid-ch));
+  align-items: stretch;
+}
+
+.media-box {
+  display: grid;
+  place-content: center;
+  min-height: calc(10 * var(--line));
+  border: var(--border-width) solid var(--color-media);
+  color: var(--color-media);
+  text-align: center;
+}
+
+.media-box b {
+  color: var(--color-signal);
+  font-weight: 400;
+}
+
+.cube-box {
+  min-height: calc(10 * var(--line));
+  margin: 0;
+  overflow: hidden;
+  border: var(--border-width) solid var(--color-geometry);
+  color: var(--color-geometry);
+  font: inherit;
+  line-height: var(--line);
+}
+
+.terminal-log {
+  display: grid;
+  gap: 0;
+  color: #a5ad9d;
+}
+
+.terminal-log span::before {
+  content: '> ';
+  color: var(--color-signal);
 }
 
 .grid-overlay {
@@ -174,4 +388,19 @@ button:focus-visible {
 
 .lab-shell[data-grid-visible='true'] .grid-overlay {
   display: block;
+}
+
+@media (max-width: 760px) {
+  .lab-toolbar {
+    flex-direction: column;
+  }
+
+  .grid-toggle-button {
+    margin-right: 0;
+  }
+
+  .panel-grid,
+  .media-layout {
+    grid-template-columns: 1fr;
+  }
 }
