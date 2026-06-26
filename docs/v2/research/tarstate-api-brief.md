@@ -420,6 +420,9 @@ review.
 - It does not currently claim watched query deltas.
 - It does not currently claim relational constraints.
 - It does not currently claim durable indexes beyond `RelationSource.lookup`.
+- It does not currently claim full-source validation during `evaluate`; query
+  evaluation diagnostics are source-level diagnostics for rows and lookups the
+  query touches.
 - It does not currently claim a storage adapter matrix.
 - It does not currently claim app schema migration.
 - It does not currently claim security, authorization, or write permissions.

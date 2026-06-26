@@ -6,6 +6,7 @@ import {
   defineSchema,
   evaluate,
   from,
+  fromIndexedObjectSource,
   fromObjectSource,
   id,
   leftJoin,
@@ -102,5 +103,35 @@ describe('tarstate sources', () => {
 
     expect(result.rows).toEqual([{ id: 'object-a', title: 'Alpha', focusedBy: 'peer-a' }]);
     expect(result.diagnostics).toEqual([unreadableDiagnostic]);
+  });
+
+  it('routes rows and lookups only to sources that declare a matching relation', async () => {
+    const objectSource = fromObjectSource({
+      objects: [{ id: 'object-a', kind: 'file', title: 'Alpha' }]
+    });
+    const presenceSource = fromObjectSource({
+      presence: [{ workspaceId: 'workspace-a', peerId: 'peer-a', clientId: 'client-a', targetObjectId: 'object-a' }]
+    });
+    const source = composeSources(objectSource, presenceSource);
+
+    expect(Array.from(await source.rows(schema.objects))).toEqual([
+      { id: 'object-a', kind: 'file', title: 'Alpha' }
+    ]);
+    expect(Array.from(await source.rows(schema.presence))).toEqual([
+      { workspaceId: 'workspace-a', peerId: 'peer-a', clientId: 'client-a', targetObjectId: 'object-a' }
+    ]);
+  });
+
+  it('does not answer composed lookup unless every relevant source can answer it', async () => {
+    const source = composeSources(
+      fromIndexedObjectSource({
+        objects: [{ id: 'object-a', kind: 'file', title: 'Alpha' }]
+      }),
+      fromObjectSource({
+        objects: [{ id: 'object-b', kind: 'file', title: 'Beta' }]
+      })
+    );
+
+    expect(await source.lookup?.({ relation: schema.objects, field: 'id', value: 'object-a' })).toBeUndefined();
   });
 });

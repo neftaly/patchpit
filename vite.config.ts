@@ -44,6 +44,16 @@ const packageConfig = manifest.name ? buildConfigsByPackageName[manifest.name] :
 const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(manifest.name);
 
 const appBase = process.env.BASE_PATH ?? '/';
+const devAllPort = Number.parseInt(process.env.DEV_ALL_PORT ?? '', 10);
+const devAllServerConfig = Number.isNaN(devAllPort)
+  ? {}
+  : {
+      server: {
+        hmr: {
+          clientPort: devAllPort
+        }
+      }
+    };
 const repoRoot = path.dirname(new URL(import.meta.url).pathname);
 const sourceAliases = [
   {
@@ -90,6 +100,7 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
       base: appBase,
       clearScreen: false,
       ...(manifest.name === '@royal/examples' ? { publicDir: path.join(repoRoot, 'fixtures') } : {}),
+      ...devAllServerConfig,
       plugins: [react(), ...sharedPlugins],
       resolve: {
         alias: sourceAliases

@@ -10,6 +10,13 @@ export type QueryResult<Row> = {
 };
 
 type Context = Record<string, Record<string, unknown> | null>;
+type LookupJoinPlan = {
+  readonly alias: string;
+  readonly relation: RelationRef;
+  readonly field: string;
+  readonly value: ExprData;
+  readonly rightAliases: readonly string[];
+};
 
 /**
  * Evaluate a query once against a source.
@@ -102,6 +109,12 @@ async function evaluateJoin(
   data: Extract<QueryData, { op: 'join' }>,
   diagnostics: TarstateDiagnostic[]
 ): Promise<Context[]> {
+  const lookupRows = await evaluateLookupJoin(source, relations, data, diagnostics);
+
+  if (lookupRows !== undefined) {
+    return lookupRows;
+  }
+
   const leftRows = (await evaluateData(source, relations, data.left, diagnostics)) as Context[];
   const rightRows = (await evaluateData(source, relations, data.right, diagnostics)) as Context[];
   const output: Context[] = [];
@@ -132,6 +145,60 @@ async function evaluateJoin(
     }
   }
 
+  return output;
+}
+
+async function evaluateLookupJoin(
+  source: RelationSource,
+  relations: Record<string, RelationRef>,
+  data: Extract<QueryData, { op: 'join' }>,
+  diagnostics: TarstateDiagnostic[]
+): Promise<Context[] | undefined> {
+  const plan = lookupForJoin(relations, data);
+
+  if (plan === undefined || source.lookup === undefined) {
+    return undefined;
+  }
+
+  const planDiagnostics: TarstateDiagnostic[] = [];
+  const leftRows = (await evaluateData(source, relations, data.left, planDiagnostics)) as Context[];
+  const output: Context[] = [];
+
+  for (const leftRow of leftRows) {
+    const diagnosticsBeforeLookup = planDiagnostics.length;
+    const lookupRows = await readLookup(
+      source,
+      { relation: plan.relation, field: plan.field, value: evaluateExpr(leftRow, plan.value) },
+      planDiagnostics
+    );
+
+    if (lookupRows === undefined) {
+      diagnostics.push(...planDiagnostics.slice(diagnosticsBeforeLookup));
+      return undefined;
+    }
+
+    const rightRows = rowsToContexts(lookupRows, plan.alias, plan.relation, planDiagnostics);
+    let matched = false;
+
+    for (const rightRow of rightRows) {
+      output.push({ ...leftRow, ...rightRow });
+      matched = true;
+    }
+
+    if (!matched && data.kind === 'left') {
+      output.push(
+        plan.rightAliases.reduce<Context>(
+          (combined, alias) => {
+            combined[alias] = null;
+            return combined;
+          },
+          { ...leftRow }
+        )
+      );
+    }
+  }
+
+  diagnostics.push(...planDiagnostics);
   return output;
 }
 
@@ -252,6 +319,41 @@ function lookupForWhere(
     return {
       lookup: { relation: relationFor(relations, data.input.relation), field: right.field, value: left.value },
       alias: data.input.alias
+    };
+  }
+
+  return undefined;
+}
+
+function lookupForJoin(
+  relations: Record<string, RelationRef>,
+  data: Extract<QueryData, { op: 'join' }>
+): LookupJoinPlan | undefined {
+  if (data.right.op !== 'from' || data.on.op !== 'eq') {
+    return undefined;
+  }
+
+  const rightAliases = aliasesFor(data.right);
+  const left = data.on.left;
+  const right = data.on.right;
+
+  if (left.op === 'field' && right.op === 'field' && left.alias === data.right.alias && right.alias !== data.right.alias) {
+    return {
+      alias: data.right.alias,
+      relation: relationFor(relations, data.right.relation),
+      field: left.field,
+      value: right,
+      rightAliases
+    };
+  }
+
+  if (left.op === 'field' && right.op === 'field' && right.alias === data.right.alias && left.alias !== data.right.alias) {
+    return {
+      alias: data.right.alias,
+      relation: relationFor(relations, data.right.relation),
+      field: right.field,
+      value: left,
+      rightAliases
     };
   }
 

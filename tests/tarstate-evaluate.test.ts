@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   as,
   anchoredPath,
+  composeSources,
   defineSchema,
   evaluate,
   from,
@@ -152,6 +153,81 @@ describe('tarstate evaluator', () => {
       rows: [{ id: 'object-a' }],
       diagnostics: []
     });
+  });
+
+  it('uses lookup for simple equality joins when available', async () => {
+    const source: RelationSource = {
+      rows: (relationRef) => {
+        if (relationRef.name === 'presence') {
+          throw new Error('join should use lookup for presence');
+        }
+
+        return [{ id: 'object-a', kind: 'file', title: 'Alpha' }];
+      },
+      lookup: ({ relation: relationRef, field, value }) => {
+        if (relationRef.name !== 'presence' || field !== 'targetObjectId' || value !== 'object-a') {
+          return undefined;
+        }
+
+        return [{ workspaceId: 'workspace-a', peerId: 'peer-a', clientId: 'client-a', targetObjectId: 'object-a' }];
+      }
+    };
+
+    const result = await evaluate(source, focusedObjects);
+
+    expect(result.rows).toEqual([{ id: 'object-a', title: 'Alpha', focusedBy: 'peer-a' }]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('falls back to scan when a composed lookup would be incomplete', async () => {
+    const result = await evaluate(
+      composeSources(
+        fromObjectSource({
+          objects: [{ id: 'object-a', kind: 'file', title: 'Alpha' }]
+        }),
+        fromIndexedObjectSource({
+          presence: [{ workspaceId: 'workspace-a', peerId: 'peer-a', clientId: 'client-a', targetObjectId: 'object-a' }]
+        }),
+        fromObjectSource({
+          presence: [{ workspaceId: 'workspace-a', peerId: 'peer-b', clientId: 'client-b', targetObjectId: 'object-a' }]
+        })
+      ),
+      focusedObjects
+    );
+
+    expect(result.rows).toEqual([
+      { id: 'object-a', title: 'Alpha', focusedBy: 'peer-a' },
+      { id: 'object-a', title: 'Alpha', focusedBy: 'peer-b' }
+    ]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('does not duplicate left diagnostics when a join lookup falls back', async () => {
+    const source: RelationSource = {
+      rows: (relationRef) =>
+        relationRef.name === 'objects'
+          ? [
+              { id: 'object-a', kind: 'file' },
+              { id: 'object-b', kind: 'file', title: 'Beta' }
+            ]
+          : [],
+      lookup: ({ value }) => (value === 'object-a' ? [] : undefined)
+    };
+
+    const result = await evaluate(source, focusedObjects);
+
+    expect(result.rows).toEqual([
+      { id: 'object-a', title: undefined, focusedBy: undefined },
+      { id: 'object-b', title: 'Beta', focusedBy: undefined }
+    ]);
+    expect(result.diagnostics).toEqual([
+      {
+        code: 'invalid_row',
+        message: 'missing required field title in relation objects',
+        relation: 'objects',
+        field: 'title'
+      }
+    ]);
   });
 
   it('drops invalid ephemeral lookup rows before projection', async () => {
