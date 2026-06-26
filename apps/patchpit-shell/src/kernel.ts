@@ -105,6 +105,14 @@ const damagedHelmetSrc = '/3d-viewer/DamagedHelmet/DamagedHelmet.gltf';
 const defaultShortcuts: readonly AppShortcut[] = [
   { id: 'files', title: 'Files', app: 'files', layoutRegion: 'left', path: '/' },
   { id: 'terminal', title: 'Terminal', app: 'terminal', layoutRegion: 'bottom' },
+  {
+    id: 'ui-lab',
+    title: 'UI Lab',
+    app: 'url',
+    layoutRegion: 'main',
+    url: '/chargrid/index.html',
+    args: { src: '/patchpit/ui/demo' }
+  },
   { id: 'viewer', title: 'Viewer', app: 'viewer', layoutRegion: 'main', path: '/i&s/capture.md', mode: 'view' },
   {
     id: '3d-viewer',
@@ -213,7 +221,7 @@ export function createInitialKernelState(): KernelState {
   };
 
   state = launchShortcut(state, 'files');
-  state = launchShortcut(state, 'viewer');
+  state = launchShortcut(state, 'ui-lab');
   state = launchShortcut(state, 'terminal');
 
   return state;

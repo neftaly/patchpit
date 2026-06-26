@@ -56,29 +56,38 @@ describe('patchpit shell kernel', () => {
       'files',
       'source',
       'terminal',
+      'ui-lab',
       'viewer'
     ]);
     expect(listPath(state, '/patchpit/run/apps').map((entry) => entry.name)).toEqual([
       'files-1',
       'terminal-3',
-      'viewer-2'
+      'ui-lab-2'
     ]);
     expect(readPath(state, '/patchpit/run/apps/terminal-3').kind).toBe('file');
   });
 
-  it('starts files left, viewer main, and terminal bottom', () => {
+  it('starts files left, UI lab main, and terminal bottom', () => {
     const state = createInitialKernelState();
 
     expect(
       state.windows.map((window) => ({
         id: window.id,
         region: window.layout.region,
-        kind: window.state.kind
+        shortcutId: window.shortcutId,
+        kind: window.state.kind,
+        src: window.state.kind === 'url' ? window.state.src : undefined
       }))
     ).toEqual([
-      { id: 'files-1', region: 'left', kind: 'files' },
-      { id: 'viewer-2', region: 'main', kind: 'viewer' },
-      { id: 'terminal-3', region: 'bottom', kind: 'terminal' }
+      { id: 'files-1', region: 'left', shortcutId: 'files', kind: 'files', src: undefined },
+      {
+        id: 'ui-lab-2',
+        region: 'main',
+        shortcutId: 'ui-lab',
+        kind: 'url',
+        src: '/chargrid/index.html#{"src":"/patchpit/ui/demo"}'
+      },
+      { id: 'terminal-3', region: 'bottom', shortcutId: 'terminal', kind: 'terminal', src: undefined }
     ]);
   });
 
