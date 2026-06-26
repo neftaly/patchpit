@@ -28,6 +28,12 @@ const apps = [
     path: '/3d-viewer/',
     root: 'apps/patchpit-3d-viewer',
     port: port + 4
+  },
+  {
+    name: 'Chargrid lab',
+    path: '/chargrid/',
+    root: 'apps/chargrid-lab',
+    port: port + 5
   }
 ];
 

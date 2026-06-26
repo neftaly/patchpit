@@ -152,6 +152,13 @@ describe('package boundaries', () => {
     ).toEqual([
       {
         license: 'AGPL-3.0-only',
+        name: '@patchpit/chargrid-lab',
+        private: true,
+        root: 'apps/chargrid-lab',
+        type: 'module'
+      },
+      {
+        license: 'AGPL-3.0-only',
         name: '@patchpit/3d-viewer',
         private: true,
         root: 'apps/patchpit-3d-viewer',

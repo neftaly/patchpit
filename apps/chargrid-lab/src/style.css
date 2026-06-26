@@ -1,0 +1,118 @@
+:root {
+  color: #d4d4c8;
+  background: #10100f;
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", "Liberation Mono", Menlo, monospace;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.lab {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  min-height: 100vh;
+  padding: 12px;
+  background: #10100f;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  padding: 8px;
+  border: 2px solid #6c7568;
+  background: #181916;
+}
+
+.controls label {
+  display: grid;
+  grid-template-columns: auto 132px 54px;
+  gap: 8px;
+  align-items: center;
+  color: #bfc4b5;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.controls input {
+  accent-color: #9fb075;
+}
+
+.controls output {
+  color: #e0d195;
+  text-align: right;
+}
+
+.viewport {
+  overflow: auto;
+  padding: 0;
+  border: 2px solid #6c7568;
+  background:
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / var(--grid-ch, 9px) var(--line, 18px),
+    #111210;
+}
+
+.chargrid {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-columns), var(--grid-ch));
+  grid-template-rows: repeat(var(--grid-rows), var(--line));
+  width: calc(var(--grid-columns) * var(--grid-ch));
+  height: calc(var(--grid-rows) * var(--line));
+  margin: 10px;
+  border-right: 2px solid #383f38;
+  border-bottom: 2px solid #383f38;
+  background: #141512;
+}
+
+.cell {
+  display: block;
+  width: var(--grid-ch);
+  height: var(--line);
+  overflow: hidden;
+  color: #d4d4c8;
+  font-size: 14px;
+  line-height: var(--line);
+  text-align: center;
+  white-space: pre;
+}
+
+.cell.muted {
+  color: #8d9489;
+}
+
+.cell.accent {
+  color: #e0d195;
+}
+
+.cell.panel {
+  color: #9ca88f;
+}
+
+.cell.media {
+  color: #79a8a1;
+}
+
+.cell.cube {
+  color: #d99868;
+}
+
+.cell.warning {
+  color: #d98080;
+}
