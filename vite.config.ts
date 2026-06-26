@@ -40,6 +40,7 @@ const appPackageNames = new Set([
   '@patchpit/tarstate-example',
   '@royal/examples'
 ]);
+const fixtureAppPackageNames = new Set(['@patchpit/3d-viewer', '@royal/examples']);
 const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as { readonly name?: string };
 const packageConfig = manifest.name ? buildConfigsByPackageName[manifest.name] : undefined;
 const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(manifest.name);
@@ -100,7 +101,7 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
     return {
       base: appBase,
       clearScreen: false,
-      ...(manifest.name === '@royal/examples' ? { publicDir: path.join(repoRoot, 'fixtures') } : {}),
+      ...(fixtureAppPackageNames.has(manifest.name ?? '') ? { publicDir: path.join(repoRoot, 'fixtures') } : {}),
       ...devAllServerConfig,
       plugins: [react(), ...sharedPlugins],
       resolve: {

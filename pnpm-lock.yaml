@@ -74,6 +74,9 @@ importers:
       react-dom:
         specifier: ^19.2.7
         version: 19.2.7(react@19.2.7)
+      react-regl-fiber:
+        specifier: workspace:*
+        version: link:../../packages/react-regl-fiber
     devDependencies:
       '@types/react':
         specifier: 'catalog:'

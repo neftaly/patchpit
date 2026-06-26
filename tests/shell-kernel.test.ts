@@ -81,6 +81,21 @@ describe('patchpit shell kernel', () => {
     expect(readPath(state, '/home/todo.md')).toMatchObject({ kind: 'file', mediaType: 'text/markdown' });
   });
 
+  it('opens glTF namespace files in the 3D viewer URL app', () => {
+    const state = openPath(createInitialKernelState(), '/home/DamagedHelmet.gltf');
+    const opened = state.windows.at(-1);
+
+    expect(readPath(state, '/home/DamagedHelmet.gltf')).toMatchObject({
+      assetUrl: '/3d-viewer/DamagedHelmet/DamagedHelmet.gltf',
+      kind: 'file',
+      mediaType: 'model/gltf+json'
+    });
+    expect(opened?.state).toEqual({
+      kind: 'url',
+      src: '/3d-viewer/index.html#{"src":"/3d-viewer/DamagedHelmet/DamagedHelmet.gltf"}'
+    });
+  });
+
   it('runs terminal commands over host capabilities and namespace paths', () => {
     const state = createInitialKernelState();
     const terminal = state.windows.find((window) => window.state.kind === 'terminal');
@@ -99,9 +114,9 @@ describe('patchpit shell kernel', () => {
   });
 
   it('builds app URLs from hash JSON without query strings', () => {
-    const url = appUrl('/3d-viewer/index.html', { path: '/home/todo.md' });
+    const url = appUrl('/3d-viewer/index.html', { src: '/assets/scene.gltf' });
 
-    expect(url).toBe('/3d-viewer/index.html#{"path":"/home/todo.md"}');
+    expect(url).toBe('/3d-viewer/index.html#{"src":"/assets/scene.gltf"}');
     expect(url).not.toContain('?');
   });
 

@@ -3,15 +3,25 @@ import { parseViewerHash } from '../apps/patchpit-3d-viewer/src/args';
 
 describe('3D viewer hash args', () => {
   it('parses the raw JSON hash written by the shell URL protocol', () => {
-    expect(parseViewerHash('#{"path":"/i&s/source.json","title":"I&S % capture"}')).toEqual({
-      path: '/i&s/source.json',
+    expect(parseViewerHash('#{"src":"/3d-viewer/DamagedHelmet/DamagedHelmet.gltf","title":"I&S % capture"}')).toEqual({
+      src: '/3d-viewer/DamagedHelmet/DamagedHelmet.gltf',
       title: 'I&S % capture'
     });
   });
 
   it('does not decode percent escapes before parsing JSON', () => {
-    expect(parseViewerHash('#{"path":"/assets/%7Braw%7D.glb"}')).toEqual({
-      path: '/assets/%7Braw%7D.glb'
+    expect(parseViewerHash('#{"src":"/assets/%7Braw%7D.gltf"}')).toEqual({
+      src: '/assets/%7Braw%7D.gltf'
     });
+  });
+
+  it('accepts browser-encoded JSON quotes without decoding the src value', () => {
+    expect(parseViewerHash('#{%22src%22:%22/assets/%7Braw%7D.gltf%22}')).toEqual({
+      src: '/assets/%7Braw%7D.gltf'
+    });
+  });
+
+  it('reports invalid hash JSON without guessing a source', () => {
+    expect(parseViewerHash('#{"src":')).toEqual({ error: 'Invalid args' });
   });
 });

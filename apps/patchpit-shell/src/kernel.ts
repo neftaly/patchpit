@@ -36,6 +36,7 @@ export type FileRead =
   | {
       readonly kind: 'file';
       readonly path: string;
+      readonly assetUrl?: string;
       readonly mediaType: string;
       readonly text: string;
     }
@@ -92,9 +93,12 @@ export type KernelState = {
 
 type StaticFile = {
   readonly path: string;
+  readonly assetUrl?: string;
   readonly mediaType: string;
   readonly text: string;
 };
+
+const damagedHelmetSrc = '/3d-viewer/DamagedHelmet/DamagedHelmet.gltf';
 
 const defaultShortcuts: readonly AppShortcut[] = [
   { id: 'files', title: 'Files', app: 'files', layoutRegion: 'left', path: '/' },
@@ -106,7 +110,7 @@ const defaultShortcuts: readonly AppShortcut[] = [
     app: 'url',
     layoutRegion: 'main',
     url: '/3d-viewer/index.html',
-    args: { path: '/i&s/source.json' }
+    args: { src: damagedHelmetSrc }
   },
   { id: 'source', title: 'View Source', app: 'viewer', layoutRegion: 'main', path: '/patchpit/apps/terminal', mode: 'source' }
 ];
@@ -135,6 +139,12 @@ const staticFiles: readonly StaticFile[] = [
       null,
       2
     )
+  },
+  {
+    path: '/home/DamagedHelmet.gltf',
+    assetUrl: damagedHelmetSrc,
+    mediaType: 'model/gltf+json',
+    text: JSON.stringify({ src: damagedHelmetSrc }, null, 2)
   },
   {
     path: '/home/readme.txt',
@@ -234,6 +244,15 @@ export function openPath(state: KernelState, path: string): KernelState {
   const shortcut: AppShortcut =
     read.kind === 'folder'
       ? { id: 'files', title: 'Files', app: 'files', path: normalizedPath }
+      : isGltfFile(read)
+        ? {
+            id: '3d-viewer',
+            title: '3D Viewer',
+            app: 'url',
+            layoutRegion: 'main',
+            url: '/3d-viewer/index.html',
+            args: { src: read.assetUrl ?? normalizedPath }
+          }
       : { id: 'viewer', title: 'Viewer', app: 'viewer', path: normalizedPath, mode: 'view' };
   const window = createWindow(shortcut, state.nextInstanceNumber, state.selectedPath);
 
@@ -367,6 +386,7 @@ export function readPath(state: KernelState, path: string): FileRead {
   if (staticFile !== undefined) {
     return {
       kind: 'file',
+      ...(staticFile.assetUrl === undefined ? {} : { assetUrl: staticFile.assetUrl }),
       mediaType: staticFile.mediaType,
       path: staticFile.path,
       text: staticFile.text
@@ -511,6 +531,10 @@ function defaultLayoutRegion(app: AppKind): WindowLayoutRegion {
 
 export function appUrl(url: string, args: Record<string, unknown>): string {
   return `${url}#${JSON.stringify(args)}`;
+}
+
+function isGltfFile(read: FileRead): read is Extract<FileRead, { readonly kind: 'file' }> {
+  return read.kind === 'file' && (read.mediaType === 'model/gltf+json' || read.path.endsWith('.gltf'));
 }
 
 function updateWindow(state: KernelState, windowId: string, updater: (window: AppWindow) => AppWindow): KernelState {

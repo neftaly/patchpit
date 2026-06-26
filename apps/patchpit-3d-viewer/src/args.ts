@@ -1,6 +1,6 @@
 export type ViewerArgs = {
-  readonly assetUrl?: string;
-  readonly path?: string;
+  readonly error?: string;
+  readonly src?: string;
   readonly title?: string;
 };
 
@@ -11,18 +11,27 @@ export function parseViewerHash(hash: string): ViewerArgs {
     return {};
   }
 
+  const parsed = parseJsonRecord(raw) ?? parseJsonRecord(raw.replaceAll('%22', '"'));
+
+  if (parsed !== undefined) {
+    return pickArgs(parsed);
+  }
+
+  return { error: 'Invalid args' };
+}
+
+function parseJsonRecord(raw: string): Record<string, unknown> | undefined {
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return isRecord(parsed) ? pickArgs(parsed) : {};
+    return isRecord(parsed) ? parsed : undefined;
   } catch {
-    return { title: 'Invalid args' };
+    return undefined;
   }
 }
 
 function pickArgs(input: Record<string, unknown>): ViewerArgs {
   return {
-    ...(typeof input.assetUrl === 'string' ? { assetUrl: input.assetUrl } : {}),
-    ...(typeof input.path === 'string' ? { path: input.path } : {}),
+    ...(typeof input.src === 'string' ? { src: input.src } : {}),
     ...(typeof input.title === 'string' ? { title: input.title } : {})
   };
 }
