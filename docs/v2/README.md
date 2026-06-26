@@ -13,6 +13,8 @@ pre-v2 implementation; `main` is now the v2 monorepo stub.
   namespace, and possible future terminal acceptance slice.
 - `research/tarstate-api-brief.md`: Tarstate API critique and future-compatible
   posture.
+- `tarstate-api-sketch.md`: proposed functional v2 API shape, edge cases, and
+  day-one proof gates.
 
 ## Monorepo Baseline
 
@@ -34,10 +36,10 @@ Intentional differences from Royal:
 
 ## Next Session
 
-1. Review the app host boundary.
-2. Define concrete app shortcut, app ref, and app instance data.
-3. Use host/namespace tests as the boundary proof: app shortcuts launch through
-   the host, runtime instances appear under `/patchpit/run/apps`, and bad data
-   becomes diagnostics.
-
-Tarstate can wait until after that unless it blocks the app host shape.
+1. Restore a small `packages/tarstate` day-one slice from
+   `tarstate-api-sketch.md`.
+2. Prove durable workspace rows joined to ephemeral presence rows through tests,
+   including one composed-source fixture and one permission/visibility
+   diagnostic fixture.
+3. Then use that query boundary while defining app shortcut, app ref, and app
+   instance data.

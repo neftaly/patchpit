@@ -127,9 +127,9 @@ block an in-scope proof.
 - full sandbox security
 - WebContainer or real Node process execution
 - WASI command runtime
-- encrypted sync / Beelay / Keyhive policy
+- encrypted sync / Beelay / Keyhive cryptographic policy
 - large-file storage / Sedimentree integration
-- full Tarstate API redesign
+- full Relic-style Tarstate runtime
 - Automerge/Immer package extraction
 - terminal app acceptance slice
 - Royal preview/rendering integration
@@ -145,8 +145,13 @@ These are not implemented first, but the stub should avoid blocking them:
 - app refs from HTTPS or Automerge module URLs
 - pinned immutable app refs
 - app-owned schemas/defaults/migrations
+- authorization state as queryable data, including proof records supplied by an
+  auth layer and denial diagnostics
+- Automerge documents as durable relation sources composed with ephemeral
+  presence sources
 - presence as ephemeral queryable data
-- Tarstate as a future relational/query library
+- Tarstate materialized views, watched query deltas, constraints, and aggregate
+  invalidation
 - structured object streams in the terminal
 - diagnostics as queryable runtime data
 
@@ -159,14 +164,20 @@ These are not implemented first, but the stub should avoid blocking them:
 | Runtime is inspectable | Read `/patchpit/run/apps` | runtime mount | namespace/runtime | unit test |
 | Apps own app state | launch creates/attaches state ref | app state doc ref | app package | app fixture test |
 | Bad data is visible | invalid shortcut becomes diagnostic | diagnostic record | app host/runtime | negative test |
+| Presence is queryable | join workspace row to peer focus | durable + ephemeral relations | Tarstate/source adapter | unit test |
+| Permission denial is explainable | unreadable linked row reports reason | diagnostic/proof record | runtime/source adapter | unit test |
 | Packages stay clean | reusable packages do not import apps | manifests/imports | monorepo | boundary test |
 
 ## First Implementation Order
 
 1. Keep the root v2 monorepo passing `typecheck`, `test`, and `build`.
-2. Define concrete `AppShortcut`, `AppRef`, and `AppInstance` types.
-3. Add an in-memory namespace fixture with `/patchpit/apps`,
+2. Restore a small `packages/tarstate` core with functional query constructors,
+   source diagnostics, and optional presence joins.
+3. Add tests for durable workspace rows joined to ephemeral presence rows, plus
+   one composed-source fixture and one permission/visibility diagnostic fixture.
+4. Define concrete `AppShortcut`, `AppRef`, and `AppInstance` types.
+5. Add an in-memory namespace fixture with `/patchpit/apps`,
    `/patchpit/run/apps`, and `/patchpit/run/diagnostics`.
-4. Implement launch/focus/close against a fake `PatchpitAppHost`.
-5. Add tests for app shortcut launch and runtime instance visibility.
-6. Add the minimal shell/launcher view after the data contract is testable.
+6. Implement launch/focus/close against a fake `PatchpitAppHost`.
+7. Add tests for app shortcut launch and runtime instance visibility.
+8. Add the minimal shell/launcher view after the data contract is testable.

@@ -10,6 +10,12 @@
     "noUnusedParameters": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "paths": {
+      "@royal/renderer-core": ["./packages/renderer-core/src/index.ts"],
+      "react-regl-fiber": ["./packages/react-regl-fiber/src/index.ts"],
+      "react-regl-fiber/jsx-dev-runtime": ["./packages/react-regl-fiber/src/jsx-dev-runtime.ts"],
+      "react-regl-fiber/jsx-runtime": ["./packages/react-regl-fiber/src/jsx-runtime.ts"]
+    },
     "isolatedModules": true,
     "jsx": "react-jsx",
     "noEmit": true,
@@ -20,6 +26,7 @@
     "apps/*/tests",
     "packages/*/src",
     "packages/*/tests",
+    "scripts/*.ts",
     "tests/*.ts",
     "types/*.d.ts",
     "vite.config.ts"

@@ -2,25 +2,36 @@
   "name": "patchpit",
   "private": true,
   "version": "0.0.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "packageManager": "pnpm@10.33.2",
   "engines": {
     "node": ">=24.12.0"
   },
   "scripts": {
-    "build": "pnpm --filter @patchpit/shell build",
+    "bench:royal": "vitest run scripts/render-bench.spec.ts scripts/gltf-lifetime-bench.spec.ts --reporter verbose",
+    "build": "pnpm -r --if-present build",
+    "check:gpu": "node scripts/gpu.ts check",
     "claims:check": "node scripts/claims.mjs check",
     "claims:take": "node scripts/claims.mjs take",
     "dev": "pnpm --filter @patchpit/shell dev",
-    "lint": "pnpm typecheck",
-    "test": "vitest run tests/*.test.ts && pnpm --filter './apps/*' --if-present test",
+    "dev:royal": "pnpm --filter @royal/examples dev",
+    "dev:tarstate": "pnpm --filter @patchpit/tarstate-example dev",
+    "lint": "pnpm typecheck && pnpm -r --if-present lint",
+    "preview:royal": "pnpm --filter @royal/examples preview",
+    "profile:gpu": "node scripts/gpu.ts profile",
+    "test": "vitest run tests/*.test.ts && pnpm --filter './apps/*' --if-present test && pnpm --filter './packages/*' --if-present test",
+    "trace:summary": "node scripts/trace-summary.ts",
     "typecheck": "tsc"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
+    "vite-plugin-glsl": "catalog:",
     "vitest": "catalog:"
   }
 }

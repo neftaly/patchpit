@@ -1,5 +1,5 @@
 {
-  "name": "@patchpit/shell",
+  "name": "@patchpit/tarstate-example",
   "private": true,
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
@@ -9,6 +9,7 @@
     "dev": "vite --config ../../vite.config.ts"
   },
   "dependencies": {
+    "@patchpit/tarstate": "workspace:*",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
