@@ -8,6 +8,7 @@ import {
   openPath,
   readPath,
   runTerminalCommand,
+  setColorMode,
   type BrowserInfo
 } from '../apps/patchpit-shell/src/kernel';
 
@@ -23,8 +24,28 @@ describe('patchpit shell kernel', () => {
     const state = createInitialKernelState();
     const entries = listPath(state, '/');
 
-    expect(entries.map((entry) => entry.path)).toEqual(['/home', '/i&s', '/patchpit']);
+    expect(entries.map((entry) => entry.path)).toEqual(['/device', '/home', '/i&s', '/patchpit']);
     expect(entries.every((entry) => entry.path !== '/')).toBe(true);
+  });
+
+  it('exposes a device OPFS bridge fixture without claiming final storage semantics', () => {
+    const state = createInitialKernelState();
+
+    expect(listPath(state, '/device').map((entry) => entry.path)).toEqual(['/device/opfs']);
+    expect(listPath(state, '/device/opfs').map((entry) => entry.path)).toEqual([
+      '/device/opfs/fixtures',
+      '/device/opfs/readme.txt'
+    ]);
+    expect(readPath(state, '/device/opfs/fixtures/session.json')).toMatchObject({
+      kind: 'file',
+      mediaType: 'application/json'
+    });
+  });
+
+  it('keeps color mode in kernel state', () => {
+    const state = setColorMode(createInitialKernelState(), 'dark');
+
+    expect(state.colorMode).toBe('dark');
   });
 
   it('exposes app shortcuts and running windows as paths', () => {

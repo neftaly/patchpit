@@ -1,4 +1,6 @@
-import { FormEvent, useState } from 'react';
+import { Terminal } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
+import { useEffect, useRef, useState } from 'react';
 import {
   closeWindow,
   createInitialKernelState,
@@ -9,23 +11,28 @@ import {
   parentPath,
   readPath,
   runTerminalCommand,
+  setColorMode,
   selectPath,
   setFilesPath,
   setViewerMode,
   windowTitle,
   type AppWindow,
   type BrowserInfo,
+  type ColorMode,
   type FileRead,
   type KernelState,
+  type TerminalState,
   type ViewerMode
 } from './kernel';
+
+type TerminalAppWindow = AppWindow & { readonly state: TerminalState };
 
 export function App() {
   const [kernel, setKernel] = useState(createInitialKernelState);
   const browser = readBrowserInfo();
 
   return (
-    <main className="shell">
+    <main className="shell" data-color-mode={kernel.colorMode}>
       <style>{css}</style>
       <nav className="bar" aria-label="launcher">
         <div className="shortcuts">
@@ -44,6 +51,7 @@ export function App() {
             </span>
           ))}
         </div>
+        <ColorModeControls colorMode={kernel.colorMode} setKernel={setKernel} />
       </nav>
       <section className="workspace" aria-label="open windows">
         <WindowRegion browser={browser} kernel={kernel} region="left" setKernel={setKernel} />
@@ -111,11 +119,58 @@ function WindowPane({
           <ViewerWindow kernel={kernel} setKernel={setKernel} window={window} />
         ) : window.state.kind === 'url' ? (
           <UrlWindow window={window} />
+        ) : isTerminalWindow(window) ? (
+          <TerminalWindow browser={browser} colorMode={kernel.colorMode} setKernel={setKernel} window={window} />
         ) : (
-          <TerminalWindow browser={browser} setKernel={setKernel} window={window} />
+          null
         )}
       </div>
     </article>
+  );
+}
+
+function isTerminalWindow(window: AppWindow): window is TerminalAppWindow {
+  return window.state.kind === 'terminal';
+}
+
+function ColorModeControls({
+  colorMode,
+  setKernel
+}: {
+  readonly colorMode: ColorMode;
+  readonly setKernel: (updater: (state: KernelState) => KernelState) => void;
+}) {
+  return (
+    <fieldset className="colorModes" aria-label="color mode">
+      <ColorModeRadio colorMode={colorMode} mode="light" setKernel={setKernel} symbol="○" />
+      <ColorModeRadio colorMode={colorMode} mode="auto" setKernel={setKernel} symbol="◐" />
+      <ColorModeRadio colorMode={colorMode} mode="dark" setKernel={setKernel} symbol="●" />
+    </fieldset>
+  );
+}
+
+function ColorModeRadio({
+  colorMode,
+  mode,
+  setKernel,
+  symbol
+}: {
+  readonly colorMode: ColorMode;
+  readonly mode: ColorMode;
+  readonly setKernel: (updater: (state: KernelState) => KernelState) => void;
+  readonly symbol: string;
+}) {
+  return (
+    <label title={mode}>
+      <input
+        checked={colorMode === mode}
+        name="color-mode"
+        onChange={() => setKernel((state) => setColorMode(state, mode))}
+        type="radio"
+      />
+      <span aria-hidden="true">{symbol}</span>
+      <span className="srOnly">{mode}</span>
+    </label>
   );
 }
 
@@ -227,35 +282,112 @@ function UrlWindow({ window }: { readonly window: AppWindow }) {
 
 function TerminalWindow({
   browser,
+  colorMode,
   setKernel,
   window
 }: {
   readonly browser: BrowserInfo;
+  readonly colorMode: ColorMode;
   readonly setKernel: (updater: (state: KernelState) => KernelState) => void;
-  readonly window: AppWindow;
+  readonly window: TerminalAppWindow;
 }) {
-  const [input, setInput] = useState('');
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef('');
+  const renderedRef = useRef('');
+  const terminalRef = useRef<Terminal | null>(null);
+  const terminalStateRef = useRef(window.state);
+  const browserRef = useRef(browser);
 
-  if (window.state.kind !== 'terminal') {
-    return null;
+  terminalStateRef.current = window.state;
+  browserRef.current = browser;
+
+  useEffect(() => {
+    const host = hostRef.current;
+
+    if (host === null || terminalRef.current !== null) {
+      return;
+    }
+
+    const terminal = new Terminal({
+      convertEol: true,
+      cursorBlink: true,
+      cursorStyle: 'block',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      fontSize: 13,
+      letterSpacing: 0,
+      theme: terminalTheme(colorMode)
+    });
+    terminalRef.current = terminal;
+    terminal.open(host);
+    renderTerminal(terminal, terminalStateRef.current, inputRef.current, renderedRef);
+    terminal.focus();
+
+    const subscription = terminal.onData((data) => {
+      if (data.startsWith('\x1B')) {
+        return;
+      }
+
+      for (const character of data) {
+        if (character === '\r') {
+          const command = inputRef.current;
+          inputRef.current = '';
+          setKernel((state) => runTerminalCommand(state, window.id, command, browserRef.current));
+        } else if (character === '\u007F') {
+          inputRef.current = inputRef.current.slice(0, -1);
+          renderTerminal(terminal, terminalStateRef.current, inputRef.current, renderedRef);
+        } else if (character >= ' ' && character !== '\u007F') {
+          inputRef.current += character;
+          renderTerminal(terminal, terminalStateRef.current, inputRef.current, renderedRef);
+        }
+      }
+    });
+
+    return () => {
+      subscription.dispose();
+      terminal.dispose();
+      terminalRef.current = null;
+    };
+  }, [setKernel, window.id]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+
+    if (terminal === null) {
+      return;
+    }
+
+    terminal.options.theme = terminalTheme(colorMode);
+    renderTerminal(terminal, window.state, inputRef.current, renderedRef);
+    terminal.focus();
+  }, [colorMode, window.state]);
+
+  return <div className="terminal" ref={hostRef} role="application" aria-label="terminal" />;
+}
+
+function renderTerminal(
+  terminal: Terminal,
+  state: Extract<AppWindow['state'], { readonly kind: 'terminal' }>,
+  input: string,
+  renderedRef: { current: string }
+) {
+  const content = [...state.lines, `${state.cwd} $ ${input}`].join('\r\n');
+
+  if (renderedRef.current === content) {
+    return;
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const command = input;
-    setInput('');
-    setKernel((state) => runTerminalCommand(state, window.id, command, browser));
-  }
+  renderedRef.current = content;
+  terminal.write(`\x1b[3J\x1b[2J\x1b[H${content}`);
+}
 
-  return (
-    <div className="terminal">
-      <pre>{window.state.lines.join('\n')}</pre>
-      <form onSubmit={submit}>
-        <span>{window.state.cwd} $</span>
-        <input aria-label="terminal command" autoComplete="off" value={input} onChange={(event) => setInput(event.currentTarget.value)} />
-      </form>
-    </div>
-  );
+function terminalTheme(colorMode: ColorMode) {
+  const dark =
+    colorMode === 'dark' ||
+    (colorMode === 'auto' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  return dark
+    ? { background: '#050505', foreground: '#f4f4f4', cursor: '#f4f4f4', selectionBackground: '#666666' }
+    : { background: '#ffffff', foreground: '#050505', cursor: '#050505', selectionBackground: '#cccccc' };
 }
 
 function renderRead(read: FileRead, mode: ViewerMode) {
@@ -327,6 +459,14 @@ button {
   cursor: pointer;
 }
 
+.srOnly {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
 .shell {
   color: CanvasText;
   background: Canvas;
@@ -337,11 +477,66 @@ button {
   line-height: 1.35;
 }
 
+.shell[data-color-mode='light'] {
+  color-scheme: light;
+}
+
+.shell[data-color-mode='dark'] {
+  color-scheme: dark;
+}
+
+.shell[data-color-mode='auto'] {
+  color-scheme: light dark;
+}
+
 .bar {
   border-bottom: 2px solid currentColor;
   display: flex;
   min-height: 40px;
   overflow: hidden;
+}
+
+.colorModes {
+  align-items: center;
+  border: 0;
+  border-left: 2px solid currentColor;
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 4px;
+}
+
+.colorModes label {
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.colorModes input {
+  appearance: none;
+  height: 0;
+  margin: 0;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+  width: 0;
+}
+
+.colorModes span[aria-hidden='true'] {
+  border: 2px solid transparent;
+  display: inline-block;
+  min-width: 2ch;
+  padding: 2px;
+  text-align: center;
+}
+
+.colorModes input:checked + span {
+  border-color: currentColor;
+}
+
+.colorModes input:focus-visible + span {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .shortcuts,
@@ -411,8 +606,7 @@ button {
 
 .windowHeader,
 .pathRow,
-.viewerTools,
-.terminal form {
+.viewerTools {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -431,8 +625,7 @@ button {
 }
 
 .fileManager,
-.viewer,
-.terminal {
+.viewer {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -465,7 +658,7 @@ button {
 }
 
 .editor,
-.terminal pre {
+.terminal {
   border: 2px solid currentColor;
   flex: 1;
   margin: 0;
@@ -474,9 +667,19 @@ button {
   white-space: pre-wrap;
 }
 
-.terminal input {
-  flex: 1;
-  min-width: 12ch;
+.terminal {
+  min-height: 100%;
+  padding: 0;
+  white-space: normal;
+}
+
+.terminal .xterm {
+  height: 100%;
+  padding: 8px;
+}
+
+.terminal .xterm-viewport {
+  overflow-y: auto;
 }
 
 .appFrame {

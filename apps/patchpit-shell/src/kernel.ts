@@ -1,4 +1,5 @@
 export type AppKind = 'terminal' | 'files' | 'viewer' | 'url';
+export type ColorMode = 'auto' | 'light' | 'dark';
 export type ViewerMode = 'view' | 'source';
 export type FsKind = 'folder' | 'file' | 'missing';
 
@@ -84,6 +85,7 @@ export type AppWindow = {
 };
 
 export type KernelState = {
+  readonly colorMode: ColorMode;
   readonly shortcuts: readonly AppShortcut[];
   readonly windows: readonly AppWindow[];
   readonly focusedWindowId: string | null;
@@ -160,11 +162,37 @@ const staticFiles: readonly StaticFile[] = [
     path: '/patchpit/run/diagnostics/readme.txt',
     mediaType: 'text/plain',
     text: 'Diagnostics will live here when the host has something useful to report.'
+  },
+  {
+    path: '/device/opfs/readme.txt',
+    mediaType: 'text/plain',
+    text: [
+      'OPFS bridge fixture.',
+      '',
+      'This folder is only a shell namespace bridge for review.',
+      'It does not claim final Origin Private File System semantics yet.'
+    ].join('\n')
+  },
+  {
+    path: '/device/opfs/fixtures/session.json',
+    mediaType: 'application/json',
+    text: JSON.stringify(
+      {
+        kind: 'opfs-bridge-fixture',
+        mounted: false,
+        notes: ['fixture surface for shell/file-manager tests', 'real OPFS sync policy is intentionally unresolved']
+      },
+      null,
+      2
+    )
   }
 ];
 
 const staticFolders = [
   '/',
+  '/device',
+  '/device/opfs',
+  '/device/opfs/fixtures',
   '/home',
   '/i&s',
   '/patchpit',
@@ -176,6 +204,7 @@ const staticFolders = [
 
 export function createInitialKernelState(): KernelState {
   let state: KernelState = {
+    colorMode: 'auto',
     focusedWindowId: null,
     nextInstanceNumber: 1,
     selectedPath: '/i&s/capture.md',
@@ -222,6 +251,10 @@ export function focusWindow(state: KernelState, windowId: string): KernelState {
 
 export function selectPath(state: KernelState, path: string): KernelState {
   return { ...state, selectedPath: normalizePath(path) };
+}
+
+export function setColorMode(state: KernelState, colorMode: ColorMode): KernelState {
+  return { ...state, colorMode };
 }
 
 export function setFilesPath(state: KernelState, windowId: string, path: string): KernelState {
@@ -330,6 +363,7 @@ export function runTerminalCommand(
         'open <path>',
         'pwd',
         'state [window]',
+        '/device/opfs is a fixture bridge, not final OPFS semantics',
         'url shortcuts such as 3d-viewer use root pnpm dev; pnpm dev:shell serves shell only'
       ];
       break;

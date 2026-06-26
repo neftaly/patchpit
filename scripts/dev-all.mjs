@@ -1,6 +1,6 @@
 import http from 'node:http';
 import net from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const host = '127.0.0.1';
 const port = readPort(process.env.PATCHPIT_DEV_PORT, 9208);
@@ -35,10 +35,30 @@ const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const children = [];
 let shuttingDown = false;
 let server;
+const git = readGitInfo();
 
 function readPort(input, fallback) {
   const parsed = Number.parseInt(input ?? '', 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readGitInfo() {
+  const branch = gitOutput(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const sha = gitOutput(['rev-parse', '--short', 'HEAD']);
+  return {
+    branch: branch ?? 'unknown',
+    sha: sha ?? 'unknown'
+  };
+}
+
+function gitOutput(args) {
+  const result = spawnSync('git', args, { encoding: 'utf8' });
+
+  if (result.status !== 0) {
+    return undefined;
+  }
+
+  return result.stdout.trim();
 }
 
 const html = `<!doctype html>
@@ -49,6 +69,8 @@ const html = `<!doctype html>
     <title>Patchpit dev</title>
   </head>
   <body>
+    <pre>branch ${git.branch}
+sha ${git.sha}</pre>
     <ul>
 ${apps.map((app) => `      <li><a href="${app.path}">${app.name}</a></li>`).join('\n')}
     </ul>
@@ -192,7 +214,12 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Patchpit dev index: http://${host}:${port}/`);
+  const origin = `http://${host}:${port}`;
+  console.log(`Patchpit dev index: ${origin}/`);
+  console.log(`branch ${git.branch} ${git.sha}`);
+  for (const app of apps) {
+    console.log(`${app.name}: ${origin}${app.path}`);
+  }
 });
 
 process.on('SIGINT', () => shutdown(0));

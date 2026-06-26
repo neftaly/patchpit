@@ -93,6 +93,9 @@ importers:
 
   apps/patchpit-shell:
     dependencies:
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -581,6 +584,9 @@ packages:
 
   '@vitest/utils@4.1.9':
     resolution: {integrity: sha512-A51o8ymO5PpqlWNnBP9ZHPXDIpuMtTLlGSjN7la4US+LJzoUMyhwjA5QXlm39JexgwHKW4Xjs8Z2d3dLCXOeuA==}
+
+  '@xterm/xterm@6.0.0':
+    resolution: {integrity: sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==}
 
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
@@ -1179,6 +1185,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.9
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
+
+  '@xterm/xterm@6.0.0': {}
 
   assertion-error@2.0.1: {}
 
