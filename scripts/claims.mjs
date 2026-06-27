@@ -12,6 +12,63 @@ const args = process.argv.slice(2)
 const commands = new Set(['take', 'check', 'status', 'clean'])
 const command = commands.has(args[0]) ? args[0] : 'check'
 const commandArgs = command === args[0] ? args.slice(1) : args
+const helpFlags = new Set(['--help', '-h'])
+
+function hasHelpFlag(values) {
+  return values.some((value) => helpFlags.has(value))
+}
+
+function commandUsage(selectedCommand) {
+  if (selectedCommand === 'take') {
+    return [
+      'usage: CLAIMS_OWNER=<owner> pnpm claims:take -- "short task" path/to/file.ts',
+      '',
+      'Take or refresh an edit claim for one or more paths.',
+    ].join('\n')
+  }
+
+  if (selectedCommand === 'status') {
+    return ['usage: pnpm claims:status', '', 'List active claim files.'].join(
+      '\n',
+    )
+  }
+
+  if (selectedCommand === 'clean') {
+    return [
+      'usage: pnpm claims:clean [--dry-run]',
+      '',
+      'Archive expired active claim files.',
+      'Options:',
+      '  -n, --dry-run  Show claims that would be archived.',
+    ].join('\n')
+  }
+
+  if (selectedCommand === 'check') {
+    return [
+      'usage: pnpm claims:check -- [path ...]',
+      '',
+      'Check paths, or current git changes when no paths are provided, for active claim conflicts.',
+    ].join('\n')
+  }
+
+  return [
+    'usage: pnpm claims:<command> [options]',
+    '',
+    'Commands:',
+    '  claims:take    Take or refresh an edit claim.',
+    '  claims:check   Check paths for active claim conflicts.',
+    '  claims:status  List active claim files.',
+    '  claims:clean   Archive expired active claim files.',
+    '',
+    'Use pnpm claims:<command> --help for command usage.',
+  ].join('\n')
+}
+
+if (hasHelpFlag(args)) {
+  const selectedCommand = commands.has(args[0]) ? command : undefined
+  console.log(commandUsage(selectedCommand))
+  process.exit(0)
+}
 
 function repoRoot() {
   const localRoot = findLocalRepoRoot(process.cwd())
