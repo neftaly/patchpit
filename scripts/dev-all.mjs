@@ -18,12 +18,6 @@ const apps = [
     port: port + 2
   },
   {
-    name: 'Royal examples',
-    path: '/royal/',
-    root: 'apps/royal-examples',
-    port: port + 3
-  },
-  {
     name: '3D viewer',
     path: '/3d-viewer/',
     root: 'apps/patchpit-3d-viewer',
