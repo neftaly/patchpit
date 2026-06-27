@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const root = repoRoot()
 const activeDir = path.join(root, '.claims', 'active')
+const archivedDir = path.join(root, '.claims', 'archived')
+const editClaimTtlMinutes = 30
 const args = process.argv.slice(2)
-const command = args[0] === 'take' || args[0] === 'check' ? args[0] : 'check'
+const commands = new Set(['take', 'check', 'status', 'clean'])
+const command = commands.has(args[0]) ? args[0] : 'check'
 const commandArgs = command === args[0] ? args.slice(1) : args
 
 function repoRoot() {
@@ -123,7 +126,7 @@ async function takeClaim(values) {
     scope: options.scope,
     created_at: previous?.created_at ?? now.toISOString(),
     updated_at: now.toISOString(),
-    expires_at: addMinutes(now, 10),
+    expires_at: addMinutes(now, editClaimTtlMinutes),
   }
 
   await writeFile(filePath, `${JSON.stringify(claim, null, 2)}\n`)
@@ -175,6 +178,11 @@ function matches(pattern, file) {
 function isActive(claim) {
   const expiresAt = Date.parse(claim.expires_at)
   return Number.isFinite(expiresAt) && expiresAt > Date.now()
+}
+
+function isExpired(claim) {
+  const expiresAt = Date.parse(claim.expires_at)
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now()
 }
 
 function validateClaim(claim, filePath) {
@@ -299,5 +307,102 @@ async function checkClaims(values) {
   )
 }
 
+function formatClaimLine({ claim, filePath }) {
+  const state = isActive(claim) ? 'fresh' : 'expired'
+  const owner = claim.owner ?? '(missing owner)'
+  const client = claim.client ?? '(missing client)'
+  const mode = claim.mode ?? '(missing mode)'
+  const task = claim.task ?? '(missing task)'
+  const scope = Array.isArray(claim.scope)
+    ? claim.scope.join(', ')
+    : '(missing scope)'
+
+  return [
+    `${state}: ${path.relative(root, filePath)}`,
+    `  owner: ${owner}/${client}`,
+    `  mode: ${mode}`,
+    `  task: ${task}`,
+    `  expires_at: ${claim.expires_at ?? '(missing expires_at)'}`,
+    `  scope: ${scope}`,
+  ].join('\n')
+}
+
+async function statusClaims() {
+  const { claims, errors } = await readActiveClaims()
+  const freshCount = claims.filter(({ claim }) => isActive(claim)).length
+  const expiredCount = claims.filter(({ claim }) => isExpired(claim)).length
+
+  for (const error of errors) {
+    console.error(`claim error: ${error}`)
+  }
+
+  if (claims.length === 0) {
+    console.log('claims status: no active claim files')
+  } else {
+    console.log(
+      `claims status: ${freshCount} fresh, ${expiredCount} expired, ${claims.length} total`,
+    )
+    for (const claim of claims) {
+      console.log(formatClaimLine(claim))
+    }
+  }
+
+  if (errors.length > 0) {
+    process.exit(1)
+  }
+}
+
+async function nextArchivePath(filePath) {
+  const ext = path.extname(filePath)
+  const base = path.basename(filePath, ext)
+  let target = path.join(archivedDir, path.basename(filePath))
+  let counter = 1
+
+  while (existsSync(target)) {
+    target = path.join(archivedDir, `${base}-${counter}${ext}`)
+    counter += 1
+  }
+
+  return target
+}
+
+async function cleanClaims(values) {
+  const dryRun = values.includes('--dry-run') || values.includes('-n')
+  const { claims, errors } = await readActiveClaims()
+  const expiredClaims = claims.filter(({ claim }) => isExpired(claim))
+
+  for (const error of errors) {
+    console.error(`claim error: ${error}`)
+  }
+
+  if (errors.length > 0) {
+    process.exit(1)
+  }
+
+  if (expiredClaims.length === 0) {
+    console.log('claims clean: no expired active claims')
+    return
+  }
+
+  if (!dryRun) {
+    await mkdir(archivedDir, { recursive: true })
+  }
+
+  for (const { filePath } of expiredClaims) {
+    const archivePath = await nextArchivePath(filePath)
+    const from = path.relative(root, filePath)
+    const to = path.relative(root, archivePath)
+
+    if (dryRun) {
+      console.log(`would archive: ${from} -> ${to}`)
+    } else {
+      await rename(filePath, archivePath)
+      console.log(`archived: ${from} -> ${to}`)
+    }
+  }
+}
+
 if (command === 'take') await takeClaim(commandArgs)
+else if (command === 'status') await statusClaims()
+else if (command === 'clean') await cleanClaims(commandArgs)
 else await checkClaims(commandArgs)

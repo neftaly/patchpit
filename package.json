@@ -17,6 +17,8 @@
     "build": "pnpm -r --if-present build",
     "check:gpu": "node scripts/gpu.ts check",
     "claims:check": "node scripts/claims.mjs check",
+    "claims:clean": "node scripts/claims.mjs clean",
+    "claims:status": "node scripts/claims.mjs status",
     "claims:take": "node scripts/claims.mjs take",
     "dev": "node scripts/dev-xr.mjs",
     "dev:all": "node scripts/dev-all.mjs",
