@@ -1,7 +1,7 @@
-/** @jsxImportSource react-regl-fiber */
+/** @jsxImportSource @royal/react */
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
-import { Canvas } from 'react-regl-fiber';
+import { Canvas } from '@royal/react';
 
 const helmetSrc = `${import.meta.env.BASE_URL}DamagedHelmet/DamagedHelmet.gltf`;
 

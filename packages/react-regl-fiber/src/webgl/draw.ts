@@ -124,6 +124,7 @@ export const drawVectorText = (
   gl.uniform4fv(programs.text.uniforms.color, node.color);
 
   bindFloatAttribute(gl, programs.text.attributes.position, asset.position, 3);
+  bindFloatAttribute(gl, programs.text.attributes.glyphCoord, asset.glyphCoord, 2);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, asset.index);
   gl.drawElements(gl.TRIANGLES, asset.indexCount, gl.UNSIGNED_SHORT, 0);
 };

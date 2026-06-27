@@ -40,6 +40,7 @@ export interface GltfProgram {
 
 export interface TextProgram {
   readonly attributes: {
+    readonly glyphCoord: number;
     readonly position: number;
   };
   readonly program: WebGLProgram;
@@ -95,6 +96,7 @@ export const createTextProgram = (gl: WebGLRenderingContext): TextProgram => {
   return {
     program,
     attributes: {
+      glyphCoord: attributeLocation(gl, program, "a_glyphCoord"),
       position: attributeLocation(gl, program, "a_position"),
     },
     uniforms: {

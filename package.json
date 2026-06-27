@@ -11,7 +11,9 @@
   "scripts": {
     "bench:connectors": "vitest run scripts/connector-ingest-bench.test.ts --reporter verbose",
     "bench:royal": "vitest run scripts/render-bench.spec.ts scripts/gltf-lifetime-bench.spec.ts --reporter verbose",
+    "bench:royal:text": "vitest run scripts/royal-text-bench.test.ts --reporter verbose",
     "bench:tarstate": "pnpm build && vitest run scripts/tarstate-ux-bench.test.ts --reporter verbose",
+    "bench:tarstate:columnar": "vitest run scripts/tarstate-columnar-source-bench.test.ts --reporter verbose",
     "bench:tarstate:geo": "vitest run scripts/tarstate-geo-bench.test.ts --reporter verbose",
     "bench:tarstate:memory": "vitest run scripts/tarstate-memory-bench.test.ts --reporter verbose --execArgv=--expose-gc",
     "build": "pnpm -r --if-present build",
@@ -33,7 +35,7 @@
     "preview:royal": "pnpm --filter @royal/examples preview",
     "profile:gpu": "node scripts/gpu.ts profile",
     "quest:browser": "node scripts/quest-browser-control.mjs",
-    "test": "vitest run tests/*.test.ts && pnpm --filter './apps/*' --if-present test && pnpm --filter './packages/*' --if-present test",
+    "test": "vitest run scripts/gpu.test.ts tests/*.test.ts && pnpm --filter './apps/*' --if-present test && pnpm --filter './packages/*' --if-present test",
     "trace:summary": "node scripts/trace-summary.ts",
     "typecheck": "tsc"
   },

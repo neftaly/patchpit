@@ -11,7 +11,13 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "paths": {
+      "@patchpit/tarstate": ["./packages/tarstate/src/index.ts"],
       "@royal/renderer-core": ["./packages/renderer-core/src/index.ts"],
+      "@royal/react": ["./packages/royal-react/src/index.ts"],
+      "@royal/react/root": ["./packages/royal-react/src/root.ts"],
+      "@royal/react/jsx-dev-runtime": ["./packages/royal-react/src/jsx-dev-runtime.ts"],
+      "@royal/react/jsx-runtime": ["./packages/royal-react/src/jsx-runtime.ts"],
+      "@royal/tarstate-lens": ["./packages/royal-tarstate-lens/src/index.ts"],
       "react-regl-fiber": ["./packages/react-regl-fiber/src/index.ts"],
       "react-regl-fiber/root": ["./packages/react-regl-fiber/src/root.ts"],
       "react-regl-fiber/jsx-dev-runtime": ["./packages/react-regl-fiber/src/jsx-dev-runtime.ts"],

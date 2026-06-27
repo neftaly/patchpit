@@ -1,4 +1,4 @@
-/** @jsxImportSource react-regl-fiber */
+/** @jsxImportSource @royal/react */
 import {
   createElement,
   useState,
@@ -10,7 +10,7 @@ import {
   boxGeometry,
   standardMaterial,
   type EulerRads,
-} from "react-regl-fiber";
+} from "@royal/react";
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [1, 0, 0, 1] });

@@ -1,6 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Canvas, createRoot as createRoyalFacadeRoot } from '@royal/react';
+import { createRoot as createRoyalRoot } from '@royal/react/root';
+import { jsx as royalJsx } from '@royal/react/jsx-runtime';
+import { jsx as legacyJsx } from 'react-regl-fiber/jsx-runtime';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -12,19 +16,23 @@ type PackageManifest = {
   readonly license?: string;
   readonly optionalDependencies?: Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
+  readonly peerDependenciesMeta?: Record<string, { readonly optional?: boolean }>;
   readonly type?: string;
+  readonly exports?: Record<string, unknown>;
 };
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const workspaceRoots = ['apps', 'packages'] as const;
 const rendererCoreRoot = path.join(repoRoot, 'packages/renderer-core');
+const royalReactRoot = path.join(repoRoot, 'packages/royal-react');
 const reactReglFiberRoot = path.join(repoRoot, 'packages/react-regl-fiber');
 const sourceExtensions = new Set(['.ts', '.tsx']);
+const reactFacadeExportSubpaths = ['.', './root', './jsx-dev-runtime', './jsx-runtime'];
 
 const upperLayerPackages = [
   {
-    label: 'React adapter',
-    pattern: /^react-regl-fiber(?:\/|$)/
+    label: 'React adapters',
+    pattern: /^(?:@royal\/react|react-regl-fiber)(?:\/|$)/
   },
   {
     label: 'shader build tooling',
@@ -223,6 +231,20 @@ describe('package boundaries', () => {
       },
       {
         license: 'AGPL-3.0-only',
+        name: '@royal/react',
+        private: true,
+        root: 'packages/royal-react',
+        type: 'module'
+      },
+      {
+        license: 'AGPL-3.0-only',
+        name: '@royal/tarstate-lens',
+        private: true,
+        root: 'packages/royal-tarstate-lens',
+        type: 'module'
+      },
+      {
+        license: 'AGPL-3.0-only',
         name: '@patchpit/tarstate',
         private: true,
         root: 'packages/tarstate',
@@ -247,10 +269,44 @@ describe('package boundaries', () => {
     ).toEqual([]);
   });
 
-  it('lets react-regl-fiber be the React facade for renderer-core', () => {
+  it('lets @royal/react bridge the React facade without moving the legacy package', () => {
+    const manifest = readManifest(path.join(royalReactRoot, 'package.json'));
+
+    expect(manifest.dependencies?.['react-regl-fiber']).toBe('workspace:*');
+    expect(manifest.peerDependencies?.react).toBe('^19.2.7');
+    expect(manifest.peerDependenciesMeta?.react?.optional).toBe(true);
+    expect(Object.keys(manifest.exports ?? {}).sort()).toEqual([...reactFacadeExportSubpaths].sort());
+    expect(manifest.exports).toMatchObject({
+      '.': {
+        types: './dist/index.d.ts',
+        import: './dist/index.js'
+      },
+      './root': {
+        types: './dist/root.d.ts',
+        import: './dist/root.js'
+      },
+      './jsx-runtime': {
+        types: './dist/jsx-runtime.d.ts',
+        import: './dist/jsx-runtime.js'
+      },
+      './jsx-dev-runtime': {
+        types: './dist/jsx-dev-runtime.d.ts',
+        import: './dist/jsx-dev-runtime.js'
+      }
+    });
+  });
+
+  it('resolves @royal/react facade and JSX runtime aliases during development', () => {
+    expect(typeof Canvas).toBe('function');
+    expect(createRoyalFacadeRoot).toBe(createRoyalRoot);
+    expect(royalJsx).toBe(legacyJsx);
+  });
+
+  it('keeps react-regl-fiber as the legacy React implementation package for renderer-core', () => {
     const manifest = readManifest(path.join(reactReglFiberRoot, 'package.json'));
 
     expect(manifest.dependencies?.['@royal/renderer-core']).toBe('workspace:*');
+    expect(Object.keys(manifest.exports ?? {}).sort()).toEqual([...reactFacadeExportSubpaths].sort());
   });
 
   it('keeps renderer-core dependencies below renderer adapters and shader tooling', () => {

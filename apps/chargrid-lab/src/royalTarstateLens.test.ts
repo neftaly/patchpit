@@ -34,13 +34,15 @@ describe('Royal chargrid tarstate lens', () => {
         scopeId: 'royal',
         boxId: 'button-primary',
         active: true,
-        focused: true
+        focused: true,
+        hovered: false
       },
       {
         scopeId: 'royal',
         boxId: 'helmet',
         active: false,
-        focused: true
+        focused: true,
+        hovered: false
       }
     ]);
     expect(result.diagnostics).toEqual([]);

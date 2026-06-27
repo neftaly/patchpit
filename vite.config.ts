@@ -34,6 +34,24 @@ const buildConfigsByPackageName: Record<string, PackageConfig> = {
       formats: ['es'],
       fileName: (_format, entryName) => `${entryName}.js`
     }
+  },
+  '@royal/react': {
+    external: [
+      'react-regl-fiber',
+      'react-regl-fiber/root',
+      'react-regl-fiber/jsx-dev-runtime',
+      'react-regl-fiber/jsx-runtime'
+    ],
+    lib: {
+      entry: {
+        index: 'src/index.ts',
+        root: 'src/root.ts',
+        'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
+        'jsx-runtime': 'src/jsx-runtime.ts'
+      },
+      formats: ['es'],
+      fileName: (_format, entryName) => `${entryName}.js`
+    }
   }
 };
 
@@ -73,6 +91,26 @@ const useBasicSsl = process.env.PATCHPIT_XR_BASIC_SSL === '1';
 const repoRoot = path.dirname(new URL(import.meta.url).pathname);
 const sourceAliases = [
   {
+    find: '@patchpit/tarstate',
+    replacement: path.join(repoRoot, 'packages/tarstate/src/index.ts')
+  },
+  {
+    find: '@royal/react/root',
+    replacement: path.join(repoRoot, 'packages/royal-react/src/root.ts')
+  },
+  {
+    find: '@royal/react/jsx-dev-runtime',
+    replacement: path.join(repoRoot, 'packages/royal-react/src/jsx-dev-runtime.ts')
+  },
+  {
+    find: '@royal/react/jsx-runtime',
+    replacement: path.join(repoRoot, 'packages/royal-react/src/jsx-runtime.ts')
+  },
+  {
+    find: '@royal/react',
+    replacement: path.join(repoRoot, 'packages/royal-react/src/index.ts')
+  },
+  {
     find: 'react-regl-fiber/root',
     replacement: path.join(repoRoot, 'packages/react-regl-fiber/src/root.ts')
   },
@@ -91,6 +129,10 @@ const sourceAliases = [
   {
     find: '@royal/renderer-core',
     replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts')
+  },
+  {
+    find: '@royal/tarstate-lens',
+    replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/index.ts')
   }
 ];
 

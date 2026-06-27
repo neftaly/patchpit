@@ -1,4 +1,4 @@
-/** @jsxImportSource react-regl-fiber */
+/** @jsxImportSource @royal/react */
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -6,7 +6,7 @@ import {
   boxGeometry,
   standardMaterial,
   type Vec3,
-} from 'react-regl-fiber';
+} from '@royal/react';
 
 type Edge = {
   readonly position: Vec3;

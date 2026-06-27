@@ -19,6 +19,9 @@ import { createKitchenSinkSpec, desktopGrid } from './yogaRoyal';
 const sampleColumns = 56;
 const sampleRows = 44;
 const sampleCount = sampleColumns * sampleRows;
+// The deterministic helmet geometry oracle is intentionally broad enough to catch
+// visibility drift, so allow CI machines more than Vitest's default 5s timeout.
+const helmetPickFuzzTimeoutMs = 15_000;
 
 type PickCoverage = {
   readonly falseNegatives: readonly VisibilityMismatch[];
@@ -310,7 +313,7 @@ describe('DamagedHelmet pick fuzz', () => {
     expect(coverage.falsePositives, `false positives: ${JSON.stringify(coverage.falsePositives.slice(0, 8))}`).toHaveLength(0);
     expect(coverage.falseNegatives, `false negatives: ${JSON.stringify(coverage.falseNegatives.slice(0, 8))}`).toHaveLength(0);
     expect(coverage.mismatchPoints).toHaveLength(0);
-  });
+  }, helmetPickFuzzTimeoutMs);
 
   it('rejects a GLTF triangle hidden behind its preview background plane', () => {
     const grid = { columns: 10, rows: 10 };

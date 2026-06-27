@@ -116,8 +116,16 @@ export class WebGlRoot {
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
 
-    for (const pass of scene.children) {
-      this.#renderPass(pass, viewport);
+    this.#textCache.beginFrame();
+    let completed = false;
+    try {
+      for (const pass of scene.children) {
+        this.#renderPass(pass, viewport);
+      }
+      completed = true;
+    } finally {
+      if (completed) this.#textCache.endFrame();
+      else this.#textCache.abortFrame();
     }
   }
 

@@ -185,6 +185,47 @@ describe('WebGL resource lifetime', () => {
     expect(counts.deleteTexture).toBe(0);
   });
 
+  it('releases replaced dynamic vector text buffers before unmount', () => {
+    const { counts, gl } = fakeGl();
+    const root = createRoot(fakeCanvas(gl));
+    const textScene = (text: string) => scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            position: [0, 0, 5],
+            rotation: [0, 0, 0],
+            left: -2,
+            right: 2,
+            bottom: -1,
+            top: 1,
+            near: 0.1,
+            far: 100
+          }),
+          children: [
+            vectorText({
+              color: [1, 1, 1, 1],
+              text
+            })
+          ]
+        })
+      ]
+    });
+
+    root.render(textScene('first'));
+
+    expect(counts.createBuffer).toBe(3);
+    expect(counts.deleteBuffer).toBe(0);
+
+    root.render(textScene('second'));
+
+    expect(counts.createBuffer).toBe(6);
+    expect(counts.deleteBuffer).toBe(3);
+
+    root.unmount();
+
+    expect(counts.deleteBuffer).toBe(6);
+  });
+
   it('keeps standard meshes lit explicitly', () => {
     const { gl } = fakeGl();
     const root = createRoot(fakeCanvas(gl));

@@ -1,11 +1,14 @@
 {
   "extends": "../../tsconfig.build.json",
   "compilerOptions": {
+    "composite": true,
     "outDir": "dist",
     "paths": {
       "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"]
     },
-    "rootDir": "src"
+    "rootDir": "src",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [{ "path": "../renderer-core/tsconfig.build.json" }]
 }

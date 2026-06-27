@@ -1,16 +1,21 @@
 # react-regl-fiber
 
-React API for Royal, a WebGL renderer targeting XR and low-end devices.
+Legacy React bridge for Royal, a WebGL renderer targeting XR and low-end
+devices.
+
+New examples and documentation should import the canonical React facade from
+`@royal/react`. This package remains as the legacy implementation bridge for
+existing `react-regl-fiber` consumers and for compatibility with older code.
 
 ## Example
 
 ```tsx
-/** @jsxImportSource react-regl-fiber */
+/** @jsxImportSource @royal/react */
 import {
   boxGeometry,
   createRoot,
   standardMaterial
-} from 'react-regl-fiber';
+} from '@royal/react';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [1, 0, 0, 1] });
@@ -32,6 +37,9 @@ createRoot(canvas).render(
   </scene>
 );
 ```
+
+Legacy imports from `react-regl-fiber` continue to work, but should not be used
+for new Royal examples.
 
 ## Workflows
 

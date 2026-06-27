@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@royal/renderer-core": "workspace:*",
+    "@royal/tarstate-lens": "workspace:*",
     "react-regl-fiber": "workspace:*",
     "yoga-layout": "^3.2.1"
   },

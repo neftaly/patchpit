@@ -3,6 +3,11 @@
 This document records the current v2 target for the renderer. Keep it as a
 short architecture checkpoint, not a coordination log.
 
+Package naming correction: this checkpoint predates the React facade rename.
+Read claims that call `react-regl-fiber` the branded or primary React surface as
+historical wording. The canonical React import and JSX source is now
+`@royal/react`; `react-regl-fiber` remains the legacy bridge implementation.
+
 ## Design Goal
 
 V2 should be a light, fast renderer for primitives, glTF, streamed scene data,

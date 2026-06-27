@@ -4,6 +4,11 @@ This document is the source of truth for the review process used to move from a
 working v1 system to a fresh v2 stub. It is a method note, not a chat log and
 not a project history.
 
+Package naming correction: this review reflects the earlier scaffold naming.
+Where it calls `react-regl-fiber` the branded React surface, read that as
+historical wording. New Royal examples and docs use `@royal/react`; the
+`react-regl-fiber` package remains the legacy bridge.
+
 Use the old system and the review session as evidence only when they produce an
 invariant, an anti-invariant, a proof obligation, a required workflow, or a
 deletion decision.

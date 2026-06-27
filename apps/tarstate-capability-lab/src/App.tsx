@@ -81,7 +81,7 @@ function App() {
       </header>
 
       <section className="dashboard-grid" aria-label="Capability demos">
-        <article className="panel fullscreen-panel" ref={fullscreenTargetRef}>
+        <article className="panel fullscreen-panel" ref={fullscreenTargetRef} data-testid="fullscreen-panel">
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Effect boundary</p>
@@ -94,7 +94,12 @@ function App() {
           <p className="body-copy">
             The button dispatches a real browser fullscreen intent and observes only rows.
           </p>
-          <button className="primary-action" type="button" onClick={dispatchFullscreenIntent}>
+          <button
+            className="primary-action"
+            type="button"
+            onClick={dispatchFullscreenIntent}
+            data-testid="fullscreen-toggle"
+          >
             {probe.fullscreenActive ? 'close fullscreen' : 'open fullscreen'}
           </button>
           <RowsList
@@ -213,6 +218,7 @@ function App() {
             value={selectedRelation}
             onChange={(event) => setSelectedRelation(event.target.value as keyof CapabilityLabRows)}
             aria-label="Selected relation"
+            data-testid="relation-select"
           >
             {probe.relationNames.map((relationName) => (
               <option key={relationName} value={relationName}>
@@ -222,7 +228,7 @@ function App() {
           </select>
         </div>
         <div className="debug-grid">
-          <pre>{JSON.stringify(snapshot.rows[selectedRelation], null, 2)}</pre>
+          <pre data-testid="relation-json">{JSON.stringify(snapshot.rows[selectedRelation], null, 2)}</pre>
           <div className="diagnostics">
             <h3>Diagnostics</h3>
             {probe.diagnostics.map((row) => (

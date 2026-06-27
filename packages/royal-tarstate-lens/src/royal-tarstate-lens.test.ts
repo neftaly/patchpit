@@ -10,7 +10,7 @@ import {
   relation,
   string,
   write
-} from '../packages/tarstate/src/index';
+} from '@patchpit/tarstate';
 import {
   createRoyalAppBoundary,
   createRoyalLensSnapshot,
@@ -31,9 +31,7 @@ import {
   type RoyalLayoutSpecInput,
   type StoreLens,
   type WritableStore
-} from '../packages/tarstate/src/royal-prototype';
-import { buildPickTargets, layoutWithYoga } from '../apps/chargrid-lab/src/royalChargridPrimitives';
-import { createKitchenSinkSpec, desktopGrid } from '../apps/chargrid-lab/src/yogaRoyal';
+} from './index.js';
 
 type User = {
   readonly id: string;
@@ -102,7 +100,7 @@ describe('tarstate Royal/store lens prototype', () => {
     expect(Object.hasOwn(boundary, 'store')).toBe(false);
     expect(Object.hasOwn(boundary, 'window')).toBe(false);
     expect(snapshot.probe.rowCount(royalLensSchema.layoutBoxes)).toBe(stores.layoutStore.getState().boxes.length);
-    expect(snapshot.probe.rowCount(royalLensSchema.pickTargets)).toBe(8);
+    expect(snapshot.probe.rowCount(royalLensSchema.pickTargets)).toBe(stores.layoutStore.getState().pickTargets.length);
     expect(result.diagnostics).toEqual([]);
     expect(button).toMatchObject({
       active: true,
@@ -172,6 +170,7 @@ describe('tarstate Royal/store lens prototype', () => {
       }
     ]);
     expect(diagnostics).toContainEqual(['missing_ref', 'activationStates', 'focusedId']);
+    expect(diagnostics).toContainEqual(['missing_ref', 'renderFlags', 'boxId']);
     expect(diagnostics).toContainEqual(['missing_ref', 'pointerSamples', 'targetId']);
     expect(diagnostics).toContainEqual(['missing_ref', 'assetDiagnostics', 'assetId']);
     expect(diagnostics).toContainEqual(['unreadable_ref', 'assets', 'src']);
@@ -375,9 +374,9 @@ function createRoyalStores(overrides: {
   readonly layoutStore: WritableStore<RoyalLayoutRuntimeState>;
   readonly interactionStore: WritableStore<RoyalInteractionState>;
 } {
-  const root = createKitchenSinkSpec(false);
-  const boxes = layoutWithYoga(root, desktopGrid);
-  const pickTargets = buildPickTargets(boxes);
+  const root = createRoyalFixtureSpec();
+  const boxes = createRoyalFixtureBoxes();
+  const pickTargets = createRoyalFixturePickTargets();
   const helmetTarget = pickTargets.find((target) => target.id === 'helmet');
 
   return {
@@ -395,7 +394,7 @@ function createRoyalStores(overrides: {
     layoutStore: createStore<RoyalLayoutRuntimeState>({
       scopeId: 'royal',
       compact: false,
-      grid: desktopGrid,
+      grid: { columns: 12, rows: 8 },
       boxes,
       pickTargets
     }),
@@ -420,6 +419,128 @@ function createRoyalStores(overrides: {
       ...overrides.interaction
     })
   };
+}
+
+function createRoyalFixtureSpec(): RoyalLayoutSpecInput {
+  return {
+    label: 'root',
+    tone: 'root',
+    children: [
+      {
+        id: 'button-primary',
+        label: 'apply',
+        primitive: 'button',
+        tone: 'accent',
+        interaction: {
+          label: 'apply',
+          role: 'button'
+        }
+      },
+      {
+        id: 'helmet',
+        label: 'Helmet geometry',
+        primitive: 'gltfPreview',
+        tone: 'media',
+        interaction: {
+          group: 'media',
+          label: 'Helmet geometry',
+          role: 'media'
+        },
+        gltf: {
+          src: '/helmet.gltf'
+        }
+      },
+      {
+        id: 'log',
+        label: 'activity log',
+        primitive: 'text',
+        tone: 'surface',
+        text: 'ready'
+      }
+    ]
+  };
+}
+
+function createRoyalFixtureBoxes(): readonly RoyalLayoutRuntimeState['boxes'][number][] {
+  return [
+    {
+      id: 'button-primary',
+      x: 1,
+      y: 1,
+      width: 4,
+      height: 2,
+      label: 'apply',
+      primitive: 'button',
+      tone: 'accent',
+      interaction: {
+        label: 'apply',
+        role: 'button'
+      }
+    },
+    {
+      id: 'helmet',
+      x: 6,
+      y: 1,
+      width: 5,
+      height: 5,
+      label: 'Helmet geometry',
+      primitive: 'gltfPreview',
+      tone: 'media',
+      interaction: {
+        group: 'media',
+        label: 'Helmet geometry',
+        role: 'media'
+      },
+      gltf: {
+        src: '/helmet.gltf'
+      }
+    },
+    {
+      id: 'log',
+      x: 1,
+      y: 5,
+      width: 4,
+      height: 2,
+      label: 'activity log',
+      primitive: 'text',
+      tone: 'surface',
+      text: 'ready'
+    }
+  ];
+}
+
+function createRoyalFixturePickTargets(): readonly RoyalLayoutRuntimeState['pickTargets'][number][] {
+  return [
+    {
+      id: 'button-primary',
+      bounds: {
+        rect: { x: 1, y: 1, width: 4, height: 2 },
+        space: 'grid'
+      },
+      interaction: {
+        label: 'apply',
+        role: 'button'
+      },
+      kind: 'box',
+      label: 'apply',
+      layer: 1
+    },
+    {
+      id: 'helmet',
+      bounds: {
+        rect: { x: 6, y: 1, width: 5, height: 5 },
+        space: 'grid'
+      },
+      interaction: {
+        group: 'media',
+        label: 'Helmet geometry',
+        role: 'media'
+      },
+      kind: 'asset',
+      label: 'Helmet geometry',
+      layer: 2
+    }
+  ];
 }
 
 function createStore<State extends object>(initialState: State): WritableStore<State> {

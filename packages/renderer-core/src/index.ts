@@ -31,13 +31,46 @@ export { mesh } from './mesh';
 export type { RenderPass, RenderPassOptions } from './render-graph';
 export { pass } from './render-graph';
 export type {
+  LayoutTextOptions,
+  ShapeTextOptions,
+  ShapeTextResult,
+  ShapedTextGlyph,
+  ShapedTextRun,
+  TextBlockMetrics,
+  TextBounds,
+  TextDiagnosticCode,
+  TextFontDescriptor,
+  TextFontMetrics,
+  TextGlyphId,
+  TextGlyphLayout,
+  TextGlyphOffset,
+  TextKerningMetadata,
+  TextLayout,
+  TextLigatureMetadata,
+  TextLineLayout,
+  TextMesh,
+  TextMeshContour,
+  TextMeshContourRole,
+  TextMeshVertex,
+  TextRunMetrics,
+  TextShapingDiagnostic,
   VectorTextCell,
   VectorTextGlyph,
+  VectorTextGlyphOptions,
   VectorTextNode,
   VectorTextOptions,
-  VectorTextRect
+  VectorTextRect,
+  VectorTextStringOptions
 } from './text';
-export { vectorText, vectorTextGlyphRects, vectorTextSupportedCharacters } from './text';
+export {
+  layoutText,
+  shapeText,
+  textMeshFromLayout,
+  vectorText,
+  vectorTextGlyphRects,
+  vectorTextMesh,
+  vectorTextSupportedCharacters
+} from './text';
 export type {
   Axis,
   AxisDirection,

@@ -4,6 +4,10 @@ This document maps renderer v2 architecture invariants to proof mechanisms.
 Use it to decide whether an invariant needs a unit test, property/fuzz test,
 import or bundle-shape test, GPU benchmark, or a skipped v2 acceptance test.
 
+Package naming correction: current React API proof obligations use
+`@royal/react` as the canonical facade and keep `react-regl-fiber` as the legacy
+bridge. Older wording that calls `react-regl-fiber` primary is historical.
+
 ## Proof Classes
 
 - Active unit tests prove behavior that exists in v1 or has landed in v2.
@@ -30,7 +34,7 @@ import or bundle-shape test, GPU benchmark, or a skipped v2 acceptance test.
 | Scene patches have lanes | unit/fuzz | v2 todo | `ScenePatchBatch` lane/revision/recovery acceptance tests |
 | Transforms are columnar transport | fuzz/property | active v1 coverage | shared transform store/fuzz tests, future transform publication lane tests |
 | Backends own GPU resources and frame scheduling | unit + GPU benchmark | partial v1 coverage | XR render-view/frame-clock tests plus XR frame-time benchmark |
-| `react-regl-fiber` is primary React API and core works without React | import/package tests | v2 todo | package boundary tests |
+| `@royal/react` is primary React API and core works without React; `react-regl-fiber` stays the legacy bridge | import/package tests | v2 todo | package boundary tests |
 | Transport, interest, and renderer metrics stay separate | unit/script | partial Infinigen coverage | interest-policy tests and WebTransport timing schema assertions |
 | Donnybrook-style replication stays above rendering | unit/property + benchmark | research scoped | attention-set ranking tests, clustered-battle benchmark, and import checks excluding peer transport from renderer packages |
 | Forward+ is optional lighting, not a base renderer cost | import/bundle + GPU benchmark | partial v1 coverage | no-Forward+ primitive import test plus Forward+ light-count benchmark |
