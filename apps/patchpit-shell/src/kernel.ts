@@ -107,7 +107,7 @@ const defaultShortcuts: readonly AppShortcut[] = [
   { id: 'terminal', title: 'Terminal', app: 'terminal', layoutRegion: 'bottom' },
   {
     id: 'ui-lab',
-    title: 'UI Lab',
+    title: 'ui lab prototype',
     app: 'url',
     layoutRegion: 'main',
     url: '/chargrid/index.html',

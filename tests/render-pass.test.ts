@@ -1,7 +1,9 @@
 import {
   boxGeometry,
+  CameraKind,
   gltf,
   mesh,
+  orthographicCamera,
   pass,
   perspectiveCamera,
   RenderGraphKind,
@@ -52,6 +54,35 @@ describe('render pass clearColor', () => {
     }) as RenderPass;
 
     expect(renderPass.camera).toEqual(camera);
+  });
+
+  it('accepts one JSX orthographic camera child', () => {
+    const cameraChild = jsx('orthographicCamera', {
+      position: [0, 0, 1],
+      rotation: [0, 0, 0],
+      left: -2,
+      right: 2,
+      bottom: -1,
+      top: 1,
+      near: 0.1,
+      far: 100
+    });
+
+    const renderPass = jsx('pass', {
+      children: cameraChild
+    }) as RenderPass;
+
+    expect(renderPass.camera.kind).toBe(CameraKind.Orthographic);
+    expect(renderPass.camera).toEqual(orthographicCamera({
+      position: [0, 0, 1],
+      rotation: [0, 0, 0],
+      left: -2,
+      right: 2,
+      bottom: -1,
+      top: 1,
+      near: 0.1,
+      far: 100
+    }));
   });
 
   it('rejects missing JSX cameras', () => {

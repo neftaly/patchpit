@@ -7,6 +7,7 @@ export type FakeGlCounts = {
   deleteBuffer: number;
   deleteTexture: number;
   drawElements: number;
+  texImage2D?: number;
 };
 
 export const fakeCanvas = (gl: WebGLRenderingContext): HTMLCanvasElement => ({
@@ -25,7 +26,8 @@ export const fakeGl = (): {
     createTexture: 0,
     deleteBuffer: 0,
     deleteTexture: 0,
-    drawElements: 0
+    drawElements: 0,
+    texImage2D: 0
   };
   const uniform = {} as WebGLUniformLocation;
 
@@ -34,6 +36,7 @@ export const fakeGl = (): {
     gl: {
       ARRAY_BUFFER: 0x8892,
       BACK: 0x0405,
+      BLEND: 0x0be2,
       COLOR_BUFFER_BIT: 0x4000,
       COMPILE_STATUS: 0x8b81,
       CULL_FACE: 0x0b44,
@@ -45,6 +48,8 @@ export const fakeGl = (): {
       LINEAR: 0x2601,
       LINEAR_MIPMAP_LINEAR: 0x2703,
       LINK_STATUS: 0x8b82,
+      ONE: 1,
+      ONE_MINUS_SRC_ALPHA: 0x0303,
       RGBA: 0x1908,
       STATIC_DRAW: 0x88e4,
       TEXTURE0: 0x84c0,
@@ -60,6 +65,7 @@ export const fakeGl = (): {
       attachShader() {},
       bindBuffer() {},
       bindTexture() {},
+      blendFunc() {},
       bufferData() {},
       clear() {},
       clearColor() {},
@@ -84,6 +90,8 @@ export const fakeGl = (): {
       deleteTexture() {
         counts.deleteTexture += 1;
       },
+      depthMask() {},
+      disable() {},
       drawElements() {
         counts.drawElements += 1;
       },
@@ -99,7 +107,9 @@ export const fakeGl = (): {
       linkProgram() {},
       pixelStorei() {},
       shaderSource() {},
-      texImage2D() {},
+      texImage2D() {
+        counts.texImage2D = (counts.texImage2D ?? 0) + 1;
+      },
       texParameteri() {},
       uniform1i() {},
       uniform3fv() {},

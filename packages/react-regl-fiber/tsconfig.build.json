@@ -2,7 +2,9 @@
   "extends": "../../tsconfig.build.json",
   "compilerOptions": {
     "outDir": "dist",
-    "paths": {},
+    "paths": {
+      "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"]
+    },
     "rootDir": "src"
   },
   "include": ["src"]

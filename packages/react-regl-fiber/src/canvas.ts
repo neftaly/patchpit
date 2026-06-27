@@ -25,33 +25,6 @@ const isRenderRoot = (value: unknown): value is RenderRoot =>
   "kind" in value &&
   value.kind === RenderGraphKind.Scene;
 
-const useCanvasResize = (
-  canvasRef: React.RefObject<HTMLCanvasElement | null>,
-  rootRef: React.RefObject<ReactReglRoot | undefined>,
-  sceneRef: React.RefObject<RenderRoot | undefined>,
-): void => {
-  useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas === null) throw new Error("Canvas ref was not attached");
-
-    const render = (): void => {
-      const root = rootRef.current;
-      const scene = sceneRef.current;
-      if (root !== undefined && scene !== undefined) root.render(scene);
-    };
-
-    if (typeof ResizeObserver === "undefined") {
-      globalThis.addEventListener("resize", render);
-      return () => globalThis.removeEventListener("resize", render);
-    }
-
-    const observer = new ResizeObserver(render);
-    observer.observe(canvas);
-
-    return () => observer.disconnect();
-  }, [canvasRef, rootRef, sceneRef]);
-};
-
 /** Canvas component that renders one Royal scene child. */
 export const Canvas = ({
   children,
@@ -76,8 +49,6 @@ export const Canvas = ({
       sceneRef.current = undefined;
     };
   }, [rootOptions]);
-
-  useCanvasResize(canvasRef, rootRef, sceneRef);
 
   useLayoutEffect(() => {
     const root = rootRef.current;

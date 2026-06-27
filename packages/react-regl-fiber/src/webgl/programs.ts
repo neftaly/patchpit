@@ -2,6 +2,8 @@ import gltfFragmentSource from "./shaders/gltf.frag";
 import gltfVertexSource from "./shaders/gltf.vert";
 import meshFragmentSource from "./shaders/mesh.frag";
 import meshVertexSource from "./shaders/mesh.vert";
+import textFragmentSource from "./shaders/text.frag";
+import textVertexSource from "./shaders/text.vert";
 import { attributeLocation, createProgram, uniformLocation } from "./gl";
 
 export interface MeshProgram {
@@ -15,6 +17,7 @@ export interface MeshProgram {
     readonly lightColor: WebGLUniformLocation;
     readonly lightDirection: WebGLUniformLocation;
     readonly model: WebGLUniformLocation;
+    readonly unlit: WebGLUniformLocation;
     readonly viewProjection: WebGLUniformLocation;
   };
 }
@@ -35,6 +38,17 @@ export interface GltfProgram {
   };
 }
 
+export interface TextProgram {
+  readonly attributes: {
+    readonly position: number;
+  };
+  readonly program: WebGLProgram;
+  readonly uniforms: {
+    readonly color: WebGLUniformLocation;
+    readonly viewProjection: WebGLUniformLocation;
+  };
+}
+
 export const createMeshProgram = (gl: WebGLRenderingContext): MeshProgram => {
   const program = createProgram(gl, meshVertexSource, meshFragmentSource);
 
@@ -49,6 +63,7 @@ export const createMeshProgram = (gl: WebGLRenderingContext): MeshProgram => {
       lightColor: uniformLocation(gl, program, "u_lightColor"),
       lightDirection: uniformLocation(gl, program, "u_lightDirection"),
       model: uniformLocation(gl, program, "u_model"),
+      unlit: uniformLocation(gl, program, "u_unlit"),
       viewProjection: uniformLocation(gl, program, "u_viewProjection"),
     },
   };
@@ -69,6 +84,21 @@ export const createGltfProgram = (gl: WebGLRenderingContext): GltfProgram => {
       lightColor: uniformLocation(gl, program, "u_lightColor"),
       lightDirection: uniformLocation(gl, program, "u_lightDirection"),
       model: uniformLocation(gl, program, "u_model"),
+      viewProjection: uniformLocation(gl, program, "u_viewProjection"),
+    },
+  };
+};
+
+export const createTextProgram = (gl: WebGLRenderingContext): TextProgram => {
+  const program = createProgram(gl, textVertexSource, textFragmentSource);
+
+  return {
+    program,
+    attributes: {
+      position: attributeLocation(gl, program, "a_position"),
+    },
+    uniforms: {
+      color: uniformLocation(gl, program, "u_color"),
       viewProjection: uniformLocation(gl, program, "u_viewProjection"),
     },
   };

@@ -10,12 +10,11 @@
     "test": "vitest run --passWithNoTests src/*.test.ts"
   },
   "dependencies": {
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "@royal/renderer-core": "workspace:*",
+    "react-regl-fiber": "workspace:*",
+    "yoga-layout": "^3.2.1"
   },
   "devDependencies": {
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

@@ -17,7 +17,7 @@ const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: 'src/index.ts',
       formats: ['es'],
-      fileName: 'index'
+      fileName: () => 'index.js'
     }
   },
   'react-regl-fiber': {
@@ -25,11 +25,12 @@ const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
+        root: 'src/root.ts',
         'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
         'jsx-runtime': 'src/jsx-runtime.ts'
       },
       formats: ['es'],
-      fileName: (_format, entryName) => entryName
+      fileName: (_format, entryName) => `${entryName}.js`
     }
   }
 };
@@ -41,7 +42,7 @@ const appPackageNames = new Set([
   '@patchpit/tarstate-example',
   '@royal/examples'
 ]);
-const fixtureAppPackageNames = new Set(['@patchpit/3d-viewer', '@royal/examples']);
+const fixtureAppPackageNames = new Set(['@patchpit/3d-viewer', '@patchpit/chargrid-lab', '@royal/examples']);
 const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as { readonly name?: string };
 const packageConfig = manifest.name ? buildConfigsByPackageName[manifest.name] : undefined;
 const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(manifest.name);
@@ -59,6 +60,10 @@ const devAllServerConfig = Number.isNaN(devAllPort)
     };
 const repoRoot = path.dirname(new URL(import.meta.url).pathname);
 const sourceAliases = [
+  {
+    find: 'react-regl-fiber/root',
+    replacement: path.join(repoRoot, 'packages/react-regl-fiber/src/root.ts')
+  },
   {
     find: 'react-regl-fiber/jsx-dev-runtime',
     replacement: path.join(repoRoot, 'packages/react-regl-fiber/src/jsx-dev-runtime.ts')
@@ -99,12 +104,16 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
   ];
 
   if (isAppPackage) {
+    const plugins = manifest.name === '@patchpit/chargrid-lab'
+      ? sharedPlugins
+      : [react(), ...sharedPlugins];
+
     return {
       base: appBase,
       clearScreen: false,
       ...(fixtureAppPackageNames.has(manifest.name ?? '') ? { publicDir: path.join(repoRoot, 'fixtures') } : {}),
       ...devAllServerConfig,
-      plugins: [react(), ...sharedPlugins],
+      plugins,
       resolve: {
         alias: sourceAliases
       },

@@ -75,19 +75,21 @@ describe('patchpit shell kernel', () => {
         id: window.id,
         region: window.layout.region,
         shortcutId: window.shortcutId,
+        title: window.title,
         kind: window.state.kind,
         src: window.state.kind === 'url' ? window.state.src : undefined
       }))
     ).toEqual([
-      { id: 'files-1', region: 'left', shortcutId: 'files', kind: 'files', src: undefined },
+      { id: 'files-1', region: 'left', shortcutId: 'files', title: 'Files', kind: 'files', src: undefined },
       {
         id: 'ui-lab-2',
         region: 'main',
         shortcutId: 'ui-lab',
+        title: 'ui lab prototype',
         kind: 'url',
         src: '/chargrid/index.html#{"src":"/patchpit/ui/demo"}'
       },
-      { id: 'terminal-3', region: 'bottom', shortcutId: 'terminal', kind: 'terminal', src: undefined }
+      { id: 'terminal-3', region: 'bottom', shortcutId: 'terminal', title: 'Terminal', kind: 'terminal', src: undefined }
     ]);
   });
 

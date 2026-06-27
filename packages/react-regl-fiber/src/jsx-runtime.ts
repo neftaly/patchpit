@@ -3,6 +3,7 @@ import {
   directionalLight,
   gltf,
   mesh,
+  orthographicCamera,
   pass,
   perspectiveCamera,
   scene,
@@ -10,6 +11,7 @@ import {
   type DirectionalLightOptions,
   type GltfOptions,
   type MeshOptions,
+  type OrthographicCameraOptions,
   type PerspectiveCameraOptions,
   type RenderElement,
   RenderGraphKind,
@@ -51,7 +53,7 @@ const isCamera = (element: ComponentOutput): element is Camera =>
   typeof element === 'object' &&
   element !== null &&
   'kind' in element &&
-  element.kind === CameraKind.Perspective;
+  (element.kind === CameraKind.Perspective || element.kind === CameraKind.Orthographic);
 
 const isRenderNode = (element: ComponentOutput): element is RenderNode =>
   typeof element === 'object' &&
@@ -128,6 +130,8 @@ const createElement = (type: ElementType, props: Record<string, unknown>): Compo
       return toPass(props as PassProps);
     case 'perspectiveCamera':
       return perspectiveCamera(props as unknown as PerspectiveCameraOptions);
+    case 'orthographicCamera':
+      return orthographicCamera(props as unknown as OrthographicCameraOptions);
     case 'directionalLight':
       return directionalLight(props as unknown as DirectionalLightOptions);
     case 'mesh':
@@ -157,6 +161,7 @@ export namespace JSX {
     scene: SceneProps;
     pass: PassProps;
     perspectiveCamera: PerspectiveCameraOptions;
+    orthographicCamera: OrthographicCameraOptions;
     directionalLight: DirectionalLightOptions;
     mesh: MeshOptions;
     gltf: GltfOptions;

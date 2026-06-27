@@ -1,18 +1,21 @@
 import {
   GeometryKind,
+  MaterialKind,
   type DirectionalLightNode,
   type GltfNode,
   type MeshNode,
+  type VectorTextNode,
 } from "@royal/renderer-core";
 import type { GeometryCache } from "./geometry-cache";
 import type { GltfAsset } from "./gltf-cache";
 import { bindFloatAttribute } from "./gl";
 import { composeTransform, multiply, type Mat4 } from "./matrix";
-import type { GltfProgram, MeshProgram } from "./programs";
+import type { GltfProgram, MeshProgram, TextProgram } from "./programs";
 import {
   asBoxGeometry,
-  asStandardMaterial,
+  asMaterial,
 } from "./render-graph";
+import type { TextRenderAsset } from "./text-cache";
 
 export interface MeshDrawContext {
   readonly directionalLight: DirectionalLightNode | undefined;
@@ -22,6 +25,10 @@ export interface MeshDrawContext {
 
 export interface GltfDrawContext {
   readonly directionalLight: DirectionalLightNode | undefined;
+  readonly viewProjectionMatrix: Mat4;
+}
+
+export interface TextDrawContext {
   readonly viewProjectionMatrix: Mat4;
 }
 
@@ -99,6 +106,28 @@ export const drawGltf = (
   }
 };
 
+export const drawVectorText = (
+  gl: WebGLRenderingContext,
+  programs: {
+    readonly text: TextProgram;
+  },
+  node: VectorTextNode,
+  asset: TextRenderAsset,
+  context: TextDrawContext,
+): void => {
+  gl.useProgram(programs.text.program);
+  gl.uniformMatrix4fv(
+    programs.text.uniforms.viewProjection,
+    false,
+    context.viewProjectionMatrix,
+  );
+  gl.uniform4fv(programs.text.uniforms.color, node.color);
+
+  bindFloatAttribute(gl, programs.text.attributes.position, asset.position, 3);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, asset.index);
+  gl.drawElements(gl.TRIANGLES, asset.indexCount, gl.UNSIGNED_SHORT, 0);
+};
+
 const drawBoxMesh = (
   gl: WebGLRenderingContext,
   program: MeshProgram,
@@ -106,9 +135,10 @@ const drawBoxMesh = (
   context: MeshDrawContext,
 ): void => {
   const light = context.directionalLight;
-  if (light === undefined)
+  const material = asMaterial(mesh);
+  const unlit = material.kind === MaterialKind.Unlit;
+  if (!unlit && light === undefined)
     throw new Error("StandardMaterial box mesh requires a directionalLight");
-  const material = asStandardMaterial(mesh);
   const geometry = context.geometryCache.box(asBoxGeometry(mesh));
 
   gl.useProgram(program.program);
@@ -123,8 +153,9 @@ const drawBoxMesh = (
     context.viewProjectionMatrix,
   );
   gl.uniform4fv(program.uniforms.color, material.color);
-  gl.uniform4fv(program.uniforms.lightColor, light.color);
-  gl.uniform3fv(program.uniforms.lightDirection, light.direction);
+  gl.uniform1i(program.uniforms.unlit, unlit ? 1 : 0);
+  gl.uniform4fv(program.uniforms.lightColor, light?.color ?? [0, 0, 0, 0]);
+  gl.uniform3fv(program.uniforms.lightDirection, light?.direction ?? [0, 0, -1]);
 
   bindFloatAttribute(
     gl,

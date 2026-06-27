@@ -16,6 +16,15 @@ export const perspective = (
   far: number,
 ): Mat4 => mat4.perspectiveNO(mat4.create(), fovY, aspect, near, far);
 
+export const orthographic = (
+  left: number,
+  right: number,
+  bottom: number,
+  top: number,
+  near: number,
+  far: number,
+): Mat4 => mat4.orthoNO(mat4.create(), left, right, bottom, top, near, far);
+
 export const translation = (position: Vec3): Mat4 =>
   mat4.fromTranslation(mat4.create(), position);
 

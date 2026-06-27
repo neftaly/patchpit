@@ -1,5 +1,11 @@
-export type { Camera, PerspectiveCamera, PerspectiveCameraOptions } from './camera';
-export { perspectiveCamera } from './camera';
+export type {
+  Camera,
+  OrthographicCamera,
+  OrthographicCameraOptions,
+  PerspectiveCamera,
+  PerspectiveCameraOptions
+} from './camera';
+export { orthographicCamera, perspectiveCamera } from './camera';
 export type {
   BoxGeometry,
   BoxGeometryOptions,
@@ -10,14 +16,28 @@ export { boxGeometry } from './geometry';
 export type { GltfNode, GltfOptions } from './gltf';
 export { gltf } from './gltf';
 export { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
-export type { Material, StandardMaterial, StandardMaterialOptions } from './material';
-export { standardMaterial } from './material';
+export type {
+  Material,
+  StandardMaterial,
+  StandardMaterialOptions,
+  UnlitMaterial,
+  UnlitMaterialOptions
+} from './material';
+export { standardMaterial, unlitMaterial } from './material';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
 export type { RenderPass, RenderPassOptions } from './render-graph';
 export { pass } from './render-graph';
+export type {
+  VectorTextCell,
+  VectorTextGlyph,
+  VectorTextNode,
+  VectorTextOptions,
+  VectorTextRect
+} from './text';
+export { vectorText, vectorTextGlyphRects, vectorTextSupportedCharacters } from './text';
 export type {
   Direction3,
   EulerRads,

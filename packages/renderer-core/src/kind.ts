@@ -1,5 +1,6 @@
 export enum CameraKind {
-  Perspective = 1
+  Perspective = 1,
+  Orthographic = 2
 }
 
 export enum GeometryKind {
@@ -7,7 +8,8 @@ export enum GeometryKind {
 }
 
 export enum MaterialKind {
-  Standard = 200
+  Standard = 200,
+  Unlit = 201
 }
 
 export enum RenderGraphKind {
@@ -18,5 +20,6 @@ export enum RenderGraphKind {
 export enum RenderNodeKind {
   DirectionalLight = 400,
   Gltf = 401,
-  Mesh = 402
+  Mesh = 402,
+  VectorText = 403
 }

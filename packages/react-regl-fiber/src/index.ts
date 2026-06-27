@@ -6,12 +6,15 @@ export {
   GeometryKind,
   MaterialKind,
   mesh,
+  orthographicCamera,
   pass,
   perspectiveCamera,
   RenderGraphKind,
   RenderNodeKind,
   scene,
-  standardMaterial
+  standardMaterial,
+  unlitMaterial,
+  vectorText
 } from '@royal/renderer-core';
 export { Canvas } from './canvas';
 export { createRoot } from './root';
@@ -32,6 +35,8 @@ export type {
   MeshNode,
   MeshOptions,
   Ms,
+  OrthographicCamera,
+  OrthographicCameraOptions,
   PerspectiveCamera,
   PerspectiveCameraOptions,
   Rads,
@@ -47,6 +52,13 @@ export type {
   StandardMaterialOptions,
   Transform,
   TransformOptions,
+  UnlitMaterial,
+  UnlitMaterialOptions,
+  VectorTextCell,
+  VectorTextGlyph,
+  VectorTextNode,
+  VectorTextOptions,
+  VectorTextRect,
   Vec3,
   Vec4
 } from '@royal/renderer-core';

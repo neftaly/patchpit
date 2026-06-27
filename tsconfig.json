@@ -13,6 +13,7 @@
     "paths": {
       "@royal/renderer-core": ["./packages/renderer-core/src/index.ts"],
       "react-regl-fiber": ["./packages/react-regl-fiber/src/index.ts"],
+      "react-regl-fiber/root": ["./packages/react-regl-fiber/src/root.ts"],
       "react-regl-fiber/jsx-dev-runtime": ["./packages/react-regl-fiber/src/jsx-dev-runtime.ts"],
       "react-regl-fiber/jsx-runtime": ["./packages/react-regl-fiber/src/jsx-runtime.ts"]
     },
