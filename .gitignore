@@ -23,6 +23,9 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+.patchpit/tls/
+.patchpit/basic-ssl/
+.patchpit/chromium-xr/
 
 package-lock.json
 npm-shrinkwrap.json

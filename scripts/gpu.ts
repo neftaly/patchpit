@@ -116,6 +116,7 @@ class CdpClient {
 }
 
 const parseArgs = (): {
+  readonly browserPath: string;
   readonly mode: Mode;
   readonly out: string;
   readonly settleMs: number;
@@ -124,9 +125,10 @@ const parseArgs = (): {
   const [modeArg = 'check', ...rawArgs] = process.argv.slice(2);
   const args = rawArgs.filter((arg) => arg !== '--');
   if (modeArg !== 'check' && modeArg !== 'profile') {
-    throw new Error('Usage: node scripts/gpu.ts <check|profile> [--url URL] [--out trace.json]');
+    throw new Error('Usage: node scripts/gpu.ts <check|profile> [--browser PATH] [--url URL] [--out trace.json]');
   }
 
+  let browserPath = process.env.CHROMIUM_BIN ?? '/usr/bin/chromium';
   let out = path.join(tmpdir(), `royal-gpu-profile-${Date.now()}.json`);
   let settleMs = 0;
   let url = 'http://127.0.0.1:5173/cube';
@@ -134,6 +136,12 @@ const parseArgs = (): {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     const value = args[index + 1];
+
+    if (arg === '--browser' && value !== undefined) {
+      browserPath = value;
+      index += 1;
+      continue;
+    }
 
     if (arg === '--url' && value !== undefined) {
       url = value;
@@ -159,16 +167,16 @@ const parseArgs = (): {
     throw new Error(`Unknown GPU script argument: ${arg ?? '<empty>'}`);
   }
 
-  return { mode: modeArg, out, settleMs, url };
+  return { browserPath, mode: modeArg, out, settleMs, url };
 };
 
-const launchChromium = async (): Promise<{
+const launchChromium = async (browserPath: string): Promise<{
   readonly browser: ChildProcessWithoutNullStreams;
   readonly userDataDir: string;
   readonly wsUrl: string;
 }> => {
   const userDataDir = mkdtempSync(path.join(tmpdir(), 'royal-gpu-'));
-  const browser = spawn('/usr/bin/chromium', chromiumArgs(userDataDir));
+  const browser = spawn(browserPath, chromiumArgs(userDataDir));
 
   const wsUrl = await new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -221,7 +229,7 @@ const openPage = async (
 
       HTMLCanvasElement.prototype.getContext = function patchedGetContext(type, ...args) {
         const context = originalGetContext.call(this, type, ...args);
-        if ((type === 'webgl' || type === 'experimental-webgl') && context && !context.__royalWrapped) {
+        if ((type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') && context && !context.__royalWrapped) {
           context.__royalWrapped = true;
 
           for (const name of ['drawArrays', 'drawElements']) {
@@ -272,7 +280,7 @@ const readWebGl = async (cdp: CdpClient, sessionId: string): Promise<WebGlReport
     returnByValue: true,
     expression: `(() => {
       const canvas = document.querySelector('canvas');
-      const gl = canvas?.getContext('webgl');
+      const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl');
       const debug = gl?.getExtension('WEBGL_debug_renderer_info');
       const pixels = gl && canvas ? new Uint8Array(canvas.width * canvas.height * 4) : null;
       if (gl && pixels) gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -366,14 +374,14 @@ const collectTrace = async (
 };
 
 const main = async (): Promise<void> => {
-  const { mode, out, settleMs, url } = parseArgs();
-  const { browser, userDataDir, wsUrl } = await launchChromium();
+  const { browserPath, mode, out, settleMs, url } = parseArgs();
+  const { browser, userDataDir, wsUrl } = await launchChromium(browserPath);
 
   try {
     const cdp = await openCdp(wsUrl);
     const report = mode === 'profile'
       ? await collectTrace(cdp, url, out, settleMs)
-      : await openPage(cdp, url).then((page) => readWebGl(cdp, page.sessionId));
+      : await checkPage(cdp, url, settleMs);
 
     assertHardwareWebGl(report);
     console.log(`WebGL renderer: ${report.vendor} / ${report.renderer}`);
@@ -393,3 +401,16 @@ const main = async (): Promise<void> => {
 };
 
 await main();
+
+async function checkPage(cdp: CdpClient, url: string, settleMs: number): Promise<WebGlReport> {
+  const page = await openPage(cdp, url);
+
+  if (settleMs > 0) {
+    await cdp.send('Runtime.evaluate', {
+      awaitPromise: true,
+      expression: `new Promise((resolve) => setTimeout(resolve, ${JSON.stringify(settleMs)}))`
+    }, page.sessionId);
+  }
+
+  return await readWebGl(cdp, page.sessionId);
+}

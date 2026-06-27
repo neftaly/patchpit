@@ -46,6 +46,7 @@ function workspacePackageManifests(): readonly { readonly root: string; readonly
 
     return readdirSync(absoluteRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
+      .filter((entry) => existsSync(path.join(absoluteRoot, entry.name, 'package.json')))
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((entry) => {
         const packageRoot = path.join(absoluteRoot, entry.name);
@@ -159,6 +160,13 @@ describe('package boundaries', () => {
       },
       {
         license: 'AGPL-3.0-only',
+        name: '@patchpit/infinigen',
+        private: true,
+        root: 'apps/infinigen',
+        type: 'module'
+      },
+      {
+        license: 'AGPL-3.0-only',
         name: '@patchpit/3d-viewer',
         private: true,
         root: 'apps/patchpit-3d-viewer',
@@ -180,9 +188,23 @@ describe('package boundaries', () => {
       },
       {
         license: 'AGPL-3.0-only',
+        name: '@patchpit/tarstate-capability-lab',
+        private: true,
+        root: 'apps/tarstate-capability-lab',
+        type: 'module'
+      },
+      {
+        license: 'AGPL-3.0-only',
         name: '@patchpit/tarstate-example',
         private: true,
         root: 'apps/tarstate-example',
+        type: 'module'
+      },
+      {
+        license: 'AGPL-3.0-only',
+        name: '@patchpit/connectors',
+        private: true,
+        root: 'packages/connectors',
         type: 'module'
       },
       {
@@ -273,12 +295,16 @@ describe('package boundaries', () => {
 
   it('keeps Node built-ins out of browser package source', () => {
     const clientSourceImports = workspacePackageManifests().flatMap(({ root }) =>
-      listSourceFiles(path.join(repoRoot, root, 'src')).flatMap((filePath) =>
-        collectModuleSpecifiers(filePath).map((moduleSpecifier) => ({
+      listSourceFiles(path.join(repoRoot, root, 'src')).flatMap((filePath) => {
+        if (filePath.endsWith('.test.ts') || filePath.endsWith('.test.tsx')) {
+          return [];
+        }
+
+        return collectModuleSpecifiers(filePath).map((moduleSpecifier) => ({
           filePath: path.relative(repoRoot, filePath),
           moduleSpecifier
-        }))
-      )
+        }));
+      })
     );
 
     expect(

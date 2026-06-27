@@ -26,22 +26,25 @@ import {
 } from './kernel';
 
 type TerminalAppWindow = AppWindow & { readonly state: TerminalState };
+type StartBarVariant = 'menu' | 'strip';
 
 export function App() {
   const [kernel, setKernel] = useState(createInitialKernelState);
+  const [startBarVariant, setStartBarVariant] = useState<StartBarVariant>('menu');
   const browser = readBrowserInfo();
 
   return (
-    <main className="shell" data-color-mode={kernel.colorMode}>
+    <main className="shell" data-color-mode={kernel.colorMode} data-start-bar={startBarVariant}>
       <style>{css}</style>
       <nav className="bar" aria-label="launcher">
-        <div className="shortcuts">
-          {kernel.shortcuts.map((shortcut) => (
-            <button key={shortcut.id} type="button" onClick={() => setKernel((state) => launchShortcut(state, shortcut.id))}>
-              {shortcut.title}
-            </button>
-          ))}
-        </div>
+        {startBarVariant === 'menu' ? (
+          <details className="startMenu">
+            <summary>▦ patchpit</summary>
+            <ShortcutButtons kernel={kernel} setKernel={setKernel} className="startMenuPanel" />
+          </details>
+        ) : (
+          <ShortcutButtons kernel={kernel} setKernel={setKernel} className="shortcuts" />
+        )}
         <div className="tasks">
           {kernel.windows.map((window) => (
             <span key={window.id} className="task">
@@ -51,6 +54,8 @@ export function App() {
             </span>
           ))}
         </div>
+        <SessionCostMeter />
+        <StartBarVariantControls startBarVariant={startBarVariant} setStartBarVariant={setStartBarVariant} />
         <ColorModeControls colorMode={kernel.colorMode} setKernel={setKernel} />
       </nav>
       <section className="workspace" aria-label="open windows">
@@ -59,6 +64,74 @@ export function App() {
         <WindowRegion browser={browser} kernel={kernel} region="bottom" setKernel={setKernel} />
       </section>
     </main>
+  );
+}
+
+type UsageSnapshot = {
+  readonly costNzd?: number;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly updatedAt?: string;
+};
+
+function SessionCostMeter() {
+  const startedAtRef = useRef(Date.now());
+  const [now, setNow] = useState(startedAtRef.current);
+  const snapshot = readUsageSnapshot();
+  const elapsed = formatElapsed(now - startedAtRef.current);
+  const tokenCount = (snapshot?.inputTokens ?? 0) + (snapshot?.outputTokens ?? 0);
+  const costLabel = snapshot?.costNzd === undefined ? '$ --' : `$${snapshot.costNzd.toFixed(2)}`;
+  const detail =
+    snapshot === undefined
+      ? 'inference telemetry offline'
+      : `${tokenCount.toLocaleString()} tokens${snapshot.updatedAt === undefined ? '' : ` updated ${snapshot.updatedAt}`}`;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <output className="costMeter" title={`${detail}; elapsed ${elapsed}`} aria-label={`${detail}; elapsed ${elapsed}`}>
+      <span aria-hidden="true">$</span>
+      <span>{costLabel}</span>
+      <small>{elapsed}</small>
+    </output>
+  );
+}
+
+function readUsageSnapshot(): UsageSnapshot | undefined {
+  const global = window as unknown as { readonly __PATCHPIT_USAGE__?: UsageSnapshot };
+
+  return global.__PATCHPIT_USAGE__;
+}
+
+function formatElapsed(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function ShortcutButtons({
+  className,
+  kernel,
+  setKernel
+}: {
+  readonly className: string;
+  readonly kernel: KernelState;
+  readonly setKernel: (updater: (state: KernelState) => KernelState) => void;
+}) {
+  return (
+    <div className={className}>
+      {kernel.shortcuts.map((shortcut) => (
+        <button key={shortcut.id} type="button" onClick={() => setKernel((state) => launchShortcut(state, shortcut.id))}>
+          {shortcut.title}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -149,6 +222,60 @@ function ColorModeControls({
   );
 }
 
+function StartBarVariantControls({
+  setStartBarVariant,
+  startBarVariant
+}: {
+  readonly setStartBarVariant: (variant: StartBarVariant) => void;
+  readonly startBarVariant: StartBarVariant;
+}) {
+  return (
+    <fieldset className="barVariants" aria-label="start bar variant">
+      <StartBarVariantRadio
+        label="A"
+        selected={startBarVariant}
+        setStartBarVariant={setStartBarVariant}
+        title="Patchpit start menu"
+        variant="menu"
+      />
+      <StartBarVariantRadio
+        label="B"
+        selected={startBarVariant}
+        setStartBarVariant={setStartBarVariant}
+        title="Visible shortcut strip"
+        variant="strip"
+      />
+    </fieldset>
+  );
+}
+
+function StartBarVariantRadio({
+  label,
+  selected,
+  setStartBarVariant,
+  title,
+  variant
+}: {
+  readonly label: string;
+  readonly selected: StartBarVariant;
+  readonly setStartBarVariant: (variant: StartBarVariant) => void;
+  readonly title: string;
+  readonly variant: StartBarVariant;
+}) {
+  return (
+    <label title={title}>
+      <input
+        checked={selected === variant}
+        name="start-bar-variant"
+        onChange={() => setStartBarVariant(variant)}
+        type="radio"
+      />
+      <span aria-hidden="true">{label}</span>
+      <span className="srOnly">{title}</span>
+    </label>
+  );
+}
+
 function ColorModeRadio({
   colorMode,
   mode,
@@ -210,9 +337,11 @@ function FilesWindow({
                 })
               }
             >
-              <span>{entry.kind === 'folder' ? '/' : '-'}</span>
-              <span>{entry.name}</span>
-              <span>{entry.summary}</span>
+              <span className="fileIcon" aria-hidden="true">{entry.kind === 'folder' ? '▸' : '·'}</span>
+              <span className="fileText">
+                <span className="fileName">{entry.name}</span>
+                <span className="fileSummary">{entry.summary}</span>
+              </span>
             </button>
           </li>
         ))}
@@ -493,9 +622,54 @@ button {
   border-bottom: 2px solid currentColor;
   display: flex;
   min-height: 40px;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
+.startMenu {
+  border-right: 2px solid currentColor;
+  flex: 0 0 auto;
+  padding: 4px;
+  position: relative;
+}
+
+.startMenu summary {
+  border: 2px solid currentColor;
+  cursor: pointer;
+  display: block;
+  list-style: none;
+  padding: 2px 8px;
+  user-select: none;
+}
+
+.startMenu summary::-webkit-details-marker {
+  display: none;
+}
+
+.startMenuPanel {
+  background: Canvas;
+  border: 2px solid currentColor;
+  display: flex;
+  flex-direction: column;
+  left: 4px;
+  min-width: 220px;
+  position: absolute;
+  top: calc(100% + 2px);
+  z-index: 20;
+}
+
+.startMenuPanel button {
+  border: 0;
+  border-bottom: 2px solid currentColor;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.startMenuPanel button:last-child {
+  border-bottom: 0;
+}
+
+.barVariants,
 .colorModes {
   align-items: center;
   border: 0;
@@ -506,12 +680,31 @@ button {
   padding: 4px;
 }
 
+.costMeter {
+  align-items: center;
+  border-left: 2px solid currentColor;
+  display: flex;
+  gap: 6px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.costMeter small {
+  opacity: 0.7;
+}
+
+.barVariants {
+  margin-left: auto;
+}
+
+.barVariants label,
 .colorModes label {
   cursor: pointer;
   display: grid;
   place-items: center;
 }
 
+.barVariants input,
 .colorModes input {
   appearance: none;
   height: 0;
@@ -522,6 +715,7 @@ button {
   width: 0;
 }
 
+.barVariants span[aria-hidden='true'],
 .colorModes span[aria-hidden='true'] {
   border: 2px solid transparent;
   display: inline-block;
@@ -530,10 +724,12 @@ button {
   text-align: center;
 }
 
+.barVariants input:checked + span,
 .colorModes input:checked + span {
   border-color: currentColor;
 }
 
+.barVariants input:focus-visible + span,
 .colorModes input:focus-visible + span {
   outline: 2px solid currentColor;
   outline-offset: 2px;
@@ -552,8 +748,8 @@ button {
   padding: 4px;
 }
 
+.shortcuts,
 .tasks {
-  margin-left: auto;
   overflow-x: auto;
 }
 
@@ -628,14 +824,31 @@ button {
 .viewer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   min-height: 100%;
+}
+
+.fileManager {
+  margin: -8px;
+}
+
+.viewer {
+  gap: 8px;
+}
+
+.pathRow {
+  border-bottom: 2px solid currentColor;
+  padding: 6px 8px;
+}
+
+.pathRow code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fileList {
   display: flex;
   flex-direction: column;
-  gap: 4px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -645,10 +858,49 @@ button {
 .fileList li {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   justify-content: flex-start;
   text-align: left;
   width: 100%;
+}
+
+.fileList button {
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  min-height: 36px;
+  padding: 6px 8px;
+}
+
+.fileList button:hover,
+.fileList button:focus-visible,
+.startMenuPanel button:hover,
+.startMenuPanel button:focus-visible {
+  background: Highlight;
+  color: HighlightText;
+  outline: 0;
+}
+
+.fileIcon {
+  flex: 0 0 2ch;
+  text-align: center;
+}
+
+.fileText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fileName,
+.fileSummary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileSummary {
+  opacity: 0.7;
 }
 
 .viewerTools {

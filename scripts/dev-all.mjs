@@ -34,6 +34,12 @@ const apps = [
     path: '/chargrid/',
     root: 'apps/chargrid-lab',
     port: port + 5
+  },
+  {
+    name: 'Infinigen',
+    path: '/infinigen/',
+    root: 'apps/infinigen',
+    port: port + 6
   }
 ];
 

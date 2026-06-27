@@ -122,6 +122,15 @@ const defaultShortcuts: readonly AppShortcut[] = [
     url: '/3d-viewer/index.html',
     args: { src: damagedHelmetSrc }
   },
+  {
+    id: 'infinigen',
+    title: 'Infinigen',
+    app: 'url',
+    layoutRegion: 'main',
+    args: { preset: 'linz-nz', quality: 'high', seed: 'tamaki' },
+    url: '/infinigen/index.html'
+  },
+  { id: 'roleplay', title: 'iOS Roleplay', app: 'viewer', layoutRegion: 'main', path: '/i&s/roleplay-ios.md', mode: 'view' },
   { id: 'source', title: 'View Source', app: 'viewer', layoutRegion: 'main', path: '/patchpit/apps/terminal', mode: 'source' }
 ];
 
@@ -134,7 +143,40 @@ const staticFiles: readonly StaticFile[] = [
       '',
       '- Keep app shortcuts as data.',
       '- Let the shell host files, apps, and runtime state.',
-      '- Make GUI apps and terminal commands use the same paths.'
+      '- Make GUI apps and terminal commands use the same paths.',
+      '- Weekend app-generation rehearsal: open /i&s/roleplay-ios.md.'
+    ].join('\n')
+  },
+  {
+    path: '/i&s/roleplay-ios.md',
+    mediaType: 'text/markdown',
+    text: [
+      '# iOS roleplay run',
+      '',
+      'Goal: turn a photo, screenshot, or WhatsApp image into a first usable app while the client talks naturally.',
+      '',
+      '1. Open Patchpit on iOS Safari.',
+      '2. Import or photograph the reference image locally.',
+      '3. Record or type what the client wants, who it is for, and what must be on the first screen.',
+      '4. Split the agent notes into observed from image, heard from user, inferred, and needs confirmation.',
+      '5. Generate the first usable screen, not a marketing page, then share the local preview URL.',
+      '6. Test desktop plus iOS: layout, tap targets, keyboard overlap, long labels, missing images, and unclear states.',
+      '',
+      'Privacy guardrails:',
+      '',
+      '- Replace names, phone numbers, addresses, medical details, payment details, and private message text with placeholders.',
+      '- Do not upload the source image or transcript outside the chosen local/session boundary.',
+      '- Ask testers for behavior/layout feedback, not forwards of private source material.',
+      '',
+      'Metrics:',
+      '',
+      '- Time to draft spec.',
+      '- Time to preview URL.',
+      '- Clarifying questions asked.',
+      '- First-run build errors.',
+      '- Mobile pass/fail.',
+      '- Issues found per device.',
+      '- Time from feedback to fixed build.'
     ].join('\n')
   },
   {
@@ -172,6 +214,22 @@ const staticFiles: readonly StaticFile[] = [
     text: 'Diagnostics will live here when the host has something useful to report.'
   },
   {
+    path: '/patchpit/run/usage/session-budget.json',
+    mediaType: 'application/json',
+    text: JSON.stringify(
+      {
+        kind: 'inference-usage-budget',
+        status: 'telemetry-hook',
+        currency: 'NZD',
+        exactCostNzd: null,
+        note: 'The shell shows a live budget placeholder. Attach runtime token/model telemetry to window.__PATCHPIT_USAGE__ for exact values.',
+        fields: ['costNzd', 'inputTokens', 'outputTokens', 'updatedAt']
+      },
+      null,
+      2
+    )
+  },
+  {
     path: '/device/opfs/readme.txt',
     mediaType: 'text/plain',
     text: [
@@ -207,7 +265,8 @@ const staticFolders = [
   '/patchpit/apps',
   '/patchpit/run',
   '/patchpit/run/apps',
-  '/patchpit/run/diagnostics'
+  '/patchpit/run/diagnostics',
+  '/patchpit/run/usage'
 ] as const;
 
 export function createInitialKernelState(): KernelState {
@@ -221,7 +280,7 @@ export function createInitialKernelState(): KernelState {
   };
 
   state = launchShortcut(state, 'files');
-  state = launchShortcut(state, 'ui-lab');
+  state = launchShortcut(state, 'infinigen');
   state = launchShortcut(state, 'terminal');
 
   return state;
@@ -371,8 +430,10 @@ export function runTerminalCommand(
         'open <path>',
         'pwd',
         'state [window]',
+        'open /i&s/roleplay-ios.md rehearses the iOS screenshot-to-app flow',
+        '/patchpit/run/usage/session-budget.json describes the budget meter telemetry hook',
         '/device/opfs is a fixture bridge, not final OPFS semantics',
-        'url shortcuts such as 3d-viewer use root pnpm dev; pnpm dev:shell serves shell only'
+        'url shortcuts such as 3d-viewer and infinigen use root pnpm dev; pnpm dev:shell serves shell only'
       ];
       break;
     case 'inspect':
