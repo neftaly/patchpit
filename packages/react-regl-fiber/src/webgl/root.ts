@@ -5,7 +5,7 @@ import {
   type RenderPass,
   type RenderRoot,
 } from "@royal/renderer-core";
-import type { ReactReglRootOptions } from "../root";
+import type { ReactRoyalRootOptions } from "../root";
 import { drawGltf, drawMesh, drawVectorText } from "./draw";
 import { GeometryCache } from "./geometry-cache";
 import { GltfCache } from "./gltf-cache";
@@ -85,7 +85,7 @@ export class WebGlRoot {
   #renderScheduled = false;
   #scene: RenderRoot | undefined;
 
-  constructor(canvas: HTMLCanvasElement, options: ReactReglRootOptions = {}) {
+  constructor(canvas: HTMLCanvasElement, options: ReactRoyalRootOptions = {}) {
     const gl = canvas.getContext("webgl", {
       alpha: options.alpha ?? true,
       ...(options.antialias === undefined ? {} : { antialias: options.antialias }),
@@ -138,6 +138,10 @@ export class WebGlRoot {
     this.#gl.deleteProgram(this.#gltfProgram.program);
     this.#gl.deleteProgram(this.#meshProgram.program);
     this.#gl.deleteProgram(this.#textProgram.program);
+  }
+
+  dispose(): void {
+    this.unmount();
   }
 
   #renderPass(

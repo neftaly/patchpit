@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   layoutText,
   shapeText,
+  text,
+  textMesh,
   textMeshFromLayout,
   vectorText,
   vectorTextGlyphRects,
@@ -9,6 +11,18 @@ import {
 } from './text';
 
 describe('text shaping and mesh generation', () => {
+  it('exposes text() as the stable authoring helper over the vector text node', () => {
+    const node = text({
+      color: [1, 1, 1, 1],
+      fontSize: 2,
+      text: 'Royal'
+    });
+
+    expect(node.kind).toBe(vectorText({ color: [1, 1, 1, 1], text: '' }).kind);
+    expect(node.layout.font.metrics.size).toBe(2);
+    expect(node.layout.lines[0]?.glyphs.map((glyph) => glyph.glyph.text).join('')).toBe('Royal');
+  });
+
   it('shapes proportional glyph advances and records kerning metadata', () => {
     const narrow = shapeText({ text: 'i' }).run.glyphs[0];
     const wide = shapeText({ text: 'm' }).run.glyphs[0];
@@ -149,5 +163,15 @@ describe('text shaping and mesh generation', () => {
     expect(mesh.contours.map((contour) => contour.role)).toEqual(['bar', 'bar', 'stem', 'stem']);
     expect(mesh.vertices).toHaveLength(16);
     expect(mesh.indices).toHaveLength(24);
+  });
+
+  it('builds mesh data from either a text node or a layout through textMesh()', () => {
+    const node = text({
+      color: [1, 1, 1, 1],
+      text: 'AV'
+    });
+
+    expect(textMesh(node)).toEqual(vectorTextMesh(node));
+    expect(textMesh(node.layout)).toEqual(textMeshFromLayout(node.layout));
   });
 });

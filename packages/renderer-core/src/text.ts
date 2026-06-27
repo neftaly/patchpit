@@ -191,6 +191,10 @@ export interface VectorTextStringOptions {
 }
 
 export type VectorTextOptions = VectorTextGlyphOptions | VectorTextStringOptions;
+export type TextNode = VectorTextNode;
+export type TextOptions = VectorTextOptions;
+export type TextGlyphOptions = VectorTextGlyphOptions;
+export type TextStringOptions = VectorTextStringOptions;
 
 const glyphRows = 7;
 const glyphColumns = 5;
@@ -950,6 +954,8 @@ export const vectorText = (options: VectorTextOptions): VectorTextNode => {
   };
 };
 
+export const text = vectorText;
+
 const contourBounds = (
   bounds: TextBounds,
   xMinRatio: number,
@@ -1108,6 +1114,9 @@ export const vectorTextMesh = (node: VectorTextNode): TextMesh => {
   const nodeWithOptionalLayout = node as VectorTextNode & { readonly layout?: TextLayout };
   return textMeshFromLayout(nodeWithOptionalLayout.layout ?? legacyLayout(node.glyphs, node.cellHeight));
 };
+
+export const textMesh = (input: TextNode | TextLayout): TextMesh =>
+  'kind' in input ? vectorTextMesh(input) : textMeshFromLayout(input);
 
 export const vectorTextGlyphRects = (node: VectorTextNode): readonly VectorTextRect[] => {
   const rects: VectorTextRect[] = [];

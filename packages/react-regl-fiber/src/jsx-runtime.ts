@@ -7,6 +7,7 @@ import {
   pass,
   perspectiveCamera,
   scene,
+  text,
   type Camera,
   type DirectionalLightOptions,
   type GltfOptions,
@@ -18,7 +19,8 @@ import {
   type RenderNode,
   RenderNodeKind,
   type RenderPass,
-  type RenderPassOptions
+  type RenderPassOptions,
+  type TextOptions
 } from '@royal/renderer-core';
 import type { ReactNode } from 'react';
 
@@ -62,7 +64,8 @@ const isRenderNode = (element: ComponentOutput): element is RenderNode =>
   (
     element.kind === RenderNodeKind.Mesh ||
     element.kind === RenderNodeKind.Gltf ||
-    element.kind === RenderNodeKind.DirectionalLight
+    element.kind === RenderNodeKind.DirectionalLight ||
+    element.kind === RenderNodeKind.VectorText
   );
 
 const toRenderPasses = (children: RendererJsxChild): readonly RenderPass[] =>
@@ -138,6 +141,8 @@ const createElement = (type: ElementType, props: Record<string, unknown>): Compo
       return mesh(props as unknown as MeshOptions);
     case 'gltf':
       return gltf(props as unknown as GltfOptions);
+    case 'text':
+      return text(props as unknown as TextOptions);
     default:
       return assertNever(type);
   }
@@ -165,5 +170,6 @@ export namespace JSX {
     directionalLight: DirectionalLightOptions;
     mesh: MeshOptions;
     gltf: GltfOptions;
+    text: TextOptions;
   }
 }

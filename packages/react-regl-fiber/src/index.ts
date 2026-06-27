@@ -15,6 +15,8 @@ export {
   layoutText,
   shapeText,
   standardMaterial,
+  text,
+  textMesh,
   textMeshFromLayout,
   unlitMaterial,
   vectorText,
@@ -75,7 +77,11 @@ export type {
   TextMeshContour,
   TextMeshContourRole,
   TextMeshVertex,
+  TextGlyphOptions,
+  TextNode,
+  TextOptions,
   TextRunMetrics,
+  TextStringOptions,
   TextShapingDiagnostic,
   Transform,
   TransformOptions,
@@ -92,4 +98,4 @@ export type {
   Vec4
 } from '@royal/renderer-core';
 export type { CanvasProps } from './canvas';
-export type { ReactReglRoot, ReactReglRootOptions } from './root';
+export type { ReactReglRoot, ReactReglRootOptions, ReactRoyalRoot, ReactRoyalRootOptions } from './root';

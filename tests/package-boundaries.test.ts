@@ -25,6 +25,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const workspaceRoots = ['apps', 'packages'] as const;
 const rendererCoreRoot = path.join(repoRoot, 'packages/renderer-core');
 const royalReactRoot = path.join(repoRoot, 'packages/royal-react');
+const royalTarstateLensRoot = path.join(repoRoot, 'packages/royal-tarstate-lens');
 const reactReglFiberRoot = path.join(repoRoot, 'packages/react-regl-fiber');
 const sourceExtensions = new Set(['.ts', '.tsx']);
 const reactFacadeExportSubpaths = ['.', './root', './jsx-dev-runtime', './jsx-runtime'];
@@ -300,6 +301,15 @@ describe('package boundaries', () => {
     expect(typeof Canvas).toBe('function');
     expect(createRoyalFacadeRoot).toBe(createRoyalRoot);
     expect(royalJsx).toBe(legacyJsx);
+  });
+
+  it('keeps @royal/tarstate-lens v1 behind an explicit public subpath', () => {
+    const manifest = readManifest(path.join(royalTarstateLensRoot, 'package.json'));
+
+    expect(manifest.exports).toMatchObject({
+      '.': './src/index.ts',
+      './v1': './src/v1.ts'
+    });
   });
 
   it('keeps react-regl-fiber as the legacy React implementation package for renderer-core', () => {

@@ -18,6 +18,7 @@
       "@royal/react/jsx-dev-runtime": ["./packages/royal-react/src/jsx-dev-runtime.ts"],
       "@royal/react/jsx-runtime": ["./packages/royal-react/src/jsx-runtime.ts"],
       "@royal/tarstate-lens": ["./packages/royal-tarstate-lens/src/index.ts"],
+      "@royal/tarstate-lens/v1": ["./packages/royal-tarstate-lens/src/v1.ts"],
       "react-regl-fiber": ["./packages/react-regl-fiber/src/index.ts"],
       "react-regl-fiber/root": ["./packages/react-regl-fiber/src/root.ts"],
       "react-regl-fiber/jsx-dev-runtime": ["./packages/react-regl-fiber/src/jsx-dev-runtime.ts"],

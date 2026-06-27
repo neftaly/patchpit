@@ -131,6 +131,10 @@ const sourceAliases = [
     replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts')
   },
   {
+    find: '@royal/tarstate-lens/v1',
+    replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/v1.ts')
+  },
+  {
     find: '@royal/tarstate-lens',
     replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/index.ts')
   }

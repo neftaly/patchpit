@@ -2,7 +2,7 @@ import type { RenderRoot } from "@royal/renderer-core";
 import { WebGlRoot } from "./webgl/root";
 
 /** WebGL context options for the renderer root. */
-export interface ReactReglRootOptions {
+export interface ReactRoyalRootOptions {
   /** @defaultValue `true` */
   readonly alpha?: boolean;
   /** @defaultValue `true` */
@@ -12,15 +12,20 @@ export interface ReactReglRootOptions {
 }
 
 /** Imperative renderer root bound to one canvas. */
-export interface ReactReglRoot {
+export interface ReactRoyalRoot {
   /** Renders a complete scene into the canvas. */
   render(scene: RenderRoot): void;
-  /** Releases resources owned by this root. */
+  /** Canonical resource cleanup hook. */
+  dispose(): void;
+  /** Compatibility cleanup hook. */
   unmount(): void;
 }
+
+export type ReactReglRootOptions = ReactRoyalRootOptions;
+export type ReactReglRoot = ReactRoyalRoot;
 
 /** Creates an imperative renderer root. */
 export const createRoot = (
   canvas: HTMLCanvasElement,
-  options?: ReactReglRootOptions,
-): ReactReglRoot => new WebGlRoot(canvas, options);
+  options?: ReactRoyalRootOptions,
+): ReactRoyalRoot => new WebGlRoot(canvas, options);

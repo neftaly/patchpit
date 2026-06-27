@@ -7,6 +7,7 @@ import {
   pass,
   perspectiveCamera,
   RenderGraphKind,
+  RenderNodeKind,
   standardMaterial,
   type RenderPass
 } from '@royal/renderer-core';
@@ -83,6 +84,23 @@ describe('render pass clearColor', () => {
       near: 0.1,
       far: 100
     }));
+  });
+
+  it('accepts JSX text as a render node child', () => {
+    const textChild = jsx('text', {
+      color: [1, 1, 1, 1],
+      fontSize: 0.25,
+      origin: [-1, 0, 0],
+      text: 'Open fullscreen'
+    });
+
+    const renderPass = jsx('pass', {
+      camera,
+      children: textChild
+    }) as RenderPass;
+
+    expect(renderPass.children).toHaveLength(1);
+    expect(renderPass.children[0]?.kind).toBe(RenderNodeKind.VectorText);
   });
 
   it('rejects missing JSX cameras', () => {
