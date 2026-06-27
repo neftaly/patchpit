@@ -1,0 +1,23 @@
+{
+  "name": "@patchpit/tarstate-capability-lab",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "vite build --config vite.config.ts --logLevel warn",
+    "dev": "vite --config vite.config.ts"
+  },
+  "dependencies": {
+    "@patchpit/tarstate": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

@@ -39,6 +39,7 @@ const appPackageNames = new Set([
   '@patchpit/3d-viewer',
   '@patchpit/chargrid-lab',
   '@patchpit/shell',
+  '@patchpit/tarstate-capability-lab',
   '@patchpit/tarstate-example',
   '@royal/examples'
 ]);
