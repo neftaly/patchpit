@@ -5,7 +5,7 @@ import {
   perspectiveCamera,
   scene
 } from '@royal/renderer-core';
-import { createRoot } from 'react-regl-fiber';
+import { createRoot } from '@royal/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   fakeCanvas,

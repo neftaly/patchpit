@@ -28,23 +28,36 @@
     "dev:chargrid": "pnpm --filter @patchpit/chargrid-lab dev",
     "dev:infinigen": "pnpm --filter @patchpit/infinigen dev",
     "dev:shell": "pnpm --filter @patchpit/shell dev",
-    "dev:royal": "pnpm --filter @royal/examples dev",
+    "dev:royal": "pnpm --dir ../royal --filter @royal/examples-react dev",
     "dev:tarstate": "pnpm --filter @patchpit/tarstate-example dev",
     "lint": "pnpm typecheck && pnpm -r --if-present lint",
     "lan:url": "node scripts/lan-url.mjs",
-    "preview:royal": "pnpm --filter @royal/examples preview",
+    "preview:royal": "pnpm --dir ../royal --filter @royal/examples-react preview",
     "profile:gpu": "node scripts/gpu.ts profile",
     "quest:browser": "node scripts/quest-browser-control.mjs",
     "test": "vitest run scripts/gpu.test.ts tests/*.test.ts && pnpm --filter './apps/*' --if-present test && pnpm --filter './packages/*' --if-present test",
     "trace:summary": "node scripts/trace-summary.ts",
     "typecheck": "tsc"
   },
+  "pnpm": {
+    "overrides": {
+      "@royal/renderer-core": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/renderer-core",
+      "@royal/react": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/react-royal-fiber",
+      "@royal/tarstate-lens": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/royal-tarstate-lens",
+      "@tarstate/core": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/tarstate-core"
+    }
+  },
   "devDependencies": {
+    "@royal/renderer-core": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/renderer-core",
+    "@royal/react": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/react-royal-fiber",
+    "@royal/tarstate-lens": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/royal-tarstate-lens",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
+    "react": "^19.2.7",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-glsl": "catalog:",

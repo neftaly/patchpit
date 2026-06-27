@@ -1,4 +1,4 @@
-import { createRoot, type ReactReglRoot } from 'react-regl-fiber/root';
+import { createRoot, type ReactRoyalRoot } from '@royal/react/root';
 import {
   buildPickTargets,
   createOrthographicUiScene,
@@ -68,7 +68,7 @@ type ChargridDebugSnapshot = {
     readonly canvasConnected: boolean;
     readonly canvasHeight: number;
     readonly canvasWidth: number;
-    readonly renderer: 'react-regl-fiber/root';
+    readonly renderer: '@royal/react/root';
   };
   readonly boxes: readonly LayoutBox[];
   readonly compact: boolean;
@@ -209,7 +209,7 @@ function createDebugSnapshot(): ChargridDebugSnapshot {
       canvasConnected: canvas.isConnected,
       canvasHeight: canvas.height,
       canvasWidth: canvas.width,
-      renderer: 'react-regl-fiber/root'
+      renderer: '@royal/react/root'
     },
     boxes: state.boxes,
     compact: state.compact,
@@ -227,7 +227,7 @@ function createDebugSnapshot(): ChargridDebugSnapshot {
   };
 }
 
-function render(renderer: ReactReglRoot, target: HTMLCanvasElement): void {
+function render(renderer: ReactRoyalRoot, target: HTMLCanvasElement): void {
   const focusIds = new Set([state.activeId, state.focusedId, state.hoveredId].filter((id): id is string => id !== undefined));
   const activeIds = new Set([state.activeId].filter((id): id is string => id !== undefined));
 

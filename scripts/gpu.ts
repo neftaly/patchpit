@@ -15,7 +15,7 @@ import type {
   WebGpuProbeInput,
   WebGlExtensionRow,
   WebGlLikeContext
-} from '../packages/react-regl-fiber/src/webgl/webgl-capabilities';
+} from '@royal/react/testing';
 
 type Mode = 'check' | 'profile';
 
@@ -555,8 +555,7 @@ const collectTrace = async (
 const loadCapabilityCollector = async (): Promise<
   (gl: WebGlLikeContext, options?: { readonly contextVersion?: 1 | 2; readonly webgpu?: WebGpuProbeInput }) => RendererCapabilityProbeResult
 > => {
-  const capabilityModulePath = '../packages/react-regl-fiber/src/webgl/webgl-capabilities.ts';
-  const capabilities = await import(capabilityModulePath) as typeof import('../packages/react-regl-fiber/src/webgl/webgl-capabilities');
+  const capabilities = await import('@royal/react/testing');
   return capabilities.collectRendererCapabilityRows;
 };
 

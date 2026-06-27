@@ -1,6 +1,12 @@
 packages:
-  - apps/*
-  - packages/*
+  - apps/chargrid-lab
+  - apps/infinigen
+  - apps/patchpit-3d-viewer
+  - apps/patchpit-shell
+  - apps/tarstate-capability-lab
+  - apps/tarstate-example
+  - packages/connectors
+  - packages/tarstate
 
 catalog:
   '@types/node': ^24.10.3

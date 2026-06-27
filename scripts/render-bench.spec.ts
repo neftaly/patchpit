@@ -8,9 +8,9 @@ import {
   standardMaterial,
   type MeshNode
 } from '@royal/renderer-core';
-import { createRoot, type ReactReglRoot } from 'react-regl-fiber';
+import { createRoot, type ReactRoyalRoot } from '@royal/react';
+import { composeTransform } from '@royal/react/testing';
 import { describe, expect, it } from 'vitest';
-import { composeTransform } from '../packages/react-regl-fiber/src/webgl/matrix';
 import { fakeCanvas, fakeGl } from '../tests/webgl-test-utils';
 
 const camera = perspectiveCamera({
@@ -86,7 +86,7 @@ describe('tiny render benchmarks', () => {
   });
 
   it('measures render command smoke', () => {
-    const root: ReactReglRoot = createRoot(fakeCanvas(fakeGl().gl));
+    const root: ReactRoyalRoot = createRoot(fakeCanvas(fakeGl().gl));
     const renderScene = scene({
       children: [
         pass({

@@ -8,7 +8,7 @@ import {
   perspectiveCamera,
   scene,
   type RenderRoot
-} from 'react-regl-fiber';
+} from '@royal/react';
 import { parseViewerHash, type ViewerArgs } from './args';
 
 const canvasOptions = { alpha: false, antialias: true } as const;

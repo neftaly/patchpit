@@ -10,9 +10,9 @@
     "test": "vitest run --passWithNoTests src/*.test.ts"
   },
   "dependencies": {
-    "@royal/renderer-core": "workspace:*",
-    "@royal/tarstate-lens": "workspace:*",
-    "react-regl-fiber": "workspace:*",
+    "@royal/renderer-core": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/renderer-core",
+    "@royal/react": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/react-royal-fiber",
+    "@royal/tarstate-lens": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/royal-tarstate-lens",
     "yoga-layout": "^3.2.1"
   },
   "devDependencies": {

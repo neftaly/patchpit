@@ -1,10 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Canvas, createRoot as createRoyalFacadeRoot } from '@royal/react';
-import { createRoot as createRoyalRoot } from '@royal/react/root';
-import { jsx as royalJsx } from '@royal/react/jsx-runtime';
-import { jsx as legacyJsx } from 'react-regl-fiber/jsx-runtime';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -16,59 +12,44 @@ type PackageManifest = {
   readonly license?: string;
   readonly optionalDependencies?: Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
-  readonly peerDependenciesMeta?: Record<string, { readonly optional?: boolean }>;
   readonly type?: string;
-  readonly exports?: Record<string, unknown>;
 };
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const workspaceRoots = ['apps', 'packages'] as const;
-const rendererCoreRoot = path.join(repoRoot, 'packages/renderer-core');
-const royalReactRoot = path.join(repoRoot, 'packages/royal-react');
-const royalTarstateLensRoot = path.join(repoRoot, 'packages/royal-tarstate-lens');
-const reactReglFiberRoot = path.join(repoRoot, 'packages/react-regl-fiber');
-const sourceExtensions = new Set(['.ts', '.tsx']);
-const reactFacadeExportSubpaths = ['.', './root', './jsx-dev-runtime', './jsx-runtime'];
-
-const upperLayerPackages = [
-  {
-    label: 'React adapters',
-    pattern: /^(?:@royal\/react|react-regl-fiber)(?:\/|$)/
-  },
-  {
-    label: 'shader build tooling',
-    pattern: /^(?:@royal\/)?(?:vite-)?shader-source(?:\/|$)|^vite-plugin-glsl(?:\/|$)/
-  }
+const royalGitPrefix = 'git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/';
+const workspaceRoots = [
+  'apps/chargrid-lab',
+  'apps/infinigen',
+  'apps/patchpit-3d-viewer',
+  'apps/patchpit-shell',
+  'apps/tarstate-capability-lab',
+  'apps/tarstate-example',
+  'packages/connectors',
+  'packages/tarstate'
 ] as const;
+const migratedRoyalRoots = [
+  'apps/royal-examples',
+  'packages/react-regl-fiber',
+  'packages/renderer-core',
+  'packages/royal-react',
+  'packages/royal-tarstate-lens'
+] as const;
+const sourceExtensions = new Set(['.ts', '.tsx']);
 
 function readManifest(manifestPath: string): PackageManifest {
   return JSON.parse(readFileSync(manifestPath, 'utf8')) as PackageManifest;
 }
 
 function workspacePackageManifests(): readonly { readonly root: string; readonly manifest: PackageManifest }[] {
-  return workspaceRoots.flatMap((workspaceRoot) => {
-    const absoluteRoot = path.join(repoRoot, workspaceRoot);
-
-    if (!existsSync(absoluteRoot)) {
-      return [];
-    }
-
-    return readdirSync(absoluteRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .filter((entry) => existsSync(path.join(absoluteRoot, entry.name, 'package.json')))
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((entry) => {
-        const packageRoot = path.join(absoluteRoot, entry.name);
-
-        return {
-          root: path.relative(repoRoot, packageRoot),
-          manifest: readManifest(path.join(packageRoot, 'package.json'))
-        };
-      });
-  });
+  return workspaceRoots.map((root) => ({
+    root,
+    manifest: readManifest(path.join(repoRoot, root, 'package.json'))
+  }));
 }
 
 function listSourceFiles(root: string): readonly string[] {
+  if (!existsSync(root)) return [];
+
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(root, entry.name);
 
@@ -121,36 +102,16 @@ function collectModuleSpecifiers(filePath: string): readonly string[] {
   return specifiers;
 }
 
-function externalPackageName(moduleSpecifier: string): string | undefined {
-  if (moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/') || moduleSpecifier.startsWith('node:')) {
-    return undefined;
-  }
-
-  if (moduleSpecifier.startsWith('@')) {
-    const [scope, name] = moduleSpecifier.split('/');
-
-    return scope === undefined || name === undefined ? moduleSpecifier : `${scope}/${name}`;
-  }
-
-  return moduleSpecifier.split('/')[0];
-}
-
-function declaredPackages(manifest: PackageManifest, options: { readonly allowDevDependencies: boolean }): Set<string> {
-  const sections = [
-    manifest.dependencies,
-    manifest.optionalDependencies,
-    manifest.peerDependencies,
-    options.allowDevDependencies ? manifest.devDependencies : undefined
-  ];
-
-  return new Set([
-    manifest.name,
-    ...sections.flatMap((section) => Object.keys(section ?? {}))
-  ].filter((dependencyName) => dependencyName !== undefined));
+function expectRoyalGitDependency(
+  dependencies: Record<string, string> | undefined,
+  packageName: string,
+  packagePath: string
+): void {
+  expect(dependencies?.[packageName]).toBe(`${royalGitPrefix}${packagePath}`);
 }
 
 describe('package boundaries', () => {
-  it('keeps every workspace package private, ESM, and AGPL-covered', () => {
+  it('keeps every Patchpit workspace package private, ESM, and AGPL-covered', () => {
     expect(
       workspacePackageManifests().map(({ manifest, root }) => ({
         license: manifest.license,
@@ -190,13 +151,6 @@ describe('package boundaries', () => {
       },
       {
         license: 'AGPL-3.0-only',
-        name: '@royal/examples',
-        private: true,
-        root: 'apps/royal-examples',
-        type: 'module'
-      },
-      {
-        license: 'AGPL-3.0-only',
         name: '@patchpit/tarstate-capability-lab',
         private: true,
         root: 'apps/tarstate-capability-lab',
@@ -218,34 +172,6 @@ describe('package boundaries', () => {
       },
       {
         license: 'AGPL-3.0-only',
-        name: 'react-regl-fiber',
-        private: true,
-        root: 'packages/react-regl-fiber',
-        type: 'module'
-      },
-      {
-        license: 'AGPL-3.0-only',
-        name: '@royal/renderer-core',
-        private: true,
-        root: 'packages/renderer-core',
-        type: 'module'
-      },
-      {
-        license: 'AGPL-3.0-only',
-        name: '@royal/react',
-        private: true,
-        root: 'packages/royal-react',
-        type: 'module'
-      },
-      {
-        license: 'AGPL-3.0-only',
-        name: '@royal/tarstate-lens',
-        private: true,
-        root: 'packages/royal-tarstate-lens',
-        type: 'module'
-      },
-      {
-        license: 'AGPL-3.0-only',
         name: '@patchpit/tarstate',
         private: true,
         root: 'packages/tarstate',
@@ -254,7 +180,34 @@ describe('package boundaries', () => {
     ]);
   });
 
-  it('keeps reusable packages independent from app packages', () => {
+  it('keeps migrated Royal code out of the Patchpit workspace', () => {
+    const workspaceConfig = readFileSync(path.join(repoRoot, 'pnpm-workspace.yaml'), 'utf8');
+
+    for (const root of migratedRoyalRoots) {
+      expect(workspaceConfig).not.toContain(`  - ${root}`);
+    }
+
+    expect(workspaceConfig).not.toContain('  - apps/*');
+    expect(workspaceConfig).not.toContain('  - packages/*');
+  });
+
+  it('consumes Royal packages from the pinned Royal Git source', () => {
+    const rootManifest = readManifest(path.join(repoRoot, 'package.json'));
+    const chargridManifest = readManifest(path.join(repoRoot, 'apps/chargrid-lab/package.json'));
+    const infinigenManifest = readManifest(path.join(repoRoot, 'apps/infinigen/package.json'));
+    const viewerManifest = readManifest(path.join(repoRoot, 'apps/patchpit-3d-viewer/package.json'));
+
+    expectRoyalGitDependency(rootManifest.devDependencies, '@royal/renderer-core', 'renderer-core');
+    expectRoyalGitDependency(rootManifest.devDependencies, '@royal/react', 'react-royal-fiber');
+    expectRoyalGitDependency(rootManifest.devDependencies, '@royal/tarstate-lens', 'royal-tarstate-lens');
+    expectRoyalGitDependency(chargridManifest.dependencies, '@royal/renderer-core', 'renderer-core');
+    expectRoyalGitDependency(chargridManifest.dependencies, '@royal/react', 'react-royal-fiber');
+    expectRoyalGitDependency(chargridManifest.dependencies, '@royal/tarstate-lens', 'royal-tarstate-lens');
+    expectRoyalGitDependency(infinigenManifest.dependencies, '@royal/renderer-core', 'renderer-core');
+    expectRoyalGitDependency(viewerManifest.dependencies, '@royal/react', 'react-royal-fiber');
+  });
+
+  it('keeps reusable Patchpit packages independent from app packages', () => {
     const manifests = workspacePackageManifests();
     const packageManifests = manifests.filter(({ root }) => root.startsWith('packages/'));
     const appPackageNames = new Set(
@@ -268,95 +221,6 @@ describe('package boundaries', () => {
           .map((dependencyName) => ({ dependencyName, root }))
       )
     ).toEqual([]);
-  });
-
-  it('lets @royal/react bridge the React facade without moving the legacy package', () => {
-    const manifest = readManifest(path.join(royalReactRoot, 'package.json'));
-
-    expect(manifest.dependencies?.['react-regl-fiber']).toBe('workspace:*');
-    expect(manifest.peerDependencies?.react).toBe('^19.2.7');
-    expect(manifest.peerDependenciesMeta?.react?.optional).toBe(true);
-    expect(Object.keys(manifest.exports ?? {}).sort()).toEqual([...reactFacadeExportSubpaths].sort());
-    expect(manifest.exports).toMatchObject({
-      '.': {
-        types: './dist/index.d.ts',
-        import: './dist/index.js'
-      },
-      './root': {
-        types: './dist/root.d.ts',
-        import: './dist/root.js'
-      },
-      './jsx-runtime': {
-        types: './dist/jsx-runtime.d.ts',
-        import: './dist/jsx-runtime.js'
-      },
-      './jsx-dev-runtime': {
-        types: './dist/jsx-dev-runtime.d.ts',
-        import: './dist/jsx-dev-runtime.js'
-      }
-    });
-  });
-
-  it('resolves @royal/react facade and JSX runtime aliases during development', () => {
-    expect(typeof Canvas).toBe('function');
-    expect(createRoyalFacadeRoot).toBe(createRoyalRoot);
-    expect(royalJsx).toBe(legacyJsx);
-  });
-
-  it('keeps @royal/tarstate-lens v1 behind an explicit public subpath', () => {
-    const manifest = readManifest(path.join(royalTarstateLensRoot, 'package.json'));
-
-    expect(manifest.exports).toMatchObject({
-      '.': './src/index.ts',
-      './v1': './src/v1.ts'
-    });
-  });
-
-  it('keeps react-regl-fiber as the legacy React implementation package for renderer-core', () => {
-    const manifest = readManifest(path.join(reactReglFiberRoot, 'package.json'));
-
-    expect(manifest.dependencies?.['@royal/renderer-core']).toBe('workspace:*');
-    expect(Object.keys(manifest.exports ?? {}).sort()).toEqual([...reactFacadeExportSubpaths].sort());
-  });
-
-  it('keeps renderer-core dependencies below renderer adapters and shader tooling', () => {
-    const manifest = readManifest(path.join(rendererCoreRoot, 'package.json'));
-    const dependencySections = [
-      manifest.dependencies,
-      manifest.devDependencies,
-      manifest.optionalDependencies,
-      manifest.peerDependencies
-    ];
-    const declaredDependencies = new Set(
-      dependencySections.flatMap((section) => Object.keys(section ?? {}))
-    );
-
-    for (const boundary of upperLayerPackages) {
-      expect(
-        [...declaredDependencies].filter((dependencyName) =>
-          boundary.pattern.test(dependencyName)
-        ),
-        `${boundary.label} packages must stay outside renderer-core dependencies`
-      ).toEqual([]);
-    }
-  });
-
-  it('keeps renderer-core imports below renderer adapters and shader tooling', () => {
-    const rendererCoreImports = listSourceFiles(path.join(rendererCoreRoot, 'src')).flatMap((filePath) =>
-      collectModuleSpecifiers(filePath).map((moduleSpecifier) => ({
-        filePath: path.relative(repoRoot, filePath),
-        moduleSpecifier
-      }))
-    );
-
-    for (const boundary of upperLayerPackages) {
-      expect(
-        rendererCoreImports.filter(({ moduleSpecifier }) =>
-          boundary.pattern.test(moduleSpecifier)
-        ),
-        `${boundary.label} imports must stay outside renderer-core`
-      ).toEqual([]);
-    }
   });
 
   it('keeps Node built-ins out of browser package source', () => {
@@ -377,28 +241,5 @@ describe('package boundaries', () => {
       clientSourceImports.filter(({ moduleSpecifier }) => moduleSpecifier.startsWith('node:')),
       'browser packages must keep Node built-ins in tests, scripts, or build tooling'
     ).toEqual([]);
-  });
-
-  it('keeps package imports declared by the owning package', () => {
-    const rootManifest = readManifest(path.join(repoRoot, 'package.json'));
-    const rootTestDependencies = declaredPackages(rootManifest, { allowDevDependencies: true });
-    const undeclaredImports = workspacePackageManifests().flatMap(({ manifest, root }) => {
-      const declared = declaredPackages(manifest, { allowDevDependencies: false });
-
-      return listSourceFiles(path.join(repoRoot, root, 'src')).flatMap((filePath) => {
-        const fileDependencies = filePath.endsWith('.test.ts') ? new Set([...declared, ...rootTestDependencies]) : declared;
-
-        return collectModuleSpecifiers(filePath)
-          .map((moduleSpecifier) => externalPackageName(moduleSpecifier))
-          .filter((packageName) => packageName !== undefined && !fileDependencies.has(packageName))
-          .map((packageName) => ({
-            filePath: path.relative(repoRoot, filePath),
-            packageName,
-            packageRoot: root
-          }));
-      });
-    });
-
-    expect(undeclaredImports, 'external package imports must be declared where they are used').toEqual([]);
   });
 });

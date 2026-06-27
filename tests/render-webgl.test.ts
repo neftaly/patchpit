@@ -11,8 +11,8 @@ import {
   unlitMaterial,
   vectorText
 } from '@royal/renderer-core';
-import { createRoot } from 'react-regl-fiber';
-import { orthographic } from '../packages/react-regl-fiber/src/webgl/matrix';
+import { createRoot } from '@royal/react';
+import { orthographic } from '@royal/react/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   fakeCanvas,

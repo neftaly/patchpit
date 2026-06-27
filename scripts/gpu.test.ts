@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { formatCapabilitySummary } from './gpu';
-import type { RendererCapabilityProbeResult } from '../packages/react-regl-fiber/src/webgl/webgl-capabilities';
+import type { RendererCapabilityProbeResult } from '@royal/react/testing';
 
 describe('formatCapabilitySummary', () => {
   it('prints the capability rows required by GPU startup tooling', () => {

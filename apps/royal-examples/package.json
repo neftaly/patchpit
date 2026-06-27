@@ -14,7 +14,7 @@
     "@tanstack/react-router": "^1.170.16",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "@royal/react": "workspace:*"
+    "@royal/react": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/react-royal-fiber"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

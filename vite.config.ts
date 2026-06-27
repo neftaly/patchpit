@@ -14,46 +14,7 @@ type PackageConfig = {
   };
 };
 
-const buildConfigsByPackageName: Record<string, PackageConfig> = {
-  '@royal/renderer-core': {
-    lib: {
-      entry: 'src/index.ts',
-      formats: ['es'],
-      fileName: () => 'index.js'
-    }
-  },
-  'react-regl-fiber': {
-    external: ['@royal/renderer-core', 'react'],
-    lib: {
-      entry: {
-        index: 'src/index.ts',
-        root: 'src/root.ts',
-        'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
-        'jsx-runtime': 'src/jsx-runtime.ts'
-      },
-      formats: ['es'],
-      fileName: (_format, entryName) => `${entryName}.js`
-    }
-  },
-  '@royal/react': {
-    external: [
-      'react-regl-fiber',
-      'react-regl-fiber/root',
-      'react-regl-fiber/jsx-dev-runtime',
-      'react-regl-fiber/jsx-runtime'
-    ],
-    lib: {
-      entry: {
-        index: 'src/index.ts',
-        root: 'src/root.ts',
-        'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
-        'jsx-runtime': 'src/jsx-runtime.ts'
-      },
-      formats: ['es'],
-      fileName: (_format, entryName) => `${entryName}.js`
-    }
-  }
-};
+const buildConfigsByPackageName: Record<string, PackageConfig> = {};
 
 const appPackageNames = new Set([
   '@patchpit/3d-viewer',
@@ -61,17 +22,15 @@ const appPackageNames = new Set([
   '@patchpit/infinigen',
   '@patchpit/shell',
   '@patchpit/tarstate-capability-lab',
-  '@patchpit/tarstate-example',
-  '@royal/examples'
+  '@patchpit/tarstate-example'
 ]);
 const reactAppPackageNames = new Set([
   '@patchpit/3d-viewer',
   '@patchpit/shell',
   '@patchpit/tarstate-capability-lab',
-  '@patchpit/tarstate-example',
-  '@royal/examples'
+  '@patchpit/tarstate-example'
 ]);
-const fixtureAppPackageNames = new Set(['@patchpit/3d-viewer', '@patchpit/chargrid-lab', '@royal/examples']);
+const fixtureAppPackageNames = new Set(['@patchpit/3d-viewer', '@patchpit/chargrid-lab']);
 const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as { readonly name?: string };
 const packageConfig = manifest.name ? buildConfigsByPackageName[manifest.name] : undefined;
 const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(manifest.name);
@@ -93,50 +52,6 @@ const sourceAliases = [
   {
     find: '@patchpit/tarstate',
     replacement: path.join(repoRoot, 'packages/tarstate/src/index.ts')
-  },
-  {
-    find: '@royal/react/root',
-    replacement: path.join(repoRoot, 'packages/royal-react/src/root.ts')
-  },
-  {
-    find: '@royal/react/jsx-dev-runtime',
-    replacement: path.join(repoRoot, 'packages/royal-react/src/jsx-dev-runtime.ts')
-  },
-  {
-    find: '@royal/react/jsx-runtime',
-    replacement: path.join(repoRoot, 'packages/royal-react/src/jsx-runtime.ts')
-  },
-  {
-    find: '@royal/react',
-    replacement: path.join(repoRoot, 'packages/royal-react/src/index.ts')
-  },
-  {
-    find: 'react-regl-fiber/root',
-    replacement: path.join(repoRoot, 'packages/react-regl-fiber/src/root.ts')
-  },
-  {
-    find: 'react-regl-fiber/jsx-dev-runtime',
-    replacement: path.join(repoRoot, 'packages/react-regl-fiber/src/jsx-dev-runtime.ts')
-  },
-  {
-    find: 'react-regl-fiber/jsx-runtime',
-    replacement: path.join(repoRoot, 'packages/react-regl-fiber/src/jsx-runtime.ts')
-  },
-  {
-    find: 'react-regl-fiber',
-    replacement: path.join(repoRoot, 'packages/react-regl-fiber/src/index.ts')
-  },
-  {
-    find: '@royal/renderer-core',
-    replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts')
-  },
-  {
-    find: '@royal/tarstate-lens/v1',
-    replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/v1.ts')
-  },
-  {
-    find: '@royal/tarstate-lens',
-    replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/index.ts')
   }
 ];
 

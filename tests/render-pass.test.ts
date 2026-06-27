@@ -11,7 +11,7 @@ import {
   standardMaterial,
   type RenderPass
 } from '@royal/renderer-core';
-import { jsx } from 'react-regl-fiber/jsx-runtime';
+import { jsx } from '@royal/react/jsx-runtime';
 import { describe, expect, it } from 'vitest';
 
 const camera = perspectiveCamera({
