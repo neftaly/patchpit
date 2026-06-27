@@ -10,9 +10,6 @@
     "noUnusedParameters": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "paths": {
-      "@patchpit/tarstate": ["./packages/tarstate/src/index.ts"]
-    },
     "isolatedModules": true,
     "jsx": "react-jsx",
     "noEmit": true,
@@ -27,7 +24,6 @@
     "apps/tarstate-capability-lab/e2e",
     "apps/tarstate-example/src",
     "packages/connectors/src",
-    "packages/tarstate/src",
     "scripts/*.ts",
     "tests/*.ts",
     "types/*.d.ts",

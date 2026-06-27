@@ -25,7 +25,7 @@ import {
   type RelationRow,
   type UpdatePatch,
   type WritePatch
-} from '../packages/tarstate/src/index';
+} from '@tarstate/core';
 
 type Todo = {
   readonly id: string;

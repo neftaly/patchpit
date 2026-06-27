@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluate } from '../packages/tarstate/src/index.js';
+import { evaluate } from '@tarstate/core';
 import {
   createRoyalLensSnapshot,
   royalQueries,
@@ -11,7 +11,7 @@ import {
   type RoyalLensStores,
   type RoyalPointerSampleInput,
   type WritableStore
-} from '../packages/tarstate/src/royal-prototype.js';
+} from '@royal/tarstate-lens';
 import { buildPickTargets, layoutWithYoga } from '../apps/chargrid-lab/src/royalChargridPrimitives.js';
 import { createKitchenSinkSpec, desktopGrid } from '../apps/chargrid-lab/src/yogaRoyal.js';
 

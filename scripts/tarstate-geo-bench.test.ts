@@ -20,7 +20,7 @@ import {
   relation,
   string,
   where
-} from '../packages/tarstate/src/index.js';
+} from '@tarstate/core';
 
 type Feature = {
   readonly id: string;

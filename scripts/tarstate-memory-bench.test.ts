@@ -16,7 +16,7 @@ import {
   ref,
   relation,
   string
-} from '../packages/tarstate/src/index.js';
+} from '@tarstate/core';
 
 type Todo = { readonly id: string; readonly text: string };
 type Assignment = { readonly todoId: string; readonly assignee: string };

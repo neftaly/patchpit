@@ -11,7 +11,7 @@ import {
   write,
   type MutableObjectSourceData,
   type WritePatch
-} from '../packages/tarstate/src/index.js';
+} from '@tarstate/core';
 
 type Todo = {
   readonly id: string;

@@ -12,7 +12,7 @@ import {
   relation,
   string,
   type TarstateDiagnostic
-} from '@patchpit/tarstate';
+} from '@tarstate/core';
 import type { InfinigenAnimalActivity, InfinigenAnimalPoseRow } from './protocol';
 
 type AnimalPoseRelationRow = {

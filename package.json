@@ -51,6 +51,7 @@
     "@royal/renderer-core": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/renderer-core",
     "@royal/react": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/react-royal-fiber",
     "@royal/tarstate-lens": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/royal-tarstate-lens",
+    "@tarstate/core": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/tarstate-core",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@vitejs/plugin-basic-ssl": "^2.3.0",

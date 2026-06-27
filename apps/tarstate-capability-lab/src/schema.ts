@@ -8,7 +8,7 @@ import {
   ref,
   relation,
   string
-} from '../../../packages/tarstate/src/index';
+} from '@tarstate/core';
 
 export type ResourceKind =
   | 'fullscreen-target'

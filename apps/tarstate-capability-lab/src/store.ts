@@ -5,7 +5,7 @@ import {
   type Query,
   type QueryResult,
   type RelationSource
-} from '../../../packages/tarstate/src/index';
+} from '@tarstate/core';
 import type {
   CapabilityRow,
   DiagnosticRow,

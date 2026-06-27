@@ -24,15 +24,15 @@ const workspaceRoots = [
   'apps/patchpit-shell',
   'apps/tarstate-capability-lab',
   'apps/tarstate-example',
-  'packages/connectors',
-  'packages/tarstate'
+  'packages/connectors'
 ] as const;
 const migratedRoyalRoots = [
   'apps/royal-examples',
   'packages/react-regl-fiber',
   'packages/renderer-core',
   'packages/royal-react',
-  'packages/royal-tarstate-lens'
+  'packages/royal-tarstate-lens',
+  'packages/tarstate'
 ] as const;
 const sourceExtensions = new Set(['.ts', '.tsx']);
 
@@ -169,13 +169,6 @@ describe('package boundaries', () => {
         private: true,
         root: 'packages/connectors',
         type: 'module'
-      },
-      {
-        license: 'AGPL-3.0-only',
-        name: '@patchpit/tarstate',
-        private: true,
-        root: 'packages/tarstate',
-        type: 'module'
       }
     ]);
   });
@@ -194,16 +187,22 @@ describe('package boundaries', () => {
   it('consumes Royal packages from the pinned Royal Git source', () => {
     const rootManifest = readManifest(path.join(repoRoot, 'package.json'));
     const chargridManifest = readManifest(path.join(repoRoot, 'apps/chargrid-lab/package.json'));
+    const capabilityLabManifest = readManifest(path.join(repoRoot, 'apps/tarstate-capability-lab/package.json'));
     const infinigenManifest = readManifest(path.join(repoRoot, 'apps/infinigen/package.json'));
+    const tarstateExampleManifest = readManifest(path.join(repoRoot, 'apps/tarstate-example/package.json'));
     const viewerManifest = readManifest(path.join(repoRoot, 'apps/patchpit-3d-viewer/package.json'));
 
     expectRoyalGitDependency(rootManifest.devDependencies, '@royal/renderer-core', 'renderer-core');
     expectRoyalGitDependency(rootManifest.devDependencies, '@royal/react', 'react-royal-fiber');
     expectRoyalGitDependency(rootManifest.devDependencies, '@royal/tarstate-lens', 'royal-tarstate-lens');
+    expectRoyalGitDependency(rootManifest.devDependencies, '@tarstate/core', 'tarstate-core');
     expectRoyalGitDependency(chargridManifest.dependencies, '@royal/renderer-core', 'renderer-core');
     expectRoyalGitDependency(chargridManifest.dependencies, '@royal/react', 'react-royal-fiber');
     expectRoyalGitDependency(chargridManifest.dependencies, '@royal/tarstate-lens', 'royal-tarstate-lens');
+    expectRoyalGitDependency(capabilityLabManifest.dependencies, '@tarstate/core', 'tarstate-core');
     expectRoyalGitDependency(infinigenManifest.dependencies, '@royal/renderer-core', 'renderer-core');
+    expectRoyalGitDependency(infinigenManifest.dependencies, '@tarstate/core', 'tarstate-core');
+    expectRoyalGitDependency(tarstateExampleManifest.dependencies, '@tarstate/core', 'tarstate-core');
     expectRoyalGitDependency(viewerManifest.dependencies, '@royal/react', 'react-royal-fiber');
   });
 

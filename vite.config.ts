@@ -48,12 +48,7 @@ const devAllServerConfig = Number.isNaN(devAllPort)
     };
 const useBasicSsl = process.env.PATCHPIT_XR_BASIC_SSL === '1';
 const repoRoot = path.dirname(new URL(import.meta.url).pathname);
-const sourceAliases = [
-  {
-    find: '@patchpit/tarstate',
-    replacement: path.join(repoRoot, 'packages/tarstate/src/index.ts')
-  }
-];
+const sourceAliases: [] = [];
 
 const failOnRollupWarning = (warning: string | { readonly message?: string }): never => {
   const message = typeof warning === 'string' ? warning : warning.message ?? JSON.stringify(warning);

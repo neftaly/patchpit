@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluate } from '../../../packages/tarstate/src/index';
+import { evaluate } from '@tarstate/core';
 import { buildPickTargets, layoutWithYoga } from './royalChargridPrimitives';
 import {
   createRoyalTarstateLensSnapshot,

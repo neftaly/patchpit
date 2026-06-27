@@ -10,8 +10,8 @@
     "test": "vitest run src/*.test.ts"
   },
   "dependencies": {
-    "@patchpit/tarstate": "workspace:*",
     "@royal/renderer-core": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/renderer-core",
+    "@tarstate/core": "git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/tarstate-core",
     "three": "^0.185.0"
   },
   "devDependencies": {

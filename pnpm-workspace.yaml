@@ -6,7 +6,6 @@ packages:
   - apps/tarstate-capability-lab
   - apps/tarstate-example
   - packages/connectors
-  - packages/tarstate
 
 catalog:
   '@types/node': ^24.10.3

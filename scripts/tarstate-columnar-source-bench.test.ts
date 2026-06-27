@@ -13,7 +13,7 @@ import {
   project,
   type Query,
   type RelationSource
-} from '../packages/tarstate/src/index.js';
+} from '@tarstate/core';
 import {
   royalLensSchema,
   type RoyalLayoutBoxRow,
@@ -22,7 +22,7 @@ import {
   type RoyalPointerSampleRow,
   type RoyalRenderFlagRow,
   type RoyalRenderRow
-} from '../packages/tarstate/src/royal-prototype.js';
+} from '@royal/tarstate-lens';
 
 type BenchData = {
   readonly layoutBoxes: readonly RoyalLayoutBoxRow[];

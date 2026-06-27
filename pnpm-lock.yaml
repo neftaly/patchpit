@@ -56,6 +56,9 @@ importers:
       '@royal/tarstate-lens':
         specifier: git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/royal-tarstate-lens
         version: https://codeload.github.com/neftaly/royal/tar.gz/a762613a3aa00f2c923217e3e0c2f7536064ef7d#path:/packages/royal-tarstate-lens
+      '@tarstate/core':
+        specifier: git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/tarstate-core
+        version: https://codeload.github.com/neftaly/royal/tar.gz/a762613a3aa00f2c923217e3e0c2f7536064ef7d#path:/packages/tarstate-core
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -101,6 +104,9 @@ importers:
       '@royal/tarstate-lens':
         specifier: git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/royal-tarstate-lens
         version: https://codeload.github.com/neftaly/royal/tar.gz/a762613a3aa00f2c923217e3e0c2f7536064ef7d#path:/packages/royal-tarstate-lens
+      '@tarstate/core':
+        specifier: git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/tarstate-core
+        version: https://codeload.github.com/neftaly/royal/tar.gz/a762613a3aa00f2c923217e3e0c2f7536064ef7d#path:/packages/tarstate-core
       yoga-layout:
         specifier: ^3.2.1
         version: 3.2.1
@@ -117,12 +123,12 @@ importers:
 
   apps/infinigen:
     dependencies:
-      '@patchpit/tarstate':
-        specifier: workspace:*
-        version: link:../../packages/tarstate
       '@royal/renderer-core':
         specifier: git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/renderer-core
         version: https://codeload.github.com/neftaly/royal/tar.gz/a762613a3aa00f2c923217e3e0c2f7536064ef7d#path:/packages/renderer-core
+      '@tarstate/core':
+        specifier: git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/tarstate-core
+        version: https://codeload.github.com/neftaly/royal/tar.gz/a762613a3aa00f2c923217e3e0c2f7536064ef7d#path:/packages/tarstate-core
       three:
         specifier: ^0.185.0
         version: 0.185.0
@@ -192,9 +198,9 @@ importers:
 
   apps/tarstate-capability-lab:
     dependencies:
-      '@patchpit/tarstate':
-        specifier: workspace:*
-        version: link:../../packages/tarstate
+      '@tarstate/core':
+        specifier: git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/tarstate-core
+        version: https://codeload.github.com/neftaly/royal/tar.gz/a762613a3aa00f2c923217e3e0c2f7536064ef7d#path:/packages/tarstate-core
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -226,9 +232,9 @@ importers:
 
   apps/tarstate-example:
     dependencies:
-      '@patchpit/tarstate':
-        specifier: workspace:*
-        version: link:../../packages/tarstate
+      '@tarstate/core':
+        specifier: git+https://github.com/neftaly/royal.git#a762613a3aa00f2c923217e3e0c2f7536064ef7d&path:/packages/tarstate-core
+        version: https://codeload.github.com/neftaly/royal/tar.gz/a762613a3aa00f2c923217e3e0c2f7536064ef7d#path:/packages/tarstate-core
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -250,8 +256,6 @@ importers:
         version: 8.1.0(@types/node@24.13.2)
 
   packages/connectors: {}
-
-  packages/tarstate: {}
 
 packages:
 

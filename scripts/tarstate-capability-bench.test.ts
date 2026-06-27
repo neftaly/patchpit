@@ -19,7 +19,7 @@ import {
   relation,
   string,
   where
-} from '../packages/tarstate/src/index.js';
+} from '@tarstate/core';
 
 type RendererResource = {
   readonly resourceId: string;

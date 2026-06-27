@@ -18,7 +18,7 @@ import {
   relation,
   string,
   where
-} from '../packages/tarstate/src/index.js';
+} from '@tarstate/core';
 
 type Product = {
   readonly id: string;

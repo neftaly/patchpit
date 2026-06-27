@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { as, eq, from, join, pipe, project, where } from '../../../packages/tarstate/src/index';
+import { as, eq, from, join, pipe, project, where } from '@tarstate/core';
 import { badFitResourceKinds, createCapabilityLabRuntime } from './runtime';
 import { capabilityLabSchema } from './schema';
 

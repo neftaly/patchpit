@@ -20,7 +20,7 @@ import {
   where,
   eq,
   type RelationSource
-} from '../packages/tarstate/src/index';
+} from '@tarstate/core';
 
 const schema = defineSchema({
   objects: relation<{

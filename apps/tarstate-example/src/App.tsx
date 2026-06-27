@@ -3,7 +3,7 @@ import {
   as, evaluate, fromObjectSource, ref, from,
   eq, relation, composeSources, maybe, pipe,
   id, leftJoin, defineSchema, project, string,
-} from '@patchpit/tarstate';
+} from '@tarstate/core';
 
 type TodoRow = {
   readonly id: string;

@@ -19,7 +19,7 @@ import {
   ref,
   relation,
   string
-} from '../packages/tarstate/src/index.js';
+} from '@tarstate/core';
 
 type Todo = {
   readonly id: string;

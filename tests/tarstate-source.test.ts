@@ -20,7 +20,7 @@ import {
   eq,
   type RelationSource,
   type TarstateDiagnostic
-} from '../packages/tarstate/src/index';
+} from '@tarstate/core';
 
 const schema = defineSchema({
   objects: relation<{

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { as, from, pipe, project } from '../../../packages/tarstate/src/index';
+import { as, from, pipe, project } from '@tarstate/core';
 import { demoRows } from './demoData';
 import { capabilityLabSchema } from './schema';
 import { createCapabilityLabStore } from './store';
