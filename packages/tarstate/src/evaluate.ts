@@ -17,6 +17,15 @@ type LookupJoinPlan = {
   readonly value: ExprData;
   readonly rightAliases: readonly string[];
 };
+type ProjectionStep = {
+  readonly fieldName: string;
+  readonly expr: ExprData;
+};
+type RowPlan = {
+  readonly relationRef: RelationRef;
+  readonly fields: readonly (readonly [string, FieldSpec])[];
+  readonly keyFields: readonly string[];
+};
 
 /**
  * Evaluate a query once against a source.
@@ -66,10 +75,17 @@ async function evaluateData(
       return evaluateWhere(source, relations, data, diagnostics);
     case 'join':
       return evaluateJoin(source, relations, data, diagnostics);
-    case 'select':
-      return (await evaluateData(source, relations, data.input, diagnostics)).map((context) =>
-        evaluateProjection(context as Context, data.projection)
-      );
+    case 'select': {
+      const projection = projectionPlan(data.projection);
+      const inputRows = await evaluateData(source, relations, data.input, diagnostics);
+      const output: Record<string, unknown>[] = [];
+
+      for (const context of inputRows) {
+        output.push(evaluateProjection(context as Context, projection));
+      }
+
+      return output;
+    }
   }
 }
 
@@ -98,9 +114,16 @@ async function evaluateWhere(
     }
   }
 
-  return (await evaluateData(source, relations, data.input, diagnostics)).filter((context) =>
-    evaluatePredicate(context as Context, data.predicate)
-  );
+  const inputRows = await evaluateData(source, relations, data.input, diagnostics);
+  const output: unknown[] = [];
+
+  for (const context of inputRows) {
+    if (evaluatePredicate(context as Context, data.predicate)) {
+      output.push(context);
+    }
+  }
+
+  return output;
 }
 
 async function evaluateJoin(
@@ -133,15 +156,7 @@ async function evaluateJoin(
     }
 
     if (!matched && data.kind === 'left') {
-      output.push(
-        rightAliases.reduce<Context>(
-          (combined, alias) => {
-            combined[alias] = null;
-            return combined;
-          },
-          { ...leftRow }
-        )
-      );
+      output.push(contextWithNullAliases(leftRow, rightAliases));
     }
   }
 
@@ -163,6 +178,7 @@ async function evaluateLookupJoin(
   const planDiagnostics: TarstateDiagnostic[] = [];
   const leftRows = (await evaluateData(source, relations, data.left, planDiagnostics)) as Context[];
   const output: Context[] = [];
+  const rightRowPlan = rowPlanFor(plan.relation);
 
   for (const leftRow of leftRows) {
     const diagnosticsBeforeLookup = planDiagnostics.length;
@@ -177,24 +193,22 @@ async function evaluateLookupJoin(
       return undefined;
     }
 
-    const rightRows = rowsToContexts(lookupRows, plan.alias, plan.relation, planDiagnostics);
     let matched = false;
+    const seenKeys = lookupRows.length > 1 ? new Set<string>() : undefined;
 
-    for (const rightRow of rightRows) {
-      output.push({ ...leftRow, ...rightRow });
+    for (const lookupRow of lookupRows) {
+      const rightRow = rowForContext(lookupRow, rightRowPlan, seenKeys, planDiagnostics);
+
+      if (rightRow === undefined) {
+        continue;
+      }
+
+      output.push({ ...leftRow, [plan.alias]: rightRow });
       matched = true;
     }
 
     if (!matched && data.kind === 'left') {
-      output.push(
-        plan.rightAliases.reduce<Context>(
-          (combined, alias) => {
-            combined[alias] = null;
-            return combined;
-          },
-          { ...leftRow }
-        )
-      );
+      output.push(contextWithNullAliases(leftRow, plan.rightAliases));
     }
   }
 
@@ -216,9 +230,9 @@ async function readRows(
   source: RelationSource,
   relationRef: RelationRef,
   diagnostics: TarstateDiagnostic[]
-): Promise<unknown[]> {
+): Promise<readonly unknown[]> {
   try {
-    return Array.from(await source.rows(relationRef));
+    return rowsArray(await source.rows(relationRef));
   } catch (error) {
     diagnostics.push({
       code: 'source_error',
@@ -234,10 +248,10 @@ async function readLookup(
   source: RelationSource,
   lookup: RelationLookup,
   diagnostics: TarstateDiagnostic[]
-): Promise<unknown[] | undefined> {
+): Promise<readonly unknown[] | undefined> {
   try {
     const rows = await source.lookup?.(lookup);
-    return rows === undefined ? undefined : Array.from(rows);
+    return rows === undefined ? undefined : rowsArray(rows);
   } catch (error) {
     diagnostics.push({
       code: 'source_error',
@@ -258,27 +272,60 @@ function rowsToContexts(
 ): Context[] {
   // Keep scan and lookup result policy identical once rows are returned.
   const seenKeys = new Set<string>();
+  const rowPlan = rowPlanFor(relationRef);
   const contexts: Context[] = [];
 
   for (const row of rows) {
-    if (!isRecord(row)) {
-      diagnostics.push({
-        code: 'invalid_row',
-        message: `row for relation ${relationRef.name} is not an object`,
-        relation: relationRef.name,
-        detail: row
-      });
+    const contextRow = rowForContext(row, rowPlan, seenKeys, diagnostics);
+
+    if (contextRow === undefined) {
       continue;
     }
 
-    const rowDiagnostics = validateRow(relationRef, row);
-    diagnostics.push(...rowDiagnostics);
+    contexts.push({ [alias]: contextRow });
+  }
 
-    if (relationRef.ephemeral && rowDiagnostics.length > 0) {
-      continue;
-    }
+  return contexts;
+}
 
-    const key = rowKey(relationRef, row);
+function rowsArray(rows: Iterable<unknown>): readonly unknown[] {
+  return Array.isArray(rows) ? rows : Array.from(rows);
+}
+
+function rowPlanFor(relationRef: RelationRef): RowPlan {
+  return {
+    relationRef,
+    fields: Object.entries(relationRef.fields),
+    keyFields: Array.isArray(relationRef.key) ? relationRef.key : [relationRef.key]
+  };
+}
+
+function rowForContext(
+  row: unknown,
+  rowPlan: RowPlan,
+  seenKeys: Set<string> | undefined,
+  diagnostics: TarstateDiagnostic[]
+): Record<string, unknown> | undefined {
+  const relationRef = rowPlan.relationRef;
+
+  if (!isRecord(row)) {
+    diagnostics.push({
+      code: 'invalid_row',
+      message: `row for relation ${relationRef.name} is not an object`,
+      relation: relationRef.name,
+      detail: row
+    });
+    return undefined;
+  }
+
+  const diagnosticCount = appendRowDiagnostics(rowPlan, row, diagnostics);
+
+  if (relationRef.ephemeral && diagnosticCount > 0) {
+    return undefined;
+  }
+
+  if (seenKeys !== undefined) {
+    const key = rowKey(rowPlan, row);
     if (key !== undefined) {
       if (seenKeys.has(key)) {
         diagnostics.push({
@@ -290,11 +337,9 @@ function rowsToContexts(
       }
       seenKeys.add(key);
     }
-
-    contexts.push({ [alias]: row });
   }
 
-  return contexts;
+  return row;
 }
 
 function lookupForWhere(
@@ -372,10 +417,15 @@ function aliasesFor(data: QueryData): string[] {
   }
 }
 
-function validateRow(relationRef: RelationRef, row: Record<string, unknown>): TarstateDiagnostic[] {
-  const diagnostics: TarstateDiagnostic[] = [];
+function appendRowDiagnostics(
+  rowPlan: RowPlan,
+  row: Record<string, unknown>,
+  diagnostics: TarstateDiagnostic[]
+): number {
+  const relationRef = rowPlan.relationRef;
+  const diagnosticsBefore = diagnostics.length;
 
-  for (const [fieldName, spec] of Object.entries(relationRef.fields)) {
+  for (const [fieldName, spec] of rowPlan.fields) {
     const hasField = Object.hasOwn(row, fieldName);
     const value = row[fieldName];
 
@@ -414,7 +464,7 @@ function validateRow(relationRef: RelationRef, row: Record<string, unknown>): Ta
     }
   }
 
-  return diagnostics;
+  return diagnostics.length - diagnosticsBefore;
 }
 
 function valueMatches(spec: FieldSpec, value: unknown): boolean {
@@ -432,12 +482,17 @@ function valueMatches(spec: FieldSpec, value: unknown): boolean {
   }
 }
 
-function rowKey(relationRef: RelationRef, row: Record<string, unknown>): string | undefined {
-  const keyFields = Array.isArray(relationRef.key) ? relationRef.key : [relationRef.key];
-  const values = keyFields.map((keyField) => row[keyField]);
+function rowKey(rowPlan: RowPlan, row: Record<string, unknown>): string | undefined {
+  const values: unknown[] = [];
 
-  if (values.some((value) => value === undefined)) {
-    return undefined;
+  for (const keyField of rowPlan.keyFields) {
+    const value = row[keyField];
+
+    if (value === undefined) {
+      return undefined;
+    }
+
+    values.push(value);
   }
 
   return JSON.stringify(values);
@@ -448,24 +503,45 @@ function evaluatePredicate(context: Context, predicate: PredicateData): boolean 
     case 'eq':
       return evaluateExpr(context, predicate.left) === evaluateExpr(context, predicate.right);
     case 'and':
-      return predicate.predicates.every((item) => evaluatePredicate(context, item));
+      for (const item of predicate.predicates) {
+        if (!evaluatePredicate(context, item)) {
+          return false;
+        }
+      }
+      return true;
     case 'or':
-      return predicate.predicates.some((item) => evaluatePredicate(context, item));
+      for (const item of predicate.predicates) {
+        if (evaluatePredicate(context, item)) {
+          return true;
+        }
+      }
+      return false;
     case 'not':
       return !evaluatePredicate(context, predicate.predicate);
   }
 }
 
-function evaluateProjection(context: Context, projection: ProjectionData): Record<string, unknown> {
-  return Object.entries(projection).reduce<Record<string, unknown>>((row, [fieldName, expr]) => {
-    if (isOptionalProjection(expr)) {
-      row[fieldName] = evaluateExpr(context, expr.expr);
-    } else {
-      row[fieldName] = evaluateExpr(context, expr);
-    }
+function projectionPlan(projection: ProjectionData): ProjectionStep[] {
+  const steps: ProjectionStep[] = [];
 
-    return row;
-  }, {});
+  for (const [fieldName, expr] of Object.entries(projection)) {
+    steps.push({
+      fieldName,
+      expr: isOptionalProjection(expr) ? expr.expr : expr
+    });
+  }
+
+  return steps;
+}
+
+function evaluateProjection(context: Context, projection: readonly ProjectionStep[]): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+
+  for (const step of projection) {
+    row[step.fieldName] = evaluateExpr(context, step.expr);
+  }
+
+  return row;
 }
 
 function isOptionalProjection(input: ExprData | OptionalProjection): input is OptionalProjection {
@@ -479,6 +555,16 @@ function evaluateExpr(context: Context, expr: ExprData): unknown {
     case 'value':
       return expr.value;
   }
+}
+
+function contextWithNullAliases(context: Context, aliases: readonly string[]): Context {
+  const output = { ...context };
+
+  for (const alias of aliases) {
+    output[alias] = null;
+  }
+
+  return output;
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {
