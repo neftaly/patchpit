@@ -1,16 +1,26 @@
 # First Slice
 
-Start by making the existing game app run through the Patchpit host with the smallest
-useful workspace.
+Start by making the existing game app run through the Patchpit host with the
+smallest useful workspace.
 
 ## Goal
 
 Open a hosted workspace that mounts a live game/session doc and renders one
 tablet view plus one spatial/table view from the same state.
 
+## End-User Shape
+
+A user opens a workspace link, lands in opshop, sees the game app as the primary
+tablet surface, sees a shared table projection of the same session, uses one
+mounted tool or asset fixture, and can inspect one useful diagnostic.
+
+The tablet view is the control surface. The spatial/table view is the public
+projection. The first slice only needs basic pick-to-focus between them.
+
 ## Build Order
 
-1. Add Patchpit launch parsing for `doc`, `template`, `sync`, and `delegation`.
+1. Add Patchpit launch parsing for `app`, `workspace`, `source`, `sync`, and
+   `delegation`.
 2. Create the allow-all host broker with real request/decision records.
 3. Add plain runtime rows: app refs, app instances, containers, mounts, config,
    surfaces, scene objects, pick targets, interaction events, diagnostics.
@@ -26,13 +36,15 @@ tablet view plus one spatial/table view from the same state.
 
 The first slice is done when:
 
-- a user can open an opshop workspace from a `doc` hash
+- a user can open an opshop workspace from a `workspace` hash
 - the workspace mounts a live session doc
-- the game app renders as a hosted surface
-- the same session has a spatial/table projection
-- a companion fixture can configure focus/layout through the host
+- the game app renders as a tablet control surface
+- the same session renders as a spatial/table projection
+- focus can move between tablet and table through stable IDs
+- a companion fixture can configure focus or layout through the host
+- a synthetic denied-call fixture produces a diagnostic
 - no app receives raw Automerge, Tarstate, Royal, or browser handles
-- diagnostics are inspectable
+- one useful diagnostic is inspectable
 
 ## Defer
 

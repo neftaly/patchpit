@@ -26,7 +26,7 @@ pre-v2 implementation; `main` is now the v2 Browser/OS/shell monorepo stub.
 
 ## Monorepo Baseline
 
-The v2 root follows Royal's boring monorepo setup where it applies:
+The v2 root uses a boring monorepo setup:
 
 - private ESM root package
 - pinned pnpm package manager
@@ -36,7 +36,7 @@ The v2 root follows Royal's boring monorepo setup where it applies:
 - root `typecheck`, `test`, `lint`, and shell `build` scripts
 - claims scripts kept at the root
 
-Intentional differences from Royal:
+Current baseline:
 
 - Patchpit has a Vite shell smoke app, but no final runtime UI yet.
 - Patchpit keeps `apps/*` and `packages/*` in the workspace globs, but only

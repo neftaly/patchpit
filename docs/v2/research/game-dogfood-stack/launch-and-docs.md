@@ -7,28 +7,29 @@ Use small URL handoffs. Put real state and config in docs.
 Open a live session/workspace:
 
 ```text
-opshop.html#{"doc":"automerge:WORKSPACE_DOC","sync":["wss://sync.example"],"delegation":"..."}
+opshop.html#{"workspace":"automerge:WORKSPACE_DOC","sync":["wss://sync.example"],"delegation":"..."}
 ```
 
 Create from a source package/root doc:
 
 ```text
-opshop.html#{"template":"automerge:SOURCE_DOC","sync":["wss://sync.example"],"delegation":"..."}
+opshop.html#{"source":"automerge:SOURCE_DOC","sync":["wss://sync.example"],"delegation":"..."}
 ```
 
 Human-writable shell form:
 
 ```text
-patchpit.html#app=opshop&doc=automerge:WORKSPACE_DOC&sync=wss://sync.example
-patchpit.html#app=opshop&template=automerge:SOURCE_DOC&sync=wss://sync.example
+patchpit.html#app=opshop&workspace=automerge:WORKSPACE_DOC&sync=wss://sync.example
+patchpit.html#app=opshop&source=automerge:SOURCE_DOC&sync=wss://sync.example
 ```
 
 ## Hash Props
 
 ```ts
 type PatchpitHashProps = {
-  doc?: `automerge:${string}`
-  template?: `automerge:${string}` | string
+  app?: string
+  workspace?: `automerge:${string}`
+  source?: `automerge:${string}` | string
   sync?: [string, ...string[]]
   delegation?: string
   view?: 'auto' | 'tablet' | 'desktop' | 'spatial'
@@ -37,8 +38,9 @@ type PatchpitHashProps = {
 
 Rules:
 
-- `doc` opens an existing live workspace/session.
-- `template` creates or mounts from source docs.
+- `app` selects the initial app, usually `opshop`.
+- `workspace` opens an existing live workspace.
+- `source` creates or mounts from source docs.
 - `sync` is transport context.
 - `delegation` is opaque in v1.
 - URL data is handoff context, not durable config.

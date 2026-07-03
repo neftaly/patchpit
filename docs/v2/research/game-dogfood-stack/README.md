@@ -21,7 +21,8 @@ The stack earns its keep if a game app can use it for:
 
 - `vision.md` - why this stack exists and how it differs from a game engine.
 - `boundaries.md` - what each repo/layer owns.
-- `launch-and-docs.md` - `doc` / `template` launch shape and linked docs.
+- `launch-and-docs.md` - `workspace` / `source` launch shape and linked docs.
+- `first-slice-api.md` - smallest useful host contract for the first build.
 - `spatial-bindings.md` - game state versus personal/shared/world placement.
 - `first-slice.md` - the smallest implementation slice to start with.
 
