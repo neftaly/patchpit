@@ -1,69 +1,67 @@
 # Tarstate
 
-Tarstate lets you query JSON-shaped data as rows.
+Tarstate lets you query relation-shaped JSON data as rows.
 
-Use it when a component needs to combine stored records, assignments, visibility,
-or other structured data.
+Core Tarstate is framework-independent. The React adapter should stay thin: it
+subscribes to a source, runs an inspectable query value, and returns rows plus
+diagnostics.
 
 ```tsx
+import { useMemo } from 'react'
+import { useQuery } from '@patchpit/tarstate-react'
 import {
-  as, evaluate, fromObjectSource, ref, from,
-  eq, relation, composeSources, maybe, pipe,
-  id, leftJoin, defineSchema, project, string,
+  as, defineSchema, eq, from, fromObjectSource, id, leftJoin, maybe,
+  pipe, project, ref, relation, string, where,
 } from '@patchpit/tarstate'
 
-// Define todo data and relationships.
 const schema = defineSchema({
-  todos: relation<{ id: string; text: string }>({
+  documents: relation<{ id: string; title: string }>({
     key: 'id',
-    fields: { id: id('todo'), text: string() },
+    fields: { id: id('document'), title: string() },
   }),
-  assignments: relation<{ todoId: string; assignee: string }>({
-    key: 'todoId',
-    fields: { todoId: ref('todos.id'), assignee: string() },
+  owners: relation<{ documentId: string; name: string }>({
+    key: 'documentId',
+    fields: { documentId: ref('documents.id'), name: string() },
   }),
 })
 
-// Pull in data from separate sources.
-const todoAppSource = fromObjectSource({
-  todos: [
-    { id: 'todo-a', text: 'Buy oat milk' },
-    { id: 'todo-b', text: 'Water basil' },
+const source = fromObjectSource({
+  documents: [
+    { id: 'doc-a', title: 'Roadmap' },
+    { id: 'doc-b', title: 'Release notes' },
   ],
-})
-const teamSource = fromObjectSource({
-  assignments: [{ todoId: 'todo-a', assignee: 'Mina' }],
+  owners: [{ documentId: 'doc-a', name: 'Mina' }],
 })
 
-// Combine the sources for the query.
-const source = composeSources(todoAppSource, teamSource)
+const document = as(schema.documents, 'document')
+const owner = as(schema.owners, 'owner')
 
-const todo = as(schema.todos, 'todo')
-const assignment = as(schema.assignments, 'assignment')
+const documentById = (documentId: string) =>
+  pipe(
+    from(document),
+    where(eq(document.id, documentId)),
+    leftJoin(from(owner), eq(owner.documentId, document.id)),
+    project({
+      id: document.id,
+      title: document.title,
+      ownerName: maybe(owner.name),
+    }),
+  )
 
-// Build the query.
-const todoRows = pipe(
-  from(todo), // => [{ todo: { id: 'todo-a', ... } }, { todo: { id: 'todo-b', ... } }]
-  // leftJoin appends matches from another query.
-  leftJoin(from(assignment), eq(todo.id, assignment.todoId)), // => [{ todo: { id: 'todo-a', ... }, assignment: { assignee: 'Mina', ... } }, { todo: { id: 'todo-b', ... } }]
-  // project formats the results nicely.
-  project({
-    id: todo.id,
-    text: todo.text,
-    assignedTo: maybe(assignment.assignee),
-  }), // => [{ id: 'todo-a', assignedTo: 'Mina', ... }, { id: 'todo-b', assignedTo: undefined, ... }]
-)
+export function DocumentSummary({ documentId }: { documentId: string }) {
+  const query = useMemo(() => documentById(documentId), [documentId])
+  const state = useQuery(source, query)
 
-// Run the query against the current data.
-const loadTodos = async () => (await evaluate(source, todoRows)).rows
+  if (state.status === 'pending') return null
+  if (state.diagnostics.length > 0) {
+    return <pre>{JSON.stringify(state.diagnostics, null, 2)}</pre>
+  }
 
-export function TodoList() {
-  const todos = useAppQuery(loadTodos)
-
-  return todos.map((todo) => (
-    <div key={todo.id}>
-      {todo.text} is assigned to {todo.assignedTo ?? 'unassigned'}
-    </div>
+  return state.rows.map((row) => (
+    <article key={row.id}>
+      <h2>{row.title}</h2>
+      <p>{row.ownerName ?? 'Unassigned'}</p>
+    </article>
   ))
 }
 ```
