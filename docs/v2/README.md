@@ -17,6 +17,8 @@ pre-v2 implementation; `main` is now the v2 monorepo stub.
   direction before considering workload-specific CRDT experiments.
 - `research/network-sync-test-plan.md`: deterministic fake-network sync test
   direction before Sedimentree/Beelay transport integration.
+- `research/game-dogfood-stack/`: neutral planning docs for making the first
+  game app dogfood Patchpit/Patchwork/opshop.
 - `research/tarstate-api-brief.md`: Tarstate API critique and future-compatible
   posture.
 - `tarstate-api-sketch.md`: proposed functional v2 API shape, edge cases, and
