@@ -32,7 +32,7 @@ after the boundary is proven in code.
 
 ## opshop
 
-`opshop 🧩` is the first workspace app inside the Patchpit monorepo.
+`opshop 🧩` is the first workspace app target inside the Patchpit monorepo.
 
 Owns:
 

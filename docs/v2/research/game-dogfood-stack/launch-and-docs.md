@@ -4,7 +4,7 @@ Use small URL handoffs. Put real state and config in docs.
 
 ## Launch Shapes
 
-Open a live session/workspace:
+Open a live workspace:
 
 ```text
 opshop.html#{"workspace":"automerge:WORKSPACE_DOC","sync":["wss://sync.example"],"delegation":"..."}
@@ -38,11 +38,14 @@ type PatchpitHashProps = {
 
 Rules:
 
+- The first slice implements the JSON object hash.
+- The key-value hash is a manual-dev alias parsed into the same props.
 - `app` selects the initial app, usually `opshop`.
 - `workspace` opens an existing live workspace.
 - `source` creates or mounts from source docs.
 - `sync` is transport context.
 - `delegation` is opaque in v1.
+- `view` is a host preference, not durable layout state.
 - URL data is handoff context, not durable config.
 
 ## Linked Docs

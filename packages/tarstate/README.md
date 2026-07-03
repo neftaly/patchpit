@@ -6,12 +6,16 @@ Core Tarstate is framework-independent. The React adapter should stay thin: it
 subscribes to a source, runs an inspectable query value, and returns rows plus
 diagnostics.
 
+Inside Patchpit the package is `@patchpit/tarstate`. Older prototypes may still
+import `@tarstate/core`; treat that as the previous external package name until
+those callers are migrated.
+
 ```tsx
-import { useMemo } from 'react'
-import { useQuery } from '@patchpit/tarstate-react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  as, defineSchema, eq, from, fromObjectSource, id, leftJoin, maybe,
-  pipe, project, ref, relation, string, where,
+  as, defineSchema, eq, evaluate, from, fromObjectSource, id, leftJoin,
+  maybe, pipe, project, ref, relation, string, where,
+  type Query, type QueryResult, type RelationSource,
 } from '@patchpit/tarstate'
 
 const schema = defineSchema({
@@ -48,11 +52,34 @@ const documentById = (documentId: string) =>
     }),
   )
 
+function useTarstateQuery<Row>(
+  source: RelationSource,
+  query: Query<Row>,
+): QueryResult<Row> {
+  const [state, setState] = useState<QueryResult<Row>>({
+    rows: [],
+    diagnostics: [],
+  })
+
+  useEffect(() => {
+    let cancelled = false
+
+    void evaluate(source, query).then((nextState) => {
+      if (!cancelled) setState(nextState)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [source, query])
+
+  return state
+}
+
 export function DocumentSummary({ documentId }: { documentId: string }) {
   const query = useMemo(() => documentById(documentId), [documentId])
-  const state = useQuery(source, query)
+  const state = useTarstateQuery(source, query)
 
-  if (state.status === 'pending') return null
   if (state.diagnostics.length > 0) {
     return <pre>{JSON.stringify(state.diagnostics, null, 2)}</pre>
   }

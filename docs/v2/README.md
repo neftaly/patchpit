@@ -19,8 +19,15 @@ pre-v2 implementation; `main` is now the v2 Browser/OS/shell monorepo stub.
   direction before Sedimentree/Beelay transport integration.
 - `research/game-dogfood-stack/`: neutral planning docs for making the first
   game app dogfood the Patchpit monorepo and its `opshop` app.
+- `research/malicious-app-capability-harness.md`: hostile-app fixture plan for
+  host-call and capability enforcement.
 - `research/tarstate-api-brief.md`: Tarstate API critique and future-compatible
   posture.
+- `research/tarstate-capability-runtime.md`: Tarstate capability and runtime
+  boundary notes.
+- `research/tarstate-royal-api.md`: Tarstate/Royal projection boundary.
+- `research/prototype-status.md`: current prototype status and cleanup notes.
+- `research/papers/README.md`: external research references.
 - `tarstate-api-sketch.md`: proposed functional v2 API shape, edge cases, and
   day-one proof gates.
 
@@ -44,10 +51,9 @@ Current baseline:
 
 ## Next Session
 
-1. Restore a small `packages/tarstate` day-one slice from
-   `tarstate-api-sketch.md`.
-2. Prove durable workspace rows joined to ephemeral presence rows through tests,
-   including one composed-source fixture and one permission/visibility
-   diagnostic fixture.
-3. Then use that query boundary while defining app shortcut, app ref, and app
-   instance data.
+1. Turn `game-dogfood-stack/first-slice-api.md` into tiny TypeScript contracts
+   and tests.
+2. Add the neutral workspace/session/assets/bindings fixture from the game
+   dogfood docs.
+3. Restore the thin React hook adapter around Tarstate once source watching is
+   ready.

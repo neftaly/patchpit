@@ -1,7 +1,7 @@
 # First Slice
 
-Start by making the existing game app run through the Patchpit host with the
-smallest useful workspace.
+Start by making a real game app run through the Patchpit host with the smallest
+useful workspace.
 
 ## Goal
 
