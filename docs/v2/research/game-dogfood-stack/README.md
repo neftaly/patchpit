@@ -1,7 +1,8 @@
 # Game Dogfood Stack
 
 This folder is the implementation plan for making the first game app dogfood
-Patchpit, Patchwork, opshop, Tarstate, Royal, and Automerge.
+Patchpit as the Browser/OS/shell: its host runtime, the `opshop` app, Tarstate,
+Royal, and Automerge.
 
 Keep this focused on stack shape and implementation boundaries.
 
@@ -37,4 +38,4 @@ For the first slice, do not build:
 - real auth
 - final schemas
 
-Those can come after the game app is running through Patchwork.
+Those can come after the game app is running through the Patchpit host.

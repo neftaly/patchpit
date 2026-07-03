@@ -19,14 +19,14 @@ opshop.html#{"template":"automerge:SOURCE_DOC","sync":["wss://sync.example"],"de
 Human-writable shell form:
 
 ```text
-patchwork.html#app=opshop&doc=automerge:WORKSPACE_DOC&sync=wss://sync.example
-patchwork.html#app=opshop&template=automerge:SOURCE_DOC&sync=wss://sync.example
+patchpit.html#app=opshop&doc=automerge:WORKSPACE_DOC&sync=wss://sync.example
+patchpit.html#app=opshop&template=automerge:SOURCE_DOC&sync=wss://sync.example
 ```
 
 ## Hash Props
 
 ```ts
-type PatchworkHashProps = {
+type PatchpitHashProps = {
   doc?: `automerge:${string}`
   template?: `automerge:${string}` | string
   sync?: [string, ...string[]]
@@ -74,7 +74,7 @@ Layer docs can include:
 
 ## Host Result
 
-Patchwork resolves the handoff into rows:
+Patchpit resolves the handoff into rows:
 
 - `appRefs`
 - `appInstances`

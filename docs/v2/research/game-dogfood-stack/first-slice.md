@@ -1,6 +1,6 @@
 # First Slice
 
-Start by making the existing game app run through Patchwork with the smallest
+Start by making the existing game app run through the Patchpit host with the smallest
 useful workspace.
 
 ## Goal
@@ -10,15 +10,15 @@ tablet view plus one spatial/table view from the same state.
 
 ## Build Order
 
-1. Add Patchwork launch parsing for `doc`, `template`, `sync`, and `delegation`.
+1. Add Patchpit launch parsing for `doc`, `template`, `sync`, and `delegation`.
 2. Create the allow-all host broker with real request/decision records.
 3. Add plain runtime rows: app refs, app instances, containers, mounts, config,
    surfaces, scene objects, pick targets, interaction events, diagnostics.
 4. Add a fixture workspace doc that mounts one live session doc.
-5. Launch opshop as a Patchwork app.
-6. Launch the game app as a mounted Patchwork app/surface inside that workspace.
+5. Launch opshop as a Patchpit app.
+6. Launch the game app as a mounted Patchpit app/surface inside that workspace.
 7. Project the session into Royal descriptors through Tarstate.
-8. Return pick/focus events through Patchwork by stable ID.
+8. Return pick/focus events through the Patchpit host by stable ID.
 9. Add one external config patch from a companion fixture.
 10. Add diagnostics for missing ref, bad config path, and denied host call.
 

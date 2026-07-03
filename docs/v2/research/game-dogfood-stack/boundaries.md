@@ -2,14 +2,17 @@
 
 The boundaries are good enough to start. Do not split into more repos yet.
 
-## Patchpit
+## Patchpit Monorepo
 
-Patchpit is the browser shell/kernel.
+Patchpit is the Browser/OS/shell monorepo. It launches apps, owns workspaces,
+brokers host capabilities, and coordinates docs, surfaces, and projections.
 
 Owns:
 
 - workspace/app contracts
 - namespace and mounts
+- launch envelopes
+- app instances
 - runtime/container rows
 - host-call broker
 - allow-all auth seam
@@ -17,34 +20,26 @@ Owns:
 - launch policy
 - asset/cache policy
 - devtools surfaces
-
-## Patchwork
-
-Patchwork is the host/runtime layer inside Patchpit.
-
-Owns:
-
-- launch envelopes
-- app instances
-- runtime containers
 - app config
 - app mounts
 - iframe/worker/direct transports
 - app-visible host APIs
 - cross-app reach-in through host calls
 
-Patchwork is not the game app and not the renderer.
+Patchpit contains apps and packages, but Patchpit itself is the product boundary:
+the browser/OS/shell. It should only split new packages out of the app host
+after the boundary is proven in code.
 
 ## opshop
 
-`opshop 🧩` is the first workspace app.
+`opshop 🧩` is the first workspace app inside the Patchpit monorepo.
 
 Owns:
 
 - arranging docs, surfaces, and scene projections in a workspace
 - showing mounted sessions/tools/assets
 - tablet/desktop/spatial workbench UI
-- proving the Patchwork app loop
+- proving the Patchpit app loop
 
 Does not own:
 
@@ -68,7 +63,7 @@ Owns:
 - game-specific document shape
 - game-specific validation
 
-The game app should run inside Patchwork and may be mounted inside an opshop
+The game app should run inside the Patchpit host and may be mounted inside an opshop
 workspace, but it should not depend on opshop as its core runtime.
 
 ## Tarstate

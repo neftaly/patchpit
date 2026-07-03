@@ -5,9 +5,9 @@ This is not an Automerge-based Unreal.
 The stack should behave more like a browser for composable game/workspace apps:
 
 ```text
-Patchpit shell
--> Patchwork host/runtime
--> app instances and mounted docs
+Patchpit Browser/OS/shell
+-> host runtime
+-> opshop and mounted app instances/docs
 -> Tarstate views
 -> Royal tablet/spatial projection
 ```

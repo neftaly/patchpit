@@ -1,7 +1,7 @@
 # Patchpit V2 Docs
 
 This directory owns the living v2 design work. The `v1` branch preserves the
-pre-v2 implementation; `main` is now the v2 monorepo stub.
+pre-v2 implementation; `main` is now the v2 Browser/OS/shell monorepo stub.
 
 ## Start Here
 
@@ -18,7 +18,7 @@ pre-v2 implementation; `main` is now the v2 monorepo stub.
 - `research/network-sync-test-plan.md`: deterministic fake-network sync test
   direction before Sedimentree/Beelay transport integration.
 - `research/game-dogfood-stack/`: neutral planning docs for making the first
-  game app dogfood Patchpit/Patchwork/opshop.
+  game app dogfood the Patchpit monorepo and its `opshop` app.
 - `research/tarstate-api-brief.md`: Tarstate API critique and future-compatible
   posture.
 - `tarstate-api-sketch.md`: proposed functional v2 API shape, edge cases, and
