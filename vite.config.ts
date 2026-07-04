@@ -1,40 +1,22 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { defineConfig, type UserConfig } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import topLevelAwait from 'vite-plugin-top-level-await';
+import wasm from 'vite-plugin-wasm';
 
-const appPackageNames = new Set(['@patchpit/hello-world']);
-const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as {
-  readonly name?: string;
-};
+const isAutomerge = (id: string): boolean => id.includes('@automerge');
 
-export default defineConfig(({ command }): UserConfig => {
-  const isAppPackage =
-    manifest.name === undefined ? false : appPackageNames.has(manifest.name);
-
-  if (!isAppPackage && command === 'build') {
-    throw new Error(
-      'No shared Vite config for package: ' + (manifest.name ?? '<unknown>'),
-    );
-  }
-
-  return {
-    clearScreen: false,
-    resolve: {
-      alias: [
-        {
-          find: /^@automerge\/automerge$/,
-          replacement: path.join(
-            process.cwd(),
-            'src/automerge-runtime.ts',
-          ),
+export default defineConfig({
+  clearScreen: false,
+  plugins: [wasm(), topLevelAwait(), react()],
+  build: {
+    target: 'esnext',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (isAutomerge(id)) return 'automerge';
         },
-      ],
+      },
     },
-    plugins: isAppPackage ? [react()] : [],
-    build: {
-      target: 'safari17',
-      sourcemap: true,
-    },
-  };
+  },
 });

@@ -22,12 +22,10 @@ import {
   type WorkbenchPane,
   type WorkbenchTab,
   WorkbenchTabKind,
-  type SeedFilesystem,
 } from './filesystem';
 import {
   buildFilesystem,
 } from './filesystem-tree';
-import { initializeAutomerge } from './automerge-runtime';
 import { Sidebar } from './sidebar/Sidebar';
 import { Workbench } from './workbench/Workbench';
 
@@ -60,17 +58,7 @@ const filesystemEntryQuery = pipe(
 );
 
 export function App() {
-  const automergeReady = useAutomergeReady();
-  const seed = useMemo(() => (automergeReady ? createSeedFilesystem() : null), [automergeReady]);
-
-  return (
-    <main className="app-shell">
-      {seed === null ? <pre className="diagnostics-json">loading automerge</pre> : <Runtime seed={seed} />}
-    </main>
-  );
-}
-
-function Runtime({ seed }: { readonly seed: SeedFilesystem }) {
+  const seed = useMemo(() => createSeedFilesystem(), []);
   const fileManagerState = useAutomergeDoc(seed.fileManagerHandle);
   const workbenchState = useAutomergeDoc(seed.workbenchHandle);
   const workbenchActions = useMemo(
@@ -150,31 +138,17 @@ function Runtime({ seed }: { readonly seed: SeedFilesystem }) {
         };
   }, [seed]);
   return (
-    <>
-      {filesystem.root === null
-        ? <pre className="diagnostics-json">{JSON.stringify(filesystem, null, 2)}</pre>
-        : (
-            <section className="workspace">
-              <Sidebar actions={fileManagerActions} root={filesystem.root} state={fileManagerState} />
-              <Workbench actions={workbenchActions} filesystemRoot={filesystem.root} state={workbenchState} />
-            </section>
-          )}
-    </>
+    <main className="app-shell">
+      {filesystem.root === null ? (
+        <pre className="diagnostics-json">{JSON.stringify(filesystem, null, 2)}</pre>
+      ) : (
+        <section className="workspace">
+          <Sidebar actions={fileManagerActions} root={filesystem.root} state={fileManagerState} />
+          <Workbench actions={workbenchActions} filesystemRoot={filesystem.root} state={workbenchState} />
+        </section>
+      )}
+    </main>
   );
-}
-
-function useAutomergeReady(): boolean {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    let mounted = true;
-    void initializeAutomerge().then(() => {
-      if (mounted) setReady(true);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-  return ready;
 }
 
 function useAutomergeDoc<T>(handle: DocHandle<T>): T {
