@@ -26,14 +26,13 @@ export default defineConfig(({ command }): UserConfig => {
           find: /^@automerge\/automerge$/,
           replacement: path.join(
             process.cwd(),
-            'node_modules/@automerge/automerge/dist/mjs/entrypoints/fullfat_base64.js',
+            'src/automerge-runtime.ts',
           ),
         },
       ],
     },
     plugins: isAppPackage ? [react()] : [],
     build: {
-      chunkSizeWarningLimit: 10_000,
       target: 'safari17',
       sourcemap: true,
     },
