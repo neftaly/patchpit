@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { defineConfig, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -19,11 +20,20 @@ export default defineConfig(({ command }): UserConfig => {
 
   return {
     clearScreen: false,
-    optimizeDeps: {
-      exclude: ['@automerge/automerge'],
+    resolve: {
+      alias: [
+        {
+          find: /^@automerge\/automerge$/,
+          replacement: path.join(
+            process.cwd(),
+            'node_modules/@automerge/automerge/dist/mjs/entrypoints/fullfat_base64.js',
+          ),
+        },
+      ],
     },
     plugins: isAppPackage ? [react()] : [],
     build: {
+      chunkSizeWarningLimit: 10_000,
       target: 'safari17',
       sourcemap: true,
     },
