@@ -1,18 +1,16 @@
-.window-manager {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: calc(1 - var(--workspace-file-picker-ratio)) 1 0;
-  background: var(--color-pane);
-}
-
+.window-manager,
 .window-manager-split,
-.window-manager-pane,
-.viewer {
+.window-manager-surface,
+.surface-content {
   display: flex;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+}
+
+.window-manager {
+  background: var(--color-surface);
+  --window-resize-handle-size: 0.25rem;
 }
 
 .window-manager-split-row {
@@ -20,24 +18,30 @@
 }
 
 .window-manager-split-column,
-.window-manager-pane,
-.viewer {
+.window-manager-surface,
+.surface-content {
   flex-direction: column;
 }
 
-.window-manager-split-row > .window-manager-pane:not(:first-child),
-.window-manager-split-row > .window-manager-split:not(:first-child) {
-  border-left: var(--app-border) solid var(--color-border);
+.window-manager-resize-handle {
+  flex: 0 0 var(--window-resize-handle-size);
+  padding: 0;
+  border: 0;
+  background: var(--color-border);
+  touch-action: none;
 }
 
-.window-manager-split-column > .window-manager-pane:not(:first-child),
-.window-manager-split-column > .window-manager-split:not(:first-child) {
-  border-top: var(--app-border) solid var(--color-border);
+.window-manager-split-row > .window-manager-resize-handle {
+  cursor: col-resize;
 }
 
-.window-manager-pane-header {
+.window-manager-split-column > .window-manager-resize-handle {
+  cursor: row-resize;
+}
+
+.window-manager-surface-header {
   display: flex;
-  min-height: var(--tab-block);
+  flex: 0 0 auto;
   background: var(--color-tabs);
 }
 
@@ -45,7 +49,7 @@
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  overflow: auto hidden;
+  overflow: hidden;
 }
 
 .window-manager-tabs::after {
@@ -65,7 +69,7 @@
   background: transparent;
   color: var(--color-muted);
   cursor: default;
-  font-size: var(--tab-font-size);
+  font-size: var(--font-code-size);
 }
 
 .window-manager-tab::before {
@@ -78,7 +82,7 @@
 
 .window-manager-tab[data-selected] {
   border-bottom-color: transparent;
-  background: var(--color-pane);
+  background: var(--color-surface);
   color: var(--color-text);
 }
 
@@ -95,8 +99,6 @@
   background: transparent;
   color: inherit;
   cursor: default;
-  font: inherit;
-  font-size: var(--tab-font-size);
 }
 
 .window-manager-tab-label {
@@ -120,16 +122,15 @@
   outline: none;
 }
 
-.window-manager-tab:hover:not([data-selected]):not(:has(.window-manager-tab-icon:hover)),
-.window-manager-tab:focus:not([data-selected]) {
+.window-manager-tab:not([data-selected]):is(:hover, :focus):not(:has(.window-manager-tab-icon:hover)) {
   background: var(--color-hover);
 }
 
-.window-manager-tab-icon:not(:disabled):hover {
+.window-manager-tab-icon:hover {
   background: var(--color-hover);
   color: inherit;
 }
 
-.viewer {
+.surface-content {
   overflow: auto;
 }

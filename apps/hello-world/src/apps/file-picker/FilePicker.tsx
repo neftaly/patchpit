@@ -1,34 +1,39 @@
 import type { CSSProperties, MouseEvent } from 'react';
-import { useMemo } from 'react';
-import { defaultFolderOpen, type FileManagerStateDoc } from '../../filesystem';
-import type { FilesystemNode } from '../../filesystem-tree';
-import { fileIcon, folderIcon } from './file-icons';
+import { defaultFolderOpen, type FilePickerStateDoc, type FilesystemNode } from '../../filesystem';
+import type { FileSelectionOptions } from './file-picker-state';
+import { fileIcon, folderIcon, type FileIcons } from './file-icons';
 import './file-picker.css';
 
-type FilePickerActions = {
-  readonly openUrl: (url: string) => void;
-  readonly previewUrl: (url: string) => void;
-  readonly selectUrl: (
-    url: string,
-    options?: { readonly range?: readonly string[]; readonly toggle?: boolean },
-  ) => void;
+export type FilePickerActions = {
+  readonly openUrl: (url: string, title: string) => void;
+  readonly previewUrl: (url: string, title: string) => void;
+  readonly selectUrl: (url: string, options?: FileSelectionOptions) => void;
   readonly toggleFolder: (url: string) => void;
 };
 
 export function FilePicker({
   actions,
+  fileIcons,
   root,
   state,
 }: {
   readonly actions: FilePickerActions;
+  readonly fileIcons: FileIcons;
   readonly root: FilesystemNode;
-  readonly state: FileManagerStateDoc;
+  readonly state: FilePickerStateDoc;
 }) {
-  const visibleUrls = useMemo(() => listVisibleUrls(root, state.openFolders), [root, state.openFolders]);
+  const visibleUrls = listVisibleUrls(root, state.openFolders);
   return (
     <nav className="tree-pane" aria-label="project explorer">
       <ul className="tree" role="tree" aria-label="project files">
-        <TreeItem actions={actions} depth={0} node={root} state={state} visibleUrls={visibleUrls} />
+        <TreeItem
+          actions={actions}
+          depth={0}
+          icons={fileIcons}
+          node={root}
+          state={state}
+          visibleUrls={visibleUrls}
+        />
       </ul>
     </nav>
   );
@@ -37,20 +42,23 @@ export function FilePicker({
 function TreeItem({
   actions,
   depth,
+  icons,
   node,
   state,
   visibleUrls,
 }: {
   readonly actions: FilePickerActions;
   readonly depth: number;
+  readonly icons: FileIcons;
   readonly node: FilesystemNode;
-  readonly state: FileManagerStateDoc;
+  readonly state: FilePickerStateDoc;
   readonly visibleUrls: readonly string[];
 }) {
   const isOpen = node.kind === 'folder' ? isFolderOpen(state.openFolders, node.url) : false;
   const isSelected = state.selectedUrls.includes(node.url);
   const isActive = state.activeUrl === node.url;
-  const icon = node.kind === 'folder' ? folderIcon(isOpen) : fileIcon(node.mediaType, node.name);
+  const icon = node.kind === 'folder' ? folderIcon(isOpen) : fileIcon(icons, node.mediaType);
+  const title = node.name || '/';
 
   return (
     <li
@@ -61,22 +69,22 @@ function TreeItem({
     >
       <button
         aria-pressed={isSelected}
-        className={`tree-item tree-${node.kind}`}
+        className="tree-item"
         onClick={(event) => {
           selectFromPointer(event, node.url, visibleUrls, actions.selectUrl);
           if (!event.metaKey && !event.ctrlKey && !event.shiftKey) {
-            actions.previewUrl(node.url);
+            actions.previewUrl(node.url, title);
             if (node.kind === 'folder') actions.toggleFolder(node.url);
           }
         }}
         onDoubleClick={() => {
-          actions.openUrl(node.url);
+          actions.openUrl(node.url, title);
         }}
         style={treeDepthStyle(depth)}
         type="button"
       >
         {icon && <span className="emoji-icon tree-icon" aria-hidden="true">{icon}</span>}
-        <span className="tree-name">{node.name || '/'}</span>
+        <span className="tree-name">{title}</span>
       </button>
       {node.kind === 'folder' && isOpen && (
         <ul role="group" style={treeGuideStyle(depth + 1)}>
@@ -84,6 +92,7 @@ function TreeItem({
             <TreeItem
               actions={actions}
               depth={depth + 1}
+              icons={icons}
               key={entry.url}
               node={entry}
               state={state}
@@ -98,14 +107,14 @@ function TreeItem({
 
 function listVisibleUrls(
   node: FilesystemNode,
-  openFolders: Readonly<Record<string, boolean | undefined>>,
+  openFolders: Readonly<Record<string, boolean>>,
 ): readonly string[] {
   if (node.kind === 'file' || !isFolderOpen(openFolders, node.url)) return [node.url];
   return [node.url, ...node.entries.flatMap((entry) => listVisibleUrls(entry, openFolders))];
 }
 
 function isFolderOpen(
-  openFolders: Readonly<Record<string, boolean | undefined>>,
+  openFolders: Readonly<Record<string, boolean>>,
   url: string,
 ): boolean {
   return openFolders[url] ?? defaultFolderOpen;
@@ -115,12 +124,16 @@ function selectFromPointer(
   event: MouseEvent,
   url: string,
   visibleUrls: readonly string[],
-  selectUrl: (
-    url: string,
-    options?: { readonly range?: readonly string[]; readonly toggle?: boolean },
-  ) => void,
+  selectUrl: FilePickerActions['selectUrl'],
 ) {
-  selectUrl(url, event.shiftKey ? { range: visibleUrls } : { toggle: event.metaKey || event.ctrlKey });
+  selectUrl(
+    url,
+    event.shiftKey
+      ? { range: visibleUrls }
+      : event.metaKey || event.ctrlKey
+        ? { toggle: true }
+        : undefined,
+  );
 }
 
 function treeDepthStyle(depth: number): CSSProperties {

@@ -1,111 +1,63 @@
+import { automergeMapSource, defineAutomergeMapRelations } from '@tarstate/automerge';
+import {
+  defineSchema,
+  from,
+  relation,
+  stringField,
+} from '@tarstate/core';
+import { evaluate } from '@tarstate/core/evaluate';
+import type { FileType, FileTypesDoc } from '../../filesystem';
+
+export type FileIcons = readonly FileType[];
+
+const fileIconSchema = defineSchema({
+  fileTypes: relation<FileType>({
+    key: 'match',
+    fields: {
+      emoji: stringField(),
+      match: stringField(),
+    },
+  }),
+});
+const fileIconRelations = defineAutomergeMapRelations<FileTypesDoc>()([
+  { relation: fileIconSchema.fileTypes, path: ['fileTypes'] },
+]);
+const fileIconQuery = from(fileIconSchema.fileTypes);
+
+export function fileIcons(doc: FileTypesDoc): FileIcons {
+  const result = evaluate(
+    automergeMapSource(doc, { relations: fileIconRelations }),
+    fileIconQuery,
+  );
+  return result.diagnostics.length === 0 ? result.rows : [];
+}
+
 export function folderIcon(isOpen: boolean): string {
   return isOpen ? '📂' : '📁';
 }
 
-type IconRule = {
-  readonly emoji: string;
-  readonly match: {
-    readonly extensions?: readonly string[];
-    readonly mediaPrefixes?: readonly string[];
-    readonly mediaTypes?: readonly string[];
-  };
-};
-
-type IconIndex = {
-  readonly extensions: ReadonlyMap<string, string>;
-  readonly mediaPrefixes: readonly (readonly [prefix: string, emoji: string])[];
-  readonly mediaTypes: ReadonlyMap<string, string>;
-};
-
-const iconRules: readonly IconRule[] = [
-  {
-    emoji: '🔀',
-    match: {
-      mediaTypes: [
-        'application/vnd.automerge',
-        'application/vnd.automerge+binary',
-        'application/x-automerge',
-      ],
-      extensions: ['automerge', 'amrg'],
-    },
-  },
-  { emoji: '🖼️', match: { mediaPrefixes: ['image/'] } },
-  { emoji: '🎵', match: { mediaPrefixes: ['audio/'] } },
-  { emoji: '🎞️', match: { mediaPrefixes: ['video/'] } },
-  {
-    emoji: '💻',
-    match: {
-      mediaTypes: [
-        'application/javascript',
-        'application/typescript',
-        'text/css',
-        'text/html',
-        'text/javascript',
-        'text/typescript',
-      ],
-      extensions: ['css', 'html', 'js', 'jsx', 'mjs', 'ts', 'tsx'],
-    },
-  },
-  {
-    emoji: '🧾',
-    match: {
-      mediaTypes: ['application/json', 'application/ld+json', 'application/x-ndjson'],
-      extensions: ['json', 'jsonl'],
-    },
-  },
-  {
-    emoji: '📝',
-    match: {
-      mediaTypes: ['text/markdown', 'text/plain'],
-      extensions: ['md', 'mdx', 'txt'],
-    },
-  },
-  {
-    emoji: '🧊',
-    match: {
-      mediaTypes: ['model/gltf+json', 'model/gltf-binary', 'model/obj', 'model/stl'],
-      extensions: ['glb', 'gltf', 'obj', 'stl'],
-    },
-  },
-  { emoji: '📕', match: { mediaTypes: ['application/pdf'] } },
-  {
-    emoji: '🗜️',
-    match: {
-      mediaTypes: ['application/gzip', 'application/x-tar', 'application/zip'],
-      extensions: ['gz', 'tar', 'tgz', 'zip'],
-    },
-  },
-];
-
-const iconIndex = indexIconRules(iconRules);
-
-export function fileIcon(mediaType: string, name: string): string | null {
-  return (
-    iconIndex.mediaTypes.get(mediaType) ??
-    iconIndex.mediaPrefixes.find(([prefix]) => mediaType.startsWith(prefix))?.[1] ??
-    iconIndex.extensions.get(extensionFromName(name)) ??
-    null
-  );
+export function fileIcon(fileTypes: FileIcons, mimeType: string): string | undefined {
+  const normalized = normalizeMimeType(mimeType);
+  return fileTypes.find((fileType) => matchesMime(fileType.match, normalized))?.emoji;
 }
 
-function indexIconRules(rules: readonly IconRule[]): IconIndex {
-  return {
-    extensions: new Map(indexMatches(rules, 'extensions')),
-    mediaPrefixes: indexMatches(rules, 'mediaPrefixes'),
-    mediaTypes: new Map(indexMatches(rules, 'mediaTypes')),
-  };
+function matchesMime(pattern: string, mimeType: string): boolean {
+  const normalizedPattern = pattern.trim().toLowerCase();
+  if (normalizedPattern === mimeType) return true;
+  const parts = normalizedPattern.split('*');
+  if (parts.length === 1 || !mimeType.startsWith(parts[0] ?? '')) return false;
+
+  let index = parts[0]?.length ?? 0;
+  for (const part of parts.slice(1)) {
+    if (part === '') continue;
+    const nextIndex = mimeType.indexOf(part, index);
+    if (nextIndex === -1) return false;
+    index = nextIndex + part.length;
+  }
+  const last = parts.at(-1) ?? '';
+  return last === '' || mimeType.endsWith(last);
 }
 
-function indexMatches(
-  rules: readonly IconRule[],
-  key: keyof IconRule['match'],
-): readonly (readonly [value: string, emoji: string])[] {
-  return rules.flatMap(({ emoji, match }) =>
-    (match[key] ?? []).map((value) => [value, emoji] as const),
-  );
-}
-
-function extensionFromName(name: string): string {
-  const extensionStart = name.lastIndexOf('.');
-  return extensionStart === -1 ? '' : name.slice(extensionStart + 1).toLowerCase();
+function normalizeMimeType(mimeType: string): string {
+  return mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
 }

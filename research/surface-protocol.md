@@ -60,9 +60,8 @@ type RoutedIntent = Intent & {
 type Context = {
   id: string;
   app: string;
-  subject?: string;
-  stateRef?: string;
   title?: string;
+  url: string;
 };
 
 type Surface = {
@@ -134,15 +133,22 @@ Clients own local viewports and transient presentation state.
 ### Context
 
 A context is the running/session object. It is not a tab, pane, process, or URL.
-It says: this app is running for this subject, with this state doc.
+It says: this app is running around this primary URL.
 
 Examples:
 
-- viewer context for `automerge:...README.md`
-- file picker context for `automerge:...file-manager-state`
+- viewer context with `url: automerge:...README.md`
+- file picker context with `url: automerge:...file-picker-state`
 - terminal context for a shell session state doc
 
-`app`, `subject`, and `stateRef` should be references, not embedded documents.
+`app` and `url` should be references, not embedded documents. For document
+apps, `url` is usually the document being viewed or edited. For stateful shell
+apps, `url` can be the app instance state doc, and that doc can link to its
+workspace/root/source documents.
+
+Tabs display `title ?? url`. Apps or routers may set `title` from filesystem
+metadata when they create or update a context; the window manager does not
+resolve resource names itself.
 Those references may initially be URL strings, but the protocol should treat
 them as document or app identities that can later become typed refs.
 
@@ -190,9 +196,9 @@ collaboration policy, or safety.
 language as file type rules, including exact matches like `text/markdown` and
 wildcards like `image/*`.
 
-`SurfaceSpec.state` declares the state type/schema an app surface expects.
-`Context.stateRef` points at the specific state document for one running
-context.
+`SurfaceSpec.state` declares the state type/schema an app surface expects. For
+stateful app instances, `Context.url` points at the specific state document for
+one running context.
 
 ### Namespace And Services
 

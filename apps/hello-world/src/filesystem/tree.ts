@@ -1,16 +1,15 @@
 import type {
   FilesystemDocumentRow,
-  FilesystemResourceRecord,
-  FolderDoc,
   FolderEntry,
-} from './filesystem';
-import { PatchworkType } from './filesystem';
+} from './types';
+import { PatchpitType } from './types';
 
 export type FilesystemNode =
   | {
       readonly kind: 'folder';
       readonly entries: readonly FilesystemNode[];
       readonly name: string;
+      readonly text: string;
       readonly url: string;
     }
   | {
@@ -24,10 +23,9 @@ export type FilesystemNode =
 
 export function buildFilesystem(
   rootUrl: string,
-  documents: readonly FilesystemResourceRecord[],
   rows: readonly FilesystemDocumentRow[],
 ): FilesystemNode {
-  return buildLinkedNode({ name: '/', type: PatchworkType.Folder, url: rootUrl }, documentsByUrl(documents), rowsByUrl(rows));
+  return buildLinkedNode({ name: '/', type: PatchpitType.Folder, url: rootUrl }, rowsByUrl(rows));
 }
 
 export function findNode(node: FilesystemNode, url: string): FilesystemNode | null {
@@ -40,37 +38,25 @@ export function findNode(node: FilesystemNode, url: string): FilesystemNode | nu
   return null;
 }
 
-export function folderSummary(node: Extract<FilesystemNode, { kind: 'folder' }>) {
-  return {
-    url: node.url,
-    entries: node.entries.map((entry) => ({
-      kind: entry.kind,
-      name: entry.name,
-      url: entry.url,
-    })),
-  };
-}
-
 function buildLinkedNode(
   entry: FolderEntry,
-  docs: ReadonlyMap<string, FilesystemResourceRecord['doc']>,
   rows: ReadonlyMap<string, FilesystemDocumentRow>,
 ): FilesystemNode {
-  if (entry.type !== PatchworkType.Folder) {
+  if (entry.type !== PatchpitType.Folder) {
     return fileNode(entry, rows.get(entry.url));
   }
 
-  const doc = docs.get(entry.url);
-  if (!isFolderDoc(doc)) {
+  const row = rows.get(entry.url);
+  if (row === undefined) {
     throw new Error(`Missing folder document for ${entry.url}`);
   }
 
   return {
-    entries: doc.docs
-      .map((child) => buildLinkedNode(child, docs, rows))
-      .sort(compareNodes),
+    entries: folderEntries(row.entries)
+      .map((child) => buildLinkedNode(child, rows)),
     kind: 'folder',
-    name: doc.title || doc.name || entry.name,
+    name: row.title || entry.name,
+    text: row.content ?? '',
     url: entry.url,
   };
 }
@@ -86,24 +72,12 @@ function fileNode(entry: FolderEntry, row: FilesystemDocumentRow | undefined): F
   };
 }
 
-function compareNodes(left: FilesystemNode, right: FilesystemNode): number {
-  return left.kind === right.kind
-    ? left.name.localeCompare(right.name)
-    : left.kind === 'folder'
-      ? -1
-      : 1;
-}
-
-function documentsByUrl(documents: readonly FilesystemResourceRecord[]) {
-  return new Map(documents.map((record) => [record.url, record.doc]));
-}
-
 function rowsByUrl(rows: readonly FilesystemDocumentRow[]) {
   return new Map(rows.map((row) => [row.url, row]));
 }
 
-function isFolderDoc(doc: FilesystemResourceRecord['doc'] | undefined): doc is FolderDoc {
-  return doc?.['@patchwork'].type === PatchworkType.Folder;
+function folderEntries(input: unknown): readonly FolderEntry[] {
+  return Array.isArray(input) ? input as readonly FolderEntry[] : [];
 }
 
 function isExternalUrl(url: string): boolean {

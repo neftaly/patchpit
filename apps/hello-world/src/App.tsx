@@ -5,6 +5,7 @@ import {
   asc,
   defineSchema,
   from,
+  jsonField,
   maybe,
   optional,
   pipe,
@@ -14,27 +15,29 @@ import {
   stringField,
 } from '@tarstate/core';
 import { evaluate } from '@tarstate/core/evaluate';
-import { type CSSProperties, useEffect, useMemo, useState } from 'react';
-import { FilePicker } from './apps/file-picker/FilePicker';
+import { useMemo, useSyncExternalStore } from 'react';
 import {
-  createSeedFilesystem,
-  defaultFolderOpen,
-  type FilesystemDocumentRow,
-  type FilesystemDoc,
-  type FilesystemResourceRecord,
-  PatchworkType,
-  type WorkspaceLayout,
-} from './filesystem';
+  selectFilePickerUrl,
+  toggleFilePickerFolder,
+  type FileSelectionOptions,
+} from './apps/file-picker/file-picker-state';
+import { fileIcons } from './apps/file-picker/file-icons';
 import {
   buildFilesystem,
-} from './filesystem-tree';
-import { launchUrl } from './shared/launch-url';
+  createSeedFilesystem,
+  type FilesystemDocumentRow,
+  type FilesystemDoc,
+  type WindowContext,
+} from './filesystem';
 import { WindowManager } from './window-manager/WindowManager';
 import {
-  closeTab,
-  focusTab,
-  openTab,
-  previewTab,
+  closeContext,
+  commitWindowManagerState,
+  focusContext,
+  openContext,
+  previewContext,
+  resizeSplit,
+  type SplitPath,
 } from './window-manager/window-manager-state';
 
 const filesystemSchema = defineSchema({
@@ -43,6 +46,8 @@ const filesystemSchema = defineSchema({
     fields: {
       url: stringField(),
       type: stringField(),
+      entries: optional(jsonField()),
+      title: optional(stringField()),
       mimeType: optional(stringField()),
       content: optional(stringField()),
     },
@@ -59,7 +64,9 @@ const filesystemEntryQuery = pipe(
   sort(asc(doc.url)),
   project({
     content: maybe(doc.content),
+    entries: maybe(doc.entries),
     mimeType: maybe(doc.mimeType),
+    title: maybe(doc.title),
     type: doc.type,
     url: doc.url,
   }),
@@ -67,65 +74,15 @@ const filesystemEntryQuery = pipe(
 
 export function App() {
   const seed = useMemo(() => createSeedFilesystem(), []);
-  const fileManagerState = useAutomergeDoc(seed.fileManagerHandle);
+  const fileTypes = useAutomergeDoc(seed.fileTypesHandle);
+  const iconRules = useMemo(() => fileIcons(fileTypes), [fileTypes]);
+  const filePickerState = useAutomergeDoc(seed.filePickerStateHandle);
   const windowManagerState = useAutomergeDoc(seed.windowManagerHandle);
-  const liveDocuments = useMemo(
-    () => ({
-      ...folderDocuments(seed.documents),
-      [seed.fileManagerHandle.url]: JSON.stringify(fileManagerState, null, 2),
-      [seed.windowManagerHandle.url]: JSON.stringify(windowManagerState, null, 2),
-    }),
-    [fileManagerState, seed.documents, seed.fileManagerHandle.url, seed.windowManagerHandle.url, windowManagerState],
-  );
-  const windowManagerActions = useMemo(
-    () => ({
-      focusTab: (paneId: string, tabId: string) => {
-        seed.windowManagerHandle.change((doc) => {
-          focusTab(doc, paneId, tabId);
-        });
-      },
-      closeTab: (paneId: string, tabId: string) => {
-        seed.windowManagerHandle.change((doc) => {
-          closeTab(doc, paneId, tabId);
-        });
-      },
-    }),
-    [seed.windowManagerHandle],
-  );
-  const fileManagerActions = useMemo(
-    () => ({
-      openUrl: (url: string) => {
-        seed.windowManagerHandle.change((doc) => {
-          openTab(doc, viewerUrl(url));
-        });
-      },
-      previewUrl: (url: string) => {
-        seed.windowManagerHandle.change((doc) => {
-          previewTab(doc, viewerUrl(url));
-        });
-      },
-      selectUrl: (
-        url: string,
-        options?: { readonly range?: readonly string[]; readonly toggle?: boolean },
-      ) => {
-        seed.fileManagerHandle.change((doc) => {
-          const startUrl = doc.activeUrl;
-          doc.activeUrl = url;
-          doc.selectedUrls = options?.range
-            ? selectedRange(startUrl, url, options.range)
-            : options?.toggle
-              ? toggleValue(doc.selectedUrls, url)
-              : [url];
-        });
-      },
-      toggleFolder: (url: string) => {
-        seed.fileManagerHandle.change((doc) => {
-          doc.openFolders[url] = !(doc.openFolders[url] ?? defaultFolderOpen);
-        });
-      },
-    }),
-    [seed.fileManagerHandle, seed.windowManagerHandle],
-  );
+  const liveDocuments = {
+    [seed.fileTypesHandle.url]: JSON.stringify(fileTypes, null, 2),
+    [seed.filePickerStateHandle.url]: JSON.stringify(filePickerState, null, 2),
+    [seed.windowManagerHandle.url]: JSON.stringify(windowManagerState, null, 2),
+  };
   const filesystem = useMemo(() => {
     const result = evaluate(
       automergeMapSource(seed.indexDoc, { relations: filesystemRelations }),
@@ -136,77 +93,86 @@ export function App() {
       ? { diagnostics: result.diagnostics, root: null }
       : {
           diagnostics: [],
-          root: buildFilesystem(
-            seed.rootUrl,
-            seed.documents,
-            result.rows as readonly FilesystemDocumentRow[],
-          ),
+          root: buildFilesystem(seed.rootUrl, result.rows as readonly FilesystemDocumentRow[]),
         };
   }, [seed]);
+  const windowManagerActions = {
+    focusContext: (surfaceId: string, contextId: string) => {
+      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
+        focusContext(doc, surfaceId, contextId);
+      });
+    },
+    closeContext: (surfaceId: string, contextId: string) => {
+      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
+        closeContext(doc, surfaceId, contextId);
+      });
+    },
+    resizeSplit: (path: SplitPath, ratio: number) => {
+      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
+        resizeSplit(doc, path, ratio);
+      });
+    },
+  };
+  const filePickerActions = (sourceSurfaceId: string) => ({
+    openUrl: (url: string, title: string) => {
+      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
+        openContext(doc, viewerContext(url, title), sourceSurfaceId);
+      });
+    },
+    previewUrl: (url: string, title: string) => {
+      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
+        previewContext(doc, viewerContext(url, title), sourceSurfaceId);
+      });
+    },
+    selectUrl: (
+      url: string,
+      options?: FileSelectionOptions,
+    ) => {
+      selectFilePickerUrl(seed.filePickerStateHandle, url, options);
+    },
+    toggleFolder: (url: string) => {
+      toggleFilePickerFolder(seed.filePickerStateHandle, url);
+    },
+  });
+  const filePickers = {
+    [seed.filePickerStateHandle.url]: {
+      actions: filePickerActions,
+      fileIcons: iconRules,
+      state: filePickerState,
+    },
+  };
   return (
     <main className="app-shell">
       {filesystem.root === null ? (
         <pre className="diagnostics-json">{JSON.stringify(filesystem, null, 2)}</pre>
       ) : (
-        <section className="workspace" style={workspaceStyle(windowManagerState.workspace)}>
-          <FilePicker actions={fileManagerActions} root={filesystem.root} state={fileManagerState} />
-          <WindowManager
-            actions={windowManagerActions}
-            filesystemRoot={filesystem.root}
-            liveDocuments={liveDocuments}
-            state={windowManagerState}
-          />
-        </section>
+        <WindowManager
+          actions={windowManagerActions}
+          filePickers={filePickers}
+          filesystemRoot={filesystem.root}
+          liveDocuments={liveDocuments}
+          state={windowManagerState}
+        />
       )}
     </main>
   );
 }
 
-function useAutomergeDoc<T>(handle: DocHandle<T>): T {
-  const [doc, setDoc] = useState(() => handle.doc());
-  useEffect(() => {
-    const update = () => setDoc(handle.doc());
-    handle.on('change', update);
-    return () => {
-      handle.off('change', update);
-    };
-  }, [handle]);
-  return doc;
-}
-
-function selectedRange(
-  startUrl: string,
-  endUrl: string,
-  visibleUrls: readonly string[],
-): string[] {
-  const startIndex = visibleUrls.indexOf(startUrl);
-  const endIndex = visibleUrls.indexOf(endUrl);
-  if (startIndex === -1 || endIndex === -1) return [endUrl];
-  return visibleUrls.slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1);
-}
-
-function toggleValue(values: readonly string[], value: string): string[] {
-  return values.includes(value)
-    ? values.filter((item) => item !== value)
-    : [...values, value];
-}
-
-function viewerUrl(src: string): string {
-  return launchUrl('viewer.html', src);
-}
-
-function workspaceStyle(workspace: WorkspaceLayout): CSSProperties {
+function viewerContext(url: string, title: string | undefined): WindowContext {
   return {
-    '--workspace-file-picker-ratio': String(workspace.filePickerRatio),
-  } as CSSProperties;
+    app: 'viewer',
+    id: `viewer:${url}`,
+    ...(title === undefined ? {} : { title }),
+    url,
+  };
 }
 
-function folderDocuments(
-  documents: readonly FilesystemResourceRecord[],
-): Readonly<Record<string, string>> {
-  return Object.fromEntries(
-    documents
-      .filter(({ doc }) => doc['@patchwork'].type === PatchworkType.Folder)
-      .map(({ doc, url }) => [url, JSON.stringify(doc, null, 2)]),
+function useAutomergeDoc<T>(handle: DocHandle<T>): T {
+  return useSyncExternalStore(
+    (update) => {
+      handle.on('change', update);
+      return () => handle.off('change', update);
+    },
+    () => handle.doc(),
   );
 }
