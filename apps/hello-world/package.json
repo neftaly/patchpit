@@ -1,0 +1,25 @@
+{
+  "name": "@patchpit/hello-world",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && vite build --config ../../vite.config.ts --logLevel warn",
+    "dev": "vite --config ../../vite.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@automerge/automerge": "catalog:",
+    "@automerge/automerge-repo": "^2.5.6",
+    "@tarstate/automerge": "git+https://github.com/neftaly/tarstate.git#c40c8e360b22f1a9f1832fbafd2e9359500307ba&path:/packages/automerge",
+    "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#c40c8e360b22f1a9f1832fbafd2e9359500307ba&path:/packages/core",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

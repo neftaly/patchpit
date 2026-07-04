@@ -1,0 +1,122 @@
+:root {
+  --sidebar-width: 18.75rem;
+  --sidebar-indent: 1rem;
+  --sidebar-pad-x: 0.5rem;
+  --sidebar-pad-y: 0.125rem;
+  --sidebar-row-height: 1.5rem;
+  --sidebar-font-size: 0.8125rem;
+  --sidebar-line-height: 1.35;
+  --sidebar-icon-width: 1.15em;
+  --sidebar-icon-gap: 0.36em;
+  --sidebar-guide-width: 1px;
+  --sidebar-active-outline: 1px;
+  --sidebar-mobile-max-block: 42vh;
+}
+
+.tree-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 0 0 var(--sidebar-width);
+  flex-direction: column;
+  background: var(--color-sidebar);
+  border-right: var(--sidebar-guide-width) solid var(--color-border);
+}
+
+.tree,
+.tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-block: calc(var(--sidebar-pad-y) * 3);
+}
+
+.tree ul {
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(var(--sidebar-indent) - var(--sidebar-guide-width)),
+    var(--tree-indent-guide) calc(var(--sidebar-indent) - var(--sidebar-guide-width)),
+    var(--tree-indent-guide) var(--sidebar-indent)
+  );
+  background-repeat: no-repeat;
+  background-size: var(--tree-guide-width, 0rem) 100%;
+}
+
+.tree-item {
+  display: flex;
+  width: 100%;
+  min-height: var(--sidebar-row-height);
+  align-items: baseline;
+  gap: var(--sidebar-icon-gap);
+  border: 0;
+  margin: 0;
+  padding: var(--sidebar-pad-y) var(--sidebar-pad-x) var(--sidebar-pad-y)
+    calc(var(--tree-indent, 0rem) + var(--sidebar-pad-x));
+  background: transparent;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(var(--sidebar-indent) - var(--sidebar-guide-width)),
+    var(--tree-indent-guide) calc(var(--sidebar-indent) - var(--sidebar-guide-width)),
+    var(--tree-indent-guide) var(--sidebar-indent)
+  );
+  background-repeat: no-repeat;
+  background-size: var(--tree-indent, 0rem) 100%;
+  color: var(--color-code);
+  cursor: default;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: var(--sidebar-font-size);
+  line-height: var(--sidebar-line-height);
+  text-align: left;
+}
+
+.tree-item:hover,
+.tree-item:focus {
+  background-color: var(--color-hover);
+  outline: none;
+}
+
+.tree li[aria-selected='true'] > .tree-item {
+  color: var(--color-selected-text);
+  background-color: var(--color-selected-bg);
+}
+
+.tree li[data-active] > .tree-item {
+  outline: var(--sidebar-active-outline) solid var(--color-selected-text);
+  outline-offset: calc(0px - var(--sidebar-active-outline));
+}
+
+.tree-icon {
+  width: var(--sidebar-icon-width);
+  flex: 0 0 var(--sidebar-icon-width);
+  font-family: "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols 2",
+    "Noto Sans Symbols", sans-serif;
+  font-size: 0.875rem;
+  font-variant-emoji: text;
+  filter: grayscale(1) saturate(0) contrast(1.1);
+  line-height: inherit;
+  text-align: center;
+}
+
+.tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .tree-pane {
+    flex: 0 0 auto;
+    max-height: var(--sidebar-mobile-max-block);
+    border-right: 0;
+    border-bottom: var(--sidebar-guide-width) solid var(--color-border);
+  }
+}
