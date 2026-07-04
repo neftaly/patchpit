@@ -4,7 +4,7 @@ import type {
   FolderDoc,
   FolderEntry,
 } from './filesystem';
-import { EntryKind } from './filesystem';
+import { PatchworkType } from './filesystem';
 
 export type FilesystemNode =
   | {
@@ -27,7 +27,7 @@ export function buildFilesystem(
   documents: readonly FilesystemResourceRecord[],
   rows: readonly FilesystemDocumentRow[],
 ): FilesystemNode {
-  return buildLinkedNode({ name: '/', type: EntryKind.Folder, url: rootUrl }, documentsByUrl(documents), rowsByUrl(rows));
+  return buildLinkedNode({ name: '/', type: PatchworkType.Folder, url: rootUrl }, documentsByUrl(documents), rowsByUrl(rows));
 }
 
 export function findNode(node: FilesystemNode, url: string): FilesystemNode | null {
@@ -56,7 +56,7 @@ function buildLinkedNode(
   docs: ReadonlyMap<string, FilesystemResourceRecord['doc']>,
   rows: ReadonlyMap<string, FilesystemDocumentRow>,
 ): FilesystemNode {
-  if (entry.type === EntryKind.File) {
+  if (entry.type !== PatchworkType.Folder) {
     return fileNode(entry, rows.get(entry.url));
   }
 
@@ -66,11 +66,11 @@ function buildLinkedNode(
   }
 
   return {
-    entries: doc.entries
+    entries: doc.docs
       .map((child) => buildLinkedNode(child, docs, rows))
       .sort(compareNodes),
     kind: 'folder',
-    name: doc.name || entry.name,
+    name: doc.title || doc.name || entry.name,
     url: entry.url,
   };
 }
@@ -103,7 +103,7 @@ function rowsByUrl(rows: readonly FilesystemDocumentRow[]) {
 }
 
 function isFolderDoc(doc: FilesystemResourceRecord['doc'] | undefined): doc is FolderDoc {
-  return doc?.entryKind === EntryKind.Folder;
+  return doc?.['@patchwork'].type === PatchworkType.Folder;
 }
 
 function isExternalUrl(url: string): boolean {

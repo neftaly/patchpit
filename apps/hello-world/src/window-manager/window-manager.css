@@ -1,0 +1,135 @@
+.window-manager {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: calc(1 - var(--workspace-file-picker-ratio)) 1 0;
+  background: var(--color-pane);
+}
+
+.window-manager-split,
+.window-manager-pane,
+.viewer {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.window-manager-split-row {
+  flex-direction: row;
+}
+
+.window-manager-split-column,
+.window-manager-pane,
+.viewer {
+  flex-direction: column;
+}
+
+.window-manager-split-row > .window-manager-pane:not(:first-child),
+.window-manager-split-row > .window-manager-split:not(:first-child) {
+  border-left: var(--app-border) solid var(--color-border);
+}
+
+.window-manager-split-column > .window-manager-pane:not(:first-child),
+.window-manager-split-column > .window-manager-split:not(:first-child) {
+  border-top: var(--app-border) solid var(--color-border);
+}
+
+.window-manager-pane-header {
+  display: flex;
+  min-height: var(--tab-block);
+  background: var(--color-tabs);
+}
+
+.window-manager-tabs {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: auto hidden;
+}
+
+.window-manager-tabs::after {
+  content: "";
+  flex: 1 1 auto;
+  border-bottom: var(--app-border) solid var(--color-border);
+}
+
+.window-manager-tab {
+  --tab-icon-size: 1lh;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-bottom: var(--app-border) solid var(--color-border);
+  border-right: var(--app-border) solid var(--color-border);
+  padding-block: var(--tab-pad);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: default;
+  font-size: var(--tab-font-size);
+}
+
+.window-manager-tab::before {
+  width: var(--tab-icon-size);
+  aspect-ratio: 1;
+  content: "";
+  flex: 0 0 auto;
+  margin: var(--tab-control-margin);
+}
+
+.window-manager-tab[data-selected] {
+  border-bottom-color: transparent;
+  background: var(--color-pane);
+  color: var(--color-text);
+}
+
+.window-manager-tab[data-preview] .window-manager-tab-label {
+  font-style: italic;
+}
+
+.window-manager-tab-label,
+.window-manager-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  font: inherit;
+  font-size: var(--tab-font-size);
+}
+
+.window-manager-tab-label {
+  flex: 0 0 auto;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.window-manager-tab-icon {
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  height: var(--tab-icon-size);
+  margin: var(--tab-control-margin);
+  padding: 0;
+  border-radius: 2px;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.window-manager-tab:focus {
+  outline: none;
+}
+
+.window-manager-tab:hover:not([data-selected]):not(:has(.window-manager-tab-icon:hover)),
+.window-manager-tab:focus:not([data-selected]) {
+  background: var(--color-hover);
+}
+
+.window-manager-tab-icon:not(:disabled):hover {
+  background: var(--color-hover);
+  color: inherit;
+}
+
+.viewer {
+  overflow: auto;
+}

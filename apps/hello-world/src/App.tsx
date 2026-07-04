@@ -14,27 +14,35 @@ import {
   stringField,
 } from '@tarstate/core';
 import { evaluate } from '@tarstate/core/evaluate';
-import { useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useState } from 'react';
+import { FilePicker } from './apps/file-picker/FilePicker';
 import {
   createSeedFilesystem,
+  defaultFolderOpen,
   type FilesystemDocumentRow,
   type FilesystemDoc,
-  type WorkbenchPane,
-  type WorkbenchTab,
-  WorkbenchTabKind,
+  type FilesystemResourceRecord,
+  PatchworkType,
+  type WorkspaceLayout,
 } from './filesystem';
 import {
   buildFilesystem,
 } from './filesystem-tree';
-import { Sidebar } from './sidebar/Sidebar';
-import { Workbench } from './workbench/Workbench';
+import { launchUrl } from './shared/launch-url';
+import { WindowManager } from './window-manager/WindowManager';
+import {
+  closeTab,
+  focusTab,
+  openTab,
+  previewTab,
+} from './window-manager/window-manager-state';
 
 const filesystemSchema = defineSchema({
   documents: relation<FilesystemDocumentRow>({
     key: 'url',
     fields: {
       url: stringField(),
-      entryKind: stringField(),
+      type: stringField(),
       mimeType: optional(stringField()),
       content: optional(stringField()),
     },
@@ -51,8 +59,8 @@ const filesystemEntryQuery = pipe(
   sort(asc(doc.url)),
   project({
     content: maybe(doc.content),
-    entryKind: doc.entryKind,
     mimeType: maybe(doc.mimeType),
+    type: doc.type,
     url: doc.url,
   }),
 );
@@ -60,42 +68,40 @@ const filesystemEntryQuery = pipe(
 export function App() {
   const seed = useMemo(() => createSeedFilesystem(), []);
   const fileManagerState = useAutomergeDoc(seed.fileManagerHandle);
-  const workbenchState = useAutomergeDoc(seed.workbenchHandle);
-  const workbenchActions = useMemo(
+  const windowManagerState = useAutomergeDoc(seed.windowManagerHandle);
+  const liveDocuments = useMemo(
     () => ({
-      activateTab: (paneId: string, tabId: string) => {
-        seed.workbenchHandle.change((doc) => {
-          const pane = paneById(doc.panes, paneId);
-          pane.activeTabId = tabId;
-          doc.activePaneId = pane.id;
+      ...folderDocuments(seed.documents),
+      [seed.fileManagerHandle.url]: JSON.stringify(fileManagerState, null, 2),
+      [seed.windowManagerHandle.url]: JSON.stringify(windowManagerState, null, 2),
+    }),
+    [fileManagerState, seed.documents, seed.fileManagerHandle.url, seed.windowManagerHandle.url, windowManagerState],
+  );
+  const windowManagerActions = useMemo(
+    () => ({
+      focusTab: (paneId: string, tabId: string) => {
+        seed.windowManagerHandle.change((doc) => {
+          focusTab(doc, paneId, tabId);
+        });
+      },
+      closeTab: (paneId: string, tabId: string) => {
+        seed.windowManagerHandle.change((doc) => {
+          closeTab(doc, paneId, tabId);
         });
       },
     }),
-    [seed.workbenchHandle],
+    [seed.windowManagerHandle],
   );
   const fileManagerActions = useMemo(
     () => ({
-      openUrl: (url: string, title: string) => {
-        seed.workbenchHandle.change((doc) => {
-          const pane = activePane(doc.panes, doc.activePaneId);
-          const tab = pinnedTab(url, title);
-          const existing = pane.pinnedTabs.find((item) => item.targetUrl === url);
-          if (existing === undefined) pane.pinnedTabs.push(tab);
-          pane.previewTab = pane.previewTab?.targetUrl === url ? null : pane.previewTab;
-          pane.activeTabId = existing?.id ?? tab.id;
+      openUrl: (url: string) => {
+        seed.windowManagerHandle.change((doc) => {
+          openTab(doc, viewerUrl(url));
         });
       },
-      previewUrl: (url: string, title: string) => {
-        seed.workbenchHandle.change((doc) => {
-          const pane = activePane(doc.panes, doc.activePaneId);
-          const existing = pane.pinnedTabs.find((item) => item.targetUrl === url);
-          if (existing) {
-            pane.activeTabId = existing.id;
-            return;
-          }
-          const tab = previewTab(url, title);
-          pane.previewTab = tab;
-          pane.activeTabId = tab.id;
+      previewUrl: (url: string) => {
+        seed.windowManagerHandle.change((doc) => {
+          previewTab(doc, viewerUrl(url));
         });
       },
       selectUrl: (
@@ -114,11 +120,11 @@ export function App() {
       },
       toggleFolder: (url: string) => {
         seed.fileManagerHandle.change((doc) => {
-          doc.openFolders = toggleValue(doc.openFolders, url);
+          doc.openFolders[url] = !(doc.openFolders[url] ?? defaultFolderOpen);
         });
       },
     }),
-    [seed.fileManagerHandle, seed.workbenchHandle],
+    [seed.fileManagerHandle, seed.windowManagerHandle],
   );
   const filesystem = useMemo(() => {
     const result = evaluate(
@@ -142,9 +148,14 @@ export function App() {
       {filesystem.root === null ? (
         <pre className="diagnostics-json">{JSON.stringify(filesystem, null, 2)}</pre>
       ) : (
-        <section className="workspace">
-          <Sidebar actions={fileManagerActions} root={filesystem.root} state={fileManagerState} />
-          <Workbench actions={workbenchActions} filesystemRoot={filesystem.root} state={workbenchState} />
+        <section className="workspace" style={workspaceStyle(windowManagerState.workspace)}>
+          <FilePicker actions={fileManagerActions} root={filesystem.root} state={fileManagerState} />
+          <WindowManager
+            actions={windowManagerActions}
+            filesystemRoot={filesystem.root}
+            liveDocuments={liveDocuments}
+            state={windowManagerState}
+          />
         </section>
       )}
     </main>
@@ -180,22 +191,22 @@ function toggleValue(values: readonly string[], value: string): string[] {
     : [...values, value];
 }
 
-function activePane(panes: WorkbenchPane[], activePaneId: string): WorkbenchPane {
-  return panes.find((pane) => pane.id === activePaneId) ?? panes[0] ?? createMainPane();
+function viewerUrl(src: string): string {
+  return launchUrl('viewer.html', src);
 }
 
-function paneById(panes: WorkbenchPane[], paneId: string): WorkbenchPane {
-  return panes.find((pane) => pane.id === paneId) ?? activePane(panes, paneId);
+function workspaceStyle(workspace: WorkspaceLayout): CSSProperties {
+  return {
+    '--workspace-file-picker-ratio': String(workspace.filePickerRatio),
+  } as CSSProperties;
 }
 
-function createMainPane(): WorkbenchPane {
-  return { activeTabId: null, id: 'main', pinnedTabs: [], previewTab: null };
-}
-
-function pinnedTab(url: string, title: string): WorkbenchTab {
-  return { id: `pinned:${url}`, kind: WorkbenchTabKind.File, pinned: true, targetUrl: url, title };
-}
-
-function previewTab(url: string, title: string): WorkbenchTab {
-  return { id: 'preview', kind: WorkbenchTabKind.File, pinned: false, targetUrl: url, title };
+function folderDocuments(
+  documents: readonly FilesystemResourceRecord[],
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    documents
+      .filter(({ doc }) => doc['@patchwork'].type === PatchworkType.Folder)
+      .map(({ doc, url }) => [url, JSON.stringify(doc, null, 2)]),
+  );
 }

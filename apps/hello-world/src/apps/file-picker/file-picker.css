@@ -1,5 +1,4 @@
 :root {
-  --sidebar-width: 18.75rem;
   --sidebar-indent: 1rem;
   --sidebar-pad-x: 0.5rem;
   --sidebar-pad-y: 0.125rem;
@@ -17,7 +16,7 @@
   display: flex;
   min-width: 0;
   min-height: 0;
-  flex: 0 0 var(--sidebar-width);
+  flex: var(--workspace-file-picker-ratio) 1 0;
   flex-direction: column;
   background: var(--color-sidebar);
   border-right: var(--sidebar-guide-width) solid var(--color-border);
@@ -71,7 +70,7 @@
   background-size: var(--tree-indent, 0rem) 100%;
   color: var(--color-code);
   cursor: default;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-code);
   font-size: var(--sidebar-font-size);
   line-height: var(--sidebar-line-height);
   text-align: left;
@@ -96,11 +95,7 @@
 .tree-icon {
   width: var(--sidebar-icon-width);
   flex: 0 0 var(--sidebar-icon-width);
-  font-family: "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols 2",
-    "Noto Sans Symbols", sans-serif;
   font-size: 0.875rem;
-  font-variant-emoji: text;
-  filter: grayscale(1) saturate(0) contrast(1.1);
   line-height: inherit;
   text-align: center;
 }

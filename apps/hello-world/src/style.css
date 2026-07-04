@@ -1,30 +1,29 @@
 :root {
   color-scheme: light dark;
-  --app-pad: 1.5rem;
+  --app-pad: 0rem;
   --app-border: 1px;
   --detail-pad: 0.75rem;
-  --detail-header-block: 2.5625rem;
   --font-code: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-code-size: 0.8125rem;
   --line-code: 1.55;
   --preview-image-width: 28rem;
   --tab-block: 2rem;
+  --tab-control-margin: 2px;
   --tab-font-size: 0.8125rem;
-  --tab-max-inline: 14rem;
-  --tab-pad-inline: 0.75rem;
+  --tab-pad: 0.375rem;
 
-  --color-bg: #f4f4f1;
-  --color-pane: #fbfbf8;
-  --color-sidebar: #ecedea;
-  --color-tabs: #f0f1ed;
-  --color-border: #d4d7d1;
-  --color-hover: #e4e8e1;
-  --color-selected-bg: #d9eaff;
-  --color-selected-text: #0b2f4f;
-  --color-text: #171916;
-  --color-code: #20231f;
-  --color-muted: #687069;
-  --tree-indent-guide: #d8ddd4;
+  --color-bg: #eff1f5;
+  --color-pane: #e6e9ef;
+  --color-sidebar: var(--color-pane);
+  --color-tabs: var(--color-pane);
+  --color-border: #ccd0da;
+  --color-hover: #dce0e8;
+  --color-selected-bg: #1e66f5;
+  --color-selected-text: #eff1f5;
+  --color-text: #4c4f69;
+  --color-code: var(--color-text);
+  --color-muted: #6c6f85;
+  --tree-indent-guide: var(--color-border);
 
   color: var(--color-text);
   background: var(--color-bg);
@@ -39,18 +38,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #141614;
-    --color-pane: #1c1f1c;
-    --color-sidebar: #181b18;
-    --color-tabs: #171a17;
-    --color-border: #343933;
-    --color-hover: #252b24;
-    --color-selected-bg: #263b4c;
-    --color-selected-text: #edf7ff;
-    --color-text: #edf1ea;
-    --color-code: #e2e8df;
-    --color-muted: #a8b1a7;
-    --tree-indent-guide: #2b312b;
+    --color-bg: #11111b;
+    --color-pane: #1e1e2e;
+    --color-border: #313244;
+    --color-hover: #313244;
+    --color-selected-bg: #89b4fa;
+    --color-selected-text: #11111b;
+    --color-text: #cdd6f4;
+    --color-muted: #a6adc8;
   }
 }
 
@@ -76,28 +71,13 @@ body {
   min-height: calc(100vh - (var(--app-pad) * 2));
   overflow: hidden;
   background: var(--color-pane);
-  border: var(--app-border) solid var(--color-border);
 }
 
-.detail-pane {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  background: var(--color-pane);
-}
-
-.detail-header {
-  min-height: var(--detail-header-block);
-  padding: calc(var(--detail-pad) * 2 / 3) var(--detail-pad);
-  border-bottom: var(--app-border) solid var(--color-border);
-}
-
-.detail-header h1 {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.875rem;
-  letter-spacing: 0;
+.emoji-icon {
+  font-family: "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols 2",
+    "Noto Sans Symbols", sans-serif;
+  font-variant-emoji: text;
+  filter: grayscale(1) saturate(0) contrast(1.1);
 }
 
 .diagnostics-json,
@@ -114,7 +94,7 @@ body {
 }
 
 .file-preview {
-  min-height: calc(100% - var(--detail-header-block));
+  min-height: 100%;
   overflow: auto;
 }
 
@@ -136,10 +116,6 @@ body {
 }
 
 @media (max-width: 45rem) {
-  :root {
-    --app-pad: 0.75rem;
-  }
-
   .workspace {
     flex-direction: column;
   }
