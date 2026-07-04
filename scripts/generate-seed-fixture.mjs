@@ -47,9 +47,9 @@ const tree = {
           name: 'ghostscript-tiger.svg',
           url: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg',
         },
+        researchTree,
       ],
     },
-    researchTree,
   ],
 };
 
