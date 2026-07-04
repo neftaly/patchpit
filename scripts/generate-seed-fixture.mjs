@@ -1,5 +1,5 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 
 const target = 'apps/hello-world/src/fixtures/seed.ts';
 
@@ -27,6 +27,8 @@ const fileTypes = [
   ['*/*', '📄'],
 ];
 
+const researchTree = await folderFromDirectory('research');
+
 const tree = {
   kind: 'folder',
   name: '',
@@ -47,6 +49,7 @@ const tree = {
         },
       ],
     },
+    researchTree,
   ],
 };
 
@@ -77,3 +80,26 @@ export const seedTree = ${JSON.stringify(tree, null, 2)} as const satisfies Seed
 
 await mkdir(dirname(target), { recursive: true });
 await writeFile(target, file);
+
+async function folderFromDirectory(path) {
+  const entries = await readdir(path, { withFileTypes: true });
+  const children = await Promise.all(
+    entries
+      .filter((entry) => !entry.name.startsWith('.'))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(async (entry) => {
+        const childPath = join(path, entry.name);
+        if (entry.isDirectory()) return folderFromDirectory(childPath);
+        return {
+          kind: 'file',
+          name: entry.name,
+          content: await readFile(childPath, 'utf8'),
+        };
+      }),
+  );
+  return {
+    kind: 'folder',
+    name: basename(path),
+    children,
+  };
+}

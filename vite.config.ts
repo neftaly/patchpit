@@ -13,6 +13,8 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('@automerge')) return 'automerge';
+          if (id.includes('@tarstate')) return 'tarstate';
+          if (id.includes('react')) return 'react';
         },
       },
     },
