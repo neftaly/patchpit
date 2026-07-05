@@ -1,3 +1,4 @@
+import type { DocHandle } from '@automerge/automerge-repo';
 import {
   TerminalLineKind,
   type TerminalCapabilities,
@@ -84,6 +85,26 @@ export function replaceTerminalState(doc: TerminalStateDoc, state: TerminalState
   doc.env = { ...changes.env };
   doc.history = [...changes.history];
   doc.lines = structuredClone(changes.lines);
+}
+
+export function createTerminalStateActions(handle: DocHandle<TerminalStateDoc>): TerminalStateActions {
+  return {
+    appendPrompt: () => commitTerminalState(handle, terminalStateWithPrompt),
+    clear: () => commitTerminalState(handle, clearedTerminalState),
+    commitExecution: (execution) => {
+      commitTerminalState(handle, (state) => terminalStateWithExecution(state, execution));
+    },
+  };
+}
+
+function commitTerminalState(
+  handle: DocHandle<TerminalStateDoc>,
+  update: (state: TerminalStateDoc) => TerminalStateDoc,
+): void {
+  const next = update(handle.doc());
+  handle.change((doc) => {
+    replaceTerminalState(doc, next);
+  });
 }
 
 function terminalStateRow(state: TerminalStateDoc): TerminalStateRow {

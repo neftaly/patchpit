@@ -1,6 +1,7 @@
 export { Terminal } from './Terminal';
 export {
   clearedTerminalState,
+  createTerminalStateActions,
   replaceTerminalState,
   terminalStateWithExecution,
   terminalStateWithPrompt,

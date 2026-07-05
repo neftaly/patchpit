@@ -2,12 +2,8 @@ import type { DocHandle } from '@automerge/automerge-repo';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { fileIcons } from '@patchpit/file-picker';
 import {
-  clearedTerminalState,
-  replaceTerminalState,
-  terminalStateWithExecution,
-  terminalStateWithPrompt,
+  createTerminalStateActions,
   type PatchpitFilesystem,
-  type TerminalStateActions,
 } from '@patchpit/terminal';
 import { createTerminalFilesystemClient } from '@patchpit/terminal/filesystem';
 import {
@@ -264,7 +260,7 @@ function ShellApp({
     : Object.fromEntries(terminalHandles.map((handle) => [
         handle.url,
         {
-          actions: createShellTerminalActions(handle),
+          actions: createTerminalStateActions(handle),
           runtimeOptions: terminalRuntimeOptions,
           state: terminalStates[handle.url] ?? handle.doc(),
         },
@@ -330,26 +326,6 @@ function ShellApp({
       )}
     </main>
   );
-}
-
-function createShellTerminalActions(handle: DocHandle<TerminalStateDoc>): TerminalStateActions {
-  return {
-    appendPrompt: () => commitShellTerminalState(handle, terminalStateWithPrompt),
-    clear: () => commitShellTerminalState(handle, clearedTerminalState),
-    commitExecution: (execution) => {
-      commitShellTerminalState(handle, (state) => terminalStateWithExecution(state, execution));
-    },
-  };
-}
-
-function commitShellTerminalState(
-  handle: DocHandle<TerminalStateDoc>,
-  update: (state: TerminalStateDoc) => TerminalStateDoc,
-): void {
-  const next = update(handle.doc());
-  handle.change((doc) => {
-    replaceTerminalState(doc, next);
-  });
 }
 
 function useAutomergeDoc<T>(handle: DocHandle<T>): T {
