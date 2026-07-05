@@ -12,8 +12,11 @@ import {
   resolveTheme,
   rootContainer,
   themeStyle,
+  type WindowManagerStateDoc,
   type WindowContext,
 } from '@patchpit/system';
+import { launcherItems } from './launch-router/launch-router';
+import { ShellBar } from './shell-bar/ShellBar';
 import { WindowManager } from './window-manager/WindowManager';
 import {
   closeContext,
@@ -127,20 +130,30 @@ export function App() {
       stateHandle: seed.terminalStateHandle,
     },
   };
+  const launchers = launcherItems({
+    activeApp: activeApp(windowManagerState),
+    filePickerStateHandle: seed.filePickerStateHandle,
+    rootUrl: seed.rootUrl,
+    terminalStateHandle: seed.terminalStateHandle,
+    windowManagerHandle: seed.windowManagerHandle,
+  });
   return (
-    <main className="standalone-app" style={themeStyle(theme)}>
+    <main className="standalone-app shell-app" style={themeStyle(theme)}>
       {filesystem.root === null ? (
         <pre className="diagnostics-json">{JSON.stringify(filesystem, null, 2)}</pre>
       ) : (
-        <WindowManager
-          actions={windowManagerActions}
-          filePickers={filePickers}
-          filesystemRoot={filesystem.root}
-          liveDocuments={liveDocuments}
-          state={windowManagerState}
-          terminals={terminals}
-          theme={theme}
-        />
+        <>
+          <WindowManager
+            actions={windowManagerActions}
+            filePickers={filePickers}
+            filesystemRoot={filesystem.root}
+            liveDocuments={liveDocuments}
+            state={windowManagerState}
+            terminals={terminals}
+            theme={theme}
+          />
+          <ShellBar items={launchers} />
+        </>
       )}
     </main>
   );
@@ -154,6 +167,11 @@ function viewerContext(url: string, title: string | undefined, rootUrl: string):
     ...(title === undefined ? {} : { title }),
     url,
   };
+}
+
+function activeApp(state: WindowManagerStateDoc): string | undefined {
+  const contextId = state.surfaces[state.focus]?.activeContext;
+  return contextId === undefined ? undefined : state.contexts[contextId]?.app;
 }
 
 function useAutomergeDoc<T>(handle: DocHandle<T>): T {

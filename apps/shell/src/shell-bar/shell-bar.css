@@ -1,0 +1,55 @@
+.shell-app {
+  flex-direction: column;
+}
+
+.shell-bar,
+.shell-bar-launchers,
+.shell-bar-button {
+  display: flex;
+  min-width: 0;
+}
+
+.shell-bar {
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-top: var(--app-border) solid var(--color-border);
+  padding: var(--tab-pad);
+  background: var(--color-tabs);
+}
+
+.shell-bar-launchers {
+  justify-content: center;
+  gap: var(--tab-control-margin);
+}
+
+.shell-bar-button {
+  align-items: center;
+  gap: calc(var(--tab-control-margin) * 2);
+  border: 0;
+  padding: var(--tab-pad);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: default;
+  font-size: var(--font-code-size);
+  line-height: 1;
+}
+
+.shell-bar-button:is(:hover, :focus-visible),
+.shell-bar-button[data-active] {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.shell-bar-button:focus {
+  outline: none;
+}
+
+.shell-bar-button:focus-visible {
+  outline: var(--app-border) solid currentColor;
+  outline-offset: calc(var(--app-border) * -1);
+}
+
+.shell-bar-icon {
+  line-height: 1;
+}

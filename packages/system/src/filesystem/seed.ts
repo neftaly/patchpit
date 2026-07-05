@@ -1,6 +1,6 @@
 import { Repo, type DocHandle } from '@automerge/automerge-repo';
 import { seedFileTypes, seedTree, type SeedNode } from '../fixtures/seed';
-import { rootContainer, terminalContainer } from './container';
+import { rootContainer } from './container';
 import {
   automergeMimeType,
   automergeExtension,
@@ -154,12 +154,6 @@ export function createSeedFilesystem(): SeedFilesystem {
         title: 'File Picker',
         url: filePickerStateHandle.url,
       },
-      terminal: {
-        app: 'terminal',
-        container: terminalContainer(root.url),
-        id: 'terminal',
-        url: terminalStateHandle.url,
-      },
     },
     extension: automergeExtension,
     focus: 'main',
@@ -168,13 +162,7 @@ export function createSeedFilesystem(): SeedFilesystem {
       first: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
       kind: WindowManagerNodeKind.Split,
       ratio: 0.2,
-      second: {
-        direction: SplitDirection.Column,
-        first: { kind: WindowManagerNodeKind.Surface, surfaceId: 'main' },
-        kind: WindowManagerNodeKind.Split,
-        ratio: 0.8,
-        second: { kind: WindowManagerNodeKind.Surface, surfaceId: 'terminal' },
-      },
+      second: { kind: WindowManagerNodeKind.Surface, surfaceId: 'main' },
     },
     mimeType: automergeMimeType,
     name: automergeFileName('window-manager'),
@@ -188,12 +176,6 @@ export function createSeedFilesystem(): SeedFilesystem {
       main: {
         contexts: [],
         id: 'main',
-        role: SurfaceRole.DocumentSet,
-      },
-      terminal: {
-        activeContext: 'terminal',
-        contexts: ['terminal'],
-        id: 'terminal',
         role: SurfaceRole.DocumentSet,
       },
     },
