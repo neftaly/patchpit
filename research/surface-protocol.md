@@ -1,29 +1,70 @@
-# Patchpit Surface Protocol Research
+# Patchpit Surface Protocol
 
-This is the target shape for Patchpit's app/window-manager protocol after comparing
-web manifests, desktop window managers, spatial shells, OMBI/Sneeze, and Plan 9.
+Patchpit is a small shell for Automerge-backed applications. Durable data lives
+as named documents in a filesystem-like namespace. Running apps are represented
+by contexts. The window manager arranges those contexts into surfaces, tabs, and
+split layouts.
 
-## Research Summary
+This document describes the target protocol shape. External systems informed the
+notes at the end, but the model here is Patchpit's own runtime contract.
 
-- Web manifests are the right precedent for app identity: `id`, `name`, `entry`,
-  `scope`, `icons`, `handles`, and requested permissions.
-- EWMH, Wayland, i3, sway, xmonad, macOS, and Windows all point to the same
-  boundary: apps describe function, while the window manager owns placement,
-  focus, stacking, layout, and final policy.
-- Spatial systems add another split: shared workspace state is not the same as
-  per-device presentation. A tablet, desktop, headset, and HUD may present the
-  same surface differently.
-- OMBI/Sneeze adds useful vocabulary: a host app/window manager presents live
-  contexts through one or more viewports. Spatial placement is a projection, not
-  the app identity.
-- Plan 9 says names and services matter more than object classes. Durable docs
-  live in namespaces; live systems are service trees; launch/open is a message,
-  not a file.
-- Tarstate schemas are lenses over JSON-shaped state. They should not force
-  Patchpit into table-shaped storage when hierarchical Automerge docs are the
-  clearer canonical shape.
+## System Model
 
-## Finished Model
+Patchpit currently seeds three durable roots and reserves one live-service root:
+
+- `/apps` contains installed app manifest docs
+- `/home` contains user and workspace documents
+- `/system` contains shell-owned persistent state
+- `/srv` is reserved for future live mountable services
+
+The bootloader creates the initial filesystem, app manifests, app instance state
+docs, and window-manager state doc. The target flow is that apps are opened
+through intents after boot. The current prototype still lets the file picker
+construct viewer contexts directly.
+
+The window manager owns:
+
+- layout tree and split ratios
+- surfaces and their roles
+- focus
+- tab membership
+- preview slots
+
+Apps own:
+
+- their manifest docs
+- their app instance state docs
+- interpretation of routed intents
+- titles and metadata they choose to publish
+
+Clients own local presentation state that should not be shared by default, such
+as viewport geometry, collapsed panels, pointer focus, or device-specific form.
+
+## Documents
+
+Automerge docs are the canonical durable state. Patchpit uses `.am` for new
+Automerge-backed filenames. `.automerge` remains readable for compatibility.
+Both map to `application/vnd.automerge`.
+
+State documents should keep the shape that best matches the domain. They do not
+need to be flattened into tables. Tarstate provides typed lenses over those docs
+for reads, views, and writes.
+
+Within `/system`:
+
+- `/system/apps` contains running app instance state docs
+- `/system/config` contains shell configuration docs
+- `/system/themes` contains theme docs
+- `/system/window-manager.am` contains shared window-manager state
+
+The linked Automerge docs are the real filesystem format. `FilesystemIndexDoc`
+is an internal projection/cache used by Tarstate and the prototype UI to read
+the linked tree efficiently. It should not become the interchange format.
+
+## App Manifests
+
+An app manifest describes what an app is and what it can handle. It does not own
+placement, focus, tab policy, or permission grants.
 
 ```ts
 type AppManifest = {
@@ -38,12 +79,31 @@ type AppManifest = {
   permissions?: PermissionRequest[];
 };
 
+type SurfaceSpec = {
+  role: SurfaceRole;
+  forms?: SurfaceForm[];
+  placementHint?: PlacementHint;
+  reuseHint?: ReuseHint;
+  state?: { type: string; schema?: string };
+};
+
 type Handler = {
   port: string;
   intent: 'preview' | 'open' | 'reveal' | 'activate';
   accepts: string[];
 };
+```
 
+`handles.accepts` matches MIME-like intent types. It uses the same pattern
+language as file icon rules: exact matches such as `text/markdown`, wildcards
+such as `image/*`, and a final fallback such as `*/*`.
+
+## Intents
+
+An intent is the message used to preview, open, reveal, or activate a resource.
+It is the shell equivalent of a command-line invocation.
+
+```ts
 type Intent = {
   src?: string;
   port?: string;
@@ -56,14 +116,52 @@ type Intent = {
 type RoutedIntent = Intent & {
   port: string;
 };
+```
 
+The router reads the intent, chooses a matching app handler from `/apps`, and
+produces a routed intent with a concrete `port`.
+
+Intent behavior:
+
+- `preview` creates or reuses a temporary preview context
+- `open` creates or reuses a durable pinned context
+- `reveal` navigates an existing surface to show a resource
+- `activate` focuses or raises without changing content
+
+Preview contexts are intentionally non-durable until promoted. Double-clicking
+or dragging a preview tab can promote it to a pinned context.
+
+## Contexts
+
+A context is the running/session object for one app around one primary URL. It
+is not itself a tab, pane, iframe, process, or file.
+
+```ts
 type Context = {
   id: string;
   app: string;
+  container: AppContainer;
   title?: string;
   url: string;
 };
+```
 
+Examples:
+
+- a viewer context for `automerge:...README.md`
+- a file picker context for a file-picker state doc
+- a terminal context for a terminal state doc
+
+The shell/router assigns the context's container, which defines the app's mount
+namespace. Tabs display a shell context label: currently filesystem path or
+runtime title, falling back to `title ?? url`.
+
+## Surfaces
+
+A surface is a shell-visible container for one or more contexts. It is the owner
+of shell-managed tabs.
+
+```ts
 type Surface = {
   id: string;
   role: SurfaceRole;
@@ -72,175 +170,33 @@ type Surface = {
   previewContext?: string;
 };
 
-type SurfaceSpec = {
-  role: SurfaceRole;
-  forms?: SurfaceForm[];
-  placementHint?: PlacementHint;
-  reuseHint?: ReuseHint;
-  state?: { type: string; schema?: string };
-};
-
-type Viewport = {
-  id: string;
-  client: string;
-  surface: string;
-  form: SurfaceForm;
-  focus?: string;
-};
-
 type SurfaceRole =
   | 'document-set'
   | 'workspace-view'
   | 'session-set'
   | 'transient'
   | 'shell';
-
-type SurfaceForm =
-  | 'window'
-  | 'panel'
-  | 'tabset'
-  | 'volume'
-  | 'hud'
-  | 'immersive-space';
-
-type PlacementHint =
-  | 'center'
-  | 'left'
-  | 'right'
-  | 'bottom'
-  | 'floating'
-  | 'spatial';
-
-type ReuseHint =
-  | 'new'
-  | 'workspace'
-  | 'subject'
-  | 'source-surface';
 ```
 
-## Resolved Questions
+`contexts` are pinned context ids. `previewContext` is the one temporary slot. A
+document-set surface can hold many viewer/editor contexts. A workspace-view
+surface usually holds one file picker context and rejects document tab drops.
 
-### Authority
+Tab behavior:
 
-The app manifest is descriptive. It declares identity, entry points, surface
-types, and handler support. It does not own placement, focus, tab membership, or
-permission grants.
+- selecting a pinned tab focuses that context
+- selecting a preview tab focuses it without pinning it
+- double-clicking a preview pins it
+- dragging a preview pins it on successful drop
+- dragging within a document-set reorders tabs
+- dragging to another document-set moves the tab there
+- dragging to a workspace-view is rejected
+- closing the active tab focuses the nearest remaining tab or preview
 
-The window manager owns surfaces, layout, focus, preview slots, and final launch
-policy. Apps own their state docs and app-specific interpretation of intents.
-Clients own local viewports and transient presentation state.
+## Layout
 
-### Context
-
-A context is the running/session object. It is not a tab, pane, process, or URL.
-It says: this app is running around this primary URL.
-
-Examples:
-
-- viewer context with `url: automerge:...README.md`
-- file picker context with `url: automerge:...file-picker-state`
-- terminal context for a shell session state doc
-
-`app` and `url` should be references, not embedded documents. For document
-apps, `url` is usually the document being viewed or edited. For stateful shell
-apps, `url` can be the app instance state doc, and that doc can link to its
-workspace/root/source documents.
-
-Tabs display `title ?? url`. Apps or routers may set `title` from filesystem
-metadata when they create or update a context; the window manager does not
-resolve resource names itself.
-Those references may initially be URL strings, but the protocol should treat
-them as document or app identities that can later become typed refs.
-
-### Surface
-
-A surface is the shell-visible container that presents one or more contexts.
-Tabs belong here when the shell manages tabs. A `document-set` surface can hold
-many viewer/editor contexts; a `workspace-view` surface usually holds one file
-picker context.
-
-This keeps editor-like tabs in the shell/window-manager model without forcing
-each app to reinvent tab state.
-
-`contexts` are pinned/open context ids. `previewContext` is the temporary slot.
-Promoting a preview moves that context id into `contexts`; switching away from a
-preview can drop the temporary reference.
-
-### Viewport
-
-A viewport is one client's presentation of a surface. It owns local geometry,
-pose, form, device-specific focus, and collapsed/expanded presentation.
-
-Shared layouts can exist, but they should be explicit workspace/session state.
-Default tablet/headset/desktop projections should not fight each other.
-
-### Intent
-
-Launch/open/preview is a plumber-style message. It should not be encoded as a
-fake file. The router reads `type`, `attr`, and `data`, resolves a handler, then
-creates a `RoutedIntent` with a concrete `port`.
-
-`preview` should create or reuse `previewContext`. `open` should create or reuse
-a durable context. `reveal` should navigate an existing surface. `activate`
-should focus or raise without changing content.
-
-Previews are intentionally non-durable unless promoted by `open`. Switching away
-from a preview should not create a pinned tab or durable context unless the user
-or app explicitly asks for that.
-
-Hints such as `placementHint`, `reuseHint`, and manifest `forms` are advisory.
-The window manager may ignore them for device constraints, user preference,
-collaboration policy, or safety.
-
-`Handler.accepts` matches `Intent.type`. Values should use the same MIME pattern
-language as file type rules, including exact matches like `text/markdown` and
-wildcards like `image/*`.
-
-`SurfaceSpec.state` declares the state type/schema an app surface expects. For
-stateful app instances, `Context.url` points at the specific state document for
-one running context.
-
-### Namespace And Services
-
-Durable resources:
-
-- documents
-- folders
-- app manifests
-- routing rules
-- saved workspace/session descriptors
-
-Live service directories:
-
-- running apps
-- surfaces/windows
-- window manager
-- router/plumber
-- device bridges
-
-`/srv` should be reserved for live mountable services. Persisted Automerge state
-docs should move to `/state`, `/sessions`, or `/wm`.
-
-App manifests should live under `/apps`. The router indexes manifest docs from
-that namespace and uses their `handles` entries to route intents.
-
-### Tarstate
-
-Automerge docs should remain the canonical state. Use the shape that best
-matches the domain and the Ink & Switch/Patchwork file format, even when that
-shape is hierarchical.
-
-Tarstate should provide the lens:
-
-- schemas describe typed projections over the document
-- relations are named views or patchable slices, not storage requirements
-- `idField`, `refField`, and `anchoredPathField` document identity, links, and
-  tree positions
-- `ephemeral` relations are appropriate for presence, local clients, and other
-  non-durable views
-- write patches compile back into the canonical Automerge tree
-
-For example, a window-manager doc can stay hierarchical:
+The window-manager doc stores a hierarchical layout tree. Split ratios belong to
+the split node, not to the app or tab.
 
 ```ts
 type WindowManagerDoc = {
@@ -250,35 +206,80 @@ type WindowManagerDoc = {
 };
 ```
 
-Tarstate can project that as `surfaces`, `contexts`, `layoutNodes`, or
-`activeContexts` without making the saved document a database dump.
+A ratio is the first child size. For example, a row split with `ratio: 0.2`
+means the first surface receives 20% and the second receives the remainder. If
+another pane is added later, the existing ratio still describes only that split
+node.
 
-### Lifecycle
+## Viewports
 
-The bootloader creates the initial window-manager doc, bootstrap contexts, and
-starting surfaces. After boot, intents are the normal way to create, reuse,
-activate, or reveal contexts.
+A viewport is one client's presentation of a surface. It lets multiple devices
+look at the same shared shell state without forcing them to share every local
+presentation choice.
 
-The router chooses an app handler from `/apps`, creates a routed intent, and
-asks the window manager to place or reuse a surface. The window manager owns
-surface creation/destruction and may garbage-collect unreferenced preview
-contexts. Apps own app-specific state creation and updates.
+```ts
+type Viewport = {
+  id: string;
+  client: string;
+  surface: string;
+  form: SurfaceForm;
+  focus?: string;
+};
+
+type SurfaceForm =
+  | 'window'
+  | 'panel'
+  | 'tabset'
+  | 'volume'
+  | 'hud'
+  | 'immersive-space';
+```
+
+Shared layouts can exist, but they should be explicit workspace/session state.
+Desktop, tablet, headset, and HUD projections should not silently overwrite each
+other's local presentation.
+
+## Tarstate
+
+Tarstate is the lens layer over Automerge docs. It should be used for structured
+reads and writes when a typed projection helps, while Automerge remains the
+source of truth.
+
+Tarstate schemas can expose:
+
+- named projections over hierarchical documents
+- patchable slices for writes
+- references and anchored paths
+- ephemeral relations for local or presence-like state
+
+For the window manager, the saved Automerge doc can stay hierarchical while
+Tarstate projects `surfaces`, `contexts`, `layoutNodes`, or `activeContexts` as
+needed.
 
 ## Implementation Target
 
-The first useful implementation should be small:
+The first useful implementation should stay small:
 
-1. Add app manifests for file picker and viewer.
-2. Model the window-manager doc as a hierarchical tree of layout, surfaces, and
-   contexts.
-3. Use Tarstate schemas as projections/write lenses over that tree.
-4. Replace URL-only tabs with contexts.
-5. Replace panes with shell-managed surfaces.
-6. Keep split layout as a WM projection over surface ids.
-7. Move persisted state docs out of `/srv`.
+1. App manifests live under `/apps`.
+2. File picker, viewer, and terminal each run as contexts.
+3. File picker state, terminal state, themes, and window-manager state live as
+   Automerge docs under `/system`.
+4. The window-manager doc owns surfaces, tabs, focus, and split layout.
+5. A router should create contexts from intents; direct file-picker-to-viewer
+   context creation is a prototype shortcut.
+6. Tarstate provides projections and write lenses over the durable docs.
+7. `/srv` remains reserved for future live services, not persisted app state.
 
-Do not implement spatial placement, permissions, or multiple viewports until the
-basic desktop projection is working.
+Do not implement permissions, spatial placement, or multiple viewports until the
+basic desktop projection is stable.
+
+## Notes
+
+The protocol is informed by app manifests, desktop window-manager protocols,
+tiling window managers, spatial shells, Plan 9 namespaces, and Tarstate schemas.
+Those references are useful for vocabulary and edge cases, but Patchpit should
+keep the runtime boundary simple: apps describe capabilities, the shell owns
+placement, and durable state lives in linked Automerge docs.
 
 ## Sources
 

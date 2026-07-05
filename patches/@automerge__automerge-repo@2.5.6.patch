@@ -1,0 +1,13 @@
+diff --git a/dist/helpers/throttle.js b/dist/helpers/throttle.js
+index 98d1f8105b93db04e9132d727190895898c4cac4..a797f6e02a8b44c1e7b1abbd6478d51a6212729d 100644
+--- a/dist/helpers/throttle.js
++++ b/dist/helpers/throttle.js
+@@ -111,7 +111,7 @@ export const asyncThrottle = (fn, delay) => {
+                     currentPromise = undefined;
+                     timeout = undefined;
+                 }
+-            }, wait);
++            }, Math.max(0, wait));
+         });
+     };
+ };

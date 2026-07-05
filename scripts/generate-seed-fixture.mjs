@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
-const target = 'apps/hello-world/src/fixtures/seed.ts';
+const target = 'packages/system/src/fixtures/seed.ts';
 
 const fileTypes = [
   ['application/vnd.automerge', '🔀'],

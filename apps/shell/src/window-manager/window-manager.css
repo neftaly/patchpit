@@ -1,0 +1,146 @@
+.window-manager,
+.window-manager-split,
+.window-manager-surface {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.window-manager {
+  background: var(--color-surface);
+}
+
+.window-manager-split-row {
+  flex-direction: row;
+}
+
+.window-manager-split-column,
+.window-manager-surface {
+  flex-direction: column;
+}
+
+.window-manager-resize-handle {
+  flex: 0 0 var(--window-resize-handle-size);
+  padding: 0;
+  border: 0;
+  background: var(--color-border);
+  touch-action: none;
+}
+
+.window-manager-split-row > .window-manager-resize-handle {
+  cursor: col-resize;
+}
+
+.window-manager-split-column > .window-manager-resize-handle {
+  cursor: row-resize;
+}
+
+.window-manager-surface-header {
+  display: flex;
+  flex: 0 0 auto;
+  background: var(--color-tabs);
+}
+
+.window-manager-tabs {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.window-manager-tabs::after {
+  content: "";
+  flex: 1 1 auto;
+  border-bottom: var(--app-border) solid var(--color-border);
+}
+
+.window-manager-tab {
+  --tab-icon-size: calc(var(--font-code-size) + var(--tab-control-margin) * 2);
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: calc(var(--tab-pad) - var(--tab-control-margin));
+  border-bottom: var(--app-border) solid var(--color-border);
+  border-right: var(--app-border) solid var(--color-border);
+  padding: var(--tab-pad);
+  padding-inline-start: calc(var(--tab-pad) + var(--tab-control-margin) * 2);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: default;
+  font-size: var(--font-code-size);
+}
+
+.window-manager-tab[data-selected] {
+  border-bottom-color: transparent;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.window-manager-tab[data-preview] .window-manager-tab-label {
+  font-style: italic;
+}
+
+.window-manager-tab-label,
+.window-manager-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  line-height: 1;
+}
+
+.window-manager-tab-label {
+  white-space: nowrap;
+}
+
+.window-manager-tab-icon {
+  inline-size: var(--tab-icon-size);
+  flex: 0 0 var(--tab-icon-size);
+  height: var(--tab-icon-size);
+  padding: 0;
+  border-radius: var(--tab-control-margin);
+  color: var(--color-muted);
+}
+
+.window-manager-tab:focus {
+  outline: none;
+}
+
+.window-manager-tab:not([data-selected]):is(:hover, :focus):not(:has(.window-manager-tab-icon:hover)) {
+  background: var(--color-hover);
+}
+
+.window-manager-surface[data-drop-target] > .surface-content,
+.window-manager-tabs[data-drop-target]::after {
+  background: var(--color-hover);
+}
+
+.window-manager-tab[data-drop-target] {
+  color: var(--color-text);
+}
+
+.window-manager-tab[data-drop-target]::after {
+  position: absolute;
+  inset-block: var(--tab-control-margin);
+  inline-size: var(--window-resize-handle-size);
+  content: "";
+  background: currentColor;
+}
+
+.window-manager-tab[data-drop-target="before"]::after {
+  inset-inline-start: 0;
+}
+
+.window-manager-tab[data-drop-target="after"]::after {
+  inset-inline-end: 0;
+}
+
+.window-manager-tab-icon:hover {
+  background: var(--color-hover);
+  color: inherit;
+}

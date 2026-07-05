@@ -1,0 +1,23 @@
+.terminal {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--window-resize-handle-size);
+}
+
+.terminal-host {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terminal .xterm-viewport {
+  background-color: transparent;
+  overflow-y: auto;
+}

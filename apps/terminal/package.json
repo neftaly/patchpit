@@ -1,0 +1,25 @@
+{
+  "name": "@patchpit/terminal",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "bench": "vite build --config scripts/bench.vite.config.mjs --logLevel warn && node --expose-gc .bench/bench.mjs"
+  },
+  "dependencies": {
+    "@automerge/automerge-repo": "^2.5.6",
+    "@patchpit/system": "workspace:*",
+    "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#c40c8e360b22f1a9f1832fbafd2e9359500307ba&path:/packages/core",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "just-bash": "^3.0.2",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:"
+  }
+}

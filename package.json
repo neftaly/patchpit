@@ -8,11 +8,12 @@
     "node": ">=24.12.0"
   },
   "scripts": {
-    "build": "pnpm -r --if-present build",
-    "dev": "pnpm --filter @patchpit/hello-world dev",
-    "fixtures:check": "pnpm fixtures:seed && git diff --exit-code -- apps/hello-world/src/fixtures/seed.ts",
+    "build": "vite build --config vite.config.ts --logLevel warn",
+    "dev": "vite --config vite.config.ts",
+    "fixtures:check": "pnpm fixtures:seed && git diff --exit-code -- packages/system/src/fixtures/seed.ts",
     "fixtures:seed": "node scripts/generate-seed-fixture.mjs",
     "lint": "oxlint . --deny-warnings --type-aware",
+    "smoke": "pnpm build && node scripts/smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -28,6 +29,9 @@
   "pnpm": {
     "overrides": {
       "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#c40c8e360b22f1a9f1832fbafd2e9359500307ba&path:/packages/core"
+    },
+    "patchedDependencies": {
+      "@automerge/automerge-repo@2.5.6": "patches/@automerge__automerge-repo@2.5.6.patch"
     }
   }
 }

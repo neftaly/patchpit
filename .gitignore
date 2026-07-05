@@ -2,6 +2,9 @@ node_modules/
 .pnpm-store/
 
 dist/
+**/dist/
+.bench/
+**/.bench/
 dist-ssr/
 .vite/
 *.tsbuildinfo
