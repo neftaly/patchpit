@@ -41,7 +41,7 @@ export type StateBrowserSnapshotInput = {
   readonly runtimeIssueHistory: readonly StateBrowserRuntimeIssueEntry[];
   readonly runtimePlatform: RuntimePlatformReport;
   readonly runtimeState: RuntimeStateDoc;
-  readonly schemaDocuments: Readonly<Record<string, unknown>>;
+  readonly schemaRefs: readonly DocumentSchemaRef[];
   readonly workspaceProjection: WorkspaceProjectionState;
 };
 
@@ -58,7 +58,12 @@ type StateBrowserSection = {
 type PatchpitMetadataSummary = Readonly<Record<string, unknown>> & {
   readonly type: string;
 };
-type DocumentSchemaRef = NonNullable<ReturnType<typeof documentSchemaRef>>;
+export type DocumentSchemaRef = {
+  readonly inlineSchemaIds?: readonly string[];
+  readonly schema?: unknown;
+  readonly type: string;
+  readonly url: string;
+};
 type SystemSchemaCatalogSummary = ReturnType<typeof systemSchemaCatalogSummary>;
 
 export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnapshot }) {
@@ -85,7 +90,7 @@ export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnap
 }
 
 export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): StateBrowserSnapshot {
-  const schemaRefs = documentSchemaRefs(input.schemaDocuments);
+  const schemaRefs = input.schemaRefs;
   const schemaCatalog = systemSchemaCatalogSummary();
 
   return {
@@ -435,14 +440,14 @@ function intentLogData(log: BootstrapRuntimeDiagnostics['intentLog']) {
   };
 }
 
-function documentSchemaRefs(documents: Readonly<Record<string, unknown>>) {
+export function documentSchemaRefs(documents: Readonly<Record<string, unknown>>): readonly DocumentSchemaRef[] {
   return Object.entries(documents)
     .map(([url, document]) => documentSchemaRef(url, document))
     .filter(isDefined)
     .sort((left, right) => left.type.localeCompare(right.type) || left.url.localeCompare(right.url));
 }
 
-function documentSchemaRef(url: string, document: unknown) {
+function documentSchemaRef(url: string, document: unknown): DocumentSchemaRef | undefined {
   const metadata = patchpitMetadata(document);
   if (metadata === undefined) return undefined;
 

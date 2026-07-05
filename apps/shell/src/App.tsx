@@ -48,6 +48,7 @@ import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/laun
 import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from './runtime/route-intents';
 import {
   createStateBrowserSnapshot,
+  documentSchemaRefs,
   type StateBrowserRuntimeIssueEntry,
 } from './state-browser/StateBrowser';
 import { useFilesystemTreeProjection, useWorkspaceProjection } from './runtime/use-runtime-projection';
@@ -138,6 +139,7 @@ function ShellApp({
     [seed.windowManagerHandle.url]: windowManagerDocument,
     ...terminalStates,
   };
+  const schemaRefs = documentSchemaRefs(liveDocuments);
   const filesystemProjection = useFilesystemTreeProjection(runtime, seed.rootUrl);
   const workspaceProjection = useWorkspaceProjection(runtime);
   const stateBrowserSnapshot = createStateBrowserSnapshot({
@@ -148,7 +150,7 @@ function ShellApp({
     runtimeIssueHistory,
     runtimePlatform,
     runtimeState,
-    schemaDocuments: liveDocuments,
+    schemaRefs,
     workspaceProjection,
   });
   const recordRuntimeIssue = (source: StateBrowserRuntimeIssueEntry['source'], issue: RuntimePanelFailure) => {
