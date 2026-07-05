@@ -19,7 +19,7 @@ function App() {
 
   return (
     <main className="standalone-app">
-      <Viewer filesystemRoot={filesystem.root} liveDocuments={{}} url={url} />
+      <Viewer filesystemRoot={filesystem.root} url={url} />
     </main>
   );
 }

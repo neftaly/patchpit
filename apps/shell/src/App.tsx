@@ -294,7 +294,6 @@ function ShellApp({
             actions={windowManagerActions}
             filePickers={filePickers}
             filesystemRoot={filesystemProjection.root}
-            liveDocuments={liveDocuments}
             stateBrowser={stateBrowserSnapshot}
             terminals={terminals}
             theme={theme}

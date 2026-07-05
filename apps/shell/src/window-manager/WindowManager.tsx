@@ -72,7 +72,6 @@ type WindowManagerRuntime = {
   readonly dropTarget: DropTarget | undefined;
   readonly filePickers: Readonly<Record<string, RunningFilePicker>>;
   readonly filesystemRoot: FilesystemNode;
-  readonly liveDocuments: Readonly<Record<string, unknown>>;
   readonly setDraggedTab: (tab: DraggedTab | undefined) => void;
   readonly setDropTarget: (target: DropTarget | undefined) => void;
   readonly stateBrowser: StateBrowserSnapshot;
@@ -98,7 +97,6 @@ export function WindowManager({
   actions,
   filePickers,
   filesystemRoot,
-  liveDocuments,
   stateBrowser,
   terminals,
   theme,
@@ -107,7 +105,6 @@ export function WindowManager({
   readonly actions: WindowManagerActions;
   readonly filePickers: Readonly<Record<string, RunningFilePicker>>;
   readonly filesystemRoot: FilesystemNode;
-  readonly liveDocuments: Readonly<Record<string, unknown>>;
   readonly stateBrowser: StateBrowserSnapshot;
   readonly terminals: Readonly<Record<string, RunningTerminal>>;
   readonly theme: ThemeDoc;
@@ -125,7 +122,6 @@ export function WindowManager({
     dropTarget,
     filePickers,
     filesystemRoot,
-    liveDocuments,
     setDraggedTab,
     setDropTarget,
     stateBrowser,
@@ -484,7 +480,6 @@ function SurfaceContent({
   return (
     <Viewer
       filesystemRoot={runtime.filesystemRoot}
-      liveDocuments={runtime.liveDocuments}
       url={context?.url}
     />
   );
