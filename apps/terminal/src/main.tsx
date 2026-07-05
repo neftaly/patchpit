@@ -2,6 +2,7 @@ import type { DocHandle } from '@automerge/automerge-repo';
 import { StrictMode, useMemo, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  createTerminalStateResource,
   createSeedFilesystem,
   resolveTheme,
   terminalContainer,
@@ -16,10 +17,11 @@ import { createPatchpitFilesystem } from './filesystem';
 
 function App() {
   const [seed] = useState(createSeedFilesystem);
+  const [terminalStateHandle] = useState(() => createTerminalStateResource(seed, 'standalone-terminal'));
   const appearance = useAutomergeDoc(seed.appearanceHandle);
   const darkTheme = useAutomergeDoc(seed.darkThemeHandle);
   const lightTheme = useAutomergeDoc(seed.lightThemeHandle);
-  const state = useAutomergeDoc(seed.terminalStateHandle);
+  const state = useAutomergeDoc(terminalStateHandle);
   const theme = resolveTheme(appearance, lightTheme, darkTheme, usePrefersDark());
   const terminalFilesystem = useMemo(() => createPatchpitFilesystem({
     documentHandles: seed.documentHandles,
@@ -27,7 +29,7 @@ function App() {
     repo: seed.repo,
     rootUrl: seed.rootUrl,
   }), [seed]);
-  const terminalActions = useMemo(() => createTerminalStateActions(seed.terminalStateHandle), [seed]);
+  const terminalActions = useMemo(() => createTerminalStateActions(terminalStateHandle), [terminalStateHandle]);
 
   return (
     <main className="standalone-app" style={themeStyle(theme)}>

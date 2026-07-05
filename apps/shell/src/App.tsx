@@ -114,7 +114,6 @@ function ShellApp({
   const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly StateBrowserRuntimeIssueEntry[]>([]);
   const filePickerState = useAutomergeDoc(seed.filePickerStateHandle);
   const systemApps = useAutomergeDoc(seed.systemAppsHandle);
-  const terminalState = useAutomergeDoc(seed.terminalStateHandle);
   const terminalHandles = useMemo(() => managedTerminalStateHandles(seed, systemApps), [seed, systemApps]);
   const terminalStates = useAutomergeDocs(terminalHandles);
   const runtimeState = useAutomergeDoc(seed.runtimeStateHandle);
@@ -133,7 +132,6 @@ function ShellApp({
     [seed.filePickerStateHandle.url]: filePickerState,
     [seed.lightThemeHandle.url]: lightTheme,
     [seed.runtimeStateHandle.url]: runtimeState,
-    [seed.terminalStateHandle.url]: terminalState,
     [seed.windowManagerHandle.url]: windowManagerDocument,
     ...terminalStates,
   };

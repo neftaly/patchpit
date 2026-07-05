@@ -373,7 +373,6 @@ export type SeedFilesystem = {
   lightThemeHandle: DocHandle<ThemeDoc>;
   systemAppsHandle: DocHandle<FolderDoc>;
   systemRuntimeHandle: DocHandle<FolderDoc>;
-  terminalStateHandle: DocHandle<TerminalStateDoc>;
   runtimeStateHandle: DocHandle<RuntimeStateDoc>;
   windowManagerHandle: DocHandle<WindowManagerStateDoc>;
   documentHandles: Record<string, DocHandle<FilesystemResource>>;

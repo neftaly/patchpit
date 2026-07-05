@@ -65,7 +65,6 @@ export function createSeedFilesystem(): SeedFilesystem {
   const root = createFolder(repo, '', []);
   const fileTypesName = automergeFileName('file-types');
   const filePickerStateId = 'file-picker-1';
-  const terminalStateId = 'terminal-1';
   const lightThemeHandle = repo.create<ThemeDoc>({
     '@patchpit': patchpitDocMetadata(PatchpitType.Theme),
     extension: automergeExtension,
@@ -159,7 +158,6 @@ export function createSeedFilesystem(): SeedFilesystem {
     rootUrl: root.url,
     selectedUrls: [],
   });
-  const terminalStateHandle = createTerminalStateHandle(repo, terminalStateId);
   const windowManagerHandle = repo.create<WindowManagerStateDoc>({
     '@patchpit': patchpitDocMetadata(PatchpitType.WindowManagerState),
     contexts: {
@@ -194,7 +192,6 @@ export function createSeedFilesystem(): SeedFilesystem {
   ]);
   const systemApps = createFolder(repo, 'apps', [
     folderEntry(automergeFileName(filePickerStateId), PatchpitType.FilePickerState, filePickerStateHandle.url),
-    folderEntry(automergeFileName(terminalStateId), PatchpitType.TerminalState, terminalStateHandle.url),
   ]);
   const systemThemes = createFolder(repo, 'themes', [
     folderEntry(automergeFileName('one-dark'), PatchpitType.Theme, darkThemeHandle.url),
@@ -241,7 +238,6 @@ export function createSeedFilesystem(): SeedFilesystem {
     darkThemeHandle,
     lightThemeHandle,
     filePickerStateHandle,
-    terminalStateHandle,
     windowManagerHandle,
     runtimeStateHandle,
     ...fixture.handles,
@@ -267,7 +263,6 @@ export function createSeedFilesystem(): SeedFilesystem {
     runtimeStateHandle,
     systemAppsHandle: systemApps,
     systemRuntimeHandle: systemRuntime,
-    terminalStateHandle,
     windowManagerHandle,
   };
 }

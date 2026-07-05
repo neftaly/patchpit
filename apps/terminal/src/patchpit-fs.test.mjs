@@ -4,6 +4,7 @@ import { InMemoryFs } from 'just-bash/browser';
 import {
   ContainerMountKind,
   createSeedFilesystem,
+  createTerminalStateResource,
   PatchpitType,
   terminalContainer,
 } from '@patchpit/system';
@@ -82,6 +83,7 @@ void test('recursive rm cleanup survives generated nested trees', async () => {
 
 void test('terminal runtime opens roots through a scoped filesystem adapter', async () => {
   const seed = createSeedFilesystem();
+  const terminalStateHandle = createTerminalStateResource(seed, 'terminal-test');
   const rootUrl = 'automerge:root';
   const overlayUrl = 'automerge:overlay';
   const openedRoots = [];
@@ -104,11 +106,11 @@ void test('terminal runtime opens roots through a scoped filesystem adapter', as
         { kind: ContainerMountKind.Automerge, path: '/mnt/project', url: overlayUrl },
       ],
     },
-    seed.terminalStateHandle.doc(),
+    terminalStateHandle.doc(),
   );
 
-  const rootResult = await runTerminalCommand(runtime, seed.terminalStateHandle.doc(), 'cat /home/root.txt');
-  const overlayResult = await runTerminalCommand(runtime, seed.terminalStateHandle.doc(), 'cat /mnt/project/note.txt');
+  const rootResult = await runTerminalCommand(runtime, terminalStateHandle.doc(), 'cat /home/root.txt');
+  const overlayResult = await runTerminalCommand(runtime, terminalStateHandle.doc(), 'cat /mnt/project/note.txt');
 
   assert.equal(rootResult.stderr, '');
   assert.equal(rootResult.stdout, 'root\n');

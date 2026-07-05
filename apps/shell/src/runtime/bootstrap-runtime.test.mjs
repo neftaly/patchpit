@@ -209,7 +209,6 @@ void test('bootstrap runtime removes managed terminal state after closing its co
 
   const terminalContext = terminalContextInWindowManager(seed);
   assert.ok(terminalContext);
-  assert.notEqual(terminalContext.url, seed.terminalStateHandle.url);
   assert.equal(systemAppUrls(seed).has(terminalContext.url), true);
   assert.equal(indexUrls(seed).has(terminalContext.url), true);
   assert.equal(Object.hasOwn(seed.documentHandles, terminalContext.url), true);
@@ -259,13 +258,13 @@ void test('managed terminal state handles follow the system apps folder', () => 
 
   assert.deepEqual(
     managedTerminalStateHandles(seed, seed.systemAppsHandle.doc()).map((handle) => handle.url),
-    [seed.terminalStateHandle.url, extraTerminal.url],
+    [extraTerminal.url],
   );
 
   assert.equal(removeSystemAppResource(seed, extraTerminal.url), true);
   assert.deepEqual(
     managedTerminalStateHandles(seed, seed.systemAppsHandle.doc()).map((handle) => handle.url),
-    [seed.terminalStateHandle.url],
+    [],
   );
 });
 
