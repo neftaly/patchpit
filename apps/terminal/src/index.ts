@@ -1,5 +1,4 @@
 export { Terminal } from './Terminal';
-export { createPatchpitFilesystem } from './patchpit-fs';
 export {
   clearedTerminalState,
   replaceTerminalState,

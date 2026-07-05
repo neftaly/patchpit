@@ -3,12 +3,12 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { fileIcons } from '@patchpit/file-picker';
 import {
   clearedTerminalState,
-  createPatchpitFilesystem,
   replaceTerminalState,
   terminalStateWithExecution,
   terminalStateWithPrompt,
   type TerminalStateActions,
 } from '@patchpit/terminal';
+import { createPatchpitFilesystem } from '@patchpit/terminal/filesystem';
 import {
   createTerminalStateResource,
   createSeedFilesystem,

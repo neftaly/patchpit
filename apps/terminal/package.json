@@ -3,7 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./filesystem": "./src/filesystem.ts"
+  },
   "scripts": {
     "bench": "vite build --config scripts/bench.vite.config.mjs --logLevel warn && node --expose-gc .bench/bench.mjs"
   },

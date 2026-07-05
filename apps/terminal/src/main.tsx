@@ -11,13 +11,13 @@ import {
 import '@patchpit/system/theme.css';
 import {
   clearedTerminalState,
-  createPatchpitFilesystem,
   replaceTerminalState,
   Terminal,
   terminalStateWithExecution,
   terminalStateWithPrompt,
   type TerminalStateActions,
 } from './index';
+import { createPatchpitFilesystem } from './filesystem';
 
 function App() {
   const [seed] = useState(createSeedFilesystem);
