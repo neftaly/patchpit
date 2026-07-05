@@ -1,13 +1,12 @@
 import type { FileSelectionOptions } from '@patchpit/file-picker';
+import { filePickerIntentBoundary } from '@patchpit/system';
 import {
-  filePickerIntentSchemaId,
-  filePickerRequestsRelation,
   filePickerSelectUrlIntent,
   filePickerToggleFolderIntent,
+  submitRuntimeIntent,
   type FilePickerIntentRow,
   type IntentResult,
   type RuntimeClient,
-  type TarstateRow,
 } from '@patchpit/system/runtime';
 
 export type FilePickerIntentName =
@@ -43,13 +42,11 @@ export function submitFilePickerIntent(
   input: FilePickerIntentInput,
 ): Promise<IntentResult> {
   const row = filePickerIntentRow(input);
-  return runtime.submitIntent({
+  return submitRuntimeIntent(runtime, {
+    boundary: filePickerIntentBoundary,
     intent,
-    input: {
-      schemaId: filePickerIntentSchemaId,
-      relations: { [filePickerRequestsRelation]: [row as unknown as TarstateRow] },
-    },
     idempotencyKey: row.id,
+    row,
   });
 }
 

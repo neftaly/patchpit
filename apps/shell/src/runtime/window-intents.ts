@@ -1,17 +1,16 @@
 import {
   windowCloseContextIntent,
   windowFocusIntent,
-  windowIntentSchemaId,
   windowMoveTabIntent,
   windowPinPreviewIntent,
-  windowRequestsRelation,
   windowResizeSplitIntent,
+  submitRuntimeIntent,
   type IntentResult,
   type Json,
   type RuntimeClient,
-  type TarstateRow,
   type WindowIntentRow,
 } from '@patchpit/system/runtime';
+import { windowIntentBoundary } from '@patchpit/system';
 import type { ContextDropTarget, SplitPath } from '../window-manager/window-manager-state';
 
 export type WindowIntentName =
@@ -38,13 +37,11 @@ export function submitWindowIntent(
   input: WindowIntentInput,
 ): Promise<IntentResult> {
   const row = windowIntentRow(input);
-  return runtime.submitIntent({
+  return submitRuntimeIntent(runtime, {
+    boundary: windowIntentBoundary,
     intent,
-    input: {
-      schemaId: windowIntentSchemaId,
-      relations: { [windowRequestsRelation]: [row as unknown as TarstateRow] },
-    },
     idempotencyKey: row.id,
+    row,
   });
 }
 

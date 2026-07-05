@@ -14,7 +14,7 @@
     "fixtures:seed": "node scripts/generate-seed-fixture.mjs",
     "lint": "oxlint . --deny-warnings --type-aware",
     "smoke": "pnpm build && node scripts/smoke.mjs",
-    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/system/src/schema.test.mjs apps/shell/src/window-manager/window-manager-state.test.mjs apps/file-picker/src/file-picker-state.test.mjs apps/terminal/src/patchpit-fs.test.mjs",
+    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/system/src/schema.test.mjs apps/shell/src/window-manager/window-manager-state.test.mjs apps/shell/src/runtime/route-intents.test.mjs apps/file-picker/src/file-picker-state.test.mjs apps/terminal/src/patchpit-fs.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

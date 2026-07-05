@@ -1,3 +1,5 @@
+import { validateRelationRow } from '@tarstate/core/evaluate';
+import { hydrateSchemaManifest, type HydratedSchema, type RelationRef } from '@tarstate/core/schema';
 import type { SurfaceRole, WindowContext } from '../filesystem/types';
 import type {
   PatchpitRelationSchemaDescriptor,
@@ -328,6 +330,12 @@ export type TarstateIntentInput = {
   readonly relations: RelationSet['relations'];
 };
 
+export type RuntimeIntentRelationBoundary = {
+  readonly label: string;
+  readonly relation: string;
+  readonly schema: PatchpitRelationSchemaDescriptor;
+};
+
 export type IntentRequest = {
   readonly intent: IntentName;
   readonly input: TarstateIntentInput;
@@ -428,4 +436,101 @@ export type RuntimeClient = {
 
 export function runtimeError(code: RuntimeErrorCode, message: string, reason?: string): RuntimeError {
   return reason === undefined ? { code, message } : { code, message, reason };
+}
+
+const hydratedIntentSchemaCache = new WeakMap<PatchpitRelationSchemaDescriptor, HydratedSchema>();
+
+export function runtimeIntentInput<Row extends object>(
+  boundary: RuntimeIntentRelationBoundary,
+  row: Row,
+): TarstateIntentInput {
+  const validationError = runtimeIntentRowValidationError(boundary, row);
+  if (validationError !== undefined) throw new Error(validationError.message);
+
+  return {
+    schemaId: boundary.schema.schemaId,
+    relations: { [boundary.relation]: [row as unknown as TarstateRow] },
+  };
+}
+
+export type RuntimeIntentSubmission<Row extends object> = {
+  readonly intent: IntentName;
+  readonly boundary: RuntimeIntentRelationBoundary;
+  readonly row: Row;
+  readonly baseHeads?: AutomergeHeadSet;
+  readonly idempotencyKey?: string;
+};
+
+export function submitRuntimeIntent<Row extends object>(
+  runtime: RuntimeClient,
+  submission: RuntimeIntentSubmission<Row>,
+): Promise<IntentResult> {
+  try {
+    const request: IntentRequest = {
+      intent: submission.intent,
+      input: runtimeIntentInput(submission.boundary, submission.row),
+      ...(submission.baseHeads === undefined ? {} : { baseHeads: submission.baseHeads }),
+      ...(submission.idempotencyKey === undefined ? {} : { idempotencyKey: submission.idempotencyKey }),
+    };
+    return runtime.submitIntent(request);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
+export function runtimeIntentRequestRow<Row extends object>(
+  request: IntentRequest,
+  boundary: RuntimeIntentRelationBoundary,
+): Row | RuntimeError {
+  if (request.input.schemaId !== boundary.schema.schemaId) {
+    return runtimeError(
+      'schema_mismatch',
+      `${boundary.label} intents require schema ${boundary.schema.schemaId}.`,
+    );
+  }
+
+  const rows = request.input.relations[boundary.relation] ?? [];
+  if (rows.length !== 1) {
+    return runtimeError(
+      'bad_request',
+      `${boundary.label} request requires exactly one ${boundary.relation} row.`,
+    );
+  }
+
+  const row = rows[0];
+  if (row === undefined) {
+    return runtimeError('bad_request', `Missing ${boundary.relation} row.`);
+  }
+
+  const validationError = runtimeIntentRowValidationError(boundary, row);
+  if (validationError !== undefined) return validationError;
+
+  return row as unknown as Row;
+}
+
+function runtimeIntentRowValidationError(
+  boundary: RuntimeIntentRelationBoundary,
+  row: unknown,
+): RuntimeError | undefined {
+  const relation = runtimeIntentRelation(boundary);
+  const diagnostics = validateRelationRow(relation, row as Record<string, unknown>);
+  const errors = diagnostics.filter((diagnostic) => diagnostic.severity === 'error');
+  if (errors.length === 0) return undefined;
+
+  return runtimeError(
+    'bad_request',
+    `${boundary.label} request row does not match schema: ${errors.map((error) => error.message).join('; ')}`,
+  );
+}
+
+function runtimeIntentRelation(boundary: RuntimeIntentRelationBoundary): RelationRef {
+  const cached = hydratedIntentSchemaCache.get(boundary.schema);
+  const schema = cached ?? hydrateSchemaManifest(boundary.schema);
+  if (cached === undefined) hydratedIntentSchemaCache.set(boundary.schema, schema);
+
+  const relation = schema[boundary.relation];
+  if (relation === undefined) {
+    throw new Error(`Runtime intent schema ${boundary.schema.schemaId} has no ${boundary.relation} relation.`);
+  }
+  return relation;
 }

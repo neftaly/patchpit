@@ -22,7 +22,11 @@ export {
 export { containerOverlayMounts, containerRootUrl, rootContainer, terminalContainer } from './container';
 export {
   appManifestSchema,
+  appLaunchIntentBoundary,
+  appLaunchIntentSchema,
   appearanceSchema,
+  filePickerIntentBoundary,
+  filePickerIntentSchema,
   filePickerStateSchema,
   fileResourceSchema,
   fileTypesSchema,
@@ -37,9 +41,13 @@ export {
   patchpitSystemSchemaLocation,
   patchpitSystemSchemaRef,
   patchpitSystemSchemas,
+  routeIntentBoundary,
+  routeIntentSchema,
   runtimeStateSchema,
   terminalStateSchema,
   themeSchema,
+  windowIntentBoundary,
+  windowIntentSchema,
   windowManagerStateSchema,
   type PatchpitSystemSchemaId,
 } from './schemas';

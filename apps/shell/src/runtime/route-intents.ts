@@ -1,14 +1,13 @@
 import {
-  routeIntentSchemaId,
   routeOpenIntent,
   routePreviewIntent,
-  routeRequestsRelation,
+  submitRuntimeIntent,
   type IntentResult,
   type Json,
   type RouteIntentRow,
   type RuntimeClient,
-  type TarstateRow,
 } from '@patchpit/system/runtime';
+import { routeIntentBoundary } from '@patchpit/system';
 import type { ContextDropTarget } from '../window-manager/window-manager-state';
 
 export type RouteIntentName = typeof routeOpenIntent | typeof routePreviewIntent;
@@ -29,13 +28,11 @@ export function submitRouteIntent(
   input: RouteIntentInput,
 ): Promise<IntentResult> {
   const row = routeIntentRow(input);
-  return runtime.submitIntent({
+  return submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
     intent,
-    input: {
-      schemaId: routeIntentSchemaId,
-      relations: { [routeRequestsRelation]: [row as unknown as TarstateRow] },
-    },
     idempotencyKey: row.id,
+    row,
   });
 }
 

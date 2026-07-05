@@ -8,8 +8,30 @@ import {
   type PatchpitSchemaId,
   type PatchpitSchemaRef,
 } from '../schema';
-import { filesystemTreeNodesRelation, filesystemTreeSchemaId } from '../runtime/protocol';
-import { PatchpitType, type PatchpitDocMetadata } from './types';
+import {
+  appLaunchIntent,
+  appLaunchIntentSchemaId,
+  appLaunchRequestsRelation,
+  filePickerIntentSchemaId,
+  filePickerRequestsRelation,
+  filePickerSelectUrlIntent,
+  filePickerToggleFolderIntent,
+  filesystemTreeNodesRelation,
+  filesystemTreeSchemaId,
+  routeIntentSchemaId,
+  routeOpenIntent,
+  routePreviewIntent,
+  routeRequestsRelation,
+  windowCloseContextIntent,
+  windowFocusIntent,
+  windowIntentSchemaId,
+  windowMoveTabIntent,
+  windowPinPreviewIntent,
+  windowRequestsRelation,
+  windowResizeSplitIntent,
+  type RuntimeIntentRelationBoundary,
+} from '../runtime/protocol';
+import { PatchpitType, SurfaceRole, type PatchpitDocMetadata } from './types';
 
 export const patchpitSystemSchemaCatalogUrl = 'package:@patchpit/system/src/filesystem/schemas.ts' as const;
 
@@ -430,6 +452,169 @@ export const runtimeStateSchema = defineRelationSchema({
   },
 });
 
+export const appLaunchIntentSchema = defineRelationSchema({
+  kind: 'tarstate.schema',
+  formatVersion: 1,
+  schemaId: appLaunchIntentSchemaId,
+  description: 'Patchpit runtime app.launch intent request rows.',
+  metadata: schemaMetadata('runtime.intent.appLaunch', {
+    intent: appLaunchIntent,
+    lifecycle: 'runtime-intent',
+  }),
+  relations: {
+    [appLaunchRequestsRelation]: {
+      key: 'id',
+      metadata: relationMetadata({
+        lifecycle: 'runtime-intent',
+      }),
+      fields: {
+        app: { type: 'string' },
+        behavior: {
+          type: 'string',
+          metadata: enumMetadata(['open-context', 'toggle-surface']),
+        },
+        context: {
+          type: 'json',
+          optional: true,
+          description: 'Optional shell WindowContext for already-created app state.',
+        },
+        id: idField('appLaunchIntentRequest'),
+        role: {
+          type: 'string',
+          metadata: enumMetadata([SurfaceRole.DocumentSet, SurfaceRole.WorkspaceView]),
+        },
+        slot: { type: 'string', optional: true },
+      },
+    },
+  },
+});
+
+export const appLaunchIntentBoundary = {
+  label: 'App launch',
+  relation: appLaunchRequestsRelation,
+  schema: appLaunchIntentSchema,
+} as const satisfies RuntimeIntentRelationBoundary;
+
+export const routeIntentSchema = defineRelationSchema({
+  kind: 'tarstate.schema',
+  formatVersion: 1,
+  schemaId: routeIntentSchemaId,
+  description: 'Patchpit runtime route intent request rows.',
+  metadata: schemaMetadata('runtime.intent.route', {
+    intents: [routeOpenIntent, routePreviewIntent],
+    lifecycle: 'runtime-intent',
+  }),
+  relations: {
+    [routeRequestsRelation]: {
+      key: 'id',
+      metadata: relationMetadata({
+        lifecycle: 'runtime-intent',
+      }),
+      fields: {
+        id: idField('routeIntentRequest'),
+        rootUrl: { type: 'string', optional: true },
+        sourceSurfaceId: { type: 'string', optional: true },
+        target: {
+          type: 'json',
+          optional: true,
+          description: 'Window-manager drop target payload validated by the runtime.',
+        },
+        title: { type: 'string', optional: true },
+        url: { type: 'string' },
+      },
+    },
+  },
+});
+
+export const routeIntentBoundary = {
+  label: 'Route',
+  relation: routeRequestsRelation,
+  schema: routeIntentSchema,
+} as const satisfies RuntimeIntentRelationBoundary;
+
+export const filePickerIntentSchema = defineRelationSchema({
+  kind: 'tarstate.schema',
+  formatVersion: 1,
+  schemaId: filePickerIntentSchemaId,
+  description: 'Patchpit runtime file-picker intent request rows.',
+  metadata: schemaMetadata('runtime.intent.filePicker', {
+    intents: [filePickerSelectUrlIntent, filePickerToggleFolderIntent],
+    lifecycle: 'runtime-intent',
+  }),
+  relations: {
+    [filePickerRequestsRelation]: {
+      key: 'id',
+      metadata: relationMetadata({
+        lifecycle: 'runtime-intent',
+      }),
+      fields: {
+        id: idField('filePickerIntentRequest'),
+        range: {
+          type: 'json',
+          optional: true,
+          description: 'Optional selection range validated by the file-picker intent handler.',
+        },
+        toggle: { type: 'boolean', optional: true },
+        url: { type: 'string' },
+      },
+    },
+  },
+});
+
+export const filePickerIntentBoundary = {
+  label: 'File picker',
+  relation: filePickerRequestsRelation,
+  schema: filePickerIntentSchema,
+} as const satisfies RuntimeIntentRelationBoundary;
+
+export const windowIntentSchema = defineRelationSchema({
+  kind: 'tarstate.schema',
+  formatVersion: 1,
+  schemaId: windowIntentSchemaId,
+  description: 'Patchpit runtime window-manager intent request rows.',
+  metadata: schemaMetadata('runtime.intent.window', {
+    intents: [
+      windowCloseContextIntent,
+      windowFocusIntent,
+      windowMoveTabIntent,
+      windowPinPreviewIntent,
+      windowResizeSplitIntent,
+    ],
+    lifecycle: 'runtime-intent',
+  }),
+  relations: {
+    [windowRequestsRelation]: {
+      key: 'id',
+      metadata: relationMetadata({
+        lifecycle: 'runtime-intent',
+      }),
+      fields: {
+        contextId: { type: 'string', optional: true },
+        id: idField('windowIntentRequest'),
+        path: {
+          type: 'json',
+          optional: true,
+          description: 'Window split path validated by the runtime.',
+        },
+        ratio: { type: 'number', optional: true },
+        sourceSurfaceId: { type: 'string', optional: true },
+        surfaceId: { type: 'string', optional: true },
+        target: {
+          type: 'json',
+          optional: true,
+          description: 'Window-manager drop target payload validated by the runtime.',
+        },
+      },
+    },
+  },
+});
+
+export const windowIntentBoundary = {
+  label: 'Window',
+  relation: windowRequestsRelation,
+  schema: windowIntentSchema,
+} as const satisfies RuntimeIntentRelationBoundary;
+
 export const themeSchema = defineRelationSchema({
   kind: 'tarstate.schema',
   formatVersion: 1,
@@ -487,6 +672,10 @@ export const patchpitSystemSchemas = [
   terminalStateSchema,
   windowManagerStateSchema,
   runtimeStateSchema,
+  appLaunchIntentSchema,
+  routeIntentSchema,
+  filePickerIntentSchema,
+  windowIntentSchema,
   themeSchema,
   appearanceSchema,
 ] as const;
@@ -503,6 +692,10 @@ const patchpitSystemSchemaHashes = {
   'patchpit.filesystem.folder@1': 'sha256:b66316f285cdf8772105be4f6ef9de97eba1f4faf9795c07d8915f5c6f84907d',
   'patchpit.filesystem.index@1': 'sha256:f3bbfcf1b7704236653b54645b3f59b488e8a03f663daad3f6e5eb67df01be88',
   'patchpit.filesystem.tree@1': 'sha256:ee3cf0878502927b4b7f90839f8f10cfa8f7d8a4ad740142c6d3d0c5ce9aa168',
+  'patchpit.intent.appLaunch@1': 'sha256:d7bb3fe3e949058f58cda7f645898c424ca7c663928b18cebfb1b24886b76d65',
+  'patchpit.intent.filePicker@1': 'sha256:cf8af620a257748885a7cbf8054699d4058c07ff998b0acb0e50be726a2194d6',
+  'patchpit.intent.route@1': 'sha256:b788b4f922f50dc25d36141190ec1872e8d1ec24cc0cbc205235c6a88f2bbf85',
+  'patchpit.intent.window@1': 'sha256:f6fc795ee96f61af948e486b88765757967171387ac641bbfb9ad25b69f205e0',
   'patchpit.runtime.state@1': 'sha256:af7929434c05cc236c47e6284362b775362ae198e8a7b2068251a5c015f636cf',
   'patchpit.system.appManifest@1': 'sha256:ef3ab14a21e0f124dbd262a5984bb3f09a3a6e90c0b27f458976b4a10fac5518',
   'patchpit.system.appearance@1': 'sha256:a3a297b433293a35d1380c666821e6883016adbaab760ed3b8e898f77dad46d4',

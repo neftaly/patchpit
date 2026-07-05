@@ -1,13 +1,11 @@
 import {
   appLaunchIntent,
-  appLaunchIntentSchemaId,
-  appLaunchRequestsRelation,
+  submitRuntimeIntent,
   type AppLaunchIntentRow,
   type IntentResult,
   type RuntimeClient,
-  type TarstateRow,
 } from '@patchpit/system/runtime';
-import type { SurfaceRole, WindowContext } from '@patchpit/system';
+import { appLaunchIntentBoundary, type SurfaceRole, type WindowContext } from '@patchpit/system';
 
 type AppLaunchIntentBase = {
   readonly app: string;
@@ -27,13 +25,11 @@ export function submitAppLaunchIntent(
   input: AppLaunchIntentInput,
 ): Promise<IntentResult> {
   const row = appLaunchIntentRow(input);
-  return runtime.submitIntent({
+  return submitRuntimeIntent(runtime, {
+    boundary: appLaunchIntentBoundary,
     intent: appLaunchIntent,
-    input: {
-      schemaId: appLaunchIntentSchemaId,
-      relations: { [appLaunchRequestsRelation]: [row as unknown as TarstateRow] },
-    },
     idempotencyKey: row.id,
+    row,
   });
 }
 

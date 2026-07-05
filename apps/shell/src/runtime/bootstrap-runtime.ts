@@ -5,16 +5,20 @@ import {
   type FileSelectionOptions,
 } from '@patchpit/file-picker';
 import {
+  appLaunchIntentBoundary,
+  filePickerIntentBoundary,
   filesystemTreeSchema,
   filesystemTreeProjectionRelations,
   patchpitSystemSchemaRef,
   projectFilesystemTreeRows,
+  routeIntentBoundary,
   ContainerMountKind,
   PatchpitType,
   RuntimeMountProvider,
   rootContainer,
   SurfaceRole,
   terminalContainer,
+  windowIntentBoundary,
   WindowManagerNodeKind,
   type AppManifestDoc,
   type AppContainer,
@@ -29,27 +33,21 @@ import {
 } from '@patchpit/system';
 import {
   appLaunchIntent,
-  appLaunchIntentSchemaId,
-  appLaunchRequestsRelation,
   automergeHeadSetForHandle,
-  filePickerIntentSchemaId,
-  filePickerRequestsRelation,
   filePickerSelectUrlIntent,
   filePickerToggleFolderIntent,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
-  routeIntentSchemaId,
   routeOpenIntent,
   routePreviewIntent,
-  routeRequestsRelation,
   runtimeError,
+  runtimeIntentRequestRow,
   windowCloseContextIntent,
   windowFocusIntent,
-  windowIntentSchemaId,
   windowMoveTabIntent,
   windowPinPreviewIntent,
-  windowRequestsRelation,
   windowResizeSplitIntent,
+  type AppLaunchIntentRow,
   type FilePickerIntentRow,
   type IntentName,
   type IntentRequest,
@@ -264,14 +262,8 @@ export function createBootstrapRuntimeClient({
 
       const appLaunch = appLaunchIntentName(request.intent);
       if (appLaunch !== undefined) {
-        if (request.input.schemaId !== appLaunchIntentSchemaId) {
-          return rejected(runtimeError(
-            'schema_mismatch',
-            `App launch intents require schema ${appLaunchIntentSchemaId}.`,
-          ));
-        }
         const launch = appLaunchIntentRequest(request);
-        if (launch instanceof Error) return rejected(runtimeError('bad_request', launch.message));
+        if (isRuntimeError(launch)) return rejected(launch);
 
         const validationError = validateAppLaunchIntent(seed, request, launch);
         if (validationError !== undefined) return appLaunchAdmissionFailure(seed, validationError);
@@ -305,14 +297,8 @@ export function createBootstrapRuntimeClient({
 
       const intent = routeIntentName(request.intent);
       if (intent !== undefined) {
-        if (request.input.schemaId !== routeIntentSchemaId) {
-          return rejected(runtimeError(
-            'schema_mismatch',
-            `Route intents require schema ${routeIntentSchemaId}.`,
-          ));
-        }
         const route = routeIntentRequest(request);
-        if (route instanceof Error) return rejected(runtimeError('bad_request', route.message));
+        if (isRuntimeError(route)) return rejected(route);
 
         const validationError = validateRouteIntent(seed.windowManagerHandle.doc(), intent, route);
         if (validationError !== undefined) return rejected(validationError);
@@ -329,16 +315,8 @@ export function createBootstrapRuntimeClient({
 
       const filePickerIntent = filePickerIntentName(request.intent);
       if (filePickerIntent !== undefined) {
-        if (request.input.schemaId !== filePickerIntentSchemaId) {
-          return rejected(runtimeError(
-            'schema_mismatch',
-            `File picker intents require schema ${filePickerIntentSchemaId}.`,
-          ));
-        }
         const filePickerRequest = filePickerIntentRequest(request, filePickerIntent);
-        if (filePickerRequest instanceof Error) {
-          return rejected(runtimeError('bad_request', filePickerRequest.message));
-        }
+        if (isRuntimeError(filePickerRequest)) return rejected(filePickerRequest);
 
         if (filePickerIntent === filePickerSelectUrlIntent) {
           selectFilePickerUrl(
@@ -360,14 +338,8 @@ export function createBootstrapRuntimeClient({
       if (windowIntent === undefined) {
         return rejected(runtimeError('unknown_intent', `Unknown intent: ${request.intent}`));
       }
-      if (request.input.schemaId !== windowIntentSchemaId) {
-        return rejected(runtimeError(
-          'schema_mismatch',
-          `Window intents require schema ${windowIntentSchemaId}.`,
-        ));
-      }
       const windowRequest = windowIntentRequest(request, windowIntent);
-      if (windowRequest instanceof Error) return rejected(runtimeError('bad_request', windowRequest.message));
+      if (isRuntimeError(windowRequest)) return rejected(windowRequest);
 
       const validationError = validateWindowIntent(seed.windowManagerHandle.doc(), windowIntent, windowRequest);
       if (validationError !== undefined) return rejected(validationError);
@@ -949,27 +921,22 @@ function windowIntentName(intent: IntentRequest['intent']):
     : undefined;
 }
 
-function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | Error {
-  const rows = request.input.relations[appLaunchRequestsRelation] ?? [];
-  if (rows.length !== 1) return new Error(`App launch request requires exactly one ${appLaunchRequestsRelation} row.`);
-  const row = rows[0];
-  if (row === undefined) return new Error(`Missing ${appLaunchRequestsRelation} row.`);
-  if (typeof row.id !== 'string') return new Error('App launch request requires an id.');
-  if (typeof row.app !== 'string') return new Error('App launch request requires an app.');
-
+function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | RuntimeError {
+  const row = runtimeIntentRequestRow<AppLaunchIntentRow>(request, appLaunchIntentBoundary);
+  if (isRuntimeError(row)) return row;
   const behavior = appLaunchBehavior(row.behavior);
-  if (behavior === undefined) return new Error('App launch request behavior is invalid.');
+  if (behavior === undefined) return badRequest('App launch request behavior is invalid.');
 
   const role = appLaunchSurfaceRole(row.role);
-  if (role === undefined) return new Error('App launch request role is invalid.');
+  if (role === undefined) return badRequest('App launch request role is invalid.');
 
   const slot = appLaunchSlot(row.slot);
-  if (slot instanceof Error) return slot;
+  if (slot instanceof Error) return badRequest(slot);
 
   if (row.app === 'terminal') {
-    if (row.context !== undefined) return new Error('Terminal app launch creates its context at commit time.');
-    if (behavior !== ContextLaunchBehavior.OpenContext) return new Error('Terminal app launch behavior is invalid.');
-    if (role !== SurfaceRole.DocumentSet) return new Error('Terminal app launch role is invalid.');
+    if (row.context !== undefined) return badRequest('Terminal app launch creates its context at commit time.');
+    if (behavior !== ContextLaunchBehavior.OpenContext) return badRequest('Terminal app launch behavior is invalid.');
+    if (role !== SurfaceRole.DocumentSet) return badRequest('Terminal app launch role is invalid.');
     return {
       id: row.id,
       app: row.app,
@@ -980,8 +947,8 @@ function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | Erro
   }
 
   const context = appLaunchContext(row.context);
-  if (context instanceof Error) return context;
-  if (context.app !== row.app) return new Error('App launch context app must match the request app.');
+  if (context instanceof Error) return badRequest(context);
+  if (context.app !== row.app) return badRequest('App launch context app must match the request app.');
 
   return {
     id: row.id,
@@ -993,18 +960,11 @@ function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | Erro
   };
 }
 
-function routeIntentRequest(request: IntentRequest): RouteIntentRow | Error {
-  const rows = request.input.relations[routeRequestsRelation] ?? [];
-  if (rows.length !== 1) return new Error(`Route request requires exactly one ${routeRequestsRelation} row.`);
-  const row = rows[0];
-  if (row === undefined) return new Error(`Missing ${routeRequestsRelation} row.`);
-  if (typeof row.url !== 'string') return new Error('Route request requires a url.');
-  if (typeof row.id !== 'string') return new Error('Route request requires an id.');
-  if (!isOptionalString(row.rootUrl)) return new Error('Route request rootUrl must be a string.');
-  if (!isOptionalString(row.sourceSurfaceId)) return new Error('Route request sourceSurfaceId must be a string.');
-  if (!isOptionalString(row.title)) return new Error('Route request title must be a string.');
+function routeIntentRequest(request: IntentRequest): RouteIntentRow | RuntimeError {
+  const row = runtimeIntentRequestRow<RouteIntentRow>(request, routeIntentBoundary);
+  if (isRuntimeError(row)) return row;
   if (row.target !== undefined && contextDropTarget(row.target) === undefined) {
-    return new Error('Route request target is invalid.');
+    return badRequest('Route request target is invalid.');
   }
 
   return {
@@ -1020,26 +980,17 @@ function routeIntentRequest(request: IntentRequest): RouteIntentRow | Error {
 function filePickerIntentRequest(
   request: IntentRequest,
   intent: FilePickerIntentName,
-): FilePickerIntentRow | Error {
-  const rows = request.input.relations[filePickerRequestsRelation] ?? [];
-  if (rows.length !== 1) {
-    return new Error(`File picker request requires exactly one ${filePickerRequestsRelation} row.`);
-  }
-  const row = rows[0];
-  if (row === undefined) return new Error(`Missing ${filePickerRequestsRelation} row.`);
-  if (typeof row.id !== 'string') return new Error('File picker request requires an id.');
-  if (typeof row.url !== 'string') return new Error('File picker request requires a url.');
+): FilePickerIntentRow | RuntimeError {
+  const row = runtimeIntentRequestRow<FilePickerIntentRow>(request, filePickerIntentBoundary);
+  if (isRuntimeError(row)) return row;
   if (row.range !== undefined && !isStringArray(row.range)) {
-    return new Error('File picker request range must be an array of strings.');
-  }
-  if (row.toggle !== undefined && typeof row.toggle !== 'boolean') {
-    return new Error('File picker request toggle must be a boolean.');
+    return badRequest('File picker request range must be an array of strings.');
   }
   if (
     intent === filePickerToggleFolderIntent
     && (row.range !== undefined || row.toggle !== undefined)
   ) {
-    return new Error(`${filePickerToggleFolderIntent} only accepts id and url.`);
+    return badRequest(`${filePickerToggleFolderIntent} only accepts id and url.`);
   }
 
   return {
@@ -1066,24 +1017,15 @@ function windowIntentRequest(
     | typeof windowMoveTabIntent
     | typeof windowPinPreviewIntent
     | typeof windowResizeSplitIntent,
-): WindowIntentRow | Error {
-  const rows = request.input.relations[windowRequestsRelation] ?? [];
-  if (rows.length !== 1) return new Error(`Window request requires exactly one ${windowRequestsRelation} row.`);
-  const row = rows[0];
-  if (row === undefined) return new Error(`Missing ${windowRequestsRelation} row.`);
-  if (typeof row.id !== 'string') return new Error('Window request requires an id.');
-  if (!isOptionalString(row.contextId)) return new Error('Window request contextId must be a string.');
-  if (!isOptionalString(row.sourceSurfaceId)) return new Error('Window request sourceSurfaceId must be a string.');
-  if (!isOptionalString(row.surfaceId)) return new Error('Window request surfaceId must be a string.');
-  if (row.path !== undefined && !isSplitPath(row.path)) return new Error('Window request path is invalid.');
-  if (row.ratio !== undefined && (typeof row.ratio !== 'number' || !Number.isFinite(row.ratio))) {
-    return new Error('Window request ratio must be a finite number.');
-  }
+): WindowIntentRow | RuntimeError {
+  const row = runtimeIntentRequestRow<WindowIntentRow>(request, windowIntentBoundary);
+  if (isRuntimeError(row)) return row;
+  if (row.path !== undefined && !isSplitPath(row.path)) return badRequest('Window request path is invalid.');
   if (row.target !== undefined && contextDropTarget(row.target) === undefined) {
-    return new Error('Window request target is invalid.');
+    return badRequest('Window request target is invalid.');
   }
   const fieldError = windowIntentFieldError(intent, row);
-  if (fieldError !== undefined) return new Error(fieldError);
+  if (fieldError !== undefined) return badRequest(fieldError);
 
   return {
     id: row.id,
@@ -1103,7 +1045,7 @@ function windowIntentFieldError(
     | typeof windowMoveTabIntent
     | typeof windowPinPreviewIntent
     | typeof windowResizeSplitIntent,
-  row: TarstateRow,
+  row: WindowIntentRow,
 ): string | undefined {
   if (
     (intent === windowCloseContextIntent || intent === windowFocusIntent || intent === windowPinPreviewIntent)
@@ -1515,8 +1457,12 @@ function rejected(error: RuntimeError): IntentResult {
   return { status: 'rejected', error };
 }
 
-function isRuntimeError(value: ProjectionSnapshot | RuntimeError): value is RuntimeError {
-  return 'code' in value;
+function badRequest(error: Error | string): RuntimeError {
+  return runtimeError('bad_request', typeof error === 'string' ? error : error.message);
+}
+
+function isRuntimeError(value: unknown): value is RuntimeError {
+  return isRecord(value) && typeof value.code === 'string' && typeof value.message === 'string';
 }
 
 function relationSet(relations: Readonly<Record<string, readonly unknown[]>>): RelationSet {
