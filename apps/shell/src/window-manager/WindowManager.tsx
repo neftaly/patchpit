@@ -8,17 +8,12 @@ import {
   type PointerEvent,
 } from 'react';
 import {
-  FilePicker,
   filePickerDragType,
   type DraggedFilePickerUrl,
   type FilePickerActions,
   type FileIcons,
 } from '@patchpit/file-picker';
-import { Terminal } from '@patchpit/terminal';
-import { Viewer } from '@patchpit/viewer';
 import {
-  containerRootUrl,
-  findNode,
   nodePath,
   type SplitDirection,
   SurfaceRole,
@@ -33,7 +28,8 @@ import {
   type WindowSurface,
 } from '@patchpit/system';
 import type { TerminalRuntimeOptions, TerminalStateActions } from '@patchpit/terminal';
-import { StateBrowser, type StateBrowserSnapshot } from '../state-browser/StateBrowser';
+import type { StateBrowserSnapshot } from '../state-browser/StateBrowser';
+import { SurfaceContent } from './SurfaceContent';
 import {
   type ContentDropZone,
   type ContextDropTarget,
@@ -65,7 +61,7 @@ type RunningTerminal = {
 
 export type WindowManagerWorkspace = Pick<WindowManagerStateDoc, 'contexts' | 'focus' | 'layout' | 'surfaces'>;
 
-type WindowManagerRuntime = {
+export type WindowManagerRuntime = {
   readonly actions: WindowManagerActions;
   readonly contexts: Readonly<Record<string, WindowContext>>;
   readonly draggedTab: DraggedTab | undefined;
@@ -429,59 +425,6 @@ function SurfaceView({
         <SurfaceContent context={selectedContext} runtime={runtime} surfaceId={surface.id} />
       </div>
     </section>
-  );
-}
-
-function SurfaceContent({
-  context,
-  runtime,
-  surfaceId,
-}: {
-  readonly context: WindowContext | undefined;
-  readonly runtime: WindowManagerRuntime;
-  readonly surfaceId: string;
-}) {
-  if (context?.app === 'file-picker') {
-    const filePicker = runtime.filePickers[context.url];
-    const rootUrl = containerRootUrl(context.container) ?? filePicker?.state.rootUrl;
-    const root = rootUrl === undefined ? null : findNode(runtime.filesystemRoot, rootUrl);
-
-    if (filePicker !== undefined && root !== null) {
-      return (
-        <FilePicker
-          actions={filePicker.actions(surfaceId)}
-          fileIcons={filePicker.fileIcons}
-          root={root}
-          state={filePicker.state}
-        />
-      );
-    }
-  }
-
-  if (context?.app === 'terminal') {
-    const terminal = runtime.terminals[context.url];
-    return terminal === undefined
-      ? null
-      : (
-          <Terminal
-            actions={terminal.actions}
-            container={context.container}
-            runtimeOptions={terminal.runtimeOptions}
-            state={terminal.state}
-            theme={runtime.theme}
-          />
-        );
-  }
-
-  if (context?.app === 'state-browser') {
-    return <StateBrowser snapshot={runtime.stateBrowser} />;
-  }
-
-  return (
-    <Viewer
-      filesystemRoot={runtime.filesystemRoot}
-      url={context?.url}
-    />
   );
 }
 
