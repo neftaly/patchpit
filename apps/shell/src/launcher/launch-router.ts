@@ -1,9 +1,6 @@
-import type { DocHandle } from '@automerge/automerge-repo';
 import {
   rootContainer,
   SurfaceRole,
-  type FilePickerStateDoc,
-  type RuntimeStateDoc,
   type WindowContext,
 } from '@patchpit/system';
 import type { AppLaunchIntentInput } from '../runtime/launch-intents';
@@ -19,22 +16,22 @@ export type LauncherItem = {
 
 export function launcherItems({
   focusedAppId,
-  filePickerStateHandle,
+  filePickerStateUrl,
   launchApp,
   rootUrl,
-  runtimeStateHandle,
+  runtimeStateUrl,
 }: {
   readonly focusedAppId: string | undefined;
-  readonly filePickerStateHandle: DocHandle<FilePickerStateDoc>;
+  readonly filePickerStateUrl: string;
   readonly launchApp: (input: AppLaunchIntentInput) => void;
   readonly rootUrl: string;
-  readonly runtimeStateHandle: DocHandle<RuntimeStateDoc>;
+  readonly runtimeStateUrl: string;
 }): readonly LauncherItem[] {
   const launcherSpecs = [
     {
       app: 'file-picker',
       behavior: ContextLaunchBehavior.ToggleSurface,
-      context: () => filePickerContext(filePickerStateHandle.url, rootUrl),
+      context: () => filePickerContext(filePickerStateUrl, rootUrl),
       emoji: '📁',
       label: 'Files',
       role: SurfaceRole.WorkspaceView,
@@ -49,7 +46,7 @@ export function launcherItems({
     {
       app: 'state-browser',
       behavior: ContextLaunchBehavior.OpenContext,
-      context: () => stateBrowserContext(runtimeStateHandle.url, rootUrl),
+      context: () => stateBrowserContext(runtimeStateUrl, rootUrl),
       emoji: '🧭',
       label: 'State Browser',
       role: SurfaceRole.DocumentSet,

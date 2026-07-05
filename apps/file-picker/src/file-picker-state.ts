@@ -1,10 +1,6 @@
 import type { DocHandle } from '@automerge/automerge-repo';
 import type { FilePickerStateDoc } from '@patchpit/system';
-
-export type FileSelectionOptions = {
-  readonly range?: readonly string[];
-  readonly toggle?: boolean;
-};
+import { isDefaultFilePickerFolderOpen, type FileSelectionOptions } from './file-picker-model';
 
 type FilePickerStateRow = {
   activeUrl?: string;
@@ -87,13 +83,6 @@ function toggledFilePickerFolderState(
       [url]: !(state.openFolders[url] ?? isDefaultFilePickerFolderOpen(state.rootUrl, url)),
     },
   };
-}
-
-export function isDefaultFilePickerFolderOpen(
-  rootUrl: string,
-  url: string,
-): boolean {
-  return url === rootUrl;
 }
 
 function filePickerStateRow(state: FilePickerStateDoc): FilePickerStateRow {

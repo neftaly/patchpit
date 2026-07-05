@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./model": "./src/file-picker-model.ts",
     "./state": "./src/file-picker-state.ts"
   },
   "dependencies": {

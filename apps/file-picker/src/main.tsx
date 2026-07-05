@@ -11,11 +11,11 @@ import '@patchpit/system/theme.css';
 import {
   FilePicker,
   fileIcons,
+  type FileSelectionOptions,
 } from './index';
 import {
   selectFilePickerUrl,
   toggleFilePickerFolder,
-  type FileSelectionOptions,
 } from './file-picker-state';
 
 function App() {

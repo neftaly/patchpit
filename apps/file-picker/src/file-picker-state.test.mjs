@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  isDefaultFilePickerFolderOpen,
-  toggleFilePickerFolder,
-} from './file-picker-state.ts';
+import { isDefaultFilePickerFolderOpen } from './file-picker-model.ts';
+import { toggleFilePickerFolder } from './file-picker-state.ts';
 
 void test('defaults only the root folder open', () => {
   assert.equal(isDefaultFilePickerFolderOpen('root', 'root'), true);

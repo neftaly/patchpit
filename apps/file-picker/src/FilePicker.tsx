@@ -1,6 +1,6 @@
 import type { CSSProperties, DragEvent, MouseEvent } from 'react';
 import type { FilePickerStateDoc, FilesystemNode } from '@patchpit/system';
-import { isDefaultFilePickerFolderOpen, type FileSelectionOptions } from './file-picker-state';
+import { isDefaultFilePickerFolderOpen, type FileSelectionOptions } from './file-picker-model';
 import { fileIcon, folderIcon, type FileIcons } from './file-icons';
 import './file-picker.css';
 

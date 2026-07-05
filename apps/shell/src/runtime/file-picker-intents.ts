@@ -1,4 +1,4 @@
-import type { FileSelectionOptions } from '@patchpit/file-picker/state';
+import type { FileSelectionOptions } from '@patchpit/file-picker/model';
 import { filePickerIntentBoundary } from '@patchpit/system';
 import {
   filePickerSelectUrlIntent,

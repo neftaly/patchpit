@@ -2,8 +2,8 @@ import type { DocHandle } from '@automerge/automerge-repo';
 import {
   selectFilePickerUrl,
   toggleFilePickerFolder,
-  type FileSelectionOptions,
 } from '@patchpit/file-picker/state';
+import type { FileSelectionOptions } from '@patchpit/file-picker/model';
 import {
   appLaunchIntentBoundary,
   filePickerIntentBoundary,
