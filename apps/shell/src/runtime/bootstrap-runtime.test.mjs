@@ -1,15 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  filePickerIntentBoundary,
   createSeedFilesystem,
+  routeIntentBoundary,
   SplitDirection,
   SurfaceRole,
+  windowIntentBoundary,
   WindowManagerNodeKind,
 } from '@patchpit/system';
 import {
+  filePickerSelectUrlIntent,
+  filePickerToggleFolderIntent,
   filesystemTreeNodesRelation,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  routeOpenIntent,
+  submitRuntimeIntent,
+  windowFocusIntent,
   workspaceContextsRelation,
   workspaceLayoutProjection,
   workspaceProjectionSchemaId,
@@ -99,6 +107,74 @@ void test('bootstrap runtime emits filesystem resets from index changes', async 
   const diagnostics = runtime.diagnostics.getSnapshot().projectionSubscriptions[0];
   assert.equal(diagnostics.status, 'closed');
   assert.equal(diagnostics.counters.resets, 1);
+});
+
+void test('bootstrap runtime commits route, file-picker, and window intents', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = createBootstrapRuntimeClient({ seed, workspaceId: 'test-workspace' });
+  const routeUrl = 'automerge:runtime-intent-target';
+  const viewerContextId = `viewer:${routeUrl}`;
+
+  const routeResult = await submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
+    intent: routeOpenIntent,
+    row: {
+      id: 'route-open-test',
+      title: 'Runtime Intent Target',
+      url: routeUrl,
+    },
+  });
+  assert.equal(routeResult.status, 'committed');
+  assert.deepEqual(Object.keys(routeResult.heads), [seed.windowManagerHandle.url]);
+  assert.equal(seed.windowManagerHandle.doc().surfaces.main.activeContext, viewerContextId);
+  assert.equal(seed.windowManagerHandle.doc().contexts[viewerContextId].title, 'Runtime Intent Target');
+
+  const selectResult = await submitRuntimeIntent(runtime, {
+    boundary: filePickerIntentBoundary,
+    intent: filePickerSelectUrlIntent,
+    row: {
+      id: 'file-picker-select-test',
+      url: routeUrl,
+    },
+  });
+  assert.equal(selectResult.status, 'committed');
+  assert.deepEqual(Object.keys(selectResult.heads), [seed.filePickerStateHandle.url]);
+  assert.equal(seed.filePickerStateHandle.doc().activeUrl, routeUrl);
+  assert.deepEqual(seed.filePickerStateHandle.doc().selectedUrls, [routeUrl]);
+
+  const toggleResult = await submitRuntimeIntent(runtime, {
+    boundary: filePickerIntentBoundary,
+    intent: filePickerToggleFolderIntent,
+    row: {
+      id: 'file-picker-toggle-test',
+      url: seed.rootUrl,
+    },
+  });
+  assert.equal(toggleResult.status, 'committed');
+  assert.equal(seed.filePickerStateHandle.doc().openFolders[seed.rootUrl], false);
+
+  const focusResult = await submitRuntimeIntent(runtime, {
+    boundary: windowIntentBoundary,
+    intent: windowFocusIntent,
+    row: {
+      contextId: 'file-picker',
+      id: 'window-focus-test',
+      surfaceId: 'files',
+    },
+  });
+  assert.equal(focusResult.status, 'committed');
+  assert.deepEqual(Object.keys(focusResult.heads), [seed.windowManagerHandle.url]);
+  assert.equal(seed.windowManagerHandle.doc().focus, 'files');
+
+  assert.deepEqual(
+    runtime.diagnostics.getSnapshot().intentLog.map((entry) => [entry.intent, entry.status]),
+    [
+      [routeOpenIntent, 'committed'],
+      [filePickerSelectUrlIntent, 'committed'],
+      [filePickerToggleFolderIntent, 'committed'],
+      [windowFocusIntent, 'committed'],
+    ],
+  );
 });
 
 void test('bootstrap runtime serves a live workspace layout projection', async () => {

@@ -1,21 +1,11 @@
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
-  selectFilePickerUrl,
-  toggleFilePickerFolder,
-} from '@patchpit/file-picker/state';
-import type { FileSelectionOptions } from '@patchpit/file-picker/model';
-import {
   appLaunchIntentBoundary,
-  filePickerIntentBoundary,
-  routeIntentBoundary,
   ContainerMountKind,
   PatchpitType,
   RuntimeMountProvider,
-  rootContainer,
   SurfaceRole,
   terminalContainer,
-  windowIntentBoundary,
-  WindowManagerNodeKind,
   type AppManifestDoc,
   type AppContainer,
   type ContainerMount,
@@ -23,56 +13,50 @@ import {
   type SeedFilesystem,
   type TerminalStateDoc,
   type WindowContext,
-  type WindowLayoutNode,
   type WindowManagerStateDoc,
-  type WindowSurface,
 } from '@patchpit/system';
 import {
   appLaunchIntent,
   automergeHeadSetForHandle,
-  filePickerSelectUrlIntent,
-  filePickerToggleFolderIntent,
-  routeOpenIntent,
-  routePreviewIntent,
   runtimeError,
   runtimeIntentRequestRow,
-  windowCloseContextIntent,
-  windowFocusIntent,
-  windowMoveTabIntent,
-  windowPinPreviewIntent,
-  windowResizeSplitIntent,
   type AppLaunchIntentRow,
-  type FilePickerIntentRow,
   type IntentName,
   type IntentRequest,
   type IntentResult,
-  type Json,
   type AutomergeHeadSet,
   type ProjectionBasis,
   type ProjectionEvent,
   type ProjectionName,
   type ProjectionSubscriptionRequest,
-  type RouteIntentRow,
   type RuntimeClient,
   type RuntimeError,
-  type WindowIntentRow,
 } from '@patchpit/system/runtime';
 import {
-  closeContext,
   commitWindowManagerState,
   ContextLaunchBehavior,
-  dropNewContext,
-  dropContext,
-  focusContext,
   launchContext,
-  openContext,
-  pinContext,
-  previewContext,
-  resizeSplit,
-  type ContextDropTarget,
-  type SplitPath,
 } from '../window-manager/window-manager-state';
 import { createBootstrapProjectionSubscriber } from './bootstrap-projections';
+import { submitBootstrapFilePickerIntent } from './bootstrap-file-picker-intents';
+import {
+  badRequest,
+  errorReason,
+  isOptionalBoolean,
+  isOptionalString,
+  isRecord,
+  isRuntimeError,
+  rejected,
+  sameHeadSet,
+} from './bootstrap-intent-result';
+import {
+  submitBootstrapRouteIntent,
+  submitBootstrapWindowIntent,
+} from './bootstrap-window-intents';
+import {
+  surfaceWithContext,
+  targetLaunchSurface,
+} from './bootstrap-window-topology';
 import { allowAllRuntimePolicy, type RuntimePolicy } from './policy';
 
 export type BootstrapRuntimeOptions = {
@@ -159,10 +143,6 @@ type AppLaunchCommitOptions = {
   readonly managedAppStateHandles: Map<string, DocHandle<TerminalStateDoc>>;
 };
 
-type FilePickerIntentName =
-  | typeof filePickerSelectUrlIntent
-  | typeof filePickerToggleFolderIntent;
-
 const defaultAppLaunchSlot = 'default';
 
 export function createBootstrapRuntimeClient({
@@ -182,111 +162,82 @@ export function createBootstrapRuntimeClient({
     async submitIntent(request) {
       return submitIntentWithDiagnostics(diagnostics, request, async () => {
         const policyDecision = policy.admitIntent(request);
-      if (policyDecision.status !== 'allow') {
-        if (request.intent === appLaunchIntent && policyDecision.status === 'deny') {
-          return appLaunchPolicyDenied(policyDecision.result);
+        if (policyDecision.status !== 'allow') {
+          if (request.intent === appLaunchIntent && policyDecision.status === 'deny') {
+            return appLaunchPolicyDenied(policyDecision.result);
+          }
+          return policyDecision.result;
         }
-        return policyDecision.result;
-      }
 
-      const appLaunch = appLaunchIntentName(request.intent);
-      if (appLaunch !== undefined) {
-        const launch = appLaunchIntentRequest(request);
-        if (isRuntimeError(launch)) return rejected(launch);
-
-        const validationError = validateAppLaunchIntent(seed, request, launch);
-        if (validationError !== undefined) return appLaunchAdmissionFailure(seed, validationError);
-
-        const commit = appLaunchCommit(seed.rootUrl, launch, {
+        const appLaunchResult = submitBootstrapAppLaunchIntent(request, {
           createTerminalState,
           managedAppStateHandles,
+          seed,
         });
-        if ('code' in commit) return rejected(commit);
+        if (appLaunchResult !== undefined) return appLaunchResult;
 
-        try {
-          commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-            launchContext(doc, {
-              behavior: launch.behavior,
-              context: commit.context,
-              role: launch.role,
-            });
-          });
-        } catch (error) {
-          return rejected(appLaunchCommitError(launch, error));
-        }
+        const routeResult = submitBootstrapRouteIntent(seed, request);
+        if (routeResult !== undefined) return routeResult;
 
-        const committedError = validateAppLaunchCommitted(seed.windowManagerHandle.doc(), commit.context);
-        if (committedError !== undefined) return rejected(committedError);
+        const filePickerResult = submitBootstrapFilePickerIntent(seed, request);
+        if (filePickerResult !== undefined) return filePickerResult;
 
-        return {
-          status: 'committed',
-          heads: appLaunchCommitHeads(seed, commit),
-        };
-      }
+        const windowResult = submitBootstrapWindowIntent(seed, request);
+        if (windowResult !== undefined) return windowResult;
 
-      const intent = routeIntentName(request.intent);
-      if (intent !== undefined) {
-        const route = routeIntentRequest(request);
-        if (isRuntimeError(route)) return rejected(route);
-
-        const validationError = validateRouteIntent(seed.windowManagerHandle.doc(), intent, route);
-        if (validationError !== undefined) return rejected(validationError);
-
-        commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-          commitRouteIntent(doc, intent, route, seed.rootUrl);
-        });
-
-        return {
-          status: 'committed',
-          heads: automergeHeadSetForHandle(seed.windowManagerHandle),
-        };
-      }
-
-      const filePickerIntent = filePickerIntentName(request.intent);
-      if (filePickerIntent !== undefined) {
-        const filePickerRequest = filePickerIntentRequest(request, filePickerIntent);
-        if (isRuntimeError(filePickerRequest)) return rejected(filePickerRequest);
-
-        if (filePickerIntent === filePickerSelectUrlIntent) {
-          selectFilePickerUrl(
-            seed.filePickerStateHandle,
-            filePickerRequest.url,
-            filePickerSelectionOptions(filePickerRequest),
-          );
-        } else {
-          toggleFilePickerFolder(seed.filePickerStateHandle, filePickerRequest.url);
-        }
-
-        return {
-          status: 'committed',
-          heads: automergeHeadSetForHandle(seed.filePickerStateHandle),
-        };
-      }
-
-      const windowIntent = windowIntentName(request.intent);
-      if (windowIntent === undefined) {
         return rejected(runtimeError('unknown_intent', `Unknown intent: ${request.intent}`));
-      }
-      const windowRequest = windowIntentRequest(request, windowIntent);
-      if (isRuntimeError(windowRequest)) return rejected(windowRequest);
-
-      const validationError = validateWindowIntent(seed.windowManagerHandle.doc(), windowIntent, windowRequest);
-      if (validationError !== undefined) return rejected(validationError);
-
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        commitWindowIntent(doc, windowIntent, windowRequest);
-      });
-
-      return {
-        status: 'committed',
-        heads: automergeHeadSetForHandle(seed.windowManagerHandle),
-      };
       });
     },
 
     async openCapability(request) {
       throw runtimeError('unknown_capability', `Unknown capability: ${request.capability}`);
     },
+  };
+}
+
+type BootstrapAppLaunchIntentOptions = {
+  readonly createTerminalState?: BootstrapRuntimeOptions['createTerminalState'];
+  readonly managedAppStateHandles: Map<string, DocHandle<TerminalStateDoc>>;
+  readonly seed: SeedFilesystem;
+};
+
+function submitBootstrapAppLaunchIntent(
+  request: IntentRequest,
+  options: BootstrapAppLaunchIntentOptions,
+): IntentResult | undefined {
+  const appLaunch = appLaunchIntentName(request.intent);
+  if (appLaunch === undefined) return undefined;
+
+  const launch = appLaunchIntentRequest(request);
+  if (isRuntimeError(launch)) return rejected(launch);
+
+  const validationError = validateAppLaunchIntent(options.seed, request, launch);
+  if (validationError !== undefined) return appLaunchAdmissionFailure(options.seed, validationError);
+
+  const commit = appLaunchCommit(options.seed.rootUrl, launch, {
+    createTerminalState: options.createTerminalState,
+    managedAppStateHandles: options.managedAppStateHandles,
+  });
+  if ('code' in commit) return rejected(commit);
+
+  try {
+    commitWindowManagerState(options.seed.windowManagerHandle, (doc) => {
+      launchContext(doc, {
+        behavior: launch.behavior,
+        context: commit.context,
+        role: launch.role,
+      });
+    });
+  } catch (error) {
+    return rejected(appLaunchCommitError(launch, error));
+  }
+
+  const committedError = validateAppLaunchCommitted(options.seed.windowManagerHandle.doc(), commit.context);
+  if (committedError !== undefined) return rejected(committedError);
+
+  return {
+    status: 'committed',
+    heads: appLaunchCommitHeads(options.seed, commit),
   };
 }
 
@@ -635,16 +586,6 @@ function intentResultReason(result: IntentResult): string {
   return 'policy returned committed for a denied intent';
 }
 
-function errorReason(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function sameHeadSet(left: readonly string[], right: readonly string[]): boolean {
-  if (left.length !== right.length) return false;
-  const rightHeads = new Set(right);
-  return left.every((head) => rightHeads.has(head));
-}
-
 function validateAppLaunchIntent(
   seed: SeedFilesystem,
   request: IntentRequest,
@@ -760,69 +701,8 @@ function isAppManifestDoc(doc: FilesystemResource): doc is AppManifestDoc {
   return doc['@patchpit'].type === PatchpitType.AppManifest;
 }
 
-function validateRouteIntent(
-  state: WindowManagerStateDoc,
-  intent: typeof routeOpenIntent | typeof routePreviewIntent,
-  route: RouteIntentRow,
-): RuntimeError | undefined {
-  const target = contextDropTarget(route.target);
-  if (target !== undefined) return validateNewContextDropTarget(state, target);
-  if (targetDocumentSurface(state, route.sourceSurfaceId) !== undefined) return undefined;
-  if (Object.keys(state.surfaces).length > 0) return undefined;
-  return runtimeError('conflict', `No document surface can accept ${intent}.`);
-}
-
-function commitRouteIntent(
-  doc: WindowManagerStateDoc,
-  intent: typeof routeOpenIntent | typeof routePreviewIntent,
-  route: RouteIntentRow,
-  defaultRootUrl: string,
-): void {
-  const context = viewerContext(route.url, route.title, route.rootUrl ?? defaultRootUrl);
-  const target = contextDropTarget(route.target);
-
-  if (target !== undefined) {
-    dropNewContext(doc, context, target);
-  } else if (intent === routeOpenIntent) {
-    openContext(doc, context, route.sourceSurfaceId);
-  } else {
-    previewContext(doc, context, route.sourceSurfaceId);
-  }
-}
-
-function routeIntentName(intent: IntentRequest['intent']): typeof routeOpenIntent | typeof routePreviewIntent | undefined {
-  return intent === routeOpenIntent || intent === routePreviewIntent ? intent : undefined;
-}
-
-function filePickerIntentName(intent: IntentRequest['intent']): FilePickerIntentName | undefined {
-  return (
-    intent === filePickerSelectUrlIntent
-    || intent === filePickerToggleFolderIntent
-  )
-    ? intent
-    : undefined;
-}
-
 function appLaunchIntentName(intent: IntentRequest['intent']): typeof appLaunchIntent | undefined {
   return intent === appLaunchIntent ? intent : undefined;
-}
-
-function windowIntentName(intent: IntentRequest['intent']):
-  | typeof windowCloseContextIntent
-  | typeof windowFocusIntent
-  | typeof windowMoveTabIntent
-  | typeof windowPinPreviewIntent
-  | typeof windowResizeSplitIntent
-  | undefined {
-  return (
-    intent === windowCloseContextIntent
-    || intent === windowFocusIntent
-    || intent === windowMoveTabIntent
-    || intent === windowPinPreviewIntent
-    || intent === windowResizeSplitIntent
-  )
-    ? intent
-    : undefined;
 }
 
 function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | RuntimeError {
@@ -862,346 +742,6 @@ function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | Runt
     role,
     slot,
   };
-}
-
-function routeIntentRequest(request: IntentRequest): RouteIntentRow | RuntimeError {
-  const row = runtimeIntentRequestRow<RouteIntentRow>(request, routeIntentBoundary);
-  if (isRuntimeError(row)) return row;
-  if (row.target !== undefined && contextDropTarget(row.target) === undefined) {
-    return badRequest('Route request target is invalid.');
-  }
-
-  return {
-    id: row.id,
-    url: row.url,
-    ...(row.rootUrl === undefined ? {} : { rootUrl: row.rootUrl }),
-    ...(row.sourceSurfaceId === undefined ? {} : { sourceSurfaceId: row.sourceSurfaceId }),
-    ...(row.target === undefined ? {} : { target: row.target }),
-    ...(row.title === undefined ? {} : { title: row.title }),
-  };
-}
-
-function filePickerIntentRequest(
-  request: IntentRequest,
-  intent: FilePickerIntentName,
-): FilePickerIntentRow | RuntimeError {
-  const row = runtimeIntentRequestRow<FilePickerIntentRow>(request, filePickerIntentBoundary);
-  if (isRuntimeError(row)) return row;
-  if (row.range !== undefined && !isStringArray(row.range)) {
-    return badRequest('File picker request range must be an array of strings.');
-  }
-  if (
-    intent === filePickerToggleFolderIntent
-    && (row.range !== undefined || row.toggle !== undefined)
-  ) {
-    return badRequest(`${filePickerToggleFolderIntent} only accepts id and url.`);
-  }
-
-  return {
-    id: row.id,
-    url: row.url,
-    ...(row.range === undefined ? {} : { range: row.range }),
-    ...(row.toggle === undefined ? {} : { toggle: row.toggle }),
-  };
-}
-
-function filePickerSelectionOptions(row: FilePickerIntentRow): FileSelectionOptions | undefined {
-  if (row.range === undefined && row.toggle === undefined) return undefined;
-  return {
-    ...(row.range === undefined ? {} : { range: row.range }),
-    ...(row.toggle === undefined ? {} : { toggle: row.toggle }),
-  };
-}
-
-function windowIntentRequest(
-  request: IntentRequest,
-  intent:
-    | typeof windowCloseContextIntent
-    | typeof windowFocusIntent
-    | typeof windowMoveTabIntent
-    | typeof windowPinPreviewIntent
-    | typeof windowResizeSplitIntent,
-): WindowIntentRow | RuntimeError {
-  const row = runtimeIntentRequestRow<WindowIntentRow>(request, windowIntentBoundary);
-  if (isRuntimeError(row)) return row;
-  if (row.path !== undefined && !isSplitPath(row.path)) return badRequest('Window request path is invalid.');
-  if (row.target !== undefined && contextDropTarget(row.target) === undefined) {
-    return badRequest('Window request target is invalid.');
-  }
-  const fieldError = windowIntentFieldError(intent, row);
-  if (fieldError !== undefined) return badRequest(fieldError);
-
-  return {
-    id: row.id,
-    ...(row.contextId === undefined ? {} : { contextId: row.contextId }),
-    ...(row.path === undefined ? {} : { path: row.path }),
-    ...(row.ratio === undefined ? {} : { ratio: row.ratio }),
-    ...(row.sourceSurfaceId === undefined ? {} : { sourceSurfaceId: row.sourceSurfaceId }),
-    ...(row.surfaceId === undefined ? {} : { surfaceId: row.surfaceId }),
-    ...(row.target === undefined ? {} : { target: row.target }),
-  };
-}
-
-function windowIntentFieldError(
-  intent:
-    | typeof windowCloseContextIntent
-    | typeof windowFocusIntent
-    | typeof windowMoveTabIntent
-    | typeof windowPinPreviewIntent
-    | typeof windowResizeSplitIntent,
-  row: WindowIntentRow,
-): string | undefined {
-  if (
-    (intent === windowCloseContextIntent || intent === windowFocusIntent || intent === windowPinPreviewIntent)
-    && (typeof row.surfaceId !== 'string' || typeof row.contextId !== 'string')
-  ) {
-    return `${intent} requires surfaceId and contextId.`;
-  }
-  if (
-    intent === windowMoveTabIntent
-    && (
-      typeof row.sourceSurfaceId !== 'string'
-      || typeof row.contextId !== 'string'
-      || row.target === undefined
-    )
-  ) {
-    return `${intent} requires sourceSurfaceId, contextId, and target.`;
-  }
-  if (intent === windowResizeSplitIntent && (row.path === undefined || typeof row.ratio !== 'number')) {
-    return `${intent} requires path and ratio.`;
-  }
-  return undefined;
-}
-
-function validateWindowIntent(
-  state: WindowManagerStateDoc,
-  intent:
-    | typeof windowCloseContextIntent
-    | typeof windowFocusIntent
-    | typeof windowMoveTabIntent
-    | typeof windowPinPreviewIntent
-    | typeof windowResizeSplitIntent,
-  request: WindowIntentRow,
-): RuntimeError | undefined {
-  if (
-    (intent === windowFocusIntent || intent === windowCloseContextIntent)
-    && request.surfaceId !== undefined
-    && request.contextId !== undefined
-  ) {
-    return validateSurfaceContext(state, request.surfaceId, request.contextId);
-  }
-
-  if (
-    intent === windowPinPreviewIntent
-    && request.surfaceId !== undefined
-    && request.contextId !== undefined
-  ) {
-    return validatePreviewContext(state, request.surfaceId, request.contextId);
-  }
-
-  if (
-    intent === windowMoveTabIntent
-    && request.sourceSurfaceId !== undefined
-    && request.contextId !== undefined
-    && request.target !== undefined
-  ) {
-    const target = contextDropTarget(request.target);
-    return target === undefined
-      ? runtimeError('bad_request', 'Window request target is invalid.')
-      : validateMovedContextDropTarget(state, request.sourceSurfaceId, request.contextId, target);
-  }
-
-  if (intent === windowResizeSplitIntent && request.path !== undefined && request.ratio !== undefined) {
-    return validateResizeSplit(state, request.path as SplitPath);
-  }
-
-  return undefined;
-}
-
-function commitWindowIntent(
-  doc: WindowManagerStateDoc,
-  intent:
-    | typeof windowCloseContextIntent
-    | typeof windowFocusIntent
-    | typeof windowMoveTabIntent
-    | typeof windowPinPreviewIntent
-    | typeof windowResizeSplitIntent,
-  request: WindowIntentRow,
-): void {
-  if (intent === windowFocusIntent && request.surfaceId !== undefined && request.contextId !== undefined) {
-    focusContext(doc, request.surfaceId, request.contextId);
-  } else if (intent === windowCloseContextIntent && request.surfaceId !== undefined && request.contextId !== undefined) {
-    closeContext(doc, request.surfaceId, request.contextId);
-  } else if (intent === windowPinPreviewIntent && request.surfaceId !== undefined && request.contextId !== undefined) {
-    pinContext(doc, request.surfaceId, request.contextId);
-  } else if (
-    intent === windowMoveTabIntent
-    && request.sourceSurfaceId !== undefined
-    && request.contextId !== undefined
-    && request.target !== undefined
-  ) {
-    const target = contextDropTarget(request.target);
-    if (target !== undefined) dropContext(doc, request.sourceSurfaceId, request.contextId, target);
-  } else if (intent === windowResizeSplitIntent && request.path !== undefined && request.ratio !== undefined) {
-    resizeSplit(doc, request.path as SplitPath, request.ratio);
-  }
-}
-
-function validateNewContextDropTarget(
-  state: WindowManagerStateDoc,
-  target: ContextDropTarget,
-): RuntimeError | undefined {
-  if (target.area === 'tabs') return validateTabDropTarget(state, target);
-  return validateContentDropTarget(state, target);
-}
-
-function validateMovedContextDropTarget(
-  state: WindowManagerStateDoc,
-  sourceSurfaceId: string,
-  contextId: string,
-  target: ContextDropTarget,
-): RuntimeError | undefined {
-  const source = state.surfaces[sourceSurfaceId];
-  if (source === undefined) return surfaceNotFound(sourceSurfaceId);
-  if (!surfaceHasContext(source, contextId)) return contextNotFoundOnSurface(contextId, sourceSurfaceId);
-
-  if (target.area === 'tabs') {
-    if (target.contextId === contextId) {
-      return runtimeError('conflict', `Context ${contextId} cannot be moved relative to itself.`);
-    }
-    return validateTabDropTarget(state, target);
-  }
-
-  const targetError = validateContentDropTarget(state, target);
-  if (targetError !== undefined) return targetError;
-  if (target.zone === 'center' && sourceSurfaceId === target.surfaceId) {
-    return runtimeError('conflict', `Context ${contextId} is already on surface ${target.surfaceId}.`);
-  }
-
-  return undefined;
-}
-
-function validateTabDropTarget(
-  state: WindowManagerStateDoc,
-  target: Extract<ContextDropTarget, { area: 'tabs' }>,
-): RuntimeError | undefined {
-  const surface = state.surfaces[target.surfaceId];
-  if (surface === undefined) return surfaceNotFound(target.surfaceId);
-  if (surface.role !== SurfaceRole.DocumentSet) {
-    return runtimeError('conflict', `Surface ${target.surfaceId} cannot accept document contexts.`);
-  }
-  if (target.contextId !== undefined && !surfaceHasContext(surface, target.contextId)) {
-    return contextNotFoundOnSurface(target.contextId, target.surfaceId);
-  }
-  return undefined;
-}
-
-function validateContentDropTarget(
-  state: WindowManagerStateDoc,
-  target: Extract<ContextDropTarget, { area: 'content' }>,
-): RuntimeError | undefined {
-  const surface = state.surfaces[target.surfaceId];
-  if (surface === undefined) return surfaceNotFound(target.surfaceId);
-  if (surface.role !== SurfaceRole.DocumentSet) {
-    return runtimeError('conflict', `Surface ${target.surfaceId} cannot accept document contexts.`);
-  }
-
-  const node = nodeAtPath(state.layout, target.path);
-  if (node === undefined) return runtimeError('not_found', `Split path ${formatSplitPath(target.path)} was not found.`);
-  if (node.kind !== WindowManagerNodeKind.Surface || node.surfaceId !== target.surfaceId) {
-    return runtimeError('conflict', `Split path ${formatSplitPath(target.path)} no longer targets surface ${target.surfaceId}.`);
-  }
-
-  return undefined;
-}
-
-function validateSurfaceContext(
-  state: WindowManagerStateDoc,
-  surfaceId: string,
-  contextId: string,
-): RuntimeError | undefined {
-  const surface = state.surfaces[surfaceId];
-  if (surface === undefined) return surfaceNotFound(surfaceId);
-  return surfaceHasContext(surface, contextId) ? undefined : contextNotFoundOnSurface(contextId, surfaceId);
-}
-
-function validatePreviewContext(
-  state: WindowManagerStateDoc,
-  surfaceId: string,
-  contextId: string,
-): RuntimeError | undefined {
-  const surface = state.surfaces[surfaceId];
-  if (surface === undefined) return surfaceNotFound(surfaceId);
-  if (surface.previewContext === contextId) return undefined;
-  if (surfaceHasContext(surface, contextId)) {
-    return runtimeError('conflict', `Context ${contextId} is not a preview on surface ${surfaceId}.`);
-  }
-  return contextNotFoundOnSurface(contextId, surfaceId);
-}
-
-function validateResizeSplit(
-  state: WindowManagerStateDoc,
-  path: SplitPath,
-): RuntimeError | undefined {
-  const node = nodeAtPath(state.layout, path);
-  if (node === undefined) return runtimeError('not_found', `Split path ${formatSplitPath(path)} was not found.`);
-  if (node.kind !== WindowManagerNodeKind.Split) {
-    return runtimeError('conflict', `Split path ${formatSplitPath(path)} is not a split.`);
-  }
-  return undefined;
-}
-
-function targetDocumentSurface(
-  state: WindowManagerStateDoc,
-  sourceSurfaceId: string | undefined,
-): WindowSurface | undefined {
-  const focused = state.surfaces[state.focus];
-  if (state.focus !== sourceSurfaceId && focused?.role === SurfaceRole.DocumentSet) return focused;
-  return Object.values(state.surfaces).find((surface) => (
-    surface.id !== sourceSurfaceId && surface.role === SurfaceRole.DocumentSet
-  ));
-}
-
-function targetLaunchSurface(
-  state: WindowManagerStateDoc,
-  role: SurfaceRole,
-): WindowSurface | undefined {
-  const focused = state.surfaces[state.focus];
-  return focused?.role === role
-    ? focused
-    : Object.values(state.surfaces).find((surface) => surface.role === role);
-}
-
-function surfaceWithContext(
-  state: WindowManagerStateDoc,
-  contextId: string,
-): WindowSurface | undefined {
-  return Object.values(state.surfaces).find((surface) => surfaceHasContext(surface, contextId));
-}
-
-function surfaceHasContext(surface: WindowSurface, contextId: string): boolean {
-  return surface.previewContext === contextId || surface.contexts.includes(contextId);
-}
-
-function nodeAtPath(root: WindowLayoutNode, path: SplitPath): WindowLayoutNode | undefined {
-  let node = root;
-  for (const side of path) {
-    if (node.kind === WindowManagerNodeKind.Surface) return undefined;
-    node = node[side];
-  }
-  return node;
-}
-
-function surfaceNotFound(surfaceId: string): RuntimeError {
-  return runtimeError('not_found', `Surface ${surfaceId} was not found.`);
-}
-
-function contextNotFoundOnSurface(contextId: string, surfaceId: string): RuntimeError {
-  return runtimeError('not_found', `Context ${contextId} was not found on surface ${surfaceId}.`);
-}
-
-function formatSplitPath(path: SplitPath): string {
-  return path.length === 0 ? '<root>' : path.join('.');
 }
 
 function appLaunchBehavior(value: unknown): ContextLaunchBehavior | undefined {
@@ -1279,55 +819,6 @@ function containerMount(value: unknown): ContainerMount | undefined {
   return undefined;
 }
 
-function contextDropTarget(target: Json | undefined): ContextDropTarget | undefined {
-  if (!isRecord(target) || typeof target.area !== 'string' || typeof target.surfaceId !== 'string') {
-    return undefined;
-  }
-
-  if (target.area === 'tabs') {
-    if (target.contextId !== undefined && typeof target.contextId !== 'string') return undefined;
-    if (
-      target.placement !== undefined
-      && target.placement !== 'before'
-      && target.placement !== 'after'
-    ) {
-      return undefined;
-    }
-
-    return {
-      area: 'tabs',
-      surfaceId: target.surfaceId,
-      ...(typeof target.contextId === 'string' ? { contextId: target.contextId } : {}),
-      ...(target.placement === 'before' || target.placement === 'after' ? { placement: target.placement } : {}),
-    };
-  }
-
-  if (
-    target.area === 'content'
-    && (target.zone === 'center' || target.zone === 'left' || target.zone === 'right' || target.zone === 'top' || target.zone === 'bottom')
-    && isSplitPath(target.path)
-  ) {
-    return {
-      area: 'content',
-      path: target.path,
-      surfaceId: target.surfaceId,
-      zone: target.zone,
-    };
-  }
-
-  return undefined;
-}
-
-function viewerContext(url: string, title: string | undefined, rootUrl: string): WindowContext {
-  return {
-    app: 'viewer',
-    container: rootContainer(rootUrl),
-    id: `viewer:${url}`,
-    ...(title === undefined ? {} : { title }),
-    url,
-  };
-}
-
 function terminalContext(url: string, rootUrl: string): WindowContext {
   return {
     app: 'terminal',
@@ -1337,30 +828,6 @@ function terminalContext(url: string, rootUrl: string): WindowContext {
   };
 }
 
-function rejected(error: RuntimeError): IntentResult {
-  return { status: 'rejected', error };
-}
-
-function badRequest(error: Error | string): RuntimeError {
-  return runtimeError('bad_request', typeof error === 'string' ? error : error.message);
-}
-
-function isRuntimeError(value: unknown): value is RuntimeError {
-  return isRecord(value) && typeof value.code === 'string' && typeof value.message === 'string';
-}
-
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === 'string';
-}
-
-function isOptionalBoolean(value: unknown): value is boolean | undefined {
-  return value === undefined || typeof value === 'boolean';
-}
-
-function isStringArray(value: unknown): value is readonly string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
-}
-
 function isRuntimeMountProvider(value: unknown): value is RuntimeMountProvider {
   return (
     value === RuntimeMountProvider.Device
@@ -1368,12 +835,4 @@ function isRuntimeMountProvider(value: unknown): value is RuntimeMountProvider {
     || value === RuntimeMountProvider.Proc
     || value === RuntimeMountProvider.ShellCommands
   );
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, Json | undefined>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isSplitPath(value: unknown): value is readonly ('first' | 'second')[] {
-  return Array.isArray(value) && value.every((item) => item === 'first' || item === 'second');
 }
