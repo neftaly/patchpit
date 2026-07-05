@@ -305,6 +305,7 @@ export type SeedFilesystem = {
   filePickerStateHandle: DocHandle<FilePickerStateDoc>;
   indexHandle: DocHandle<FilesystemIndexDoc>;
   lightThemeHandle: DocHandle<ThemeDoc>;
+  systemAppsHandle: DocHandle<FolderDoc>;
   terminalStateHandle: DocHandle<TerminalStateDoc>;
   windowManagerHandle: DocHandle<WindowManagerStateDoc>;
   documentHandles: Record<string, DocHandle<FilesystemResource>>;

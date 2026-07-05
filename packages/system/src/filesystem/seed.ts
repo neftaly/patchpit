@@ -127,23 +127,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     rootUrl: root.url,
     selectedUrls: [],
   });
-  const terminalStateHandle = repo.create<TerminalStateDoc>({
-    '@patchpit': { type: PatchpitType.TerminalState },
-    capabilities: {
-      network: {
-        allowAll: true,
-        allowedUrlPrefixes: [],
-        enabled: true,
-      },
-    },
-    cwd: '/home',
-    env: {},
-    extension: automergeExtension,
-    history: [],
-    lines: [],
-    mimeType: automergeMimeType,
-    name: automergeFileName(terminalStateId),
-  });
+  const terminalStateHandle = createTerminalStateHandle(repo, terminalStateId);
   const windowManagerHandle = repo.create<WindowManagerStateDoc>({
     '@patchpit': { type: PatchpitType.WindowManagerState },
     contexts: {
@@ -249,9 +233,72 @@ export function createSeedFilesystem(): SeedFilesystem {
     filePickerStateHandle,
     indexHandle,
     lightThemeHandle,
+    systemAppsHandle: systemApps,
     terminalStateHandle,
     windowManagerHandle,
   };
+}
+
+export function createTerminalStateResource(
+  filesystem: SeedFilesystem,
+  id: string,
+): DocHandle<TerminalStateDoc> {
+  const handle = createTerminalStateHandle(filesystem.repo, id);
+  filesystem.documentHandles[handle.url] = handle as unknown as DocHandle<FilesystemResource>;
+  registerFilesystemResource({
+    folderHandle: filesystem.systemAppsHandle,
+    handle,
+    indexHandle: filesystem.indexHandle,
+    name: handle.doc().name,
+    type: PatchpitType.TerminalState,
+  });
+  return handle;
+}
+
+function registerFilesystemResource<T extends FilesystemResource>({
+  folderHandle,
+  handle,
+  indexHandle,
+  name,
+  type,
+}: {
+  readonly folderHandle: DocHandle<FolderDoc>;
+  readonly handle: DocHandle<T>;
+  readonly indexHandle: DocHandle<FilesystemIndexDoc>;
+  readonly name: string;
+  readonly type: PatchpitType | string;
+}): void {
+  folderHandle.change((doc) => {
+    doc.docs = [...doc.docs, entry(name, type, handle.url)];
+  });
+
+  indexHandle.change((doc) => {
+    upsertIndexRow(doc.filesystemIndex.documents, indexRowForResource(folderHandle.url, folderHandle.doc()));
+    upsertIndexRow(doc.filesystemIndex.documents, indexRowForResource(handle.url, filesystemResource(handle)));
+  });
+}
+
+function createTerminalStateHandle(
+  repo: Repo,
+  id: string,
+): DocHandle<TerminalStateDoc> {
+  return repo.create<TerminalStateDoc>({
+    '@patchpit': { type: PatchpitType.TerminalState },
+    capabilities: {
+      network: {
+        allowAll: true,
+        allowedUrlPrefixes: [],
+        enabled: true,
+      },
+    },
+    cwd: '/home',
+    env: {},
+    extension: automergeExtension,
+    history: [],
+    lines: [],
+    mimeType: automergeMimeType,
+    name: automergeFileName(id),
+  });
 }
 
 const sharedMetrics = {
@@ -414,6 +461,16 @@ function indexRowForResource(url: string, doc: FilesystemResource): FilesystemIn
     type,
     url,
   };
+}
+
+function upsertIndexRow(rows: FilesystemIndexRow[], row: FilesystemIndexRow): void {
+  const index = rows.findIndex((item) => item.url === row.url);
+  if (index === -1) rows.push(row);
+  else rows[index] = row;
+}
+
+function filesystemResource<T extends FilesystemResource>(handle: DocHandle<T>): FilesystemResource {
+  return handle.doc() as unknown as FilesystemResource;
 }
 
 function extensionFromName(name: string): string {

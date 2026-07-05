@@ -48,6 +48,17 @@ type EdgeDropTarget = Extract<ContextDropTarget, { area: 'content' }> & {
   readonly zone: Exclude<ContentDropZone, 'center'>;
 };
 
+export enum ContextLaunchBehavior {
+  OpenContext = 'open-context',
+  ToggleSurface = 'toggle-surface',
+}
+
+export type ContextLaunch = {
+  readonly behavior: ContextLaunchBehavior;
+  readonly context: WindowContext;
+  readonly role: SurfaceRole;
+};
+
 type WindowManagerStateRow = {
   contexts: Record<string, WindowContext>;
   focus: string;
@@ -304,14 +315,13 @@ export function previewContext(
 
 export function launchContext(
   state: WindowManagerStateDoc,
-  context: WindowContext,
-  role: SurfaceRole,
+  launch: ContextLaunch,
 ): void {
-  if (role === SurfaceRole.WorkspaceView) {
-    toggleWorkspaceContext(state, context);
+  if (launch.behavior === ContextLaunchBehavior.ToggleSurface) {
+    toggleLaunchContext(state, launch.context, launch.role);
     return;
   }
-  revealContext(state, context, role);
+  revealContext(state, launch.context, launch.role);
 }
 
 function revealContext(
@@ -370,13 +380,14 @@ function targetSurfaceByRole(
     : Object.values(state.surfaces).find((surface) => surface.role === role);
 }
 
-function toggleWorkspaceContext(
+function toggleLaunchContext(
   state: WindowManagerStateDoc,
   context: WindowContext,
+  role: SurfaceRole,
 ): void {
   const surface = surfaceWithContext(state, context.id);
-  if (surface?.role === SurfaceRole.WorkspaceView && hideSurface(state, surface)) return;
-  revealContext(state, context, SurfaceRole.WorkspaceView);
+  if (surface?.role === role && hideSurface(state, surface)) return;
+  revealContext(state, context, role);
 }
 
 function hideSurface(state: WindowManagerStateDoc, surface: WindowSurface): boolean {

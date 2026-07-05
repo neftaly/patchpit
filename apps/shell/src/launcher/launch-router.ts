@@ -9,6 +9,7 @@ import {
   type WindowManagerStateDoc,
 } from '@patchpit/system';
 import {
+  ContextLaunchBehavior,
   commitWindowManagerState,
   launchContext,
 } from '../window-manager/window-manager-state';
@@ -24,63 +25,57 @@ export type LauncherItem = {
 export function launcherItems({
   focusedAppId,
   filePickerStateHandle,
+  newTerminalStateHandle,
   rootUrl,
-  terminalStateHandle,
   windowManagerHandle,
 }: {
   readonly focusedAppId: string | undefined;
   readonly filePickerStateHandle: DocHandle<FilePickerStateDoc>;
+  readonly newTerminalStateHandle: () => DocHandle<TerminalStateDoc>;
   readonly rootUrl: string;
-  readonly terminalStateHandle: DocHandle<TerminalStateDoc>;
   readonly windowManagerHandle: DocHandle<WindowManagerStateDoc>;
 }): readonly LauncherItem[] {
-  return [
-    launcherItem({
-      focusedAppId,
-      context: filePickerContext(filePickerStateHandle.url, rootUrl),
+  const specs = [
+    {
+      app: 'file-picker',
+      behavior: ContextLaunchBehavior.ToggleSurface,
+      context: () => filePickerContext(filePickerStateHandle.url, rootUrl),
       emoji: '📁',
       label: 'Files',
       role: SurfaceRole.WorkspaceView,
-      windowManagerHandle,
-    }),
-    launcherItem({
-      focusedAppId,
-      context: terminalContext(terminalStateHandle.url, rootUrl),
+    },
+    {
+      app: 'terminal',
+      behavior: ContextLaunchBehavior.OpenContext,
+      context: () => terminalContext(newTerminalStateHandle().url, rootUrl),
       emoji: '💬',
       label: 'Terminal',
       role: SurfaceRole.DocumentSet,
-      windowManagerHandle,
-    }),
-  ];
+    },
+  ] satisfies readonly LauncherSpec[];
+
+  return specs.map((spec) => ({
+    active: focusedAppId === spec.app,
+    app: spec.app,
+    emoji: spec.emoji,
+    label: spec.label,
+    launch: () => {
+      const context = spec.context();
+      commitWindowManagerState(windowManagerHandle, (doc) => {
+        launchContext(doc, { behavior: spec.behavior, context, role: spec.role });
+      });
+    },
+  }));
 }
 
-function launcherItem({
-  focusedAppId,
-  context,
-  emoji,
-  label,
-  role,
-  windowManagerHandle,
-}: {
-  readonly focusedAppId: string | undefined;
-  readonly context: WindowContext;
+type LauncherSpec = {
+  readonly app: string;
+  readonly behavior: ContextLaunchBehavior;
+  readonly context: () => WindowContext;
   readonly emoji: string;
   readonly label: string;
   readonly role: SurfaceRole;
-  readonly windowManagerHandle: DocHandle<WindowManagerStateDoc>;
-}): LauncherItem {
-  return {
-    active: focusedAppId === context.app,
-    app: context.app,
-    emoji,
-    label,
-    launch: () => {
-      commitWindowManagerState(windowManagerHandle, (doc) => {
-        launchContext(doc, context, role);
-      });
-    },
-  };
-}
+};
 
 function filePickerContext(url: string, rootUrl: string): WindowContext {
   return {
@@ -96,7 +91,7 @@ function terminalContext(url: string, rootUrl: string): WindowContext {
   return {
     app: 'terminal',
     container: terminalContainer(rootUrl),
-    id: 'terminal',
+    id: `terminal:${url}`,
     url,
   };
 }

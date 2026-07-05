@@ -1,5 +1,5 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import { useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   fileIcons,
   selectFilePickerUrl,
@@ -7,11 +7,14 @@ import {
   type FileSelectionOptions,
 } from '@patchpit/file-picker';
 import {
+  createTerminalStateResource,
   createSeedFilesystem,
   projectFilesystem,
   resolveTheme,
   rootContainer,
   themeStyle,
+  type TerminalStateDoc,
+  type WindowManagerStateDoc,
   type WindowContext,
 } from '@patchpit/system';
 import { LauncherBar } from './launcher/LauncherBar';
@@ -40,8 +43,11 @@ export function App() {
   const indexDoc = useAutomergeDoc(seed.indexHandle);
   const iconRules = useMemo(() => fileIcons(fileTypes), [fileTypes]);
   const lightTheme = useAutomergeDoc(seed.lightThemeHandle);
+  const nextTerminalId = useRef(2);
+  const [terminalHandles, setTerminalHandles] = useState<readonly DocHandle<TerminalStateDoc>[]>([]);
   const filePickerState = useAutomergeDoc(seed.filePickerStateHandle);
   const terminalState = useAutomergeDoc(seed.terminalStateHandle);
+  const terminalStates = useAutomergeDocs(terminalHandles);
   const windowManagerState = useAutomergeDoc(seed.windowManagerHandle);
   const prefersDark = usePrefersDark();
   const theme = useMemo(
@@ -56,50 +62,38 @@ export function App() {
     [seed.lightThemeHandle.url]: lightTheme,
     [seed.terminalStateHandle.url]: terminalState,
     [seed.windowManagerHandle.url]: windowManagerState,
+    ...terminalStates,
   };
   const filesystem = useMemo(() => projectFilesystem(indexDoc, seed.rootUrl), [indexDoc, seed.rootUrl]);
+  const updateWindowManager = (update: (doc: WindowManagerStateDoc) => void) => {
+    commitWindowManagerState(seed.windowManagerHandle, update);
+  };
   const windowManagerActions = {
     focusContext: (surfaceId: string, contextId: string) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        focusContext(doc, surfaceId, contextId);
-      });
+      updateWindowManager((doc) => focusContext(doc, surfaceId, contextId));
     },
     closeContext: (surfaceId: string, contextId: string) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        closeContext(doc, surfaceId, contextId);
-      });
+      updateWindowManager((doc) => closeContext(doc, surfaceId, contextId));
     },
     dropContext: (sourceSurfaceId: string, contextId: string, target: ContextDropTarget) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        dropContext(doc, sourceSurfaceId, contextId, target);
-      });
+      updateWindowManager((doc) => dropContext(doc, sourceSurfaceId, contextId, target));
     },
     dropUrl: (url: string, title: string, target: ContextDropTarget) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        dropNewContext(doc, viewerContext(url, title, seed.rootUrl), target);
-      });
+      updateWindowManager((doc) => dropNewContext(doc, viewerContext(url, title, seed.rootUrl), target));
     },
     pinContext: (surfaceId: string, contextId: string) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        pinContext(doc, surfaceId, contextId);
-      });
+      updateWindowManager((doc) => pinContext(doc, surfaceId, contextId));
     },
     resizeSplit: (path: SplitPath, ratio: number) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        resizeSplit(doc, path, ratio);
-      });
+      updateWindowManager((doc) => resizeSplit(doc, path, ratio));
     },
   };
   const filePickerActions = (sourceSurfaceId: string) => ({
     openUrl: (url: string, title: string) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        openContext(doc, viewerContext(url, title, seed.rootUrl), sourceSurfaceId);
-      });
+      updateWindowManager((doc) => openContext(doc, viewerContext(url, title, seed.rootUrl), sourceSurfaceId));
     },
     previewUrl: (url: string, title: string) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        previewContext(doc, viewerContext(url, title, seed.rootUrl), sourceSurfaceId);
-      });
+      updateWindowManager((doc) => previewContext(doc, viewerContext(url, title, seed.rootUrl), sourceSurfaceId));
     },
     selectUrl: (
       url: string,
@@ -118,23 +112,31 @@ export function App() {
       state: filePickerState,
     },
   };
-  const terminals = {
-    [seed.terminalStateHandle.url]: {
-      runtimeOptions: {
-        documentHandles: seed.documentHandles,
-        indexHandle: seed.indexHandle,
-        repo: seed.repo,
-        rootUrl: seed.rootUrl,
-      },
-      state: terminalState,
-      stateHandle: seed.terminalStateHandle,
+  const terminalRuntimeOptions = {
+    documentHandles: seed.documentHandles,
+    indexHandle: seed.indexHandle,
+    repo: seed.repo,
+    rootUrl: seed.rootUrl,
+  };
+  const terminals = Object.fromEntries(terminalHandles.map((handle) => [
+    handle.url,
+    {
+      runtimeOptions: terminalRuntimeOptions,
+      state: terminalStates[handle.url] ?? handle.doc(),
+      stateHandle: handle,
     },
+  ]));
+  const newTerminalStateHandle = () => {
+    const handle = createTerminalStateResource(seed, `terminal-${nextTerminalId.current}`);
+    nextTerminalId.current += 1;
+    setTerminalHandles((handles) => [...handles, handle]);
+    return handle;
   };
   const launchers = launcherItems({
     focusedAppId: focusedAppId(windowManagerState),
     filePickerStateHandle: seed.filePickerStateHandle,
+    newTerminalStateHandle,
     rootUrl: seed.rootUrl,
-    terminalStateHandle: seed.terminalStateHandle,
     windowManagerHandle: seed.windowManagerHandle,
   });
   return (
@@ -176,6 +178,23 @@ function useAutomergeDoc<T>(handle: DocHandle<T>): T {
       return () => handle.off('change', update);
     },
     () => handle.doc(),
+  );
+}
+
+function useAutomergeDocs<T>(handles: readonly DocHandle<T>[]): Readonly<Record<string, T>> {
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const update = () => setVersion((current) => current + 1);
+    for (const handle of handles) handle.on('change', update);
+    return () => {
+      for (const handle of handles) handle.off('change', update);
+    };
+  }, [handles]);
+
+  return useMemo(
+    () => Object.fromEntries(handles.map((handle) => [handle.url, handle.doc()])),
+    [handles, version],
   );
 }
 
