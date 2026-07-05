@@ -16,7 +16,7 @@ import {
   filesystemIndexRowForResource,
   folderEntry,
   PatchpitType,
-  removeFilesystemIndexRow,
+  removeFilesystemIndexRows,
   replaceFolderEntries,
   upsertFilesystemIndexRow,
   type FileDoc,
@@ -124,12 +124,13 @@ export class PatchpitFs implements IFileSystem {
       throw fsError('ENOTEMPTY', `directory not empty, rm '${path}'`);
     }
 
+    const removedUrls = this.#subtreeUrls(found);
     const parent = this.#parentFolder(path, false);
     this.#updateFolder(
       parent.handle,
       cloneFolderEntries(parent.handle.doc().docs).filter((folderEntry) => folderEntry.name !== basename(path)),
     );
-    this.#dropIndex(found.entry.url);
+    this.#dropIndexes(removedUrls);
   }
 
   async cp(src: string, dest: string, options?: CpOptions): Promise<void> {
@@ -305,11 +306,36 @@ export class PatchpitFs implements IFileSystem {
     });
   }
 
-  #dropIndex(url: string): void {
+  #dropIndexes(urls: readonly string[]): void {
     this.#indexHandle.change((doc) => {
-      removeFilesystemIndexRow(doc.filesystemIndex.documents, url);
+      removeFilesystemIndexRows(doc.filesystemIndex.documents, urls);
     });
-    delete this.#documentHandles[url];
+    for (const url of urls) delete this.#documentHandles[url];
+  }
+
+  #subtreeUrls(found: LookupResult): string[] {
+    const urls = new Set<string>();
+
+    if (found.kind === PatchpitType.Folder) {
+      this.#collectFolderSubtreeUrls(found.entry.url, found.handle, urls);
+    } else {
+      urls.add(found.entry.url);
+    }
+
+    return [...urls];
+  }
+
+  #collectFolderSubtreeUrls(url: string, handle: DocHandle<FolderDoc>, urls: Set<string>): void {
+    if (urls.has(url)) return;
+    urls.add(url);
+
+    for (const entry of handle.doc().docs) {
+      if (entry.type === PatchpitType.Folder) {
+        this.#collectFolderSubtreeUrls(entry.url, this.#folderHandle(entry.url), urls);
+      } else {
+        urls.add(entry.url);
+      }
+    }
   }
 
   #paths(path: string, folder: DocHandle<FolderDoc>): string[] {

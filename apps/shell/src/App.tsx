@@ -32,13 +32,16 @@ import {
 } from '@patchpit/system/runtime';
 import { LauncherBar } from './launcher/LauncherBar';
 import { launcherItems } from './launcher/launch-router';
-import { createBootstrapRuntimeClient } from './runtime/bootstrap-runtime';
+import { createBootstrapRuntimeClient, type BootstrapRuntimeClient } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
 import runtimeSharedWorkerUrl from './runtime/shared-worker.ts?sharedworker&url';
 import { submitFilePickerIntent, type FilePickerSelectUrlInput } from './runtime/file-picker-intents';
 import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/launch-intents';
 import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from './runtime/route-intents';
-import { createStateBrowserSnapshot } from './state-browser/StateBrowser';
+import {
+  createStateBrowserSnapshot,
+  type StateBrowserRuntimeIssueEntry,
+} from './state-browser/StateBrowser';
 import { useFilesystemTreeProjection } from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
 import { WindowManager } from './window-manager/WindowManager';
@@ -95,12 +98,15 @@ function ShellApp({
     seed,
     workspaceId: 'default',
   }));
+  const runtimeDiagnostics = useRuntimeDiagnostics(runtime);
   const appearance = useAutomergeDoc(seed.appearanceHandle);
   const darkTheme = useAutomergeDoc(seed.darkThemeHandle);
   const fileTypes = useAutomergeDoc(seed.fileTypesHandle);
   const iconRules = useMemo(() => fileIcons(fileTypes), [fileTypes]);
   const lightTheme = useAutomergeDoc(seed.lightThemeHandle);
   const [runtimeFault, setRuntimeFault] = useState<RuntimePanelFailure>();
+  const nextRuntimeIssueId = useRef(1);
+  const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly StateBrowserRuntimeIssueEntry[]>([]);
   const filePickerState = useAutomergeDoc(seed.filePickerStateHandle);
   const terminalState = useAutomergeDoc(seed.terminalStateHandle);
   const terminalStates = useAutomergeDocs(terminalHandles);
@@ -128,15 +134,30 @@ function ShellApp({
   const stateBrowserSnapshot = createStateBrowserSnapshot({
     filesystemProjection,
     runtimeAck: runtimeConnection.ack,
+    runtimeDiagnostics,
     runtimeIssue: runtimeFault,
+    runtimeIssueHistory,
     runtimePlatform,
     runtimeState,
     schemaDocuments: liveDocuments,
     windowManagerState,
   });
+  const recordRuntimeIssue = (source: StateBrowserRuntimeIssueEntry['source'], issue: RuntimePanelFailure) => {
+    const entry: StateBrowserRuntimeIssueEntry = {
+      id: nextRuntimeIssueId.current++,
+      issue,
+      observedAt: new Date().toISOString(),
+      source,
+    };
+    setRuntimeIssueHistory((history) => appendRuntimeIssueHistory(history, entry));
+  };
   const reportIntentResult = (result: IntentResult): IntentResult => {
     if (result.status === 'committed') setRuntimeFault(undefined);
-    else setRuntimeFault(failureFromIntentResult(result));
+    else {
+      const failure = failureFromIntentResult(result);
+      setRuntimeFault(failure);
+      recordRuntimeIssue('intent', failure);
+    }
     return result;
   };
   const routeUrl = (intent: RouteIntentName, input: RouteIntentInput) => {
@@ -146,7 +167,9 @@ function ShellApp({
     return submitWindowIntent(runtime, intent, input).then(reportIntentResult);
   };
   const reportRuntimeError = (error: unknown) => {
-    setRuntimeFault(failureFromUnknownError('Runtime request failed', 'Runtime request failed.', error));
+    const failure = failureFromUnknownError('Runtime request failed', 'Runtime request failed.', error);
+    setRuntimeFault(failure);
+    recordRuntimeIssue('runtime', failure);
   };
   const launchApp = (input: AppLaunchIntentInput) => {
     void submitAppLaunchIntent(runtime, input).then(reportIntentResult).catch(reportRuntimeError);
@@ -281,6 +304,23 @@ function useAutomergeDocs<T>(handles: readonly DocHandle<T>[]): Readonly<Record<
   }, [handles]);
 
   return Object.fromEntries(handles.map((handle) => [handle.url, handle.doc()]));
+}
+
+function useRuntimeDiagnostics(runtime: BootstrapRuntimeClient) {
+  return useSyncExternalStore(
+    (listener) => runtime.diagnostics.subscribe(listener),
+    () => runtime.diagnostics.getSnapshot(),
+  );
+}
+
+const runtimeIssueHistoryLimit = 50;
+
+function appendRuntimeIssueHistory(
+  history: readonly StateBrowserRuntimeIssueEntry[],
+  entry: StateBrowserRuntimeIssueEntry,
+): readonly StateBrowserRuntimeIssueEntry[] {
+  const next = [...history, entry];
+  return next.length > runtimeIssueHistoryLimit ? next.slice(next.length - runtimeIssueHistoryLimit) : next;
 }
 
 type RuntimeBootState =

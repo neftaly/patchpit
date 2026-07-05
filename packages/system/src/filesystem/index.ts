@@ -14,6 +14,7 @@ export {
   folderEntry,
   mimeTypeFromFileName,
   removeFilesystemIndexRow,
+  removeFilesystemIndexRows,
   replaceFolderEntries,
   syncFilesystemIndexResource,
   upsertFilesystemIndexRow,

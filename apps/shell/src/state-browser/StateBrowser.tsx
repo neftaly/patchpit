@@ -13,6 +13,7 @@ import {
   type RuntimePlatformFeature,
   type RuntimePlatformReport,
 } from '@patchpit/system/runtime';
+import type { BootstrapRuntimeDiagnostics } from '../runtime/bootstrap-runtime';
 import type { FilesystemTreeProjectionState } from '../runtime/use-runtime-projection';
 import './state-browser.css';
 
@@ -22,10 +23,19 @@ export type StateBrowserRuntimeIssue = {
   readonly details: readonly string[];
 };
 
+export type StateBrowserRuntimeIssueEntry = {
+  readonly id: number;
+  readonly issue: StateBrowserRuntimeIssue;
+  readonly observedAt: string;
+  readonly source: 'intent' | 'runtime';
+};
+
 export type StateBrowserSnapshotInput = {
   readonly filesystemProjection: FilesystemTreeProjectionState;
   readonly runtimeAck: RuntimeHelloAck;
+  readonly runtimeDiagnostics: BootstrapRuntimeDiagnostics;
   readonly runtimeIssue: StateBrowserRuntimeIssue | undefined;
+  readonly runtimeIssueHistory: readonly StateBrowserRuntimeIssueEntry[];
   readonly runtimePlatform: RuntimePlatformReport;
   readonly runtimeState: RuntimeStateDoc;
   readonly schemaDocuments: Readonly<Record<string, unknown>>;
@@ -45,6 +55,8 @@ type StateBrowserSection = {
 type PatchpitMetadataSummary = Readonly<Record<string, unknown>> & {
   readonly type: string;
 };
+type DocumentSchemaRef = NonNullable<ReturnType<typeof documentSchemaRef>>;
+type SystemSchemaCatalogSummary = ReturnType<typeof systemSchemaCatalogSummary>;
 
 export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnapshot }) {
   return (
@@ -71,6 +83,7 @@ export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnap
 
 export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): StateBrowserSnapshot {
   const schemaRefs = documentSchemaRefs(input.schemaDocuments);
+  const schemaCatalog = systemSchemaCatalogSummary();
 
   return {
     sections: [
@@ -82,9 +95,15 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
       },
       {
         id: 'runtime-issues',
-        title: 'Runtime Issues',
+        title: 'Current Runtime Issue',
         summary: input.runtimeIssue?.title ?? 'No current runtime issue',
         data: runtimeIssueData(input.runtimeIssue),
+      },
+      {
+        id: 'runtime-issue-history',
+        title: 'Runtime Issue History',
+        summary: runtimeIssueHistorySummary(input.runtimeIssueHistory),
+        data: runtimeIssueHistoryData(input.runtimeIssueHistory),
       },
       {
         id: 'platform-features',
@@ -100,18 +119,25 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
       },
       {
         id: 'projection-status',
-        title: 'Projection Status',
-        summary: input.filesystemProjection.status,
-        data: projectionStatusData(input.filesystemProjection),
+        title: 'Projection Status And Counters',
+        summary: projectionStatusSummary(input.filesystemProjection, input.runtimeDiagnostics),
+        data: projectionStatusData(input.filesystemProjection, input.runtimeDiagnostics),
       },
       {
         id: 'schemas',
-        title: 'Schema Catalog And Refs',
-        summary: `${patchpitSystemSchemas.length} system schemas, ${schemaRefs.length} observed document refs`,
+        title: 'Schema Refs And Catalog Summary',
+        summary: `${schemaCatalog.length} system schemas, ${schemaRefs.length} observed document refs`,
         data: {
-          catalog: systemSchemaCatalogSummary(),
+          summary: schemaSummary(schemaCatalog, schemaRefs),
+          catalog: schemaCatalog,
           documentRefs: schemaRefs,
         },
+      },
+      {
+        id: 'intent-log',
+        title: 'Intent Request And Result Log',
+        summary: intentLogSummary(input.runtimeDiagnostics.intentLog),
+        data: intentLogData(input.runtimeDiagnostics.intentLog),
       },
       {
         id: 'policy-capabilities',
@@ -158,6 +184,21 @@ function runtimeIssueData(runtimeIssue: StateBrowserRuntimeIssue | undefined) {
         status: 'current',
         issue: runtimeIssue,
       };
+}
+
+function runtimeIssueHistorySummary(history: readonly StateBrowserRuntimeIssueEntry[]): string {
+  if (history.length === 0) return 'No session issues recorded';
+  const latest = history.at(-1);
+  return latest === undefined
+    ? `${history.length} session issues`
+    : `${history.length} session issues, latest ${latest.issue.title}`;
+}
+
+function runtimeIssueHistoryData(history: readonly StateBrowserRuntimeIssueEntry[]) {
+  return {
+    count: history.length,
+    issues: [...history].reverse(),
+  };
 }
 
 function platformFeatureData(platform: RuntimePlatformReport) {
@@ -240,7 +281,26 @@ function layoutSummary(node: WindowLayoutNode): unknown {
   };
 }
 
-function projectionStatusData(projection: FilesystemTreeProjectionState) {
+function projectionStatusSummary(
+  projection: FilesystemTreeProjectionState,
+  diagnostics: BootstrapRuntimeDiagnostics,
+): string {
+  const counters = totalProjectionCounters(diagnostics);
+  return `${projection.status}, ${counters.resets} resets, ${counters.errors} errors`;
+}
+
+function projectionStatusData(
+  projection: FilesystemTreeProjectionState,
+  diagnostics: BootstrapRuntimeDiagnostics,
+) {
+  return {
+    current: filesystemProjectionData(projection),
+    subscriptions: diagnostics.projectionSubscriptions,
+    totals: totalProjectionCounters(diagnostics),
+  };
+}
+
+function filesystemProjectionData(projection: FilesystemTreeProjectionState) {
   if (projection.status === 'initializing') return { status: projection.status };
   if (projection.status === 'failed') {
     return {
@@ -253,6 +313,23 @@ function projectionStatusData(projection: FilesystemTreeProjectionState) {
     rootUrl: projection.root.url,
     nodeCount: countFilesystemNodes(projection.root),
   };
+}
+
+function totalProjectionCounters(diagnostics: BootstrapRuntimeDiagnostics) {
+  return diagnostics.projectionSubscriptions.reduce(
+    (totals, subscription) => ({
+      errors: totals.errors + subscription.counters.errors,
+      patches: totals.patches + subscription.counters.patches,
+      resets: totals.resets + subscription.counters.resets,
+      snapshots: totals.snapshots + subscription.counters.snapshots,
+    }),
+    {
+      errors: 0,
+      patches: 0,
+      resets: 0,
+      snapshots: 0,
+    },
+  );
 }
 
 function countFilesystemNodes(node: FilesystemNode): number {
@@ -274,6 +351,34 @@ function systemSchemaCatalogSummary() {
       })),
     };
   });
+}
+
+function schemaSummary(
+  catalog: SystemSchemaCatalogSummary,
+  refs: readonly DocumentSchemaRef[],
+) {
+  return {
+    systemSchemaCount: catalog.length,
+    systemRelationCount: catalog.reduce((count, schema) => count + schema.relations.length, 0),
+    observedDocumentRefCount: refs.length,
+    observedDocumentTypes: countBy(refs, (ref) => ref.type),
+    inlineSchemaDocumentCount: refs.filter((ref) => ref.inlineSchemaIds !== undefined).length,
+  };
+}
+
+function intentLogSummary(log: BootstrapRuntimeDiagnostics['intentLog']): string {
+  if (log.length === 0) return 'No session intents recorded';
+  const latest = log.at(-1);
+  return latest === undefined
+    ? `${log.length} session intents`
+    : `${log.length} session intents, latest ${latest.intent} ${latest.status}`;
+}
+
+function intentLogData(log: BootstrapRuntimeDiagnostics['intentLog']) {
+  return {
+    count: log.length,
+    entries: [...log].reverse(),
+  };
 }
 
 function documentSchemaRefs(documents: Readonly<Record<string, unknown>>) {
@@ -301,6 +406,15 @@ function patchpitMetadata(document: unknown): PatchpitMetadataSummary | undefine
   const metadata = document['@patchpit'];
   if (!isRecord(metadata) || typeof metadata.type !== 'string') return undefined;
   return metadata as PatchpitMetadataSummary;
+}
+
+function countBy<T>(items: readonly T[], keyFor: (item: T) => string): Readonly<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    const key = keyFor(item);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

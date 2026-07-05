@@ -47,10 +47,18 @@
   outline-offset: calc(var(--app-border) * -1);
 }
 
+.state-browser-section summary span {
+  flex: 0 0 auto;
+}
+
 .state-browser-section summary small {
+  min-width: 0;
+  overflow: hidden;
   color: var(--color-muted);
   font: inherit;
   text-align: end;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .state-browser-json {

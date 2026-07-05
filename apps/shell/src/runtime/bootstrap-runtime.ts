@@ -51,12 +51,14 @@ import {
   windowRequestsRelation,
   windowResizeSplitIntent,
   type FilePickerIntentRow,
+  type IntentName,
   type IntentRequest,
   type IntentResult,
   type Json,
   type AutomergeHeadSet,
   type ProjectionBasis,
   type ProjectionEvent,
+  type ProjectionName,
   type ProjectionSnapshot,
   type ProjectionSubscription,
   type ProjectionSubscriptionRequest,
@@ -89,6 +91,64 @@ export type BootstrapRuntimeOptions = {
   readonly policy?: RuntimePolicy;
   readonly seed: SeedFilesystem;
   readonly workspaceId: string;
+};
+
+export type BootstrapRuntimeClient = RuntimeClient & {
+  readonly diagnostics: BootstrapRuntimeDiagnosticsStore;
+};
+
+export type BootstrapRuntimeDiagnosticsStore = {
+  getSnapshot(): BootstrapRuntimeDiagnostics;
+  subscribe(listener: () => void): () => void;
+};
+
+export type BootstrapRuntimeDiagnostics = {
+  readonly intentLog: readonly BootstrapIntentLogEntry[];
+  readonly projectionSubscriptions: readonly BootstrapProjectionDiagnostics[];
+};
+
+export type BootstrapProjectionDiagnostics = {
+  readonly basis: ProjectionBasis;
+  readonly counters: {
+    readonly errors: number;
+    readonly patches: number;
+    readonly resets: number;
+    readonly snapshots: number;
+  };
+  readonly latestEvent?: unknown;
+  readonly lastEventAt?: string;
+  readonly openedAt: string;
+  readonly closedAt?: string;
+  readonly projection: ProjectionName;
+  readonly schemaId: string;
+  readonly status: 'active' | 'closed' | 'error';
+  readonly subscriptionId: string;
+};
+
+export type BootstrapIntentLogEntry = {
+  readonly durationMs?: number;
+  readonly error?: string;
+  readonly finishedAt?: string;
+  readonly intent: IntentName;
+  readonly request: {
+    readonly baseHeadDocs: readonly string[];
+    readonly idempotencyKey?: string;
+    readonly input: IntentRequest['input'];
+    readonly relationCounts: Readonly<Record<string, number>>;
+  };
+  readonly result?: unknown;
+  readonly sequence: number;
+  readonly startedAt: string;
+  readonly status: 'pending' | IntentResult['status'] | 'thrown';
+};
+
+type BootstrapRuntimeDiagnosticsStoreInternal = BootstrapRuntimeDiagnosticsStore & {
+  recordIntentResult(sequence: number, result: IntentResult): void;
+  recordIntentStart(request: IntentRequest): number;
+  recordIntentThrown(sequence: number, error: unknown): void;
+  recordProjectionClosed(subscriptionId: string): void;
+  recordProjectionEvent(subscriptionId: string, event: ProjectionEvent): void;
+  recordProjectionOpened(subscriptionId: string, request: ProjectionSubscriptionRequest): void;
 };
 
 type AppLaunchRequest = {
@@ -126,30 +186,34 @@ export function createBootstrapRuntimeClient({
   policy = allowAllRuntimePolicy,
   seed,
   workspaceId,
-}: BootstrapRuntimeOptions): RuntimeClient {
+}: BootstrapRuntimeOptions): BootstrapRuntimeClient {
+  const diagnostics = createBootstrapRuntimeDiagnosticsStore();
   let nextSubscriptionId = 1;
   const managedAppStateHandles = new Map<string, DocHandle<TerminalStateDoc>>();
 
   return {
+    diagnostics,
+
     subscribeProjection(request, listener) {
       const subscriptionId = `${workspaceId}:projection:${nextSubscriptionId++}`;
+      diagnostics.recordProjectionOpened(subscriptionId, request);
       if (request.projection !== filesystemTreeProjection) {
         return errorSubscription(subscriptionId, listener, runtimeError(
           'unknown_projection',
           `Unknown projection: ${request.projection}`,
-        ));
+        ), diagnostics);
       }
       if (request.schemaId !== filesystemTreeSchemaId) {
         return errorSubscription(subscriptionId, listener, runtimeError(
           'schema_mismatch',
           `Projection ${request.projection} requires schema ${filesystemTreeSchemaId}.`,
-        ));
+        ), diagnostics);
       }
       if (!isLiveBasis(request.basis)) {
         return errorSubscription(subscriptionId, listener, runtimeError(
           'unsupported_basis',
           'The bootstrap runtime only serves live filesystem projections.',
-        ));
+        ), diagnostics);
       }
 
       let closed = false;
@@ -157,16 +221,20 @@ export function createBootstrapRuntimeClient({
         if (closed) return;
         const snapshot = filesystemSnapshot(subscriptionId, request);
         if (isRuntimeError(snapshot)) {
-          listener({ type: 'error', error: snapshot });
+          const event = { type: 'error', error: snapshot } satisfies ProjectionEvent;
+          diagnostics.recordProjectionEvent(subscriptionId, event);
+          listener(event);
           return;
         }
-        listener(
+        const event = (
           type === 'snapshot'
             ? { type, snapshot }
             : reason === undefined
               ? { type, snapshot }
-              : { type, snapshot, reason },
-        );
+              : { type, snapshot, reason }
+        ) satisfies ProjectionEvent;
+        diagnostics.recordProjectionEvent(subscriptionId, event);
+        listener(event);
       };
       const update = () => emit('reset', 'source-change');
 
@@ -176,14 +244,17 @@ export function createBootstrapRuntimeClient({
       return {
         subscriptionId,
         close() {
+          if (closed) return;
           closed = true;
           seed.indexHandle.off('change', update);
+          diagnostics.recordProjectionClosed(subscriptionId);
         },
       };
     },
 
     async submitIntent(request) {
-      const policyDecision = policy.admitIntent(request);
+      return submitIntentWithDiagnostics(diagnostics, request, async () => {
+        const policyDecision = policy.admitIntent(request);
       if (policyDecision.status !== 'allow') {
         if (request.intent === appLaunchIntent && policyDecision.status === 'deny') {
           return appLaunchPolicyDenied(policyDecision.result);
@@ -309,6 +380,7 @@ export function createBootstrapRuntimeClient({
         status: 'committed',
         heads: automergeHeadSetForHandle(seed.windowManagerHandle),
       };
+      });
     },
 
     async openCapability(request) {
@@ -340,6 +412,247 @@ export function createBootstrapRuntimeClient({
       relations,
     };
   }
+}
+
+const diagnosticsLogLimit = 50;
+
+function createBootstrapRuntimeDiagnosticsStore(): BootstrapRuntimeDiagnosticsStoreInternal {
+  let nextIntentSequence = 1;
+  let snapshot: BootstrapRuntimeDiagnostics = {
+    intentLog: [],
+    projectionSubscriptions: [],
+  };
+  const listeners = new Set<() => void>();
+
+  const setSnapshot = (update: (current: BootstrapRuntimeDiagnostics) => BootstrapRuntimeDiagnostics) => {
+    snapshot = update(snapshot);
+    for (const listener of listeners) listener();
+  };
+
+  const updateProjection = (
+    subscriptionId: string,
+    update: (entry: BootstrapProjectionDiagnostics) => BootstrapProjectionDiagnostics,
+  ) => {
+    setSnapshot((current) => ({
+      ...current,
+      projectionSubscriptions: current.projectionSubscriptions.map((entry) => (
+        entry.subscriptionId === subscriptionId ? update(entry) : entry
+      )),
+    }));
+  };
+
+  return {
+    getSnapshot() {
+      return snapshot;
+    },
+
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+
+    recordIntentStart(request) {
+      const sequence = nextIntentSequence++;
+      const entry: BootstrapIntentLogEntry = {
+        intent: request.intent,
+        request: intentRequestDiagnostics(request),
+        sequence,
+        startedAt: nowIso(),
+        status: 'pending',
+      };
+      setSnapshot((current) => ({
+        ...current,
+        intentLog: appendLimited(current.intentLog, entry),
+      }));
+      return sequence;
+    },
+
+    recordIntentResult(sequence, result) {
+      updateIntentLog(setSnapshot, sequence, (entry) => ({
+        ...entry,
+        durationMs: elapsedMs(entry.startedAt),
+        finishedAt: nowIso(),
+        result: intentResultDiagnostics(result),
+        status: result.status,
+      }));
+    },
+
+    recordIntentThrown(sequence, error) {
+      updateIntentLog(setSnapshot, sequence, (entry) => ({
+        ...entry,
+        durationMs: elapsedMs(entry.startedAt),
+        error: errorReason(error),
+        finishedAt: nowIso(),
+        status: 'thrown',
+      }));
+    },
+
+    recordProjectionOpened(subscriptionId, request) {
+      const entry: BootstrapProjectionDiagnostics = {
+        basis: request.basis ?? { kind: 'live' },
+        counters: {
+          errors: 0,
+          patches: 0,
+          resets: 0,
+          snapshots: 0,
+        },
+        openedAt: nowIso(),
+        projection: request.projection,
+        schemaId: request.schemaId,
+        status: 'active',
+        subscriptionId,
+      };
+      setSnapshot((current) => ({
+        ...current,
+        projectionSubscriptions: appendLimited(current.projectionSubscriptions, entry),
+      }));
+    },
+
+    recordProjectionEvent(subscriptionId, event) {
+      updateProjection(subscriptionId, (entry) => ({
+        ...entry,
+        counters: projectionCountersAfterEvent(entry.counters, event),
+        latestEvent: projectionEventDiagnostics(event),
+        lastEventAt: nowIso(),
+        status: event.type === 'error' ? 'error' : entry.status,
+      }));
+    },
+
+    recordProjectionClosed(subscriptionId) {
+      updateProjection(subscriptionId, (entry) => ({
+        ...entry,
+        closedAt: nowIso(),
+        status: entry.status === 'error' ? 'error' : 'closed',
+      }));
+    },
+  };
+}
+
+async function submitIntentWithDiagnostics(
+  diagnostics: BootstrapRuntimeDiagnosticsStoreInternal,
+  request: IntentRequest,
+  submit: () => Promise<IntentResult>,
+): Promise<IntentResult> {
+  const sequence = diagnostics.recordIntentStart(request);
+  try {
+    const result = await submit();
+    diagnostics.recordIntentResult(sequence, result);
+    return result;
+  } catch (error) {
+    diagnostics.recordIntentThrown(sequence, error);
+    throw error;
+  }
+}
+
+function updateIntentLog(
+  setSnapshot: (update: (current: BootstrapRuntimeDiagnostics) => BootstrapRuntimeDiagnostics) => void,
+  sequence: number,
+  update: (entry: BootstrapIntentLogEntry) => BootstrapIntentLogEntry,
+): void {
+  setSnapshot((current) => ({
+    ...current,
+    intentLog: current.intentLog.map((entry) => (entry.sequence === sequence ? update(entry) : entry)),
+  }));
+}
+
+function intentRequestDiagnostics(request: IntentRequest): BootstrapIntentLogEntry['request'] {
+  return {
+    baseHeadDocs: Object.keys(request.baseHeads ?? {}).sort(),
+    ...(request.idempotencyKey === undefined ? {} : { idempotencyKey: request.idempotencyKey }),
+    input: request.input,
+    relationCounts: relationCounts(request.input.relations),
+  };
+}
+
+function intentResultDiagnostics(result: IntentResult): unknown {
+  if (result.status === 'committed') {
+    return {
+      status: result.status,
+      effectCount: result.effects?.length ?? 0,
+      headDocs: Object.keys(result.heads).sort(),
+      ...(result.policy === undefined ? {} : { policy: result.policy }),
+    };
+  }
+  if (result.status === 'conflict') {
+    return {
+      status: result.status,
+      currentHeadDocs: Object.keys(result.currentHeads).sort(),
+      ...(result.error === undefined ? {} : { error: result.error }),
+    };
+  }
+  if (result.status === 'rejected') {
+    return {
+      status: result.status,
+      error: result.error,
+    };
+  }
+  if (result.status === 'queued') {
+    return {
+      status: result.status,
+      ticket: result.ticket,
+    };
+  }
+  return {
+    status: result.status,
+    reason: result.reason,
+  };
+}
+
+function projectionCountersAfterEvent(
+  counters: BootstrapProjectionDiagnostics['counters'],
+  event: ProjectionEvent,
+): BootstrapProjectionDiagnostics['counters'] {
+  if (event.type === 'snapshot') return { ...counters, snapshots: counters.snapshots + 1 };
+  if (event.type === 'reset') return { ...counters, resets: counters.resets + 1 };
+  if (event.type === 'patch') return { ...counters, patches: counters.patches + 1 };
+  return { ...counters, errors: counters.errors + 1 };
+}
+
+function projectionEventDiagnostics(event: ProjectionEvent): unknown {
+  if (event.type === 'error') {
+    return {
+      type: event.type,
+      error: event.error,
+    };
+  }
+  if (event.type === 'patch') {
+    return {
+      type: event.type,
+      opCount: event.patch.patch.ops.length,
+      seq: event.patch.seq,
+      storageHeadDocs: Object.keys(event.patch.storageHeads ?? {}).sort(),
+    };
+  }
+  return {
+    type: event.type,
+    ...(event.type === 'reset' && event.reason !== undefined ? { reason: event.reason } : {}),
+    relationCounts: relationCounts(event.snapshot.relations.relations),
+    schemaHash: event.snapshot.schemaHash,
+    storageHeadDocs: Object.keys(event.snapshot.storageHeads ?? {}).sort(),
+  };
+}
+
+function relationCounts(relations: Readonly<Record<string, readonly unknown[]>>): Readonly<Record<string, number>> {
+  return Object.fromEntries(
+    Object.entries(relations)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([name, rows]) => [name, rows.length]),
+  );
+}
+
+function appendLimited<T>(entries: readonly T[], entry: T): readonly T[] {
+  const next = [...entries, entry];
+  return next.length > diagnosticsLogLimit ? next.slice(next.length - diagnosticsLogLimit) : next;
+}
+
+function elapsedMs(startedAt: string): number {
+  return Math.max(0, Date.now() - Date.parse(startedAt));
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 function appLaunchCommit(
@@ -1182,9 +1495,20 @@ function errorSubscription(
   subscriptionId: string,
   listener: (event: ProjectionEvent) => void,
   error: RuntimeError,
+  diagnostics: BootstrapRuntimeDiagnosticsStoreInternal,
 ): ProjectionSubscription {
-  listener({ type: 'error', error });
-  return { subscriptionId, close() {} };
+  const event = { type: 'error', error } satisfies ProjectionEvent;
+  diagnostics.recordProjectionEvent(subscriptionId, event);
+  listener(event);
+  let closed = false;
+  return {
+    subscriptionId,
+    close() {
+      if (closed) return;
+      closed = true;
+      diagnostics.recordProjectionClosed(subscriptionId);
+    },
+  };
 }
 
 function rejected(error: RuntimeError): IntentResult {

@@ -105,8 +105,17 @@ export function upsertFilesystemIndexRow(
 }
 
 export function removeFilesystemIndexRow(rows: FilesystemIndexRow[], url: string): void {
-  const index = rows.findIndex((row) => row.url === url);
-  if (index !== -1) rows.splice(index, 1);
+  removeFilesystemIndexRows(rows, [url]);
+}
+
+export function removeFilesystemIndexRows(rows: FilesystemIndexRow[], urls: Iterable<string>): void {
+  const urlSet = new Set(urls);
+  if (urlSet.size === 0) return;
+
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row !== undefined && urlSet.has(row.url)) rows.splice(index, 1);
+  }
 }
 
 export function cloneFilesystemIndexRow(row: FilesystemIndexRow): FilesystemIndexRow {

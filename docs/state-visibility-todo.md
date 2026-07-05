@@ -23,9 +23,13 @@ that are already visible through the file picker.
 ## Covered By State Browser
 
 - Runtime boot gate ack/status from the runtime state doc and SharedWorker ack.
-- Current runtime issue banner state.
+- Current runtime issue banner state and bounded session issue history with
+  observed time and source.
 - Runtime platform and feature checks.
-- Current filesystem projection status.
+- Current filesystem projection status, subscription lifecycle, event counters,
+  storage-head document summaries, and latest event diagnostics.
+- Intent request/result log with request relation counts, outcomes, timings, and
+  thrown errors.
 - Window-manager surface/context/layout summary.
 - System schema catalog refs and observed document schema refs.
 - Current policy/capability placeholder behavior in the bootstrap runtime.
@@ -33,14 +37,14 @@ that are already visible through the file picker.
 ## Remaining Gaps
 
 - Boot connection errors before the shell reaches the normal app surface are
-  only shown on the unavailable screen; there is no retained issue history.
-- Runtime issues are currently last-issue only, not an inspectable log with
-  timestamps, source, affected intent, or recovery status.
+  only shown on the unavailable screen because the State Browser is not mounted.
+- Runtime issue history is session-local and bounded; entries do not yet carry
+  affected intent ids, recovery status, or durable failure-relation rows.
 - Policy and capability state is still mostly hard-coded placeholder behavior;
   there is no visible effective grants/quarantine/revocation state.
-- Projection subscriptions expose only current filesystem readiness/failure in
-  the shell; subscription history, patch/reset counts, storage heads, and
-  projection diagnostics are not browsable.
+- Projection diagnostics are limited to bootstrap filesystem subscription
+  entries; there is no general projection catalog, historical basis browser, or
+  full patch/storage-head inspector.
 - Schema refs are visible as refs/catalog summaries, but there is no dedicated
   schema-detail browser or ref integrity checker.
 - Client/session/presence/viewport state is protocol-shaped in docs but not
