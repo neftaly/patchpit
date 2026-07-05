@@ -2,6 +2,14 @@ import type { DocHandle } from '@automerge/automerge-repo';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { fileIcons } from '@patchpit/file-picker';
 import {
+  clearedTerminalState,
+  createPatchpitFilesystem,
+  replaceTerminalState,
+  terminalStateWithExecution,
+  terminalStateWithPrompt,
+  type TerminalStateActions,
+} from '@patchpit/terminal';
+import {
   createTerminalStateResource,
   createSeedFilesystem,
   recordRuntimeBootGateAck,
@@ -228,18 +236,21 @@ function ShellApp({
       state: filePickerState,
     },
   };
-  const terminalRuntimeOptions = {
+  const terminalFilesystem = useMemo(() => createPatchpitFilesystem({
     documentHandles: seed.documentHandles,
     indexHandle: seed.indexHandle,
     repo: seed.repo,
     rootUrl: seed.rootUrl,
-  };
+  }), [seed]);
+  const terminalRuntimeOptions = useMemo(() => ({
+    filesystem: terminalFilesystem,
+  }), [terminalFilesystem]);
   const terminals = Object.fromEntries(terminalHandles.map((handle) => [
     handle.url,
     {
+      actions: createShellTerminalActions(handle),
       runtimeOptions: terminalRuntimeOptions,
       state: terminalStates[handle.url] ?? handle.doc(),
-      stateHandle: handle,
     },
   ]));
   const launchers = launcherItems({
@@ -280,6 +291,26 @@ function ShellApp({
       )}
     </main>
   );
+}
+
+function createShellTerminalActions(handle: DocHandle<TerminalStateDoc>): TerminalStateActions {
+  return {
+    appendPrompt: () => commitShellTerminalState(handle, terminalStateWithPrompt),
+    clear: () => commitShellTerminalState(handle, clearedTerminalState),
+    commitExecution: (execution) => {
+      commitShellTerminalState(handle, (state) => terminalStateWithExecution(state, execution));
+    },
+  };
+}
+
+function commitShellTerminalState(
+  handle: DocHandle<TerminalStateDoc>,
+  update: (state: TerminalStateDoc) => TerminalStateDoc,
+): void {
+  const next = update(handle.doc());
+  handle.change((doc) => {
+    replaceTerminalState(doc, next);
+  });
 }
 
 function useAutomergeDoc<T>(handle: DocHandle<T>): T {

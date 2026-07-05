@@ -17,9 +17,11 @@ import {
   type TerminalNetworkPolicy,
   type TerminalStateDoc,
 } from '@patchpit/system';
-import { PatchpitFs, type PatchpitFsOptions } from './patchpit-fs';
+import type { PatchpitFilesystem } from './terminal-filesystem';
 
-export type TerminalRuntimeOptions = PatchpitFsOptions;
+export type TerminalRuntimeOptions = {
+  readonly filesystem: PatchpitFilesystem;
+};
 
 export type TerminalRuntime = {
   readonly bash: Bash;
@@ -44,12 +46,18 @@ export function createTerminalRuntime(
     fs: terminalFs(options, container, state.capabilities.network),
     ...networkOptions(state.capabilities.network),
   };
-  return { bash: new Bash(bashOptions), key: terminalRuntimeKey(container, state) };
+  return { bash: new Bash(bashOptions), key: terminalRuntimeKey(options, container, state) };
 }
 
-export function terminalRuntimeKey(container: AppContainer, state: TerminalStateDoc): string {
+export function terminalRuntimeKey(
+  options: TerminalRuntimeOptions,
+  container: AppContainer,
+  state: TerminalStateDoc,
+): string {
   return JSON.stringify({
     container,
+    filesystem: options.filesystem.cacheKey,
+    rootUrl: options.filesystem.rootUrl,
     network: state.capabilities.network,
   });
 }
@@ -85,11 +93,11 @@ function terminalFs(
   container: AppContainer,
   network: TerminalNetworkPolicy,
 ): MountableFs {
-  const rootUrl = containerRootUrl(container) ?? options.rootUrl;
-  const fs = new MountableFs({ base: new PatchpitFs({ ...options, rootUrl }) });
+  const rootUrl = containerRootUrl(container) ?? options.filesystem.rootUrl;
+  const fs = new MountableFs({ base: options.filesystem.openRoot(rootUrl) });
   for (const mount of containerOverlayMounts(container)) {
     if (mount.kind === ContainerMountKind.Automerge) {
-      fs.mount(mount.path, new PatchpitFs({ ...options, rootUrl: mount.url }));
+      fs.mount(mount.path, options.filesystem.openRoot(mount.url));
     } else {
       fs.mount(mount.path, runtimeFs(mount.provider, network));
     }

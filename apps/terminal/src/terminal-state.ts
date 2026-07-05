@@ -1,4 +1,3 @@
-import type { DocHandle } from '@automerge/automerge-repo';
 import {
   TerminalLineKind,
   type TerminalCapabilities,
@@ -14,6 +13,12 @@ export type TerminalExecution = {
   readonly stdout: string;
 };
 
+export type TerminalStateActions = {
+  readonly appendPrompt: () => void;
+  readonly clear: () => void;
+  readonly commitExecution: (execution: TerminalExecution) => void;
+};
+
 type TerminalStateRow = {
   capabilities: TerminalCapabilities;
   cwd: string;
@@ -26,48 +31,14 @@ type TerminalStateRow = {
 const stateId = 'terminal';
 const terminalScrollbackLines = 1000;
 
-export function clearTerminal(handle: DocHandle<TerminalStateDoc>): void {
-  commitTerminalState(handle, clearedTerminalState);
-}
-
-export function appendTerminalPrompt(handle: DocHandle<TerminalStateDoc>): void {
-  commitTerminalState(handle, terminalStateWithPrompt);
-}
-
-export function commitTerminalExecution(
-  handle: DocHandle<TerminalStateDoc>,
-  execution: TerminalExecution,
-): void {
-  commitTerminalState(handle, (state) => terminalStateWithExecution(state, execution));
-}
-
-export function terminalPrompt(cwd: string): string {
-  return `${cwd}$ `;
-}
-
-function commitTerminalState(
-  handle: DocHandle<TerminalStateDoc>,
-  update: (state: TerminalStateDoc) => TerminalStateDoc,
-): void {
-  const changes = terminalStateRow(update(handle.doc()));
-
-  handle.change((doc) => {
-    doc.capabilities = structuredClone(changes.capabilities);
-    doc.cwd = changes.cwd;
-    doc.env = { ...changes.env };
-    doc.history = [...changes.history];
-    doc.lines = structuredClone(changes.lines);
-  });
-}
-
-function clearedTerminalState(state: TerminalStateDoc): TerminalStateDoc {
+export function clearedTerminalState(state: TerminalStateDoc): TerminalStateDoc {
   return {
     ...cloneTerminalState(state),
     lines: [],
   };
 }
 
-function terminalStateWithPrompt(state: TerminalStateDoc): TerminalStateDoc {
+export function terminalStateWithPrompt(state: TerminalStateDoc): TerminalStateDoc {
   return {
     ...cloneTerminalState(state),
     lines: clippedLines([
@@ -77,7 +48,7 @@ function terminalStateWithPrompt(state: TerminalStateDoc): TerminalStateDoc {
   };
 }
 
-function terminalStateWithExecution(
+export function terminalStateWithExecution(
   state: TerminalStateDoc,
   execution: TerminalExecution,
 ): TerminalStateDoc {
@@ -100,6 +71,19 @@ function terminalStateWithExecution(
       ...terminalLinesFromOutput(TerminalLineKind.Error, execution.stderr),
     ]),
   };
+}
+
+export function terminalPrompt(cwd: string): string {
+  return `${cwd}$ `;
+}
+
+export function replaceTerminalState(doc: TerminalStateDoc, state: TerminalStateDoc): void {
+  const changes = terminalStateRow(state);
+  doc.capabilities = structuredClone(changes.capabilities);
+  doc.cwd = changes.cwd;
+  doc.env = { ...changes.env };
+  doc.history = [...changes.history];
+  doc.lines = structuredClone(changes.lines);
 }
 
 function terminalStateRow(state: TerminalStateDoc): TerminalStateRow {

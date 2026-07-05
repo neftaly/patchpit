@@ -26,6 +26,7 @@ import {
   type FolderDoc,
   type FolderEntry,
 } from '@patchpit/system';
+import type { PatchpitFilesystem } from './terminal-filesystem';
 
 export type PatchpitFsOptions = {
   readonly documentHandles: Record<string, DocHandle<FilesystemResource>>;
@@ -33,6 +34,17 @@ export type PatchpitFsOptions = {
   readonly repo: Repo;
   readonly rootUrl: string;
 };
+
+let nextPatchpitFilesystemId = 1;
+
+export function createPatchpitFilesystem(options: PatchpitFsOptions): PatchpitFilesystem {
+  const cacheKey = `patchpit-filesystem:${nextPatchpitFilesystemId++}:${options.rootUrl}`;
+  return {
+    cacheKey,
+    rootUrl: options.rootUrl,
+    openRoot: (rootUrl) => new PatchpitFs({ ...options, rootUrl }),
+  };
+}
 
 type WriteFileOption = Parameters<IFileSystem['writeFile']>[2];
 type EncodingOption = BufferEncoding | { encoding?: BufferEncoding | null };

@@ -32,8 +32,7 @@ import {
   type WindowManagerStateDoc,
   type WindowSurface,
 } from '@patchpit/system';
-import type { DocHandle } from '@automerge/automerge-repo';
-import type { TerminalRuntimeOptions } from '@patchpit/terminal';
+import type { TerminalRuntimeOptions, TerminalStateActions } from '@patchpit/terminal';
 import { StateBrowser, type StateBrowserSnapshot } from '../state-browser/StateBrowser';
 import {
   type ContentDropZone,
@@ -59,9 +58,9 @@ type RunningFilePicker = {
 };
 
 type RunningTerminal = {
+  readonly actions: TerminalStateActions;
   readonly runtimeOptions: TerminalRuntimeOptions;
   readonly state: TerminalStateDoc;
-  readonly stateHandle: DocHandle<TerminalStateDoc>;
 };
 
 type WindowManagerRuntime = {
@@ -467,10 +466,10 @@ function SurfaceContent({
       ? null
       : (
           <Terminal
+            actions={terminal.actions}
             container={context.container}
             runtimeOptions={terminal.runtimeOptions}
             state={terminal.state}
-            stateHandle={terminal.stateHandle}
             theme={runtime.theme}
           />
         );

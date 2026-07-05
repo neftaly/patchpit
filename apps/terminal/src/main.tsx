@@ -1,14 +1,23 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import { StrictMode, useState, useSyncExternalStore } from 'react';
+import { StrictMode, useMemo, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   createSeedFilesystem,
   resolveTheme,
   terminalContainer,
   themeStyle,
+  type TerminalStateDoc,
 } from '@patchpit/system';
 import '@patchpit/system/theme.css';
-import { Terminal } from './index';
+import {
+  clearedTerminalState,
+  createPatchpitFilesystem,
+  replaceTerminalState,
+  Terminal,
+  terminalStateWithExecution,
+  terminalStateWithPrompt,
+  type TerminalStateActions,
+} from './index';
 
 function App() {
   const [seed] = useState(createSeedFilesystem);
@@ -17,23 +26,45 @@ function App() {
   const lightTheme = useAutomergeDoc(seed.lightThemeHandle);
   const state = useAutomergeDoc(seed.terminalStateHandle);
   const theme = resolveTheme(appearance, lightTheme, darkTheme, usePrefersDark());
+  const terminalFilesystem = useMemo(() => createPatchpitFilesystem({
+    documentHandles: seed.documentHandles,
+    indexHandle: seed.indexHandle,
+    repo: seed.repo,
+    rootUrl: seed.rootUrl,
+  }), [seed]);
+  const terminalActions = useMemo(() => createStandaloneTerminalActions(seed.terminalStateHandle), [seed]);
 
   return (
     <main className="standalone-app" style={themeStyle(theme)}>
       <Terminal
+        actions={terminalActions}
         container={terminalContainer(seed.rootUrl)}
-        runtimeOptions={{
-          documentHandles: seed.documentHandles,
-          indexHandle: seed.indexHandle,
-          repo: seed.repo,
-          rootUrl: seed.rootUrl,
-        }}
+        runtimeOptions={{ filesystem: terminalFilesystem }}
         state={state}
-        stateHandle={seed.terminalStateHandle}
         theme={theme}
       />
     </main>
   );
+}
+
+function createStandaloneTerminalActions(handle: DocHandle<TerminalStateDoc>): TerminalStateActions {
+  return {
+    appendPrompt: () => commitStandaloneTerminalState(handle, terminalStateWithPrompt),
+    clear: () => commitStandaloneTerminalState(handle, clearedTerminalState),
+    commitExecution: (execution) => {
+      commitStandaloneTerminalState(handle, (state) => terminalStateWithExecution(state, execution));
+    },
+  };
+}
+
+function commitStandaloneTerminalState(
+  handle: DocHandle<TerminalStateDoc>,
+  update: (state: TerminalStateDoc) => TerminalStateDoc,
+): void {
+  const next = update(handle.doc());
+  handle.change((doc) => {
+    replaceTerminalState(doc, next);
+  });
 }
 
 function useAutomergeDoc<T>(handle: DocHandle<T>): T {

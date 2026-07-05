@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSeedFilesystem, PatchpitType } from '@patchpit/system';
+import { InMemoryFs } from 'just-bash/browser';
+import {
+  ContainerMountKind,
+  createSeedFilesystem,
+  PatchpitType,
+  terminalContainer,
+} from '@patchpit/system';
 import { PatchpitFs } from './patchpit-fs.ts';
+import { createTerminalRuntime, runTerminalCommand } from './terminal-bash.ts';
 
 void test('recursive rm drops descendant handles and filesystem index rows', async () => {
   const { fs, seed } = createTestFilesystem();
@@ -62,6 +69,43 @@ void test('recursive rm cleanup survives generated nested trees', async () => {
     assertIndexRowsRemoved(seed, removedUrls);
     assertFolderLacksEntry(seed, '/home', `fuzz-${run}`);
   }
+});
+
+void test('terminal runtime opens roots through a scoped filesystem adapter', async () => {
+  const seed = createSeedFilesystem();
+  const rootUrl = 'automerge:root';
+  const overlayUrl = 'automerge:overlay';
+  const openedRoots = [];
+  const runtime = createTerminalRuntime(
+    {
+      filesystem: {
+        cacheKey: 'test-filesystem',
+        rootUrl,
+        openRoot: (url) => {
+          openedRoots.push(url);
+          return new InMemoryFs(url === overlayUrl
+            ? { '/note.txt': 'overlay\n' }
+            : { '/home/root.txt': 'root\n' });
+        },
+      },
+    },
+    {
+      mounts: [
+        ...terminalContainer(rootUrl).mounts,
+        { kind: ContainerMountKind.Automerge, path: '/mnt/project', url: overlayUrl },
+      ],
+    },
+    seed.terminalStateHandle.doc(),
+  );
+
+  const rootResult = await runTerminalCommand(runtime, seed.terminalStateHandle.doc(), 'cat /home/root.txt');
+  const overlayResult = await runTerminalCommand(runtime, seed.terminalStateHandle.doc(), 'cat /mnt/project/note.txt');
+
+  assert.equal(rootResult.stderr, '');
+  assert.equal(rootResult.stdout, 'root\n');
+  assert.equal(overlayResult.stderr, '');
+  assert.equal(overlayResult.stdout, 'overlay\n');
+  assert.deepEqual(openedRoots, [rootUrl, overlayUrl]);
 });
 
 function createTestFilesystem() {

@@ -1,4 +1,3 @@
-import type { DocHandle } from '@automerge/automerge-repo';
 import { useEffect, useRef } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XtermTerminal, type ITheme } from '@xterm/xterm';
@@ -16,22 +15,20 @@ import {
   type TerminalRuntimeOptions,
 } from './terminal-bash';
 import {
-  appendTerminalPrompt,
-  clearTerminal,
-  commitTerminalExecution,
   terminalPrompt,
+  type TerminalStateActions,
 } from './terminal-state';
 import './terminal.css';
 
 export function Terminal({
+  actions,
   container,
   state,
-  stateHandle,
   theme,
   runtimeOptions,
 }: {
+  readonly actions: TerminalStateActions;
   readonly state: TerminalStateDoc;
-  readonly stateHandle: DocHandle<TerminalStateDoc>;
   readonly theme: ThemeDoc;
   readonly runtimeOptions: TerminalRuntimeOptions;
   readonly container: AppContainer;
@@ -40,12 +37,14 @@ export function Terminal({
   const fitRef = useRef<FitAddon | null>(null);
   const inputRef = useRef('');
   const xtermRef = useRef<XtermTerminal | null>(null);
+  const actionsRef = useRef(actions);
   const stateRef = useRef(state);
   const runtimeRef = useRef(createTerminalRuntime(runtimeOptions, container, state));
-  const runtimeKey = terminalRuntimeKey(container, state);
+  const runtimeKey = terminalRuntimeKey(runtimeOptions, container, state);
   const { terminalCursor, terminalSelection, terminalText } = theme.palette;
   const { codeFont, codeSize, terminalLineHeight } = theme.typography;
 
+  actionsRef.current = actions;
   stateRef.current = state;
   if (runtimeRef.current.key !== runtimeKey) {
     runtimeRef.current = createTerminalRuntime(runtimeOptions, container, state);
@@ -80,7 +79,7 @@ export function Terminal({
       void handleTerminalInput(
         inputChunk,
         stateRef.current,
-        stateHandle,
+        actionsRef.current,
         runtimeRef.current,
         inputRef,
         terminal,
@@ -94,7 +93,7 @@ export function Terminal({
       fitRef.current = null;
       xtermRef.current = null;
     };
-  }, [codeFont, codeSize, stateHandle, terminalCursor, terminalLineHeight, terminalSelection, terminalText]);
+  }, [codeFont, codeSize, terminalCursor, terminalLineHeight, terminalSelection, terminalText]);
 
   useEffect(() => {
     const terminal = xtermRef.current;
@@ -114,7 +113,7 @@ export function Terminal({
 async function handleTerminalInput(
   inputChunk: string,
   state: TerminalStateDoc,
-  handle: DocHandle<TerminalStateDoc>,
+  actions: TerminalStateActions,
   runtime: ReturnType<typeof createTerminalRuntime>,
   pendingInput: { current: string },
   terminal: XtermTerminal,
@@ -124,11 +123,11 @@ async function handleTerminalInput(
     pendingInput.current = '';
     terminal.write('\r\n');
     if (command.trim() === 'clear') {
-      clearTerminal(handle);
+      actions.clear();
       return;
     }
     const result = await runTerminalCommand(runtime, state, command);
-    commitTerminalExecution(handle, { command, ...result });
+    actions.commitExecution({ command, ...result });
     return;
   }
 
@@ -142,13 +141,13 @@ async function handleTerminalInput(
 
   if (inputChunk === '\u000C') {
     pendingInput.current = '';
-    clearTerminal(handle);
+    actions.clear();
     return;
   }
 
   if (inputChunk === '\u0003') {
     pendingInput.current = '';
-    appendTerminalPrompt(handle);
+    actions.appendPrompt();
     return;
   }
 
