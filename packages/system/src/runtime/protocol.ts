@@ -409,11 +409,18 @@ export type CapabilityRequest = {
   readonly verbs?: readonly string[];
 };
 
+export type CapabilityEndpoint = {
+  readonly protocol: string;
+  readonly rootUrl?: string;
+  readonly initialPaths?: readonly string[];
+};
+
 export type CapabilityGrant = {
   readonly capabilityId: string;
   readonly capability: CapabilityName;
   readonly verbs: readonly string[];
   readonly bounds?: CapabilityBounds;
+  readonly endpoint?: CapabilityEndpoint;
   readonly schemas?: Readonly<Record<TarstateSchemaId, PatchpitRelationSchemaDescriptor>>;
 };
 
@@ -432,6 +439,75 @@ export type CapabilityEvent =
   | { readonly type: 'ready'; readonly grant: CapabilityGrant }
   | { readonly type: 'revoked'; readonly reason?: string }
   | { readonly type: 'error'; readonly error: RuntimeError };
+
+export const terminalFilesystemCapability = 'terminal.filesystem' as const satisfies CapabilityName;
+export const terminalFilesystemProtocol = 'patchpit.terminal.filesystem@1' as const;
+export const terminalFilesystemVerbs = ['read', 'write', 'stat', 'list', 'mount'] as const;
+
+export type TerminalFilesystemVerb = typeof terminalFilesystemVerbs[number];
+
+export type TerminalFilesystemCapabilityGrant = CapabilityGrant & {
+  readonly capability: typeof terminalFilesystemCapability;
+  readonly endpoint: {
+    readonly protocol: typeof terminalFilesystemProtocol;
+    readonly rootUrl: string;
+    readonly initialPaths: readonly string[];
+  };
+  readonly verbs: readonly TerminalFilesystemVerb[];
+};
+
+export type TerminalFilesystemOperation =
+  | 'appendFile'
+  | 'chmod'
+  | 'cp'
+  | 'exists'
+  | 'getAllPaths'
+  | 'link'
+  | 'lstat'
+  | 'mkdir'
+  | 'mv'
+  | 'readFile'
+  | 'readFileBuffer'
+  | 'readlink'
+  | 'readdir'
+  | 'realpath'
+  | 'resolvePath'
+  | 'rm'
+  | 'stat'
+  | 'symlink'
+  | 'utimes'
+  | 'writeFile';
+
+export type TerminalFilesystemPayload = unknown;
+
+export type TerminalFilesystemRequest = {
+  readonly protocol: typeof terminalFilesystemProtocol;
+  readonly id: string;
+  readonly capabilityId: string;
+  readonly rootUrl: string;
+  readonly op: TerminalFilesystemOperation;
+  readonly args: readonly TerminalFilesystemPayload[];
+};
+
+export type TerminalFilesystemError = {
+  readonly code?: string;
+  readonly message: string;
+};
+
+export type TerminalFilesystemResponse =
+  | {
+      readonly protocol: typeof terminalFilesystemProtocol;
+      readonly id: string;
+      readonly ok: true;
+      readonly result?: TerminalFilesystemPayload;
+      readonly paths?: readonly string[];
+    }
+  | {
+      readonly protocol: typeof terminalFilesystemProtocol;
+      readonly id: string;
+      readonly ok: false;
+      readonly error: TerminalFilesystemError;
+    };
 
 export type RealtimeMessage = {
   readonly topic: string;

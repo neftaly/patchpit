@@ -6,16 +6,11 @@ import {
   resolveTheme,
   terminalContainer,
   themeStyle,
-  type TerminalStateDoc,
 } from '@patchpit/system';
 import '@patchpit/system/theme.css';
 import {
-  clearedTerminalState,
-  replaceTerminalState,
+  createTerminalStateActions,
   Terminal,
-  terminalStateWithExecution,
-  terminalStateWithPrompt,
-  type TerminalStateActions,
 } from './index';
 import { createPatchpitFilesystem } from './filesystem';
 
@@ -32,7 +27,7 @@ function App() {
     repo: seed.repo,
     rootUrl: seed.rootUrl,
   }), [seed]);
-  const terminalActions = useMemo(() => createStandaloneTerminalActions(seed.terminalStateHandle), [seed]);
+  const terminalActions = useMemo(() => createTerminalStateActions(seed.terminalStateHandle), [seed]);
 
   return (
     <main className="standalone-app" style={themeStyle(theme)}>
@@ -45,26 +40,6 @@ function App() {
       />
     </main>
   );
-}
-
-function createStandaloneTerminalActions(handle: DocHandle<TerminalStateDoc>): TerminalStateActions {
-  return {
-    appendPrompt: () => commitStandaloneTerminalState(handle, terminalStateWithPrompt),
-    clear: () => commitStandaloneTerminalState(handle, clearedTerminalState),
-    commitExecution: (execution) => {
-      commitStandaloneTerminalState(handle, (state) => terminalStateWithExecution(state, execution));
-    },
-  };
-}
-
-function commitStandaloneTerminalState(
-  handle: DocHandle<TerminalStateDoc>,
-  update: (state: TerminalStateDoc) => TerminalStateDoc,
-): void {
-  const next = update(handle.doc());
-  handle.change((doc) => {
-    replaceTerminalState(doc, next);
-  });
 }
 
 function useAutomergeDoc<T>(handle: DocHandle<T>): T {

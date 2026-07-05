@@ -30,7 +30,7 @@ export type StateBrowserRuntimeIssueEntry = {
   readonly id: number;
   readonly issue: StateBrowserRuntimeIssue;
   readonly observedAt: string;
-  readonly source: 'intent' | 'runtime';
+  readonly source: 'capability' | 'intent' | 'runtime';
 };
 
 export type StateBrowserSnapshotInput = {
