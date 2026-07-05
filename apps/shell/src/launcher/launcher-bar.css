@@ -2,14 +2,14 @@
   flex-direction: column;
 }
 
-.shell-bar,
-.shell-bar-launchers,
-.shell-bar-button {
+.launcher-bar,
+.launcher-bar-items,
+.launcher-bar-button {
   display: flex;
   min-width: 0;
 }
 
-.shell-bar {
+.launcher-bar {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -18,12 +18,12 @@
   background: var(--color-tabs);
 }
 
-.shell-bar-launchers {
+.launcher-bar-items {
   justify-content: center;
   gap: var(--tab-control-margin);
 }
 
-.shell-bar-button {
+.launcher-bar-button {
   align-items: center;
   gap: calc(var(--tab-control-margin) * 2);
   border: 0;
@@ -35,21 +35,21 @@
   line-height: 1;
 }
 
-.shell-bar-button:is(:hover, :focus-visible),
-.shell-bar-button[data-active] {
+.launcher-bar-button:is(:hover, :focus-visible),
+.launcher-bar-button[data-active] {
   background: var(--color-hover);
   color: var(--color-text);
 }
 
-.shell-bar-button:focus {
+.launcher-bar-button:focus {
   outline: none;
 }
 
-.shell-bar-button:focus-visible {
+.launcher-bar-button:focus-visible {
   outline: var(--app-border) solid currentColor;
   outline-offset: calc(var(--app-border) * -1);
 }
 
-.shell-bar-icon {
+.launcher-bar-icon {
   line-height: 1;
 }

@@ -22,13 +22,13 @@ export type LauncherItem = {
 };
 
 export function launcherItems({
-  activeApp,
+  focusedAppId,
   filePickerStateHandle,
   rootUrl,
   terminalStateHandle,
   windowManagerHandle,
 }: {
-  readonly activeApp: string | undefined;
+  readonly focusedAppId: string | undefined;
   readonly filePickerStateHandle: DocHandle<FilePickerStateDoc>;
   readonly rootUrl: string;
   readonly terminalStateHandle: DocHandle<TerminalStateDoc>;
@@ -36,7 +36,7 @@ export function launcherItems({
 }): readonly LauncherItem[] {
   return [
     launcherItem({
-      activeApp,
+      focusedAppId,
       context: filePickerContext(filePickerStateHandle.url, rootUrl),
       emoji: '📁',
       label: 'Files',
@@ -44,7 +44,7 @@ export function launcherItems({
       windowManagerHandle,
     }),
     launcherItem({
-      activeApp,
+      focusedAppId,
       context: terminalContext(terminalStateHandle.url, rootUrl),
       emoji: '💬',
       label: 'Terminal',
@@ -55,14 +55,14 @@ export function launcherItems({
 }
 
 function launcherItem({
-  activeApp,
+  focusedAppId,
   context,
   emoji,
   label,
   role,
   windowManagerHandle,
 }: {
-  readonly activeApp: string | undefined;
+  readonly focusedAppId: string | undefined;
   readonly context: WindowContext;
   readonly emoji: string;
   readonly label: string;
@@ -70,7 +70,7 @@ function launcherItem({
   readonly windowManagerHandle: DocHandle<WindowManagerStateDoc>;
 }): LauncherItem {
   return {
-    active: activeApp === context.app,
+    active: focusedAppId === context.app,
     app: context.app,
     emoji,
     label,

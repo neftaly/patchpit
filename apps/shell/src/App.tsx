@@ -12,17 +12,17 @@ import {
   resolveTheme,
   rootContainer,
   themeStyle,
-  type WindowManagerStateDoc,
   type WindowContext,
 } from '@patchpit/system';
-import { launcherItems } from './launch-router/launch-router';
-import { ShellBar } from './shell-bar/ShellBar';
+import { LauncherBar } from './launcher/LauncherBar';
+import { launcherItems } from './launcher/launch-router';
 import { WindowManager } from './window-manager/WindowManager';
 import {
   closeContext,
   commitWindowManagerState,
   dropContext,
   dropNewContext,
+  focusedAppId,
   focusContext,
   openContext,
   pinContext,
@@ -131,7 +131,7 @@ export function App() {
     },
   };
   const launchers = launcherItems({
-    activeApp: activeApp(windowManagerState),
+    focusedAppId: focusedAppId(windowManagerState),
     filePickerStateHandle: seed.filePickerStateHandle,
     rootUrl: seed.rootUrl,
     terminalStateHandle: seed.terminalStateHandle,
@@ -152,7 +152,7 @@ export function App() {
             terminals={terminals}
             theme={theme}
           />
-          <ShellBar items={launchers} />
+          <LauncherBar items={launchers} />
         </>
       )}
     </main>
@@ -167,11 +167,6 @@ function viewerContext(url: string, title: string | undefined, rootUrl: string):
     ...(title === undefined ? {} : { title }),
     url,
   };
-}
-
-function activeApp(state: WindowManagerStateDoc): string | undefined {
-  const contextId = state.surfaces[state.focus]?.activeContext;
-  return contextId === undefined ? undefined : state.contexts[contextId]?.app;
 }
 
 function useAutomergeDoc<T>(handle: DocHandle<T>): T {

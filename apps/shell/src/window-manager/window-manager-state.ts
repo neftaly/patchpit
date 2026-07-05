@@ -1,11 +1,23 @@
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
+  as,
   defineSchema,
+  eq,
+  from,
+  leftJoin,
+  maybe,
   opaqueField,
+  optional,
+  pipe,
+  project,
   relation,
   stringField,
+  value,
+  where,
   write,
 } from '@tarstate/core';
+import { evaluate } from '@tarstate/core/evaluate';
+import { fromObjectSource } from '@tarstate/core/source';
 import {
   SplitDirection,
   type WindowContext,
@@ -43,10 +55,22 @@ type WindowManagerStateRow = {
   layout: WindowLayoutNode;
   surfaces: Record<string, WindowSurface>;
 };
+type WindowContextRow = WindowContext;
+type WindowSurfaceRow = WindowSurface;
 
 const stateId = 'window-manager';
 const workspaceSurfaceRatio = 0.2;
 const windowManagerSchema = defineSchema({
+  contexts: relation<WindowContextRow>({
+    key: 'id',
+    fields: {
+      app: stringField(),
+      container: opaqueField<WindowContext['container']>(),
+      id: stringField(),
+      title: optional(stringField()),
+      url: stringField(),
+    },
+  }),
   state: relation<WindowManagerStateRow>({
     key: 'id',
     fields: {
@@ -57,7 +81,19 @@ const windowManagerSchema = defineSchema({
       surfaces: opaqueField<Record<string, WindowSurface>>(),
     },
   }),
+  surfaces: relation<WindowSurfaceRow>({
+    key: 'id',
+    fields: {
+      activeContext: optional(stringField()),
+      contexts: opaqueField<string[]>(),
+      id: stringField(),
+      previewContext: optional(stringField()),
+      role: stringField(),
+    },
+  }),
 });
+const focusedSurface = as(windowManagerSchema.surfaces, 'surface');
+const focusedContext = as(windowManagerSchema.contexts, 'context');
 
 export function commitWindowManagerState(
   handle: DocHandle<WindowManagerStateDoc>,
@@ -81,6 +117,22 @@ export function commitWindowManagerState(
     doc.layout = structuredClone(changes.layout);
     doc.surfaces = structuredClone(changes.surfaces);
   });
+}
+
+export function focusedAppId(state: WindowManagerStateDoc): string | undefined {
+  const result = evaluate(
+    fromObjectSource({
+      contexts: Object.values(state.contexts),
+      surfaces: Object.values(state.surfaces),
+    }),
+    pipe(
+      from(focusedSurface),
+      where(eq(focusedSurface.id, value(state.focus))),
+      leftJoin(from(focusedContext), eq(focusedSurface.activeContext, focusedContext.id)),
+      project({ app: maybe(focusedContext.app) }),
+    ),
+  );
+  return result.rows[0]?.app;
 }
 
 export function focusContext(
@@ -255,7 +307,10 @@ export function launchContext(
   context: WindowContext,
   role: SurfaceRole,
 ): void {
-  if (role === SurfaceRole.WorkspaceView && toggleSurfaceContext(state, context, role)) return;
+  if (role === SurfaceRole.WorkspaceView) {
+    toggleWorkspaceContext(state, context);
+    return;
+  }
   revealContext(state, context, role);
 }
 
@@ -266,14 +321,14 @@ function revealContext(
 ): void {
   const currentSurface = surfaceWithContext(state, context.id);
   if (currentSurface !== undefined) {
-    showSurface(state, currentSurface);
+    showWorkspaceSurface(state, currentSurface);
     focusContext(state, currentSurface.id, context.id);
     return;
   }
 
   const surface = targetSurfaceByRole(state, role);
   if (surface === undefined) return;
-  showSurface(state, surface);
+  showWorkspaceSurface(state, surface);
   clearPreview(state, surface, context.id);
   state.contexts[context.id] = context;
   insertContext(surface.contexts, context.id, undefined, 'after');
@@ -315,15 +370,13 @@ function targetSurfaceByRole(
     : Object.values(state.surfaces).find((surface) => surface.role === role);
 }
 
-function toggleSurfaceContext(
+function toggleWorkspaceContext(
   state: WindowManagerStateDoc,
   context: WindowContext,
-  role: SurfaceRole,
-): boolean {
+): void {
   const surface = surfaceWithContext(state, context.id);
-  if (surface?.role === role && hideSurface(state, surface)) return true;
-  revealContext(state, context, role);
-  return true;
+  if (surface?.role === SurfaceRole.WorkspaceView && hideSurface(state, surface)) return;
+  revealContext(state, context, SurfaceRole.WorkspaceView);
 }
 
 function hideSurface(state: WindowManagerStateDoc, surface: WindowSurface): boolean {
@@ -336,7 +389,8 @@ function hideSurface(state: WindowManagerStateDoc, surface: WindowSurface): bool
   return true;
 }
 
-function showSurface(state: WindowManagerStateDoc, surface: WindowSurface): void {
+function showWorkspaceSurface(state: WindowManagerStateDoc, surface: WindowSurface): void {
+  if (surface.role !== SurfaceRole.WorkspaceView) return;
   if (surfaceInLayout(state.layout, surface.id)) return;
   state.layout = {
     direction: SplitDirection.Row,
