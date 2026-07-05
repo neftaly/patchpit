@@ -6,7 +6,13 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
-import { FilePicker, type FilePickerActions, type FileIcons } from '@patchpit/file-picker';
+import {
+  FilePicker,
+  filePickerDragType,
+  type DraggedFilePickerUrl,
+  type FilePickerActions,
+  type FileIcons,
+} from '@patchpit/file-picker';
 import { Terminal } from '@patchpit/terminal';
 import { Viewer } from '@patchpit/viewer';
 import {
@@ -27,11 +33,18 @@ import {
 } from '@patchpit/system';
 import type { DocHandle } from '@automerge/automerge-repo';
 import type { TerminalRuntimeOptions } from '@patchpit/terminal';
-import { type ContextMovePlacement, type SplitPath } from './window-manager-state';
+import {
+  type ContentDropZone,
+  type ContextDropTarget,
+  type ContextMovePlacement,
+  type SplitPath,
+} from './window-manager-state';
 import './window-manager.css';
 
 export type WindowManagerActions = {
   readonly closeContext: (surfaceId: string, contextId: string) => void;
+  readonly dropContext: (sourceSurfaceId: string, contextId: string, target: ContextDropTarget) => void;
+  readonly dropUrl: (url: string, title: string, target: ContextDropTarget) => void;
   readonly focusContext: (surfaceId: string, contextId: string) => void;
   readonly moveContext: (
     sourceSurfaceId: string,
@@ -72,11 +85,8 @@ type WindowManagerRuntime = {
 };
 
 type DropTarget = {
-  readonly area?: 'surface' | 'tabs';
   readonly contextId?: string;
-  readonly placement?: ContextMovePlacement;
-  readonly surfaceId: string;
-};
+} & ContextDropTarget;
 
 export function WindowManager({
   actions,
@@ -140,7 +150,7 @@ function LayoutNodeView({
   const surface = runtime.surfaces[node.surfaceId];
   return surface === undefined
     ? null
-    : <SurfaceView runtime={runtime} style={style} surface={surface} />;
+    : <SurfaceView path={path} runtime={runtime} style={style} surface={surface} />;
 }
 
 function SplitView({
@@ -193,10 +203,12 @@ function SplitView({
 }
 
 function SurfaceView({
+  path,
   runtime,
   surface,
   style,
 }: {
+  readonly path: SplitPath;
   readonly runtime: WindowManagerRuntime;
   readonly surface: WindowSurface;
   readonly style?: CSSProperties | undefined;
@@ -213,24 +225,9 @@ function SurfaceView({
     <section
       className="window-manager-surface"
       aria-label="window surface"
-      data-drop-target={dropTarget?.area === 'surface' ? '' : undefined}
-      onDragOver={(event) => {
-        if (surface.role === SurfaceRole.DocumentSet) {
-          acceptTabDrag(event, runtime, { area: 'surface', surfaceId: surface.id });
-        }
-      }}
       onDragLeave={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           runtime.setDropTarget(undefined);
-        }
-      }}
-      onDrop={(event) => {
-        if (surface.role === SurfaceRole.DocumentSet) {
-          dropDraggedTab(event, runtime, (dragged) => {
-            if (dragged.surfaceId !== surface.id) {
-              runtime.actions.moveContext(dragged.surfaceId, dragged.contextId, surface.id);
-            }
-          });
         }
       }}
       style={style}
@@ -241,11 +238,11 @@ function SurfaceView({
             className="window-manager-tabs"
             data-drop-target={dropTarget?.area === 'tabs' ? '' : undefined}
             onDragOver={(event) => {
-              acceptTabDrag(event, runtime, { area: 'tabs', surfaceId: surface.id }, true);
+              acceptDrag(event, runtime, { area: 'tabs', surfaceId: surface.id }, true);
             }}
             onDrop={(event) => {
-              dropDraggedTab(event, runtime, (dragged) => {
-                runtime.actions.moveContext(dragged.surfaceId, dragged.contextId, surface.id);
+              dropDraggedItem(event, runtime, (dragged) => {
+                dropItem(runtime, dragged, { area: 'tabs', surfaceId: surface.id });
               }, true);
             }}
             role="tablist"
@@ -253,7 +250,9 @@ function SurfaceView({
           >
             {tabIds.map((contextId) => {
               const label = contextLabel(runtime, contextId);
-              const tabDropTarget = dropTarget?.contextId === contextId ? dropTarget.placement : undefined;
+              const tabDropTarget = dropTarget?.area === 'tabs' && dropTarget.contextId === contextId
+                ? dropTarget.placement
+                : undefined;
               return (
                 <div
                   aria-selected={contextId === selectedContextId}
@@ -265,7 +264,8 @@ function SurfaceView({
                   key={contextId}
                   onClick={() => runtime.actions.focusContext(surface.id, contextId)}
                   onDragOver={(event) => {
-                    acceptTabDrag(event, runtime, {
+                    acceptDrag(event, runtime, {
+                      area: 'tabs',
                       contextId,
                       placement: tabDropPlacement(event, tabIds, runtime.draggedTab, surface.id, contextId),
                       surfaceId: surface.id,
@@ -282,14 +282,19 @@ function SurfaceView({
                     runtime.setDropTarget(undefined);
                   }}
                   onDrop={(event) => {
-                    dropDraggedTab(event, runtime, (dragged) => {
-                      runtime.actions.moveContext(
-                        dragged.surfaceId,
-                        dragged.contextId,
-                        surface.id,
+                    dropDraggedItem(event, runtime, (dragged) => {
+                      dropItem(runtime, dragged, {
+                        area: 'tabs',
                         contextId,
-                        tabDropPlacement(event, tabIds, dragged, surface.id, contextId),
-                      );
+                        placement: tabDropPlacement(
+                          event,
+                          tabIds,
+                          dragged.kind === 'tab' ? dragged : undefined,
+                          surface.id,
+                          contextId,
+                        ),
+                        surfaceId: surface.id,
+                      });
                     }, true);
                   }}
                   onDoubleClick={() => runtime.actions.pinContext(surface.id, contextId)}
@@ -323,7 +328,24 @@ function SurfaceView({
           </div>
         </header>
       )}
-      <SurfaceContent context={selectedContext} runtime={runtime} surfaceId={surface.id} />
+      <div
+        className="window-manager-content"
+        data-drop-zone={dropTarget?.area === 'content' ? dropTarget.zone : undefined}
+        onDragOver={(event) => {
+          if (surface.role === SurfaceRole.DocumentSet) {
+            acceptDrag(event, runtime, contentDropTarget(event, path, surface.id));
+          }
+        }}
+        onDrop={(event) => {
+          if (surface.role === SurfaceRole.DocumentSet) {
+            dropDraggedItem(event, runtime, (dragged) => {
+              dropItem(runtime, dragged, contentDropTarget(event, path, surface.id));
+            });
+          }
+        }}
+      >
+        <SurfaceContent context={selectedContext} runtime={runtime} surfaceId={surface.id} />
+      </div>
     </section>
   );
 }
@@ -387,14 +409,14 @@ function isActivationKey(event: KeyboardEvent): boolean {
 
 const tabDragType = 'application/x.patchpit-tab';
 
-function acceptTabDrag(
+function acceptDrag(
   event: DragEvent,
   runtime: WindowManagerRuntime,
   target: DropTarget,
   stopPropagation = false,
 ): void {
-  if (!allowTabDrop(event)) return;
-  if (!canDropTab(runtime.draggedTab, target)) {
+  if (!allowDrop(event)) return;
+  if (!canDrop(runtime.draggedTab, target)) {
     runtime.setDropTarget(undefined);
     return;
   }
@@ -402,20 +424,20 @@ function acceptTabDrag(
   runtime.setDropTarget(target);
 }
 
-function allowTabDrop(event: DragEvent): boolean {
-  if (!event.dataTransfer.types.includes(tabDragType)) return false;
+function allowDrop(event: DragEvent): boolean {
+  if (!event.dataTransfer.types.includes(tabDragType) && !event.dataTransfer.types.includes(filePickerDragType)) return false;
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
   return true;
 }
 
-function dropDraggedTab(
+function dropDraggedItem(
   event: DragEvent,
   runtime: WindowManagerRuntime,
-  drop: (dragged: DraggedTab) => void,
+  drop: (dragged: DraggedItem) => void,
   stopPropagation = false,
 ): void {
-  const dragged = draggedTab(event);
+  const dragged = draggedItem(event);
   if (dragged === undefined) return;
 
   event.preventDefault();
@@ -426,6 +448,31 @@ function dropDraggedTab(
 }
 
 type DraggedTab = { contextId: string; surfaceId: string };
+type DraggedItem =
+  | ({ kind: 'tab' } & DraggedTab)
+  | ({ kind: 'url' } & DraggedFilePickerUrl);
+
+function dropItem(runtime: WindowManagerRuntime, dragged: DraggedItem, target: ContextDropTarget): void {
+  if (dragged.kind === 'tab') {
+    runtime.actions.dropContext(dragged.surfaceId, dragged.contextId, target);
+  } else {
+    runtime.actions.dropUrl(dragged.url, dragged.title, target);
+  }
+}
+
+function draggedItem(event: DragEvent): DraggedItem | undefined {
+  const tab = draggedTab(event);
+  if (tab !== undefined) return { kind: 'tab', ...tab };
+
+  const value = event.dataTransfer.getData(filePickerDragType);
+  if (value === '') return undefined;
+
+  try {
+    return { kind: 'url', ...JSON.parse(value) as DraggedFilePickerUrl };
+  } catch {
+    return undefined;
+  }
+}
 
 function draggedTab(event: DragEvent): DraggedTab | undefined {
   const value = event.dataTransfer.getData(tabDragType);
@@ -438,10 +485,39 @@ function draggedTab(event: DragEvent): DraggedTab | undefined {
   }
 }
 
-function canDropTab(dragged: DraggedTab | undefined, target: DropTarget): boolean {
+function canDrop(dragged: DraggedTab | undefined, target: DropTarget): boolean {
   if (dragged === undefined) return true;
   if (target.contextId === dragged.contextId) return false;
-  return target.area !== 'surface' || target.surfaceId !== dragged.surfaceId;
+  return target.area !== 'content' || target.zone !== 'center' || target.surfaceId !== dragged.surfaceId;
+}
+
+const edgeDropThreshold = 1 / 3;
+
+function contentDropTarget(
+  event: DragEvent<HTMLElement>,
+  path: SplitPath,
+  surfaceId: string,
+): ContextDropTarget & DropTarget {
+  return {
+    area: 'content',
+    path,
+    surfaceId,
+    zone: contentDropZone(event),
+  };
+}
+
+function contentDropZone(event: DragEvent<HTMLElement>): ContentDropZone {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width;
+  const y = (event.clientY - rect.top) / rect.height;
+  const edges: [ContentDropZone, number][] = [
+    ['left', x],
+    ['right', 1 - x],
+    ['top', y],
+    ['bottom', 1 - y],
+  ];
+  const edge = edges.reduce((best, item) => item[1] < best[1] ? item : best);
+  return edge[1] < edgeDropThreshold ? edge[0] : 'center';
 }
 
 function tabDropPlacement(
@@ -464,10 +540,19 @@ function tabDropPlacement(
 }
 
 function sameDropTarget(left: DropTarget | undefined, right: DropTarget | undefined): boolean {
-  return left?.area === right?.area
-    && left?.contextId === right?.contextId
-    && left?.placement === right?.placement
-    && left?.surfaceId === right?.surfaceId;
+  if (left?.area !== right?.area || left?.surfaceId !== right?.surfaceId) return false;
+  if (left === undefined || right === undefined) return true;
+  if (left.area === 'tabs' && right.area === 'tabs') {
+    return left.contextId === right.contextId && left.placement === right.placement;
+  }
+  if (left.area === 'content' && right.area === 'content') {
+    return samePath(left.path, right.path) && left.zone === right.zone;
+  }
+  return false;
+}
+
+function samePath(left: SplitPath | undefined, right: SplitPath | undefined): boolean {
+  return left?.length === right?.length && left?.every((side, index) => side === right?.[index]) === true;
 }
 
 function splitChildStyle(size = 1): CSSProperties {

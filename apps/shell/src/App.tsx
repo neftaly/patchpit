@@ -18,12 +18,15 @@ import { WindowManager } from './window-manager/WindowManager';
 import {
   closeContext,
   commitWindowManagerState,
+  dropContext,
+  dropNewContext,
   focusContext,
   moveContext,
   openContext,
   pinContext,
   previewContext,
   resizeSplit,
+  type ContextDropTarget,
   type ContextMovePlacement,
   type SplitPath,
 } from './window-manager/window-manager-state';
@@ -63,6 +66,16 @@ export function App() {
     closeContext: (surfaceId: string, contextId: string) => {
       commitWindowManagerState(seed.windowManagerHandle, (doc) => {
         closeContext(doc, surfaceId, contextId);
+      });
+    },
+    dropContext: (sourceSurfaceId: string, contextId: string, target: ContextDropTarget) => {
+      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
+        dropContext(doc, sourceSurfaceId, contextId, target);
+      });
+    },
+    dropUrl: (url: string, title: string, target: ContextDropTarget) => {
+      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
+        dropNewContext(doc, viewerContext(url, title, seed.rootUrl), target);
       });
     },
     moveContext: (

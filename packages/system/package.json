@@ -10,8 +10,8 @@
   "dependencies": {
     "@automerge/automerge": "catalog:",
     "@automerge/automerge-repo": "^2.5.6",
-    "@tarstate/automerge": "git+https://github.com/neftaly/tarstate.git#c40c8e360b22f1a9f1832fbafd2e9359500307ba&path:/packages/automerge",
-    "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#c40c8e360b22f1a9f1832fbafd2e9359500307ba&path:/packages/core"
+    "@tarstate/automerge": "catalog:",
+    "@tarstate/core": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:"
