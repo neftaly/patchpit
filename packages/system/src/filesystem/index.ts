@@ -60,5 +60,10 @@ export {
   type FilesystemTreeProjectionRelations,
   type ProjectedFilesystem,
 } from './project';
-export { createSeedFilesystem, createTerminalStateResource, recordRuntimeBootGateAck } from './seed';
+export {
+  createSeedFilesystem,
+  createTerminalStateResource,
+  recordRuntimeBootGateAck,
+  removeSystemAppResource,
+} from './seed';
 export * from './types';

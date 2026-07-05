@@ -27,6 +27,8 @@ export type TerminalFilesystemCapabilityServerOptions = {
 };
 
 type PendingRequest = {
+  readonly args: readonly TerminalFilesystemPayload[];
+  readonly op: TerminalFilesystemOperation;
   readonly reject: (error: Error) => void;
   readonly resolve: (value: unknown) => void;
   readonly rootUrl: string;
@@ -49,9 +51,14 @@ export function serveTerminalFilesystemCapability({
   port.addEventListener('message', onMessage);
   port.start();
 
+  let closed = false;
   return () => {
+    if (closed) return;
+    closed = true;
     port.removeEventListener('message', onMessage);
+    postFilesystemClosed(port, 'Terminal filesystem capability was closed.');
     port.close();
+    filesystem.close?.();
   };
 }
 
@@ -60,6 +67,10 @@ export function createTerminalFilesystemClient(capability: CapabilityPort): Patc
   const connection = new TerminalFilesystemConnection(grant, capability.port);
   return {
     cacheKey: `terminal-filesystem-capability:${grant.capabilityId}`,
+    close: () => {
+      connection.close('Terminal filesystem capability closed.');
+      capability.close();
+    },
     rootUrl: grant.endpoint.rootUrl,
     openRoot: (rootUrl) => new TerminalFilesystemPortFs(connection, rootUrl),
   };
@@ -76,8 +87,13 @@ async function handleTerminalFilesystemRequest(
     return;
   }
 
-  const verb = terminalFilesystemOperationVerb(message.op);
-  if (!grant.verbs.includes(verb)) {
+  if (!grant.endpoint.rootUrls.includes(message.rootUrl)) {
+    postFilesystemError(port, message.id, 'EPERM', `Root ${message.rootUrl} is outside this terminal filesystem grant.`);
+    return;
+  }
+
+  const verbs = terminalFilesystemOperationVerbs(message.op);
+  if (!verbs.every((verb) => grant.verbs.includes(verb))) {
     postFilesystemError(port, message.id, 'EPERM', `${message.op} is outside this terminal filesystem grant.`);
     return;
   }
@@ -90,7 +106,6 @@ async function handleTerminalFilesystemRequest(
       id: message.id,
       ok: true,
       ...(result === undefined ? {} : { result }),
-      paths: fs.getAllPaths(),
     } satisfies TerminalFilesystemResponse);
   } catch (error) {
     const filesystemError = errorFromUnknown(error);
@@ -126,6 +141,7 @@ async function executeTerminalFilesystemOperation(
 }
 
 class TerminalFilesystemConnection {
+  #closed = false;
   readonly #grant: TerminalFilesystemCapabilityGrant;
   readonly #pathsByRoot = new Map<string, readonly string[]>();
   readonly #pending = new Map<string, PendingRequest>();
@@ -134,8 +150,11 @@ class TerminalFilesystemConnection {
   constructor(grant: TerminalFilesystemCapabilityGrant, port: MessagePort) {
     this.#grant = grant;
     this.#port = port;
-    this.#pathsByRoot.set(grant.endpoint.rootUrl, grant.endpoint.initialPaths);
+    for (const [rootUrl, paths] of Object.entries(initialPathsByRoot(grant))) {
+      this.#pathsByRoot.set(rootUrl, paths);
+    }
     this.#port.addEventListener('message', this.#onMessage);
+    this.#port.addEventListener('messageerror', this.#onMessageError);
     this.#port.start();
   }
 
@@ -148,6 +167,10 @@ class TerminalFilesystemConnection {
     op: TerminalFilesystemOperation,
     args: readonly TerminalFilesystemPayload[],
   ): Promise<Result> {
+    if (this.#closed) {
+      return Promise.reject(filesystemClientError('Terminal filesystem capability is closed.', 'ECLOSED'));
+    }
+
     const id = `terminal-fs:${nextFilesystemRequestId++}`;
     const request: TerminalFilesystemRequest = {
       protocol: terminalFilesystemProtocol,
@@ -160,6 +183,8 @@ class TerminalFilesystemConnection {
 
     return new Promise((resolve, reject) => {
       this.#pending.set(id, {
+        args,
+        op,
         reject,
         resolve: (value) => resolve(value as Result),
         rootUrl,
@@ -170,19 +195,53 @@ class TerminalFilesystemConnection {
 
   readonly #onMessage = (event: MessageEvent<unknown>) => {
     const response = event.data;
+    if (isTerminalFilesystemClosed(response)) {
+      this.close(response.error.message);
+      return;
+    }
     if (!isTerminalFilesystemResponse(response)) return;
     const pending = this.#pending.get(response.id);
     if (pending === undefined) return;
     this.#pending.delete(response.id);
 
     if (response.ok) {
-      if (response.paths !== undefined) this.#pathsByRoot.set(pending.rootUrl, response.paths);
+      this.#updatePathCache(pending, response.result);
       pending.resolve(response.result);
       return;
     }
 
     pending.reject(filesystemClientError(response.error.message, response.error.code));
   };
+
+  readonly #onMessageError = () => {
+    this.close('Terminal filesystem capability received an unreadable message.');
+  };
+
+  close(message: string): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#port.removeEventListener('message', this.#onMessage);
+    this.#port.removeEventListener('messageerror', this.#onMessageError);
+    this.#port.close();
+    const error = filesystemClientError(message, 'ECLOSED');
+    for (const pending of this.#pending.values()) pending.reject(error);
+    this.#pending.clear();
+  }
+
+  #updatePathCache(pending: PendingRequest, result: unknown): void {
+    if (pending.op === 'getAllPaths') {
+      if (Array.isArray(result) && result.every((path) => typeof path === 'string')) {
+        this.#pathsByRoot.set(pending.rootUrl, result);
+      }
+      return;
+    }
+
+    const cachedPaths = this.#pathsByRoot.get(pending.rootUrl);
+    if (cachedPaths === undefined) return;
+
+    const nextPaths = updateCachedPaths(cachedPaths, pending.op, pending.args);
+    if (nextPaths !== cachedPaths) this.#pathsByRoot.set(pending.rootUrl, nextPaths);
+  }
 }
 
 class TerminalFilesystemPortFs implements IFileSystem {
@@ -280,7 +339,12 @@ function terminalFilesystemGrant(grant: CapabilityPort['grant']): TerminalFilesy
     grant.capability === terminalFilesystemCapability
     && grant.endpoint?.protocol === terminalFilesystemProtocol
     && typeof grant.endpoint.rootUrl === 'string'
+    && Array.isArray(grant.endpoint.rootUrls)
     && Array.isArray(grant.endpoint.initialPaths)
+    && (
+      grant.endpoint.initialPathsByRoot === undefined
+      || isInitialPathsByRoot(grant.endpoint.initialPathsByRoot)
+    )
   ) {
     return grant as TerminalFilesystemCapabilityGrant;
   }
@@ -292,12 +356,85 @@ function terminalFilesystemGrant(grant: CapabilityPort['grant']): TerminalFilesy
   );
 }
 
-function terminalFilesystemOperationVerb(op: TerminalFilesystemOperation): TerminalFilesystemVerb {
-  if (op === 'readFile' || op === 'readFileBuffer' || op === 'readlink' || op === 'realpath') return 'read';
-  if (op === 'exists' || op === 'stat' || op === 'lstat') return 'stat';
-  if (op === 'readdir' || op === 'getAllPaths') return 'list';
-  if (op === 'resolvePath') return 'mount';
-  return 'write';
+function terminalFilesystemOperationVerbs(op: TerminalFilesystemOperation): readonly TerminalFilesystemVerb[] {
+  if (op === 'cp' || op === 'mv') return ['read', 'write'];
+  if (op === 'readFile' || op === 'readFileBuffer' || op === 'readlink' || op === 'realpath') return ['read'];
+  if (op === 'exists' || op === 'stat' || op === 'lstat') return ['stat'];
+  if (op === 'readdir' || op === 'getAllPaths') return ['list'];
+  if (op === 'resolvePath') return ['mount'];
+  return ['write'];
+}
+
+function updateCachedPaths(
+  paths: readonly string[],
+  op: TerminalFilesystemOperation,
+  args: readonly TerminalFilesystemPayload[],
+): readonly string[] {
+  if (op === 'appendFile' || op === 'writeFile') return addCachedPath(paths, stringPath(args, 0));
+  if (op === 'link' || op === 'symlink') return addCachedPath(paths, stringPath(args, 1));
+  if (op === 'mkdir') return addCachedDirectoryPaths(paths, stringPath(args, 0), mkdirRecursive(args[1]));
+  if (op === 'rm') return removeCachedPath(paths, stringPath(args, 0));
+  if (op === 'cp') return copyCachedPath(paths, stringPath(args, 0), stringPath(args, 1));
+  if (op === 'mv') return removeCachedPath(copyCachedPath(paths, stringPath(args, 0), stringPath(args, 1)), stringPath(args, 0));
+  return paths;
+}
+
+function addCachedPath(paths: readonly string[], path: string | undefined): readonly string[] {
+  if (path === undefined || paths.includes(path)) return paths;
+  return [...paths, path].sort();
+}
+
+function addCachedDirectoryPaths(
+  paths: readonly string[],
+  path: string | undefined,
+  recursive: boolean,
+): readonly string[] {
+  if (path === undefined) return paths;
+  if (!recursive) return addCachedPath(paths, path);
+
+  const next = new Set(paths);
+  const parts = path.split('/').filter(Boolean);
+  for (let index = 1; index <= parts.length; index += 1) {
+    next.add(`/${parts.slice(0, index).join('/')}`);
+  }
+  return [...next].sort();
+}
+
+function removeCachedPath(paths: readonly string[], path: string | undefined): readonly string[] {
+  if (path === undefined) return paths;
+  const descendants = `${path}/`;
+  const next = paths.filter((candidate) => candidate !== path && !candidate.startsWith(descendants));
+  return next.length === paths.length ? paths : next;
+}
+
+function copyCachedPath(
+  paths: readonly string[],
+  src: string | undefined,
+  dest: string | undefined,
+): readonly string[] {
+  if (src === undefined || dest === undefined) return paths;
+
+  const next = new Set(paths);
+  const descendants = `${src}/`;
+  for (const path of paths) {
+    if (path === src) {
+      next.add(dest);
+    } else if (path.startsWith(descendants)) {
+      next.add(`${dest}/${path.slice(descendants.length)}`);
+    }
+  }
+
+  if (next.size === paths.length) next.add(dest);
+  return [...next].sort();
+}
+
+function stringPath(args: readonly TerminalFilesystemPayload[], index: number): string | undefined {
+  const value = args[index];
+  return typeof value === 'string' ? normalize(value) : undefined;
+}
+
+function mkdirRecursive(value: unknown): boolean {
+  return isRecord(value) && value.recursive === true;
 }
 
 function isTerminalFilesystemRequest(value: unknown): value is TerminalFilesystemRequest {
@@ -310,11 +447,36 @@ function isTerminalFilesystemRequest(value: unknown): value is TerminalFilesyste
     && Array.isArray(value.args);
 }
 
-function isTerminalFilesystemResponse(value: unknown): value is TerminalFilesystemResponse {
+function isTerminalFilesystemResponse(
+  value: unknown,
+): value is Exclude<TerminalFilesystemResponse, { readonly type: 'closed' }> {
   return isRecord(value)
     && value.protocol === terminalFilesystemProtocol
     && typeof value.id === 'string'
     && typeof value.ok === 'boolean';
+}
+
+function isTerminalFilesystemClosed(value: unknown): value is Extract<TerminalFilesystemResponse, { type: 'closed' }> {
+  return isRecord(value)
+    && value.protocol === terminalFilesystemProtocol
+    && value.type === 'closed'
+    && isRecord(value.error)
+    && typeof value.error.message === 'string';
+}
+
+function initialPathsByRoot(grant: TerminalFilesystemCapabilityGrant): Readonly<Record<string, readonly string[]>> {
+  return {
+    ...Object.fromEntries(grant.endpoint.rootUrls.map((rootUrl) => [rootUrl, []])),
+    [grant.endpoint.rootUrl]: grant.endpoint.initialPaths,
+    ...grant.endpoint.initialPathsByRoot,
+  };
+}
+
+function isInitialPathsByRoot(value: unknown): value is Readonly<Record<string, readonly string[]>> {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((paths) => (
+    Array.isArray(paths) && paths.every((path) => typeof path === 'string')
+  ));
 }
 
 function isTerminalFilesystemOperation(value: unknown): value is TerminalFilesystemOperation {
@@ -379,6 +541,18 @@ function postFilesystemError(port: MessagePort, id: string, code: string | undef
     ok: false,
     error: code === undefined ? { message } : { code, message },
   } satisfies TerminalFilesystemResponse);
+}
+
+function postFilesystemClosed(port: MessagePort, message: string): void {
+  try {
+    port.postMessage({
+      protocol: terminalFilesystemProtocol,
+      type: 'closed',
+      error: { code: 'ECLOSED', message },
+    } satisfies TerminalFilesystemResponse);
+  } catch {
+    // Closing is best effort; the local disposer still releases the server side.
+  }
 }
 
 function errorFromUnknown(error: unknown): { readonly code?: string; readonly message: string } {

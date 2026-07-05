@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  appLaunchIntentBoundary,
   filePickerIntentBoundary,
   createSeedFilesystem,
+  createTerminalStateResource,
   routeIntentBoundary,
   SplitDirection,
   SurfaceRole,
@@ -10,6 +12,7 @@ import {
   WindowManagerNodeKind,
 } from '@patchpit/system';
 import {
+  appLaunchIntent,
   filePickerSelectUrlIntent,
   filePickerToggleFolderIntent,
   filesystemTreeNodesRelation,
@@ -19,6 +22,7 @@ import {
   submitRuntimeIntent,
   terminalFilesystemCapability,
   terminalFilesystemProtocol,
+  windowCloseContextIntent,
   windowFocusIntent,
   workspaceContextsRelation,
   workspaceLayoutProjection,
@@ -179,6 +183,74 @@ void test('bootstrap runtime commits route, file-picker, and window intents', as
   );
 });
 
+void test('bootstrap runtime removes managed terminal state after closing its context', async () => {
+  const seed = createSeedFilesystem();
+  let nextTerminalId = 2;
+  const runtime = createBootstrapRuntimeClient({
+    createTerminalState: () => createTerminalStateResource(seed, `terminal-${nextTerminalId++}`),
+    seed,
+    workspaceId: 'test-workspace',
+  });
+  const initialSystemAppUrls = systemAppUrls(seed);
+
+  const launchResult = await submitRuntimeIntent(runtime, {
+    boundary: appLaunchIntentBoundary,
+    intent: appLaunchIntent,
+    row: {
+      app: 'terminal',
+      behavior: 'open-context',
+      id: 'terminal-launch-test',
+      role: SurfaceRole.DocumentSet,
+    },
+  });
+  assert.equal(launchResult.status, 'committed');
+
+  const terminalContext = terminalContextInWindowManager(seed);
+  assert.ok(terminalContext);
+  assert.notEqual(terminalContext.url, seed.terminalStateHandle.url);
+  assert.equal(systemAppUrls(seed).has(terminalContext.url), true);
+  assert.equal(indexUrls(seed).has(terminalContext.url), true);
+  assert.equal(Object.hasOwn(seed.documentHandles, terminalContext.url), true);
+  assert.equal(systemAppUrls(seed).size, initialSystemAppUrls.size + 1);
+
+  const terminalSurface = surfaceForContext(seed, terminalContext.id);
+  assert.ok(terminalSurface);
+  const closeResult = await submitRuntimeIntent(runtime, {
+    boundary: windowIntentBoundary,
+    intent: windowCloseContextIntent,
+    row: {
+      contextId: terminalContext.id,
+      id: 'terminal-close-test',
+      surfaceId: terminalSurface.id,
+    },
+  });
+  assert.equal(closeResult.status, 'committed');
+  assert.deepEqual(
+    Object.keys(closeResult.heads).sort(),
+    [seed.indexHandle.url, seed.systemAppsHandle.url, seed.windowManagerHandle.url].sort(),
+  );
+  assert.equal(seed.windowManagerHandle.doc().contexts[terminalContext.id], undefined);
+  assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
+  assert.equal(indexUrls(seed).has(terminalContext.url), false);
+  assert.equal(Object.hasOwn(seed.documentHandles, terminalContext.url), false);
+
+  const relaunchResult = await submitRuntimeIntent(runtime, {
+    boundary: appLaunchIntentBoundary,
+    intent: appLaunchIntent,
+    row: {
+      app: 'terminal',
+      behavior: 'open-context',
+      id: 'terminal-relaunch-test',
+      role: SurfaceRole.DocumentSet,
+    },
+  });
+  assert.equal(relaunchResult.status, 'committed');
+  const relaunchedContext = terminalContextInWindowManager(seed);
+  assert.ok(relaunchedContext);
+  assert.notEqual(relaunchedContext.url, terminalContext.url);
+  assert.equal(systemAppUrls(seed).has(relaunchedContext.url), true);
+});
+
 void test('bootstrap runtime opens a narrowed terminal filesystem capability', async () => {
   const seed = createSeedFilesystem();
   const runtime = createBootstrapRuntimeClient({ seed, workspaceId: 'test-workspace' });
@@ -192,9 +264,11 @@ void test('bootstrap runtime opens a narrowed terminal filesystem capability', a
     assert.deepEqual(capability.grant.verbs, ['read', 'list']);
     assert.equal(capability.grant.endpoint?.protocol, terminalFilesystemProtocol);
     assert.equal(capability.grant.endpoint?.rootUrl, seed.rootUrl);
+    assert.deepEqual(capability.grant.endpoint?.rootUrls, [seed.rootUrl]);
     assert.equal(capability.grant.endpoint?.initialPaths?.includes('/'), true);
+    assert.equal(capability.grant.endpoint?.initialPathsByRoot?.[seed.rootUrl]?.includes('/'), true);
   } finally {
-    capability.port.close();
+    capability.close();
   }
 });
 
@@ -391,4 +465,22 @@ function workspaceContext(id) {
     title: id,
     url: `automerge:${id}`,
   };
+}
+
+function terminalContextInWindowManager(seed) {
+  return Object.values(seed.windowManagerHandle.doc().contexts).find((context) => context.app === 'terminal');
+}
+
+function surfaceForContext(seed, contextId) {
+  return Object.values(seed.windowManagerHandle.doc().surfaces).find((surface) => (
+    surface.contexts.includes(contextId) || surface.previewContext === contextId
+  ));
+}
+
+function systemAppUrls(seed) {
+  return new Set(seed.systemAppsHandle.doc().docs.map((entry) => entry.url));
+}
+
+function indexUrls(seed) {
+  return new Set(seed.indexHandle.doc().filesystemIndex.documents.map((row) => row.url));
 }

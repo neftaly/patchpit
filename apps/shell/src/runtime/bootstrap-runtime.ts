@@ -7,9 +7,11 @@ import {
   appLaunchIntentBoundary,
   ContainerMountKind,
   PatchpitType,
+  removeSystemAppResource,
   RuntimeMountProvider,
   SurfaceRole,
   terminalContainer,
+  windowIntentBoundary,
   type AppManifestDoc,
   type AppContainer,
   type ContainerMount,
@@ -27,6 +29,7 @@ import {
   terminalFilesystemCapability,
   terminalFilesystemProtocol,
   terminalFilesystemVerbs,
+  windowCloseContextIntent,
   type AppLaunchIntentRow,
   type CapabilityRequest,
   type CapabilityPort,
@@ -42,6 +45,7 @@ import {
   type RuntimeError,
   type TerminalFilesystemCapabilityGrant,
   type TerminalFilesystemVerb,
+  type WindowIntentRow,
 } from '@patchpit/system/runtime';
 import {
   commitWindowManagerState,
@@ -154,6 +158,12 @@ type AppLaunchCommitOptions = {
   readonly managedAppStateHandles: Map<string, DocHandle<TerminalStateDoc>>;
 };
 
+type ManagedAppStateCloseTarget = {
+  readonly contextId: string;
+  readonly handle: DocHandle<TerminalStateDoc>;
+  readonly key: string;
+};
+
 const defaultAppLaunchSlot = 'default';
 let nextCapabilityId = 1;
 
@@ -194,8 +204,11 @@ export function createBootstrapRuntimeClient({
         const filePickerResult = submitBootstrapFilePickerIntent(seed, request);
         if (filePickerResult !== undefined) return filePickerResult;
 
+        const managedCloseTarget = managedAppStateCloseTarget(seed, request, managedAppStateHandles);
         const windowResult = submitBootstrapWindowIntent(seed, request);
-        if (windowResult !== undefined) return windowResult;
+        if (windowResult !== undefined) {
+          return closeManagedAppState(seed, managedAppStateHandles, managedCloseTarget, windowResult);
+        }
 
         return rejected(runtimeError('unknown_intent', `Unknown intent: ${request.intent}`));
       });
@@ -229,20 +242,52 @@ function openBootstrapCapability(
     repo: seed.repo,
     rootUrl: seed.rootUrl,
   });
+  const rootUrls = terminalFilesystemRootUrls(terminalContainer(seed.rootUrl));
+  const initialPathsByRoot = verbs.includes('list')
+    ? terminalFilesystemInitialPathsByRoot(filesystem, rootUrls)
+    : {};
   const grant: TerminalFilesystemCapabilityGrant = {
     capability: terminalFilesystemCapability,
     capabilityId: `terminal-filesystem:${nextCapabilityId++}`,
     endpoint: {
       protocol: terminalFilesystemProtocol,
       rootUrl: seed.rootUrl,
-      initialPaths: filesystem.openRoot(seed.rootUrl).getAllPaths(),
+      rootUrls,
+      initialPaths: initialPathsByRoot[seed.rootUrl] ?? [],
+      initialPathsByRoot,
     },
     verbs,
   };
   const { port1, port2 } = new MessageChannel();
-  serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
+  const closeServer = serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
+  let closed = false;
 
-  return { grant, port: port2 };
+  return {
+    close() {
+      if (closed) return;
+      closed = true;
+      closeServer();
+      port2.close();
+    },
+    grant,
+    port: port2,
+  };
+}
+
+function terminalFilesystemRootUrls(container: AppContainer): readonly string[] {
+  return [...new Set(container.mounts.flatMap((mount) => (
+    mount.kind === ContainerMountKind.Automerge ? [mount.url] : []
+  )))].sort();
+}
+
+function terminalFilesystemInitialPathsByRoot(
+  filesystem: ReturnType<typeof createPatchpitFilesystem>,
+  rootUrls: readonly string[],
+): Readonly<Record<string, readonly string[]>> {
+  return Object.fromEntries(rootUrls.map((rootUrl) => [
+    rootUrl,
+    filesystem.openRoot(rootUrl).getAllPaths(),
+  ]));
 }
 
 function terminalFilesystemGrantVerbs(
@@ -590,6 +635,50 @@ function terminalStateForLaunch(
 
 function appLaunchStateKey(launch: AppLaunchRequest): string {
   return JSON.stringify([launch.app, launch.slot]);
+}
+
+function managedAppStateCloseTarget(
+  seed: SeedFilesystem,
+  request: IntentRequest,
+  managedAppStateHandles: ReadonlyMap<string, DocHandle<TerminalStateDoc>>,
+): ManagedAppStateCloseTarget | undefined {
+  if (request.intent !== windowCloseContextIntent) return undefined;
+
+  const row = runtimeIntentRequestRow<WindowIntentRow>(request, windowIntentBoundary);
+  if (isRuntimeError(row) || typeof row.contextId !== 'string') return undefined;
+
+  const context = seed.windowManagerHandle.doc().contexts[row.contextId];
+  if (context?.app !== 'terminal') return undefined;
+
+  for (const [key, handle] of managedAppStateHandles) {
+    if (handle.url === context.url) return { contextId: context.id, handle, key };
+  }
+
+  return undefined;
+}
+
+function closeManagedAppState(
+  seed: SeedFilesystem,
+  managedAppStateHandles: Map<string, DocHandle<TerminalStateDoc>>,
+  target: ManagedAppStateCloseTarget | undefined,
+  result: IntentResult,
+): IntentResult {
+  if (target === undefined || result.status !== 'committed') return result;
+  if (seed.windowManagerHandle.doc().contexts[target.contextId] !== undefined) return result;
+  if (managedAppStateHandles.get(target.key)?.url !== target.handle.url) return result;
+
+  managedAppStateHandles.delete(target.key);
+  const removed = removeSystemAppResource(seed, target.handle.url);
+  if (!removed) return result;
+
+  return {
+    ...result,
+    heads: mergeHeadSets(
+      result.heads,
+      automergeHeadSetForHandle(seed.systemAppsHandle),
+      automergeHeadSetForHandle(seed.indexHandle),
+    ),
+  };
 }
 
 function appLaunchCommitHeads(seed: SeedFilesystem, commit: AppLaunchCommit): AutomergeHeadSet {

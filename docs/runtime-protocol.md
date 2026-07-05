@@ -782,7 +782,9 @@ type CapabilityGrant = {
 type CapabilityEndpoint = {
   protocol: string;
   rootUrl?: string;
+  rootUrls?: readonly string[];
   initialPaths?: readonly string[];
+  initialPathsByRoot?: Readonly<Record<string, readonly string[]>>;
 };
 
 type CapabilityBounds = {
@@ -794,6 +796,7 @@ type CapabilityBounds = {
 type CapabilityPort = {
   grant: CapabilityGrant;
   port: MessagePort;
+  close(): void;
 };
 
 type CapabilityEvent =
@@ -853,7 +856,9 @@ type TerminalFilesystemCapabilityGrant = CapabilityGrant & {
   endpoint: {
     protocol: 'patchpit.terminal.filesystem@1';
     rootUrl: string;
+    rootUrls: readonly string[];
     initialPaths: readonly string[];
+    initialPathsByRoot?: Readonly<Record<string, readonly string[]>>;
   };
 };
 ```
@@ -873,12 +878,18 @@ type TerminalFilesystemRequest = {
 };
 
 type TerminalFilesystemResponse =
-  | { protocol: 'patchpit.terminal.filesystem@1'; id: string; ok: true; result?: unknown; paths?: readonly string[] }
-  | { protocol: 'patchpit.terminal.filesystem@1'; id: string; ok: false; error: { code?: string; message: string } };
+  | { protocol: 'patchpit.terminal.filesystem@1'; id: string; ok: true; result?: unknown }
+  | { protocol: 'patchpit.terminal.filesystem@1'; id: string; ok: false; error: { code?: string; message: string } }
+  | { protocol: 'patchpit.terminal.filesystem@1'; type: 'closed'; error: { code?: string; message: string } };
 ```
 
-`paths` updates the client's synchronous `getAllPaths()` cache. This is a cache
-of already-granted filesystem names, not canonical state.
+`rootUrls` is an allow-list. The server rejects requests for roots outside the
+grant and the bootstrap grant currently derives that list from the terminal
+container's Automerge mounts. Copy and move require both `read` and `write`
+verbs. `initialPathsByRoot` seeds the client's synchronous `getAllPaths()` cache;
+successful path-changing operations update that cache locally instead of forcing
+a full server tree walk. The serving side sends `type: 'closed'` before
+revocation so clients can reject in-flight filesystem calls.
 
 ## Realtime Capabilities
 

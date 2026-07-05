@@ -412,7 +412,9 @@ export type CapabilityRequest = {
 export type CapabilityEndpoint = {
   readonly protocol: string;
   readonly rootUrl?: string;
+  readonly rootUrls?: readonly string[];
   readonly initialPaths?: readonly string[];
+  readonly initialPathsByRoot?: Readonly<Record<string, readonly string[]>>;
 };
 
 export type CapabilityGrant = {
@@ -433,6 +435,7 @@ export type CapabilityBounds = {
 export type CapabilityPort = {
   readonly grant: CapabilityGrant;
   readonly port: MessagePort;
+  close(): void;
 };
 
 export type CapabilityEvent =
@@ -451,7 +454,9 @@ export type TerminalFilesystemCapabilityGrant = CapabilityGrant & {
   readonly endpoint: {
     readonly protocol: typeof terminalFilesystemProtocol;
     readonly rootUrl: string;
+    readonly rootUrls: readonly string[];
     readonly initialPaths: readonly string[];
+    readonly initialPathsByRoot?: Readonly<Record<string, readonly string[]>>;
   };
   readonly verbs: readonly TerminalFilesystemVerb[];
 };
@@ -496,16 +501,20 @@ export type TerminalFilesystemError = {
 
 export type TerminalFilesystemResponse =
   | {
-      readonly protocol: typeof terminalFilesystemProtocol;
-      readonly id: string;
-      readonly ok: true;
-      readonly result?: TerminalFilesystemPayload;
-      readonly paths?: readonly string[];
-    }
+    readonly protocol: typeof terminalFilesystemProtocol;
+    readonly id: string;
+    readonly ok: true;
+    readonly result?: TerminalFilesystemPayload;
+  }
   | {
       readonly protocol: typeof terminalFilesystemProtocol;
       readonly id: string;
       readonly ok: false;
+      readonly error: TerminalFilesystemError;
+    }
+  | {
+      readonly protocol: typeof terminalFilesystemProtocol;
+      readonly type: 'closed';
       readonly error: TerminalFilesystemError;
     };
 

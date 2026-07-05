@@ -23,6 +23,8 @@ import {
   filesystemIndexRowForResource,
   filesystemResourceFromHandle,
   folderEntry,
+  removeFilesystemIndexRow,
+  replaceFolderEntries,
   syncFilesystemIndexResource,
   upsertFilesystemIndexRow,
 } from './resources';
@@ -284,6 +286,39 @@ export function createTerminalStateResource(
     type: PatchpitType.TerminalState,
   });
   return handle;
+}
+
+export function removeSystemAppResource(
+  filesystem: SeedFilesystem,
+  url: string,
+): boolean {
+  const hasFolderEntry = filesystem.systemAppsHandle.doc().docs.some((entry) => entry.url === url);
+  const hasIndexRow = filesystem.indexHandle.doc().filesystemIndex.documents.some((row) => row.url === url);
+  const hasDocumentHandle = Object.hasOwn(filesystem.documentHandles, url);
+  if (!hasFolderEntry && !hasIndexRow && !hasDocumentHandle) return false;
+
+  if (hasFolderEntry) {
+    filesystem.systemAppsHandle.change((doc) => {
+      replaceFolderEntries(
+        doc.docs,
+        doc.docs.filter((entry) => entry.url !== url),
+      );
+    });
+  }
+
+  delete filesystem.documentHandles[url];
+
+  if (hasFolderEntry || hasIndexRow) {
+    filesystem.indexHandle.change((doc) => {
+      removeFilesystemIndexRow(doc.filesystemIndex.documents, url);
+      upsertFilesystemIndexRow(
+        doc.filesystemIndex.documents,
+        filesystemIndexRowForResource(filesystem.systemAppsHandle.url, filesystem.systemAppsHandle.doc()),
+      );
+    });
+  }
+
+  return true;
 }
 
 export function recordRuntimeBootGateAck(

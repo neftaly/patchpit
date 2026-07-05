@@ -369,19 +369,21 @@ function useTerminalFilesystemCapability(runtime: BootstrapRuntimeClient): Termi
 
   useEffect(() => {
     let closed = false;
-    let port: MessagePort | undefined;
+    let filesystem: PatchpitFilesystem | undefined;
+    let closeCapability: (() => void) | undefined;
     setCapability({ status: 'opening' });
 
     void runtime.openCapability({ capability: terminalFilesystemCapability })
       .then((capabilityPort) => {
         if (closed) {
-          capabilityPort.port.close();
+          capabilityPort.close();
           return;
         }
 
-        port = capabilityPort.port;
+        closeCapability = () => capabilityPort.close();
+        filesystem = createTerminalFilesystemClient(capabilityPort);
         setCapability({
-          filesystem: createTerminalFilesystemClient(capabilityPort),
+          filesystem,
           status: 'ready',
         });
       })
@@ -400,7 +402,8 @@ function useTerminalFilesystemCapability(runtime: BootstrapRuntimeClient): Termi
 
     return () => {
       closed = true;
-      port?.close();
+      filesystem?.close?.();
+      if (filesystem === undefined) closeCapability?.();
     };
   }, [runtime]);
 
