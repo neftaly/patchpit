@@ -69,7 +69,7 @@ type WindowManagerRuntime = {
   readonly dropTarget: DropTarget | undefined;
   readonly filePickers: Readonly<Record<string, RunningFilePicker>>;
   readonly filesystemRoot: FilesystemNode;
-  readonly liveDocuments: Readonly<Record<string, string>>;
+  readonly liveDocuments: Readonly<Record<string, unknown>>;
   readonly setDraggedTab: (tab: DraggedTab | undefined) => void;
   readonly setDropTarget: (target: DropTarget | undefined) => void;
   readonly surfaces: Readonly<Record<string, WindowSurface>>;
@@ -91,7 +91,7 @@ export function WindowManager({
   readonly actions: WindowManagerActions;
   readonly filePickers: Readonly<Record<string, RunningFilePicker>>;
   readonly filesystemRoot: FilesystemNode;
-  readonly liveDocuments: Readonly<Record<string, string>>;
+  readonly liveDocuments: Readonly<Record<string, unknown>>;
   readonly state: WindowManagerStateDoc;
   readonly terminals: Readonly<Record<string, RunningTerminal>>;
   readonly theme: ThemeDoc;

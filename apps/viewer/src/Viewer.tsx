@@ -6,7 +6,7 @@ export function Viewer({
   url,
 }: {
   readonly filesystemRoot: FilesystemNode;
-  readonly liveDocuments: Readonly<Record<string, string>>;
+  readonly liveDocuments: Readonly<Record<string, unknown>>;
   readonly url: string | undefined;
 }) {
   if (url === undefined) {
@@ -14,11 +14,11 @@ export function Viewer({
   }
 
   const node = findNode(filesystemRoot, url);
-  const liveText = liveDocuments[url];
+  const liveDocument = liveDocuments[url];
   return (
     <section className="surface-content" aria-label="window content">
-      {liveText !== undefined ? (
-        <pre className="file-preview">{liveText}</pre>
+      {liveDocument !== undefined ? (
+        <pre className="file-preview">{JSON.stringify(liveDocument, null, 2)}</pre>
       ) : node?.kind === 'folder' ? (
         <pre className="file-preview">{node.text}</pre>
       ) : node?.sourceUrl && node.mediaType.startsWith('image/') ? (

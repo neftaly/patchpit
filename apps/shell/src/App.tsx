@@ -46,13 +46,13 @@ export function App() {
     [appearance, darkTheme, lightTheme, prefersDark],
   );
   const liveDocuments = {
-    [seed.appearanceHandle.url]: JSON.stringify(appearance, null, 2),
-    [seed.darkThemeHandle.url]: JSON.stringify(darkTheme, null, 2),
-    [seed.fileTypesHandle.url]: JSON.stringify(fileTypes, null, 2),
-    [seed.filePickerStateHandle.url]: JSON.stringify(filePickerState, null, 2),
-    [seed.lightThemeHandle.url]: JSON.stringify(lightTheme, null, 2),
-    [seed.terminalStateHandle.url]: JSON.stringify(terminalState, null, 2),
-    [seed.windowManagerHandle.url]: JSON.stringify(windowManagerState, null, 2),
+    [seed.appearanceHandle.url]: appearance,
+    [seed.darkThemeHandle.url]: darkTheme,
+    [seed.fileTypesHandle.url]: fileTypes,
+    [seed.filePickerStateHandle.url]: filePickerState,
+    [seed.lightThemeHandle.url]: lightTheme,
+    [seed.terminalStateHandle.url]: terminalState,
+    [seed.windowManagerHandle.url]: windowManagerState,
   };
   const filesystem = useMemo(() => projectFilesystem(indexDoc, seed.rootUrl), [indexDoc, seed.rootUrl]);
   const windowManagerActions = {
