@@ -13,24 +13,24 @@ export function Viewer({
     return <section className="surface-content" aria-label="window content" />;
   }
 
-  const node = findNode(filesystemRoot, url);
+  const selectedNode = findNode(filesystemRoot, url);
   const liveDocument = liveDocuments[url];
   return (
     <section className="surface-content" aria-label="window content">
       {liveDocument !== undefined ? (
         <pre className="file-preview">{JSON.stringify(liveDocument, null, 2)}</pre>
-      ) : node?.kind === 'folder' ? (
-        <pre className="file-preview">{node.text}</pre>
-      ) : node?.sourceUrl && node.mediaType.startsWith('image/') ? (
+      ) : selectedNode?.kind === 'folder' ? (
+        <pre className="file-preview">{selectedNode.text}</pre>
+      ) : selectedNode?.sourceUrl && selectedNode.mediaType.startsWith('image/') ? (
         <div className="file-preview url-preview">
-          <img src={node.sourceUrl} alt={node.name} />
+          <img src={selectedNode.sourceUrl} alt={selectedNode.name} />
         </div>
-      ) : node?.sourceUrl ? (
+      ) : selectedNode?.sourceUrl ? (
         <div className="file-preview url-preview">
-          <a href={node.sourceUrl}>{node.sourceUrl}</a>
+          <a href={selectedNode.sourceUrl}>{selectedNode.sourceUrl}</a>
         </div>
       ) : (
-        <pre className="file-preview">{node?.text ?? ''}</pre>
+        <pre className="file-preview">{selectedNode?.text ?? ''}</pre>
       )}
     </section>
   );

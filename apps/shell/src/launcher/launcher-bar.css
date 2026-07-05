@@ -4,6 +4,7 @@
 
 .launcher-bar,
 .launcher-bar-items,
+.launcher-bar-system-buttons,
 .launcher-bar-button {
   display: flex;
   min-width: 0;
@@ -13,12 +14,14 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  gap: var(--tab-control-margin);
   border-top: var(--app-border) solid var(--color-border);
   padding: var(--tab-pad);
   background: var(--color-tabs);
 }
 
-.launcher-bar-items {
+.launcher-bar-items,
+.launcher-bar-system-buttons {
   justify-content: center;
   gap: var(--tab-control-margin);
 }
@@ -51,5 +54,9 @@
 }
 
 .launcher-bar-icon {
+  line-height: 1;
+}
+
+.launcher-bar-reset-icon {
   line-height: 1;
 }

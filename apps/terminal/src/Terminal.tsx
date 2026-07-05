@@ -1,5 +1,5 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XtermTerminal, type ITheme } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
@@ -43,7 +43,8 @@ export function Terminal({
   const stateRef = useRef(state);
   const runtimeRef = useRef(createTerminalRuntime(runtimeOptions, container, state));
   const runtimeKey = terminalRuntimeKey(container, state);
-  const xtermTheme = useMemo(() => terminalTheme(theme), [theme]);
+  const { terminalCursor, terminalSelection, terminalText } = theme.palette;
+  const { codeFont, codeSize, terminalLineHeight } = theme.typography;
 
   stateRef.current = state;
   if (runtimeRef.current.key !== runtimeKey) {
@@ -59,11 +60,11 @@ export function Terminal({
       allowTransparency: true,
       convertEol: true,
       cursorBlink: true,
-      fontFamily: theme.typography.codeFont,
-      fontSize: parseFloat(theme.typography.codeSize) * 16,
-      lineHeight: parseFloat(theme.typography.terminalLineHeight),
+      fontFamily: codeFont,
+      fontSize: parseFloat(codeSize) * 16,
+      lineHeight: parseFloat(terminalLineHeight),
       scrollback: 1000,
-      theme: xtermTheme,
+      theme: xtermThemeFromPalette({ terminalCursor, terminalSelection, terminalText }),
     });
     fitRef.current = fit;
     xtermRef.current = terminal;
@@ -75,26 +76,33 @@ export function Terminal({
       fit.fit();
     });
     observer.observe(host);
-    const input = terminal.onData((data) => {
-      void handleTerminalData(data, stateRef.current, stateHandle, runtimeRef.current, inputRef, terminal);
+    const inputSubscription = terminal.onData((inputChunk) => {
+      void handleTerminalInput(
+        inputChunk,
+        stateRef.current,
+        stateHandle,
+        runtimeRef.current,
+        inputRef,
+        terminal,
+      );
     });
 
     return () => {
       observer.disconnect();
-      input.dispose();
+      inputSubscription.dispose();
       terminal.dispose();
       fitRef.current = null;
       xtermRef.current = null;
     };
-  }, [stateHandle, theme.typography.codeFont, theme.typography.codeSize, theme.typography.terminalLineHeight, xtermTheme]);
+  }, [codeFont, codeSize, stateHandle, terminalCursor, terminalLineHeight, terminalSelection, terminalText]);
 
   useEffect(() => {
     const terminal = xtermRef.current;
     if (terminal === null) return;
-    terminal.options.theme = xtermTheme;
+    terminal.options.theme = xtermThemeFromPalette({ terminalCursor, terminalSelection, terminalText });
     fitRef.current?.fit();
     renderTerminal(terminal, state, inputRef.current);
-  }, [state, xtermTheme]);
+  }, [state, terminalCursor, terminalSelection, terminalText]);
 
   return (
     <section className="terminal surface-content" aria-label="terminal">
@@ -103,17 +111,17 @@ export function Terminal({
   );
 }
 
-async function handleTerminalData(
-  data: string,
+async function handleTerminalInput(
+  inputChunk: string,
   state: TerminalStateDoc,
   handle: DocHandle<TerminalStateDoc>,
   runtime: ReturnType<typeof createTerminalRuntime>,
-  input: { current: string },
+  pendingInput: { current: string },
   terminal: XtermTerminal,
 ): Promise<void> {
-  if (data === '\r') {
-    const command = input.current;
-    input.current = '';
+  if (inputChunk === '\r') {
+    const command = pendingInput.current;
+    pendingInput.current = '';
     terminal.write('\r\n');
     if (command.trim() === 'clear') {
       clearTerminal(handle);
@@ -124,41 +132,40 @@ async function handleTerminalData(
     return;
   }
 
-  if (data === '\u007F') {
-    if (input.current.length > 0) {
-      input.current = input.current.slice(0, -1);
+  if (inputChunk === '\u007F') {
+    if (pendingInput.current.length > 0) {
+      pendingInput.current = pendingInput.current.slice(0, -1);
       terminal.write('\b \b');
     }
     return;
   }
 
-  if (data === '\u000C') {
-    input.current = '';
+  if (inputChunk === '\u000C') {
+    pendingInput.current = '';
     clearTerminal(handle);
     return;
   }
 
-  if (data === '\u0003') {
-    input.current = '';
+  if (inputChunk === '\u0003') {
+    pendingInput.current = '';
     appendTerminalPrompt(handle);
     return;
   }
 
-  if (isTextInput(data)) {
-    input.current = `${input.current}${data}`;
-    terminal.write(data);
+  if (isPrintableInput(inputChunk)) {
+    pendingInput.current = `${pendingInput.current}${inputChunk}`;
+    terminal.write(inputChunk);
   }
 }
 
-function isTextInput(data: string): boolean {
-  if (data.startsWith('\u001B')) return false;
-  return Array.from(data).every((char) => {
+function isPrintableInput(inputChunk: string): boolean {
+  return !inputChunk.startsWith('\u001B') && Array.from(inputChunk).every((char) => {
     const code = char.codePointAt(0) ?? 0;
     return code > 0x1F && code !== 0x7F;
   });
 }
 
-function terminalText(state: TerminalStateDoc): string {
+function terminalHistoryText(state: TerminalStateDoc): string {
   return state.lines.map((line) => {
     const prompt = line.prompt === undefined ? '' : styledText(line.prompt, '1');
     const text = `${prompt}${line.text}`;
@@ -172,23 +179,23 @@ function renderTerminal(
   input: string,
 ): void {
   terminal.reset();
-  terminal.write(`${terminalText(state)}${styledPrompt(state.cwd)}${input}`);
+  terminal.write(`${terminalHistoryText(state)}${styledText(terminalPrompt(state.cwd), '1')}${input}`);
   terminal.refresh(0, terminal.rows - 1);
-}
-
-function styledPrompt(cwd: string): string {
-  return styledText(terminalPrompt(cwd), '1');
 }
 
 function styledText(text: string, sgr: string): string {
   return `\x1b[${sgr}m${text}\x1b[0m`;
 }
 
-function terminalTheme(theme: ThemeDoc): ITheme {
+function xtermThemeFromPalette({
+  terminalCursor,
+  terminalSelection,
+  terminalText,
+}: Pick<ThemeDoc['palette'], 'terminalCursor' | 'terminalSelection' | 'terminalText'>): ITheme {
   return {
     background: '#00000000',
-    cursor: theme.palette.terminalCursor,
-    foreground: theme.palette.terminalText,
-    selectionBackground: theme.palette.terminalSelection,
+    cursor: terminalCursor,
+    foreground: terminalText,
+    selectionBackground: terminalSelection,
   };
 }

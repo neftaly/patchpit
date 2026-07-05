@@ -1,13 +1,4 @@
 import type { DocHandle, Repo } from '@automerge/automerge-repo';
-import {
-  defineSchema,
-  opaqueField,
-  optional,
-  relation,
-  stringField,
-  write,
-  type JsonValue,
-} from '@tarstate/core';
 import type {
   BufferEncoding,
   CpOptions,
@@ -18,9 +9,16 @@ import type {
   RmOptions,
 } from 'just-bash/browser';
 import {
-  automergeMimeType,
-  isAutomergeFileName,
+  cloneFolderEntries,
+  cloneFolderEntry,
+  createPatchpitFileDoc,
+  createPatchpitFolderDoc,
+  filesystemIndexRowForResource,
+  folderEntry,
   PatchpitType,
+  removeFilesystemIndexRow,
+  replaceFolderEntries,
+  upsertFilesystemIndexRow,
   type FileDoc,
   type FilesystemIndexDoc,
   type FilesystemIndexRow,
@@ -36,56 +34,11 @@ export type PatchpitFsOptions = {
   readonly rootUrl: string;
 };
 
-type FileRow = {
-  content: string;
-  extension: string;
-  id: string;
-  mimeType: string;
-  name: string;
-};
-
-type FolderRow = {
-  docs: FolderEntry[];
-  id: string;
-};
-
-type WritableIndexRow = FilesystemIndexRow & { id: string };
 type WriteFileOption = Parameters<IFileSystem['writeFile']>[2];
 type EncodingOption = BufferEncoding | { encoding?: BufferEncoding | null };
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
-const fsSchema = defineSchema({
-  file: relation<FileRow>({
-    key: 'id',
-    fields: {
-      content: stringField(),
-      extension: stringField(),
-      id: stringField(),
-      mimeType: stringField(),
-      name: stringField(),
-    },
-  }),
-  folder: relation<FolderRow>({
-    key: 'id',
-    fields: {
-      docs: opaqueField<FolderEntry[]>(),
-      id: stringField(),
-    },
-  }),
-  index: relation<WritableIndexRow>({
-    key: 'id',
-    fields: {
-      content: optional(stringField()),
-      entries: optional(opaqueField<JsonValue>()),
-      id: stringField(),
-      mimeType: optional(stringField()),
-      title: optional(stringField()),
-      type: stringField(),
-      url: stringField(),
-    },
-  }),
-});
 
 export class PatchpitFs implements IFileSystem {
   readonly #documentHandles: Record<string, DocHandle<FilesystemResource>>;
@@ -125,7 +78,7 @@ export class PatchpitFs implements IFileSystem {
     const parent = this.#parentFolder(path, false);
     const name = basename(path);
     const handle = this.#createFile(name, text);
-    this.#setEntry(parent.handle, entry(name, PatchpitType.File, handle.url));
+    this.#setEntry(parent.handle, folderEntry(name, PatchpitType.File, handle.url));
   }
 
   async appendFile(
@@ -157,7 +110,7 @@ export class PatchpitFs implements IFileSystem {
   }
 
   async readdir(path: string): Promise<string[]> {
-    return [...this.#folder(path).doc().docs].map((item) => item.name).sort();
+    return [...this.#folder(path).doc().docs].map((folderEntry) => folderEntry.name).sort();
   }
 
   async rm(path: string, options?: RmOptions): Promise<void> {
@@ -172,7 +125,10 @@ export class PatchpitFs implements IFileSystem {
     }
 
     const parent = this.#parentFolder(path, false);
-    this.#updateFolder(parent.handle, parent.handle.doc().docs.filter((item) => item.name !== basename(path)));
+    this.#updateFolder(
+      parent.handle,
+      cloneFolderEntries(parent.handle.doc().docs).filter((folderEntry) => folderEntry.name !== basename(path)),
+    );
     this.#dropIndex(found.entry.url);
   }
 
@@ -249,7 +205,7 @@ export class PatchpitFs implements IFileSystem {
     const normalized = normalize(path);
     if (normalized === '/') {
       return {
-        entry: entry('/', PatchpitType.Folder, this.#rootUrl),
+        entry: folderEntry('/', PatchpitType.Folder, this.#rootUrl),
         handle: this.#rootFolder(),
         kind: PatchpitType.Folder,
       };
@@ -259,8 +215,9 @@ export class PatchpitFs implements IFileSystem {
     const parts = segments(normalized);
     for (let index = 0; index < parts.length; index += 1) {
       const name = parts[index];
-      const entry = folder.doc().docs.find((item) => item.name === name);
-      if (entry === undefined) return undefined;
+      const currentEntry = folder.doc().docs.find((folderEntry) => folderEntry.name === name);
+      if (currentEntry === undefined) return undefined;
+      const entry = cloneFolderEntry(currentEntry);
       const last = index === parts.length - 1;
       if (entry.type === PatchpitType.Folder) {
         const handle = this.#folderHandle(entry.url);
@@ -292,68 +249,41 @@ export class PatchpitFs implements IFileSystem {
     const parent = this.#parentFolder(normalized, recursive);
     const name = basename(normalized);
     const handle = this.#createFolder(name);
-    this.#setEntry(parent.handle, entry(name, PatchpitType.Folder, handle.url));
+    this.#setEntry(parent.handle, folderEntry(name, PatchpitType.Folder, handle.url));
   }
 
-  #setEntry(handle: DocHandle<FolderDoc>, next: FolderEntry): void {
+  #setEntry(handle: DocHandle<FolderDoc>, nextEntry: FolderEntry): void {
     this.#updateFolder(handle, [
-      ...handle.doc().docs.filter((item) => item.name !== next.name),
-      next,
+      ...cloneFolderEntries(handle.doc().docs).filter((folderEntry) => folderEntry.name !== nextEntry.name),
+      cloneFolderEntry(nextEntry),
     ]);
   }
 
-  #updateFolder(handle: DocHandle<FolderDoc>, docs: FolderEntry[]): void {
-    const changes = write(fsSchema.folder)
-      .updateByKey(handle.url, { docs, id: handle.url })
-      .changes as FolderRow;
+  #updateFolder(handle: DocHandle<FolderDoc>, entries: readonly FolderEntry[]): void {
     handle.change((doc) => {
-      doc.docs = [...changes.docs];
+      replaceFolderEntries(doc.docs, entries);
     });
-    this.#upsertIndex(handle.url, folderRow(handle.url, handle.doc()));
+    this.#upsertIndex(filesystemIndexRowForResource(handle.url, handle.doc()));
   }
 
   #updateFile(handle: DocHandle<FileDoc>, content: string): void {
-    const current = handle.doc();
-    const changes = write(fsSchema.file)
-      .updateByKey(handle.url, {
-        content,
-        extension: current.extension,
-        id: handle.url,
-        mimeType: current.mimeType,
-        name: current.name,
-      })
-      .changes as FileRow;
     handle.change((doc) => {
-      doc.content = changes.content;
-      doc.extension = changes.extension;
-      doc.mimeType = changes.mimeType;
-      doc.name = changes.name;
+      doc.content = content;
     });
-    this.#upsertIndex(handle.url, fileRow(handle.url, handle.doc()));
+    this.#upsertIndex(filesystemIndexRowForResource(handle.url, handle.doc()));
   }
 
   #createFile(name: string, content: string): DocHandle<FileDoc> {
-    const handle = this.#repo.create<FileDoc>({
-      '@patchpit': { type: PatchpitType.File },
-      content,
-      extension: extensionFromName(name),
-      mimeType: mimeTypeFromName(name),
-      name,
-    });
+    const handle = this.#repo.create<FileDoc>(createPatchpitFileDoc(name, content));
     this.#documentHandles[handle.url] = handle as DocHandle<FilesystemResource>;
-    this.#upsertIndex(handle.url, fileRow(handle.url, handle.doc()));
+    this.#upsertIndex(filesystemIndexRowForResource(handle.url, handle.doc()));
     return handle;
   }
 
   #createFolder(name: string): DocHandle<FolderDoc> {
-    const handle = this.#repo.create<FolderDoc>({
-      '@patchpit': { type: PatchpitType.Folder },
-      docs: [],
-      name,
-      title: name,
-    });
+    const handle = this.#repo.create<FolderDoc>(createPatchpitFolderDoc(name));
     this.#documentHandles[handle.url] = handle as DocHandle<FilesystemResource>;
-    this.#upsertIndex(handle.url, folderRow(handle.url, handle.doc()));
+    this.#upsertIndex(filesystemIndexRowForResource(handle.url, handle.doc()));
     return handle;
   }
 
@@ -369,21 +299,15 @@ export class PatchpitFs implements IFileSystem {
     throw fsError('ENOENT', `missing folder document '${url}'`);
   }
 
-  #upsertIndex(url: string, row: FilesystemIndexRow): void {
-    const changes = write(fsSchema.index)
-      .updateByKey(url, { ...row, id: url })
-      .changes as WritableIndexRow;
+  #upsertIndex(row: FilesystemIndexRow): void {
     this.#indexHandle.change((doc) => {
-      const index = doc.filesystemIndex.documents.findIndex((item) => item.url === url);
-      const next = indexRow(changes);
-      if (index === -1) doc.filesystemIndex.documents.push(next);
-      else doc.filesystemIndex.documents[index] = next;
+      upsertFilesystemIndexRow(doc.filesystemIndex.documents, row);
     });
   }
 
   #dropIndex(url: string): void {
     this.#indexHandle.change((doc) => {
-      doc.filesystemIndex.documents = doc.filesystemIndex.documents.filter((row) => row.url !== url);
+      removeFilesystemIndexRow(doc.filesystemIndex.documents, url);
     });
     delete this.#documentHandles[url];
   }
@@ -391,10 +315,10 @@ export class PatchpitFs implements IFileSystem {
   #paths(path: string, folder: DocHandle<FolderDoc>): string[] {
     return [
       path,
-      ...folder.doc().docs.flatMap((item) => {
-        const childPath = join(path, item.name);
-        if (item.type !== PatchpitType.Folder) return [childPath];
-        return this.#paths(childPath, this.#folderHandle(item.url));
+      ...folder.doc().docs.flatMap((folderEntry) => {
+        const childPath = join(path, folderEntry.name);
+        if (folderEntry.type !== PatchpitType.Folder) return [childPath];
+        return this.#paths(childPath, this.#folderHandle(folderEntry.url));
       }),
     ];
   }
@@ -412,10 +336,6 @@ type LookupResult =
       kind: PatchpitType.File;
     };
 
-function entry(name: string, type: PatchpitType | string, url: string): FolderEntry {
-  return { name, type, url };
-}
-
 function stat(isDirectory: boolean, size: number): FsStat {
   return {
     isDirectory,
@@ -424,36 +344,6 @@ function stat(isDirectory: boolean, size: number): FsStat {
     mode: isDirectory ? 0o755 : 0o644,
     mtime: new Date(),
     size,
-  };
-}
-
-function fileRow(url: string, doc: FileDoc): FilesystemIndexRow {
-  return {
-    content: doc.content,
-    mimeType: doc.mimeType,
-    type: doc['@patchpit'].type,
-    url,
-  };
-}
-
-function folderRow(url: string, doc: FolderDoc): FilesystemIndexRow {
-  return {
-    content: JSON.stringify(doc, null, 2),
-    entries: doc.docs,
-    title: doc.title,
-    type: doc['@patchpit'].type,
-    url,
-  };
-}
-
-function indexRow(row: WritableIndexRow): FilesystemIndexRow {
-  return {
-    ...(row.content === undefined ? {} : { content: row.content }),
-    ...(row.entries === undefined ? {} : { entries: row.entries }),
-    ...(row.mimeType === undefined ? {} : { mimeType: row.mimeType }),
-    ...(row.title === undefined ? {} : { title: row.title }),
-    type: row.type,
-    url: row.url,
   };
 }
 
@@ -495,20 +385,6 @@ function basename(path: string): string {
 
 function join(parent: string, child: string): string {
   return normalize(parent === '/' ? `/${child}` : `${parent}/${child}`);
-}
-
-function extensionFromName(name: string): string {
-  const index = name.lastIndexOf('.');
-  return index === -1 ? '' : name.slice(index + 1);
-}
-
-function mimeTypeFromName(name: string): string {
-  if (isAutomergeFileName(name)) return automergeMimeType;
-  if (name.endsWith('.json')) return 'application/json';
-  if (name.endsWith('.md')) return 'text/markdown';
-  if (name.endsWith('.svg')) return 'image/svg+xml';
-  if (name.endsWith('.txt')) return 'text/plain';
-  return 'application/octet-stream';
 }
 
 function fsError(code: string, message: string): Error & { code: string } {

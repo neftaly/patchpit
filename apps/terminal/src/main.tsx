@@ -1,6 +1,5 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import { StrictMode } from 'react';
-import { useMemo, useSyncExternalStore } from 'react';
+import { StrictMode, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   createSeedFilesystem,
@@ -12,7 +11,7 @@ import '@patchpit/system/theme.css';
 import { Terminal } from './index';
 
 function App() {
-  const seed = useMemo(createSeedFilesystem, []);
+  const [seed] = useState(createSeedFilesystem);
   const appearance = useAutomergeDoc(seed.appearanceHandle);
   const darkTheme = useAutomergeDoc(seed.darkThemeHandle);
   const lightTheme = useAutomergeDoc(seed.lightThemeHandle);

@@ -1,13 +1,5 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import {
-  defineSchema,
-  opaqueField,
-  optional,
-  relation,
-  stringField,
-  write,
-} from '@tarstate/core';
-import { defaultFolderOpen, type FilePickerStateDoc } from '@patchpit/system';
+import type { FilePickerStateDoc } from '@patchpit/system';
 
 export type FileSelectionOptions = {
   readonly range?: readonly string[];
@@ -22,72 +14,95 @@ type FilePickerStateRow = {
 };
 
 const stateId = 'file-picker';
-const filePickerSchema = defineSchema({
-  state: relation<FilePickerStateRow>({
-    key: 'id',
-    fields: {
-      activeUrl: optional(stringField()),
-      id: stringField(),
-      openFolders: opaqueField<Record<string, boolean>>(),
-      selectedUrls: opaqueField<string[]>(),
-    },
-  }),
-});
 
 export function selectFilePickerUrl(
   handle: DocHandle<FilePickerStateDoc>,
   url: string,
   options?: FileSelectionOptions,
 ): void {
-  commitFilePickerState(handle, (doc) => {
-    const anchor = doc.activeUrl;
-    doc.activeUrl = url;
-    if (options?.range !== undefined && anchor !== undefined) {
-      const start = options.range.indexOf(anchor);
-      const end = options.range.indexOf(url);
-      doc.selectedUrls = start === -1 || end === -1
-        ? [url]
-        : options.range.slice(Math.min(start, end), Math.max(start, end) + 1);
-    } else if (options?.toggle) {
-      doc.selectedUrls = doc.selectedUrls.includes(url)
-        ? doc.selectedUrls.filter((item) => item !== url)
-        : [...doc.selectedUrls, url];
-    } else {
-      doc.selectedUrls = [url];
-    }
-  });
+  commitFilePickerState(handle, (state) => selectedFilePickerState(state, url, options));
 }
 
 export function toggleFilePickerFolder(
   handle: DocHandle<FilePickerStateDoc>,
   url: string,
 ): void {
-  commitFilePickerState(handle, (doc) => {
-    doc.openFolders[url] = !(doc.openFolders[url] ?? defaultFolderOpen);
-  });
+  commitFilePickerState(handle, (state) => toggledFilePickerFolderState(state, url));
 }
 
 function commitFilePickerState(
   handle: DocHandle<FilePickerStateDoc>,
-  update: (doc: FilePickerStateDoc) => void,
+  update: (doc: FilePickerStateDoc) => FilePickerStateDoc,
 ): void {
-  const next = cloneFilePickerState(handle.doc());
-  update(next);
-  const changes = write(filePickerSchema.state)
-    .updateByKey(stateId, {
-      ...(next.activeUrl === undefined ? {} : { activeUrl: next.activeUrl }),
-      id: stateId,
-      openFolders: { ...next.openFolders },
-      selectedUrls: [...next.selectedUrls],
-    })
-    .changes as Partial<FilePickerStateRow>;
+  const changes = filePickerStateRow(update(handle.doc()));
 
   handle.change((doc) => {
     if (changes.activeUrl === undefined) delete doc.activeUrl;
     else doc.activeUrl = changes.activeUrl;
-    if (changes.openFolders !== undefined) doc.openFolders = { ...changes.openFolders };
-    if (changes.selectedUrls !== undefined) doc.selectedUrls = [...changes.selectedUrls];
+    doc.openFolders = { ...changes.openFolders };
+    doc.selectedUrls = [...changes.selectedUrls];
   });
+}
+
+function selectedFilePickerState(
+  state: FilePickerStateDoc,
+  url: string,
+  options?: FileSelectionOptions,
+): FilePickerStateDoc {
+  const selectionAnchorUrl = state.activeUrl;
+  return {
+    ...cloneFilePickerState(state),
+    activeUrl: url,
+    selectedUrls: selectedFilePickerUrls(state.selectedUrls, url, selectionAnchorUrl, options),
+  };
+}
+
+function selectedFilePickerUrls(
+  selectedUrls: readonly string[],
+  url: string,
+  selectionAnchorUrl: string | undefined,
+  options?: FileSelectionOptions,
+): string[] {
+  if (options?.range !== undefined && selectionAnchorUrl !== undefined) {
+    const anchorIndex = options.range.indexOf(selectionAnchorUrl);
+    const selectedIndex = options.range.indexOf(url);
+    return anchorIndex === -1 || selectedIndex === -1
+      ? [url]
+      : options.range.slice(Math.min(anchorIndex, selectedIndex), Math.max(anchorIndex, selectedIndex) + 1);
+  }
+  if (!options?.toggle) return [url];
+  return selectedUrls.includes(url)
+    ? selectedUrls.filter((selectedUrl) => selectedUrl !== url)
+    : [...selectedUrls, url];
+}
+
+function toggledFilePickerFolderState(
+  state: FilePickerStateDoc,
+  url: string,
+): FilePickerStateDoc {
+  return {
+    ...cloneFilePickerState(state),
+    openFolders: {
+      ...state.openFolders,
+      [url]: !(state.openFolders[url] ?? isDefaultFilePickerFolderOpen(state.rootUrl, url)),
+    },
+  };
+}
+
+export function isDefaultFilePickerFolderOpen(
+  rootUrl: string,
+  url: string,
+): boolean {
+  return url === rootUrl;
+}
+
+function filePickerStateRow(state: FilePickerStateDoc): FilePickerStateRow {
+  return {
+    ...(state.activeUrl === undefined ? {} : { activeUrl: state.activeUrl }),
+    id: stateId,
+    openFolders: { ...state.openFolders },
+    selectedUrls: [...state.selectedUrls],
+  };
 }
 
 function cloneFilePickerState(doc: FilePickerStateDoc): FilePickerStateDoc {

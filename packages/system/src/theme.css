@@ -103,6 +103,63 @@ button {
   white-space: pre-wrap;
 }
 
+.runtime-status-panel {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  padding: calc(var(--detail-pad) * 2);
+  overflow: auto;
+  background: var(--color-surface);
+}
+
+.runtime-status-content {
+  width: min(100%, 34rem);
+  border: var(--app-border) solid var(--color-border);
+  padding: calc(var(--detail-pad) * 1.5);
+  background: var(--color-bg);
+}
+
+.runtime-status-content h1 {
+  margin: 0 0 calc(var(--detail-pad) * 0.75);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.runtime-status-content p,
+.runtime-issue-banner span {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.runtime-status-content details,
+.runtime-issue-banner details {
+  margin-top: var(--detail-pad);
+  color: var(--color-muted);
+  font-family: var(--font-code);
+  font-size: var(--font-code-size);
+  line-height: var(--line-code);
+}
+
+.runtime-status-content ul,
+.runtime-issue-banner ul {
+  margin: calc(var(--detail-pad) * 0.5) 0 0;
+  padding-inline-start: 1.25rem;
+}
+
+.runtime-issue-banner {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: var(--detail-pad);
+  border-bottom: var(--app-border) solid var(--color-border);
+  padding: var(--detail-pad);
+  background: var(--color-bg);
+  font-size: var(--font-code-size);
+}
+
 .surface-content,
 .url-preview {
   display: flex;

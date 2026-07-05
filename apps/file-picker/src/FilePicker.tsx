@@ -1,6 +1,6 @@
 import type { CSSProperties, DragEvent, MouseEvent } from 'react';
-import { defaultFolderOpen, type FilePickerStateDoc, type FilesystemNode } from '@patchpit/system';
-import type { FileSelectionOptions } from './file-picker-state';
+import type { FilePickerStateDoc, FilesystemNode } from '@patchpit/system';
+import { isDefaultFilePickerFolderOpen, type FileSelectionOptions } from './file-picker-state';
 import { fileIcon, folderIcon, type FileIcons } from './file-icons';
 import './file-picker.css';
 
@@ -29,7 +29,7 @@ export function FilePicker({
   readonly root: FilesystemNode;
   readonly state: FilePickerStateDoc;
 }) {
-  const visibleUrls = listVisibleUrls(root, state.openFolders);
+  const visibleUrls = listVisibleUrls(root, state.openFolders, state.rootUrl);
   return (
     <nav className="tree-pane" aria-label="project explorer">
       <ul className="tree" role="tree" aria-label="project files">
@@ -61,11 +61,11 @@ function TreeItem({
   readonly state: FilePickerStateDoc;
   readonly visibleUrls: readonly string[];
 }) {
-  const isOpen = node.kind === 'folder' ? isFolderOpen(state.openFolders, node.url) : false;
+  const isOpen = node.kind === 'folder' ? isFolderOpen(state.openFolders, node.url, state.rootUrl) : false;
   const isSelected = state.selectedUrls.includes(node.url);
   const isActive = state.activeUrl === node.url;
   const icon = node.kind === 'folder' ? folderIcon(isOpen) : fileIcon(icons, node.mediaType);
-  const title = node.name || '/';
+  const displayName = node.name || '/';
 
   return (
     <li
@@ -79,23 +79,23 @@ function TreeItem({
         className="tree-item"
         draggable
         onClick={(event) => {
-          selectFromPointer(event, node.url, visibleUrls, actions.selectUrl);
+          selectUrlFromPointer(event, node.url, visibleUrls, actions.selectUrl);
           if (!event.metaKey && !event.ctrlKey && !event.shiftKey) {
-            actions.previewUrl(node.url, title);
+            actions.previewUrl(node.url, displayName);
             if (node.kind === 'folder') actions.toggleFolder(node.url);
           }
         }}
         onDoubleClick={() => {
-          actions.openUrl(node.url, title);
+          actions.openUrl(node.url, displayName);
         }}
         onDragStart={(event) => {
-          dragUrl(event, { title, url: node.url });
+          beginFileDrag(event, { title: displayName, url: node.url });
         }}
         style={depthStyle(depth)}
         type="button"
       >
         {icon && <span className="emoji-icon tree-icon" aria-hidden="true">{icon}</span>}
-        <span className="tree-name">{title}</span>
+        <span className="tree-name">{displayName}</span>
       </button>
       {node.kind === 'folder' && isOpen && (
         <ul role="group" style={depthStyle(depth + 1)}>
@@ -116,27 +116,29 @@ function TreeItem({
   );
 }
 
-function dragUrl(event: DragEvent, payload: DraggedFilePickerUrl): void {
+function beginFileDrag(event: DragEvent, draggedFile: DraggedFilePickerUrl): void {
   event.dataTransfer.effectAllowed = 'copyMove';
-  event.dataTransfer.setData(filePickerDragType, JSON.stringify(payload));
+  event.dataTransfer.setData(filePickerDragType, JSON.stringify(draggedFile));
 }
 
 function listVisibleUrls(
   node: FilesystemNode,
   openFolders: Readonly<Record<string, boolean>>,
+  rootUrl: string,
 ): readonly string[] {
-  if (node.kind === 'file' || !isFolderOpen(openFolders, node.url)) return [node.url];
-  return [node.url, ...node.entries.flatMap((entry) => listVisibleUrls(entry, openFolders))];
+  if (node.kind === 'file' || !isFolderOpen(openFolders, node.url, rootUrl)) return [node.url];
+  return [node.url, ...node.entries.flatMap((entry) => listVisibleUrls(entry, openFolders, rootUrl))];
 }
 
 function isFolderOpen(
   openFolders: Readonly<Record<string, boolean>>,
   url: string,
+  rootUrl: string,
 ): boolean {
-  return openFolders[url] ?? defaultFolderOpen;
+  return openFolders[url] ?? isDefaultFilePickerFolderOpen(rootUrl, url);
 }
 
-function selectFromPointer(
+function selectUrlFromPointer(
   event: MouseEvent,
   url: string,
   visibleUrls: readonly string[],

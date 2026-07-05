@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -33,6 +34,7 @@ import {
 } from '@patchpit/system';
 import type { DocHandle } from '@automerge/automerge-repo';
 import type { TerminalRuntimeOptions } from '@patchpit/terminal';
+import { StateBrowser, type StateBrowserSnapshot } from '../state-browser/StateBrowser';
 import {
   type ContentDropZone,
   type ContextDropTarget,
@@ -47,7 +49,7 @@ type WindowManagerActions = {
   readonly dropUrl: (url: string, title: string, target: ContextDropTarget) => void;
   readonly focusContext: (surfaceId: string, contextId: string) => void;
   readonly pinContext: (surfaceId: string, contextId: string) => void;
-  readonly resizeSplit: (path: SplitPath, ratio: number) => void;
+  readonly resizeSplit: (path: SplitPath, ratio: number) => Promise<boolean>;
 };
 
 type RunningFilePicker = {
@@ -72,12 +74,24 @@ type WindowManagerRuntime = {
   readonly liveDocuments: Readonly<Record<string, unknown>>;
   readonly setDraggedTab: (tab: DraggedTab | undefined) => void;
   readonly setDropTarget: (target: DropTarget | undefined) => void;
+  readonly stateBrowser: StateBrowserSnapshot;
   readonly surfaces: Readonly<Record<string, WindowSurface>>;
   readonly terminals: Readonly<Record<string, RunningTerminal>>;
   readonly theme: ThemeDoc;
 };
 
 type DropTarget = ContextDropTarget;
+type ActiveSplitResize = {
+  readonly baseRatio: number;
+  readonly pointerId: number;
+  ratio: number;
+};
+type SplitResizeDraft = {
+  readonly commitId?: number;
+  readonly phase: 'dragging' | 'pending';
+  readonly baseRatio: number;
+  readonly ratio: number;
+};
 
 export function WindowManager({
   actions,
@@ -85,6 +99,7 @@ export function WindowManager({
   filesystemRoot,
   liveDocuments,
   state,
+  stateBrowser,
   terminals,
   theme,
 }: {
@@ -93,6 +108,7 @@ export function WindowManager({
   readonly filesystemRoot: FilesystemNode;
   readonly liveDocuments: Readonly<Record<string, unknown>>;
   readonly state: WindowManagerStateDoc;
+  readonly stateBrowser: StateBrowserSnapshot;
   readonly terminals: Readonly<Record<string, RunningTerminal>>;
   readonly theme: ThemeDoc;
 }) {
@@ -111,6 +127,7 @@ export function WindowManager({
     liveDocuments,
     setDraggedTab,
     setDropTarget,
+    stateBrowser,
     surfaces: state.surfaces,
     terminals,
     theme,
@@ -156,6 +173,87 @@ function SplitView({
   readonly style?: CSSProperties | undefined;
 }) {
   const splitRef = useRef<HTMLDivElement>(null);
+  const activeResize = useRef<ActiveSplitResize | undefined>(undefined);
+  const nextResizeCommitId = useRef(0);
+  const [resizeDraft, setResizeDraft] = useState<SplitResizeDraft>();
+  const ratio = resizeDraft?.ratio ?? node.ratio;
+
+  useEffect(() => {
+    setResizeDraft((draft) => {
+      if (draft === undefined || draft.phase === 'dragging') return draft;
+      if (sameRatio(node.ratio, draft.ratio) || !sameRatio(node.ratio, draft.baseRatio)) return undefined;
+      return draft;
+    });
+  }, [node.ratio]);
+
+  useEffect(() => {
+    if (resizeDraft?.phase !== 'pending' || resizeDraft.commitId === undefined) return undefined;
+
+    const commitId = resizeDraft.commitId;
+    const timeout = window.setTimeout(() => {
+      setResizeDraft((draft) => (
+        draft?.phase === 'pending' && draft.commitId === commitId ? undefined : draft
+      ));
+    }, splitResizeConfirmationTimeoutMs);
+
+    return () => window.clearTimeout(timeout);
+  }, [resizeDraft]);
+
+  const beginResize = (event: PointerEvent<HTMLButtonElement>) => {
+    const draftRatio = resizeRatioFromPointer(event, splitRef.current, node.direction);
+    if (draftRatio === undefined) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    activeResize.current = {
+      baseRatio: node.ratio,
+      pointerId: event.pointerId,
+      ratio: draftRatio,
+    };
+    setResizeDraft({ phase: 'dragging', baseRatio: node.ratio, ratio: draftRatio });
+  };
+  const updateResize = (event: PointerEvent<HTMLButtonElement>) => {
+    const active = activeResize.current;
+    if (active?.pointerId !== event.pointerId || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+
+    const draftRatio = resizeRatioFromPointer(event, splitRef.current, node.direction);
+    if (draftRatio === undefined) return;
+
+    active.ratio = draftRatio;
+    setResizeDraft({ phase: 'dragging', baseRatio: active.baseRatio, ratio: draftRatio });
+  };
+  const finishResize = (event: PointerEvent<HTMLButtonElement>, usePointerPosition: boolean) => {
+    const active = activeResize.current;
+    if (active?.pointerId !== event.pointerId) return;
+
+    const finalRatio = usePointerPosition
+      ? resizeRatioFromPointer(event, splitRef.current, node.direction) ?? active.ratio
+      : active.ratio;
+    activeResize.current = undefined;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (sameRatio(finalRatio, node.ratio)) {
+      setResizeDraft(undefined);
+      return;
+    }
+
+    const commitId = nextResizeCommitId.current + 1;
+    nextResizeCommitId.current = commitId;
+    setResizeDraft({ commitId, phase: 'pending', baseRatio: active.baseRatio, ratio: finalRatio });
+    void runtime.actions.resizeSplit(path, finalRatio)
+      .then((committed) => {
+        if (committed) return;
+        setResizeDraft((draft) => (
+          draft?.phase === 'pending' && draft.commitId === commitId ? undefined : draft
+        ));
+      })
+      .catch(() => {
+        setResizeDraft((draft) => (
+          draft?.phase === 'pending' && draft.commitId === commitId ? undefined : draft
+        ));
+      });
+  };
 
   return (
     <div
@@ -167,27 +265,23 @@ function SplitView({
         node={node.first}
         path={[...path, 'first']}
         runtime={runtime}
-        style={splitChildStyle(node.ratio)}
+        style={splitChildStyle(ratio)}
       />
       <button
         aria-label="Resize surfaces"
         className="window-manager-resize-handle"
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId);
-          resizeFromPointer(event, splitRef.current, node.direction, path, runtime.actions.resizeSplit);
-        }}
-        onPointerMove={(event) => {
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            resizeFromPointer(event, splitRef.current, node.direction, path, runtime.actions.resizeSplit);
-          }
-        }}
+        onLostPointerCapture={(event) => finishResize(event, false)}
+        onPointerCancel={(event) => finishResize(event, false)}
+        onPointerDown={beginResize}
+        onPointerMove={updateResize}
+        onPointerUp={(event) => finishResize(event, true)}
         type="button"
       />
       <LayoutNodeView
         node={node.second}
         path={[...path, 'second']}
         runtime={runtime}
-        style={splitChildStyle(1 - node.ratio)}
+        style={splitChildStyle(1 - ratio)}
       />
     </div>
   );
@@ -382,6 +476,10 @@ function SurfaceContent({
         );
   }
 
+  if (context?.app === 'state-browser') {
+    return <StateBrowser snapshot={runtime.stateBrowser} />;
+  }
+
   return (
     <Viewer
       filesystemRoot={runtime.filesystemRoot}
@@ -424,17 +522,17 @@ function allowDrop(event: DragEvent): boolean {
 function dropDraggedItem(
   event: DragEvent,
   runtime: WindowManagerRuntime,
-  drop: (dragged: DraggedItem) => void,
+  handleDrop: (dragged: DraggedItem) => void,
   stopPropagation = false,
 ): void {
-  const dragged = draggedItem(event);
+  const dragged = draggedItemFromEvent(event);
   if (dragged === undefined) return;
 
   event.preventDefault();
   if (stopPropagation) event.stopPropagation();
   runtime.setDraggedTab(undefined);
   runtime.setDropTarget(undefined);
-  drop(dragged);
+  handleDrop(dragged);
 }
 
 type DraggedTab = { contextId: string; surfaceId: string };
@@ -450,19 +548,19 @@ function dropItem(runtime: WindowManagerRuntime, dragged: DraggedItem, target: C
   }
 }
 
-function draggedItem(event: DragEvent): DraggedItem | undefined {
-  const tab = dragData<DraggedTab>(event, tabDragType);
+function draggedItemFromEvent(event: DragEvent): DraggedItem | undefined {
+  const tab = dragDataFromEvent<DraggedTab>(event, tabDragType);
   if (tab !== undefined) return { kind: 'tab', ...tab };
 
-  const url = dragData<DraggedFilePickerUrl>(event, filePickerDragType);
+  const url = dragDataFromEvent<DraggedFilePickerUrl>(event, filePickerDragType);
   return url === undefined ? undefined : { kind: 'url', ...url };
 }
 
-function dragData<T>(event: DragEvent, type: string): T | undefined {
-  const value = event.dataTransfer.getData(type);
-  if (value === '') return undefined;
+function dragDataFromEvent<T>(event: DragEvent, type: string): T | undefined {
+  const serializedDragData = event.dataTransfer.getData(type);
+  if (serializedDragData === '') return undefined;
   try {
-    return JSON.parse(value) as T;
+    return JSON.parse(serializedDragData) as T;
   } catch {
     return undefined;
   }
@@ -490,17 +588,19 @@ function contentDropTarget(
 }
 
 function contentDropZone(event: DragEvent<HTMLElement>): ContentDropZone {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const x = (event.clientX - rect.left) / rect.width;
-  const y = (event.clientY - rect.top) / rect.height;
-  const edges: [ContentDropZone, number][] = [
-    ['left', x],
-    ['right', 1 - x],
-    ['top', y],
-    ['bottom', 1 - y],
+  const contentRect = event.currentTarget.getBoundingClientRect();
+  const horizontalPosition = (event.clientX - contentRect.left) / contentRect.width;
+  const verticalPosition = (event.clientY - contentRect.top) / contentRect.height;
+  const edgeDistances: [ContentDropZone, number][] = [
+    ['left', horizontalPosition],
+    ['right', 1 - horizontalPosition],
+    ['top', verticalPosition],
+    ['bottom', 1 - verticalPosition],
   ];
-  const edge = edges.reduce((best, item) => item[1] < best[1] ? item : best);
-  return edge[1] < edgeDropThreshold ? edge[0] : 'center';
+  const closestEdge = edgeDistances.reduce((best, edgeDistance) => (
+    edgeDistance[1] < best[1] ? edgeDistance : best
+  ));
+  return closestEdge[1] < edgeDropThreshold ? closestEdge[0] : 'center';
 }
 
 function tabDropPlacement(
@@ -518,8 +618,8 @@ function tabDropPlacement(
     }
   }
 
-  const rect = event.currentTarget.getBoundingClientRect();
-  return event.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+  const tabRect = event.currentTarget.getBoundingClientRect();
+  return event.clientX < tabRect.left + tabRect.width / 2 ? 'before' : 'after';
 }
 
 function sameDropTarget(left: DropTarget | undefined, right: DropTarget | undefined): boolean {
@@ -542,9 +642,23 @@ function splitChildStyle(size = 1): CSSProperties {
   return { flex: `${size} 1 0` };
 }
 
+const minSplitRatio = 0.05;
+const maxSplitRatio = 0.95;
+const splitResizeConfirmationTimeoutMs = 1_500;
+const splitRatioEpsilon = 0.0001;
+
+function clampedSplitRatio(ratio: number): number {
+  return Math.min(maxSplitRatio, Math.max(minSplitRatio, ratio));
+}
+
+function sameRatio(left: number, right: number): boolean {
+  return Math.abs(left - right) < splitRatioEpsilon;
+}
+
 function contextLabel(runtime: WindowManagerRuntime, contextId: string): string {
   const context = runtime.contexts[contextId];
   if (context === undefined) return contextId;
+  if (context.app === 'state-browser') return context.title ?? 'State Browser';
   if (context.app === 'terminal') {
     return terminalTitle(runtime.terminals[context.url]?.state.cwd);
   }
@@ -560,18 +674,16 @@ function currentDirectoryName(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? '/';
 }
 
-function resizeFromPointer(
+function resizeRatioFromPointer(
   event: PointerEvent,
   split: HTMLDivElement | null,
   direction: SplitDirection,
-  path: SplitPath,
-  resizeSplit: (path: SplitPath, ratio: number) => void,
-): void {
-  if (split === null) return;
+): number | undefined {
+  if (split === null) return undefined;
   event.preventDefault();
 
-  const rect = split.getBoundingClientRect();
-  const offset = direction === 'row' ? event.clientX - rect.left : event.clientY - rect.top;
-  const size = direction === 'row' ? rect.width : rect.height;
-  resizeSplit(path, offset / size);
+  const splitRect = split.getBoundingClientRect();
+  const pointerOffset = direction === 'row' ? event.clientX - splitRect.left : event.clientY - splitRect.top;
+  const splitSize = direction === 'row' ? splitRect.width : splitRect.height;
+  return splitSize <= 0 ? undefined : clampedSplitRatio(pointerOffset / splitSize);
 }

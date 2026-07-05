@@ -18,9 +18,10 @@ Patchpit currently seeds three durable roots and reserves one live-service root:
 - `/srv` is reserved for future live mountable services
 
 The bootloader creates the initial filesystem, app manifests, app instance state
-docs, and window-manager state doc. The target flow is that apps are opened
-through intents after boot. The current prototype still lets the file picker
-construct viewer contexts directly.
+docs, and window-manager state doc. Apps are opened through intents after boot:
+file picker open/preview and file drag/drop requests submit route intents, and
+the runtime commits the resulting viewer context effects to the window-manager
+doc.
 
 The window manager owns:
 
@@ -54,12 +55,21 @@ Within `/system`:
 
 - `/system/apps` contains running app instance state docs
 - `/system/config` contains shell configuration docs
+- `/system/runtime` contains inspectable runtime and worker state docs
 - `/system/themes` contains theme docs
 - `/system/window-manager.am` contains shared window-manager state
 
+Runtime docs are normal Automerge docs in the visible filesystem. The current
+slice seeds `/system/runtime/runtime-boot-gate.am` so users and developers can
+inspect the SharedWorker boot-gate handshake, current boot status, platform
+feature requirements, and the explicit note that the in-process bootstrap
+runtime still owns Automerge handles until that ownership moves into the worker.
+
 The linked Automerge docs are the real filesystem format. `FilesystemIndexDoc`
-is an internal projection/cache used by Tarstate and the prototype UI to read
-the linked tree efficiently. It should not become the interchange format.
+is an internal projection/cache used by Tarstate and the runtime to read the
+linked tree efficiently. Runtime clients consume `filesystem.tree` with
+`schemaId: patchpit.filesystem.tree@1` as a public `nodes` relation. The index
+doc should not become the interchange format.
 
 ## App Manifests
 
@@ -74,6 +84,7 @@ type AppManifest = {
   entry: string;
   scope?: string;
   icons?: Icon[];
+  schemas?: Record<string, PatchpitRelationSchemaDescriptor>;
   surfaces?: SurfaceSpec[];
   handles?: Handler[];
   permissions?: PermissionRequest[];
@@ -84,7 +95,7 @@ type SurfaceSpec = {
   forms?: SurfaceForm[];
   placementHint?: PlacementHint;
   reuseHint?: ReuseHint;
-  state?: { type: string; schema?: string };
+  state?: { type: string; schema?: PatchpitSchemaRef };
 };
 
 type Handler = {
@@ -97,6 +108,14 @@ type Handler = {
 `handles.accepts` matches MIME-like intent types. It uses the same pattern
 language as file icon rules: exact matches such as `text/markdown`, wildcards
 such as `image/*`, and a final fallback such as `*/*`.
+
+`SurfaceSpec.state` declares the app-owned persistent state document type that a
+managed `app.launch` may create or reuse. It does not give the app placement,
+focus, or tab authority. A context-less launch is admitted only when the runtime
+has a handler for the app, surface role, state type, and non-empty launch slot;
+the current slice implements that managed path for terminal state. Apps such as
+the file picker can still launch by providing an explicit context around an
+existing state doc.
 
 ## Intents
 
@@ -252,6 +271,13 @@ Tarstate schemas can expose:
 - references and anchored paths
 - ephemeral relations for local or presence-like state
 
+Portable schema descriptors are defined in
+[`schema-protocol.md`](schema-protocol.md). Durable Patchpit docs embed their
+primary schema ref and optional inline descriptors in `@patchpit`, while app
+manifests advertise schemas for state docs they create. The embedded schema is
+stable document metadata; normal Automerge changes should update state fields,
+not rewrite schema descriptors.
+
 For the window manager, the saved Automerge doc can stay hierarchical while
 Tarstate projects `surfaces`, `contexts`, `layoutNodes`, or `activeContexts` as
 needed.
@@ -262,11 +288,11 @@ The first useful implementation should stay small:
 
 1. App manifests live under `/apps`.
 2. File picker, viewer, and terminal each run as contexts.
-3. File picker state, terminal state, themes, and window-manager state live as
-   Automerge docs under `/system`.
+3. File picker state, terminal state, runtime state, themes, and window-manager
+   state live as Automerge docs under `/system`.
 4. The window-manager doc owns surfaces, tabs, focus, and split layout.
-5. A router should create contexts from intents; direct file-picker-to-viewer
-   context creation is a prototype shortcut.
+5. A router creates viewer contexts from route intents; file picker UI submits
+   open/preview intents instead of constructing viewer contexts directly.
 6. Tarstate provides projections and write lenses over the durable docs.
 7. `/srv` remains reserved for future live services, not persisted app state.
 

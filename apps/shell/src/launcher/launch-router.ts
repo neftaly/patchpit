@@ -2,17 +2,12 @@ import type { DocHandle } from '@automerge/automerge-repo';
 import {
   rootContainer,
   SurfaceRole,
-  terminalContainer,
   type FilePickerStateDoc,
-  type TerminalStateDoc,
+  type RuntimeStateDoc,
   type WindowContext,
-  type WindowManagerStateDoc,
 } from '@patchpit/system';
-import {
-  ContextLaunchBehavior,
-  commitWindowManagerState,
-  launchContext,
-} from '../window-manager/window-manager-state';
+import type { AppLaunchIntentInput } from '../runtime/launch-intents';
+import { ContextLaunchBehavior } from '../window-manager/window-manager-state';
 
 export type LauncherItem = {
   readonly active: boolean;
@@ -25,17 +20,17 @@ export type LauncherItem = {
 export function launcherItems({
   focusedAppId,
   filePickerStateHandle,
-  newTerminalStateHandle,
+  launchApp,
   rootUrl,
-  windowManagerHandle,
+  runtimeStateHandle,
 }: {
   readonly focusedAppId: string | undefined;
   readonly filePickerStateHandle: DocHandle<FilePickerStateDoc>;
-  readonly newTerminalStateHandle: () => DocHandle<TerminalStateDoc>;
+  readonly launchApp: (input: AppLaunchIntentInput) => void;
   readonly rootUrl: string;
-  readonly windowManagerHandle: DocHandle<WindowManagerStateDoc>;
+  readonly runtimeStateHandle: DocHandle<RuntimeStateDoc>;
 }): readonly LauncherItem[] {
-  const specs = [
+  const launcherSpecs = [
     {
       app: 'file-picker',
       behavior: ContextLaunchBehavior.ToggleSurface,
@@ -47,31 +42,54 @@ export function launcherItems({
     {
       app: 'terminal',
       behavior: ContextLaunchBehavior.OpenContext,
-      context: () => terminalContext(newTerminalStateHandle().url, rootUrl),
       emoji: '💬',
       label: 'Terminal',
       role: SurfaceRole.DocumentSet,
     },
+    {
+      app: 'state-browser',
+      behavior: ContextLaunchBehavior.OpenContext,
+      context: () => stateBrowserContext(runtimeStateHandle.url, rootUrl),
+      emoji: '🧭',
+      label: 'State Browser',
+      role: SurfaceRole.DocumentSet,
+    },
   ] satisfies readonly LauncherSpec[];
 
-  return specs.map((spec) => ({
-    active: focusedAppId === spec.app,
-    app: spec.app,
-    emoji: spec.emoji,
-    label: spec.label,
+  return launcherSpecs.map((launcherSpec) => ({
+    active: focusedAppId === launcherSpec.app,
+    app: launcherSpec.app,
+    emoji: launcherSpec.emoji,
+    label: launcherSpec.label,
     launch: () => {
-      const context = spec.context();
-      commitWindowManagerState(windowManagerHandle, (doc) => {
-        launchContext(doc, { behavior: spec.behavior, context, role: spec.role });
+      if (launcherSpec.context === undefined) {
+        launchApp({ app: launcherSpec.app, behavior: launcherSpec.behavior, role: launcherSpec.role });
+        return;
+      }
+      launchApp({
+        app: launcherSpec.app,
+        behavior: launcherSpec.behavior,
+        context: launcherSpec.context(),
+        role: launcherSpec.role,
       });
     },
   }));
 }
 
-type LauncherSpec = {
+type LauncherSpec = ContextLauncherSpec | ManagedLauncherSpec;
+
+type ContextLauncherSpec = LauncherSpecBase & {
   readonly app: string;
-  readonly behavior: ContextLaunchBehavior;
   readonly context: () => WindowContext;
+};
+
+type ManagedLauncherSpec = LauncherSpecBase & {
+  readonly app: 'terminal';
+  readonly context?: undefined;
+};
+
+type LauncherSpecBase = {
+  readonly behavior: ContextLaunchBehavior;
   readonly emoji: string;
   readonly label: string;
   readonly role: SurfaceRole;
@@ -87,11 +105,12 @@ function filePickerContext(url: string, rootUrl: string): WindowContext {
   };
 }
 
-function terminalContext(url: string, rootUrl: string): WindowContext {
+function stateBrowserContext(url: string, rootUrl: string): WindowContext {
   return {
-    app: 'terminal',
-    container: terminalContainer(rootUrl),
-    id: `terminal:${url}`,
+    app: 'state-browser',
+    container: rootContainer(rootUrl),
+    id: 'state-browser',
+    title: 'State Browser',
     url,
   };
 }

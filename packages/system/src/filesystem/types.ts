@@ -1,5 +1,10 @@
 import type { DocHandle, Repo } from '@automerge/automerge-repo';
 import type { JsonValue } from '@tarstate/core';
+import type {
+  PatchpitRelationSchemaDescriptor,
+  PatchpitSchemaId,
+  PatchpitSchemaRef,
+} from '../schema';
 import type { AutomergeMoveRoot } from '../shared/automerge-moves';
 
 export enum PatchpitType {
@@ -8,7 +13,9 @@ export enum PatchpitType {
   File = 'file',
   FilePickerState = 'file-picker-state',
   FileTypes = 'file-types',
+  FilesystemIndex = 'filesystem-index',
   Folder = 'folder',
+  RuntimeState = 'runtime-state',
   TerminalState = 'terminal-state',
   Theme = 'theme',
   WindowManagerState = 'window-manager-state',
@@ -59,11 +66,15 @@ export type FolderEntry = {
   url: string;
 };
 
+export type PatchpitDocMetadata<T extends string> = {
+  schema?: PatchpitSchemaRef;
+  schemas?: Readonly<Record<PatchpitSchemaId, PatchpitRelationSchemaDescriptor>>;
+  suggestedImportUrl?: string;
+  type: T;
+};
+
 export type PatchpitDoc<T extends string> = AutomergeMoveRoot & {
-  '@patchpit': {
-    suggestedImportUrl?: string;
-    type: T;
-  };
+  '@patchpit': PatchpitDocMetadata<T>;
 };
 
 export type FolderDoc = PatchpitDoc<PatchpitType.Folder> & {
@@ -88,6 +99,7 @@ export type AppManifestDoc = PatchpitDoc<PatchpitType.AppManifest> & {
   handles?: AppManifestHandler[];
   icons?: AppManifestIcon[];
   mimeType: string;
+  schemas?: Readonly<Record<PatchpitSchemaId, PatchpitRelationSchemaDescriptor>>;
   surfaces?: SurfaceSpec[];
 };
 
@@ -103,10 +115,10 @@ export type AppManifestIcon = {
 
 export type SurfaceSpec = {
   role: SurfaceRole;
-  state?: { type: string; schema?: string };
+  state?: { type: string; schema?: PatchpitSchemaRef };
 };
 
-export type FilesystemIndexDoc = AutomergeMoveRoot & {
+export type FilesystemIndexDoc = PatchpitDoc<PatchpitType.FilesystemIndex> & {
   filesystemIndex: {
     rootUrl: string;
     documents: FilesystemIndexRow[];
@@ -224,6 +236,59 @@ export type TerminalLine = {
   prompt?: string;
 };
 
+export type RuntimeStateDoc = PatchpitDoc<PatchpitType.RuntimeState> & {
+  name: string;
+  extension: string;
+  mimeType: string;
+  title: string;
+  protocol: RuntimeStateProtocol;
+  boot: RuntimeStateBoot;
+  features: RuntimeStateFeatures;
+  ownership: RuntimeStateOwnership;
+  workers: RuntimeComponentState[];
+};
+
+export type RuntimeStateProtocol = {
+  id: string;
+  buildId: string;
+};
+
+export type RuntimeStateBoot = {
+  status: 'waiting-for-boot-gate-helloAck' | 'ready';
+  clientId?: string;
+  runtimeInstanceId?: string;
+  workspaceId?: string;
+};
+
+export type RuntimeStateFeatures = {
+  requiredCurrentBoot: RuntimeFeatureRequirement[];
+  plannedRuntime: RuntimeFeatureRequirement[];
+};
+
+export type RuntimeFeatureRequirement = {
+  name: string;
+  available?: boolean;
+  note?: string;
+};
+
+export type RuntimeStateOwnership = {
+  canonicalState: 'automerge';
+  currentAutomergeHandleOwner: string;
+  note: string;
+};
+
+export type RuntimeComponentState = {
+  id: string;
+  kind: 'shared-worker-boot-gate' | 'in-process-bootstrap-runtime';
+  status: 'waiting-for-boot-gate-helloAck' | 'ready' | 'active';
+  buildId?: string;
+  clientId?: string;
+  runtimeInstanceId?: string;
+  workspaceId?: string;
+  ownsAutomergeHandles: boolean;
+  note: string;
+};
+
 export type AppContainer = {
   mounts: ContainerMount[];
 };
@@ -291,6 +356,7 @@ export type FilesystemResource =
   | FileTypesDoc
   | FileDoc
   | FolderDoc
+  | RuntimeStateDoc
   | TerminalStateDoc
   | ThemeDoc
   | WindowManagerStateDoc;
@@ -306,7 +372,9 @@ export type SeedFilesystem = {
   indexHandle: DocHandle<FilesystemIndexDoc>;
   lightThemeHandle: DocHandle<ThemeDoc>;
   systemAppsHandle: DocHandle<FolderDoc>;
+  systemRuntimeHandle: DocHandle<FolderDoc>;
   terminalStateHandle: DocHandle<TerminalStateDoc>;
+  runtimeStateHandle: DocHandle<RuntimeStateDoc>;
   windowManagerHandle: DocHandle<WindowManagerStateDoc>;
   documentHandles: Record<string, DocHandle<FilesystemResource>>;
 };

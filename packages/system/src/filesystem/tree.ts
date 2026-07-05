@@ -3,6 +3,7 @@ import type {
   FolderEntry,
 } from './types';
 import { PatchpitType } from './types';
+import { mimeTypeFromFileName } from './resources';
 
 export type FilesystemNode =
   | {
@@ -23,9 +24,12 @@ export type FilesystemNode =
 
 export function buildFilesystem(
   rootUrl: string,
-  rows: readonly FilesystemIndexRow[],
+  indexRows: readonly FilesystemIndexRow[],
 ): FilesystemNode {
-  return buildLinkedNode({ name: '/', type: PatchpitType.Folder, url: rootUrl }, rowsByUrl(rows));
+  return filesystemNodeFromEntry(
+    { name: '/', type: PatchpitType.Folder, url: rootUrl },
+    mapIndexRowsByUrl(indexRows),
+  );
 }
 
 export function findNode(node: FilesystemNode, url: string): FilesystemNode | null {
@@ -48,45 +52,45 @@ export function nodePath(node: FilesystemNode, url: string, path = '/'): string 
   return undefined;
 }
 
-function buildLinkedNode(
+function filesystemNodeFromEntry(
   entry: FolderEntry,
-  rows: ReadonlyMap<string, FilesystemIndexRow>,
+  indexRowsByUrl: ReadonlyMap<string, FilesystemIndexRow>,
 ): FilesystemNode {
   if (entry.type !== PatchpitType.Folder) {
-    return fileNode(entry, rows.get(entry.url));
+    return fileNodeFromEntry(entry, indexRowsByUrl.get(entry.url));
   }
 
-  const row = rows.get(entry.url);
-  if (row === undefined) {
+  const indexRow = indexRowsByUrl.get(entry.url);
+  if (indexRow === undefined) {
     throw new Error(`Missing folder document for ${entry.url}`);
   }
 
   return {
-    entries: folderEntries(row.entries)
-      .map((child) => buildLinkedNode(child, rows)),
+    entries: folderEntriesFromIndexField(indexRow.entries)
+      .map((childEntry) => filesystemNodeFromEntry(childEntry, indexRowsByUrl)),
     kind: 'folder',
-    name: row.title || entry.name,
-    text: row.content ?? '',
+    name: indexRow.title || entry.name,
+    text: indexRow.content ?? '',
     url: entry.url,
   };
 }
 
-function fileNode(entry: FolderEntry, row: FilesystemIndexRow | undefined): FilesystemNode {
+function fileNodeFromEntry(entry: FolderEntry, indexRow: FilesystemIndexRow | undefined): FilesystemNode {
   return {
     kind: 'file',
-    mediaType: row?.mimeType ?? mimeTypeFromName(entry.name),
+    mediaType: indexRow?.mimeType ?? mimeTypeFromFileName(entry.name),
     name: entry.name,
     sourceUrl: isExternalUrl(entry.url) ? entry.url : null,
-    text: row?.content ?? '',
+    text: indexRow?.content ?? '',
     url: entry.url,
   };
 }
 
-function rowsByUrl(rows: readonly FilesystemIndexRow[]) {
-  return new Map(rows.map((row) => [row.url, row]));
+function mapIndexRowsByUrl(indexRows: readonly FilesystemIndexRow[]) {
+  return new Map(indexRows.map((indexRow) => [indexRow.url, indexRow]));
 }
 
-function folderEntries(input: unknown): readonly FolderEntry[] {
+function folderEntriesFromIndexField(input: unknown): readonly FolderEntry[] {
   return Array.isArray(input) ? input as readonly FolderEntry[] : [];
 }
 
@@ -97,11 +101,6 @@ function isExternalUrl(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-function mimeTypeFromName(name: string): string {
-  if (name.endsWith('.svg')) return 'image/svg+xml';
-  return 'application/octet-stream';
 }
 
 function joinPath(parent: string, name: string): string {

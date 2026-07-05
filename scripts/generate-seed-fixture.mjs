@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
-const target = 'packages/system/src/fixtures/seed.ts';
+const seedFixturePath = 'packages/system/src/fixtures/seed.ts';
 
 const fileTypes = [
   ['application/vnd.automerge', '🔀'],
@@ -27,12 +27,13 @@ const fileTypes = [
   ['*/*', '📄'],
 ];
 
-const researchTree = await folderFromDirectory('research');
+const docsTree = await seedFolderFromDirectory('docs');
 
 const tree = {
   kind: 'folder',
   name: '',
   children: [
+    docsTree,
     {
       kind: 'folder',
       name: 'home',
@@ -47,13 +48,12 @@ const tree = {
           name: 'ghostscript-tiger.svg',
           url: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg',
         },
-        researchTree,
       ],
     },
   ],
 };
 
-const file = `export type SeedFileType = {
+const fixtureSource = `export type SeedFileType = {
   emoji: string;
   match: string;
 };
@@ -78,28 +78,28 @@ export const seedFileTypes = ${JSON.stringify(fileTypes.map(([match, emoji]) => 
 export const seedTree = ${JSON.stringify(tree, null, 2)} as const satisfies SeedFolder;
 `;
 
-await mkdir(dirname(target), { recursive: true });
-await writeFile(target, file);
+await mkdir(dirname(seedFixturePath), { recursive: true });
+await writeFile(seedFixturePath, fixtureSource);
 
-async function folderFromDirectory(path) {
-  const entries = await readdir(path, { withFileTypes: true });
+async function seedFolderFromDirectory(directoryPath) {
+  const directoryEntries = await readdir(directoryPath, { withFileTypes: true });
   const children = await Promise.all(
-    entries
-      .filter((entry) => !entry.name.startsWith('.'))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(async (entry) => {
-        const childPath = join(path, entry.name);
-        if (entry.isDirectory()) return folderFromDirectory(childPath);
+    directoryEntries
+      .filter((directoryEntry) => !directoryEntry.name.startsWith('.'))
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(async (directoryEntry) => {
+        const childPath = join(directoryPath, directoryEntry.name);
+        if (directoryEntry.isDirectory()) return seedFolderFromDirectory(childPath);
         return {
           kind: 'file',
-          name: entry.name,
+          name: directoryEntry.name,
           content: await readFile(childPath, 'utf8'),
         };
       }),
   );
   return {
     kind: 'folder',
-    name: basename(path),
+    name: basename(directoryPath),
     children,
   };
 }

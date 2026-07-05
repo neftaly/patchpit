@@ -11,6 +11,9 @@ const appsRoot = resolve(repoRoot, 'apps');
 
 export default defineConfig({
   clearScreen: false,
+  define: {
+    __PATCHPIT_RUNTIME_BUILD_ID__: JSON.stringify(process.env.PATCHPIT_RUNTIME_BUILD_ID ?? `${Date.now().toString(36)}`),
+  },
   root: repoRoot,
   plugins: [wasm(), topLevelAwait(), react()],
   resolve: {
@@ -34,6 +37,10 @@ export default defineConfig({
         },
       },
     },
+  },
+  worker: {
+    format: 'es',
+    plugins: () => [wasm()],
   },
 });
 

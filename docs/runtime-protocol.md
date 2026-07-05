@@ -1,7 +1,8 @@
 # Patchpit Runtime Protocol
 
 Patchpit needs a shared runtime boundary for Automerge, Tarstate, policy, and
-app capabilities. This document narrows that boundary without implementing it.
+app capabilities. This document narrows that boundary and records the first
+implementation slice.
 
 The surface protocol defines Patchpit's shell objects: app manifests, intents,
 contexts, surfaces, layouts, and viewports. This document defines how clients
@@ -17,6 +18,9 @@ projections.
   `DocHandle` access.
 - Make Tarstate schemas the compatibility and versioning layer for projection
   and intent payloads.
+- Attach portable schema descriptors to snapshots, durable documents, and
+  capability grants so relation-shaped state can be understood without importing
+  app TypeScript.
 - Keep the public protocol separate from worker placement, while making the V0
   deployment target explicit.
 - Require the runtime platform we need instead of building compatibility
@@ -91,7 +95,8 @@ The public runtime API should stay small:
 type RuntimeClient = {
   subscribeProjection(
     req: ProjectionSubscriptionRequest,
-  ): Promise<ProjectionSubscription>;
+    listener: (event: ProjectionEvent) => void,
+  ): ProjectionSubscription;
 
   submitIntent(req: IntentRequest): Promise<IntentResult>;
 
@@ -110,18 +115,19 @@ Avoid public APIs named `getRepo`, `getDocHandle`, `changeDoc`, `command`, or
 Patchpit's `Viewport` concept.
 
 The public protocol should not expose whether the runtime is local, worker
-backed, or hosted elsewhere. V0 still has one supported deployment path:
+backed, or hosted elsewhere. The target deployment path is:
 
 ```txt
 Client <-> RuntimeClient <-> SharedWorker runtime
 ```
 
-An in-process implementation may be useful as a temporary refactor scaffold, but
-it is not a supported runtime mode. If the required browser platform is absent,
-Patchpit should fail before booting the OS runtime.
+The current V0 slice has not moved runtime ownership there yet. It gates boot
+through a module SharedWorker hello/ack and then runs the bootstrap
+`RuntimeClient` in the shell process. If the required boot platform is absent,
+Patchpit should fail before booting the in-process scaffold.
 
 Connection is lifecycle, not an app-facing operation. A runtime client must
-complete the worker handshake before exposing the three public operations.
+complete the boot-gate handshake before exposing the three public operations.
 
 ## Scope
 
@@ -163,10 +169,12 @@ message envelope.
 
 ```ts
 type RuntimeProtocol = 'patchpit.runtime@1';
+type RuntimeBuildId = string;
 
 type RuntimeConnectRequest = {
   protocol: RuntimeProtocol;
   id: string;
+  buildId: RuntimeBuildId;
   clientKind: 'tab' | 'sandbox' | 'agent' | 'device-adapter';
   workspaceId: string;
   subjectId?: string;
@@ -174,8 +182,27 @@ type RuntimeConnectRequest = {
 };
 
 type RuntimeConnectResult = {
+  buildId: RuntimeBuildId;
   runtimeId: string;
   clientId: string;
+  workspaceId: string;
+};
+
+type RuntimeHello = {
+  protocol: RuntimeProtocol;
+  type: 'hello';
+  buildId: RuntimeBuildId;
+  clientId: string;
+  clientKind: 'tab' | 'sandbox' | 'agent' | 'device-adapter';
+  workspaceId: string;
+};
+
+type RuntimeHelloAck = {
+  protocol: RuntimeProtocol;
+  type: 'helloAck';
+  buildId: RuntimeBuildId;
+  clientId: string;
+  runtimeInstanceId: string;
   workspaceId: string;
 };
 
@@ -205,10 +232,14 @@ type RuntimeError = {
     | 'unknown_projection'
     | 'unknown_intent'
     | 'unknown_capability'
+    | 'missing_handler'
     | 'schema_mismatch'
+    | 'unsupported_basis'
     | 'policy_denied'
     | 'policy_quarantined'
     | 'conflict'
+    | 'stale_target'
+    | 'commit_error'
     | 'not_found'
     | 'runtime_unavailable'
     | 'internal_error';
@@ -247,6 +278,13 @@ The runtime assigns a stable `clientId` during connection and uses it for every
 later request from that client. Reconnecting creates a new client session unless
 a future resume protocol explicitly says otherwise.
 
+The boot-gate handshake is mandatory before the public operations are exposed.
+The client names the SharedWorker with both protocol and build id, posts
+`hello`, and waits for `helloAck`. Protocol mismatch, timeout, or build
+mismatch is a runtime boot failure. On build mismatch the client may ask the
+stale boot-gate worker to shut down and retry once with a cache-busted worker
+URL; this is stale boot-gate recovery, not a degraded runtime path.
+
 `RuntimeRequest.id` is a transport correlation id. It is not an idempotency key
 and does not imply retry safety.
 
@@ -283,9 +321,15 @@ fields must be rejected before policy or mutation work begins.
 
 Tarstate schemas are the projection and intent payload versioning boundary.
 Operation names are stable semantic handles; `schemaId` carries compatibility.
+The exact portable descriptor format is defined in
+[`schema-protocol.md`](schema-protocol.md). Descriptors are stable protocol
+headers: snapshots and durable documents may carry them, while normal patches
+and state updates carry only `schemaId`.
 
 ```ts
 type TarstateSchemaId = string;
+type PatchpitSchemaHash = string;
+type PatchpitRelationSchemaDescriptor = Record<string, Json>;
 type AutomergeUrl = string;
 type AutomergeHeads = readonly string[];
 type AutomergeHeadSet = Record<AutomergeUrl, AutomergeHeads>;
@@ -392,6 +436,8 @@ type ProjectionSnapshot = {
   subscriptionId: string;
   projection: string;
   schemaId: TarstateSchemaId;
+  schemaHash?: PatchpitSchemaHash;
+  schema?: PatchpitRelationSchemaDescriptor;
   basis: ProjectionBasis;
   storageHeads?: AutomergeHeadSet;
   lensPath?: string[];
@@ -448,12 +494,41 @@ policy.effectiveGrants
 presence.clients
 ```
 
+`filesystem.tree` with `schemaId: patchpit.filesystem.tree@1` returns one
+relation:
+
+```ts
+relations.nodes: FilesystemTreeNodeRow[];
+
+type FilesystemTreeNodeRow = {
+  url: string;
+  parentUrl: string | null;
+  isRoot: boolean;
+  position: number;
+  name: string;
+  kind: 'folder' | 'file';
+  type: string;
+  title: string | null;
+  mediaType: string | null;
+  sourceUrl: string | null;
+  text: string;
+};
+```
+
+`url` identifies the backing resource. `parentUrl`, `isRoot`, and `position`
+describe the projected tree shape without exposing folder `entries` blobs.
+`kind` is the UI tree kind; `type` is the Patchpit document/resource type.
+`mediaType`, `sourceUrl`, and `text` carry the current viewer metadata. A
+runtime may derive this relation from `FilesystemIndexDoc`, but must not expose
+`FilesystemIndexRow`, `filesystemIndex.documents`, or a public `documents`
+relation for this projection.
+
 `workspace.viewports` is for shared viewport membership or presence-like facts,
 such as which client is presenting which surface. It is not the default home for
 local viewport geometry, camera, pointer focus, or device form state.
 
 The current `FilesystemIndexDoc` remains an internal projection/cache, not a
-portable runtime payload.
+portable runtime payload or interchange schema.
 
 ## Historical Reads And Analysis Branches
 
@@ -560,10 +635,13 @@ route.activate
 Initial filesystem and shell intents:
 
 ```txt
+app.launch
 filesystem.writeFile
 filesystem.mkdir
 filesystem.move
 filesystem.delete
+filePicker.selectUrl
+filePicker.toggleFolder
 window.focus
 window.pinPreview
 window.closeContext
@@ -577,6 +655,100 @@ asset.approveShare
 `route.open` is the public request to open or reuse a durable pinned context.
 Lower-level context creation is a runtime/window-manager effect, not a separate
 public intent in V0.
+
+The V0 app launch intent input is a Tarstate relation set:
+
+```ts
+intent: app.launch
+input.schemaId: patchpit.intent.appLaunch@1
+
+relation requests:
+  id: string
+  app: string
+  behavior: 'open-context' | 'toggle-surface'
+  context?: WindowContext
+  role: 'document-set' | 'workspace-view'
+  slot?: string
+```
+
+`slot` names the app-managed persistent state instance for launches that do not
+provide an explicit `context`. It defaults to `default` and must be a non-empty
+string. The runtime combines app id and slot for handler-local reuse, while the
+canonical state remains the app's Automerge state doc under `/system/apps`.
+Tarstate projects and write lenses sit over that doc shape; app state docs are
+not flattened just to make launch admission convenient.
+
+If `context` is present, the runtime validates that the context app matches the
+request, the backing URL is still available, and any existing context id still
+targets the same app and URL. If `context` is absent, the app manifest's matching
+surface must declare a persisted `state` type and the runtime must have a
+managed launch state handler for it. The current slice implements that managed
+path for the terminal app only: terminal launch omits `context`, uses
+`behavior: 'open-context'`, targets `role: 'document-set'`, and creates or
+reuses a terminal state doc through a handler-local `terminal:<slot>` key. The
+document itself is a normal terminal state resource registered under
+`/system/apps`.
+
+`app.launch` uses explicit failure states so callers do not infer placement or
+state ownership from a generic rejection:
+
+- `schema_mismatch`: request used a schema other than
+  `patchpit.intent.appLaunch@1`.
+- `bad_request`: the relation set is malformed, the slot is empty, terminal
+  supplied a context, or required terminal behavior/role is wrong.
+- `missing_handler`: the app is not installed, has no matching surface state, or
+  no managed state handler exists for a context-less launch.
+- `policy_denied`: runtime policy rejected launch before mutation.
+- `stale_target`: `baseHeads` or an explicit context target no longer matches
+  the current window-manager/filesystem state.
+- `conflict`: no compatible surface can accept the launch.
+- `commit_error`: state creation or the window-manager commit failed after
+  admission.
+
+The V0 route intent input is a Tarstate relation set:
+
+```ts
+intent: route.open | route.preview
+input.schemaId: patchpit.intent.route@1
+
+relation requests:
+  id: string
+  url: string
+  rootUrl?: string
+  sourceSurfaceId?: string
+  target?: Json
+  title?: string
+```
+
+`sourceSurfaceId` lets preview/open avoid replacing the source file-picker
+surface. `target` is the window-manager drop target for drag-and-drop opens.
+The runtime validates the relation before mutating window-manager state.
+
+The V0 window intent input is also a Tarstate relation set:
+
+```ts
+intent:
+  | window.focus
+  | window.closeContext
+  | window.pinPreview
+  | window.moveTab
+  | window.resizeSplit
+
+input.schemaId: patchpit.intent.window@1
+
+relation requests:
+  id: string
+  contextId?: string
+  path?: readonly Json[]
+  ratio?: number
+  sourceSurfaceId?: string
+  surfaceId?: string
+  target?: Json
+```
+
+Each window intent validates its required fields before applying the
+window-manager write lens. Missing or malformed targets are rejected instead of
+being treated as a no-op or a different placement.
 
 `asset.import` is a capability for staged import access. `asset.commitImport` is
 the durable intent that commits an approved staged asset into normal Patchpit
@@ -603,6 +775,7 @@ type CapabilityGrant = {
   capability: string;
   verbs: readonly string[];
   bounds?: CapabilityBounds;
+  schemas?: Record<TarstateSchemaId, PatchpitRelationSchemaDescriptor>;
 };
 
 type CapabilityBounds = {
@@ -751,7 +924,7 @@ ServiceWorker:
   update/version/kill switch
   cached policy snapshot for early denial
 
-SharedWorker runtime:
+Target SharedWorker runtime:
   Automerge repo
   sync/networking
   Tarstate shared IVM
@@ -772,11 +945,18 @@ Clients:
   translate input into presence or intents
 ```
 
-The required platform is part of the runtime contract:
+The current boot gate is the implemented runtime contract for this slice:
 
 ```txt
 secure context
 SharedWorker
+crypto.randomUUID
+module SharedWorker hello/ack with the page build id
+```
+
+The target shared runtime will also require:
+
+```txt
 Worker
 MessageChannel
 transferable ArrayBuffer
@@ -784,17 +964,38 @@ ServiceWorker
 Cache API
 IndexedDB
 WebSocket usable from worker
-worker ES modules, if the runtime worker is a module
+worker ES modules, if the target runtime worker is a module
 ```
 
-The platform probe must test behavior, not just constructor presence. If a
-required feature is missing or fails the probe, Patchpit shows an unsupported
+The platform probe must test behavior, not just constructor presence when a
+feature becomes required by implemented code. Planned features may be shown in
+diagnostics, but they must not block the shell before they are on the boot path.
+Boot uses the real module SharedWorker URL for the hello/ack handshake, so a
+stale, missing, or non-module worker fails before the shell renders. The app
+callsite must expose the worker entry to Vite as a SharedWorker URL or literal
+SharedWorker constructor so production builds emit a compiled worker chunk
+instead of embedding the TypeScript source as a generic asset. If a required
+feature is missing or fails the probe, Patchpit shows an unsupported
 browser/device screen. There is no dedicated-worker fallback, BroadcastChannel
 leader mode, or degraded multi-tab runtime in V0/V1.
 
-Some failures happen before a runtime worker can exist; those produce the local
+Some failures happen before any runtime owner can exist; those produce the local
 unsupported-browser screen directly. `unsupported_platform` is for failures the
-worker/runtime detects after a connection attempt starts.
+boot gate or runtime detects after a connection attempt starts.
+
+## Runtime State Docs
+
+Runtime and worker state that should be inspected by users or developers lives
+under `/system/runtime` as normal visible Automerge docs. The current slice
+seeds `/system/runtime/runtime-boot-gate.am` with the runtime protocol id, build
+id once `helloAck` is recorded, runtime instance id when available, boot status,
+current required boot features, target shared-runtime features, and ownership
+notes.
+
+That document deliberately says the SharedWorker is only the boot gate, while
+the in-process bootstrap runtime still owns seed Automerge handles until the
+implementation moves into the SharedWorker. This keeps the decomplection
+question visible without pretending ownership has moved before it has.
 
 ## Hot Path And Latency
 
@@ -904,30 +1105,47 @@ A requirement is suspicious when it combines:
 
 ## V0 Boundary
 
-The first implementation should only prove the boundary:
+The first implementation should only prove the boundary. Current code has
+landed the handshake gate and the first shell extraction scaffold:
 
-- Add a `RuntimeClient` facade.
-- Use an in-process facade only as a short-lived extraction scaffold, not as a
-  product runtime mode.
-- Stand up the `SharedWorker` build/registration path needed by the required
-  deployment.
-- Move filesystem projection behind `subscribeProjection('filesystem.tree')`.
+- `@patchpit/system/runtime` exports protocol types, platform probing,
+  SharedWorker boot-gate connection/handshake helpers, boot-gate worker naming,
+  stale-build retry, and Automerge head-set helpers.
+- `apps/shell/src/runtime/shared-worker.ts` is a thin Vite module SharedWorker
+  entry that accepts the mandatory hello/ack handshake and shuts down on stale
+  build or dev reload.
+- `apps/shell/src/runtime/bootstrap-runtime.ts` is an explicit in-process
+  scaffold for the first boundary slice. It owns the raw seed `DocHandle`s for
+  this slice, serves `filesystem.tree`, admits app launch, file-picker, route,
+  and window intents through a policy hook, and commits their effects to the
+  relevant system docs.
+- `/system/runtime/runtime-boot-gate.am` is a visible Automerge runtime state
+  doc for the current SharedWorker boot gate plus in-process bootstrap slice;
+  `App.tsx` records the boot-gate `helloAck` into it after boot.
+- `App.tsx` gates shell render on the runtime platform probe plus worker
+  boot-gate handshake. Missing features or handshake failures show diagnostics
+  and do not boot a compatibility runtime.
+- File picker open/preview and file drag/drop now go through
+  `submitIntent(route.open | route.preview)` instead of direct viewer context
+  construction in the UI.
+- Normal window controls now go through window intents for focus, close,
+  preview pinning, tab drops, and split resize.
+
+Next work:
+
+- Move the bootstrap runtime implementation into the SharedWorker so tabs share
+  the same Automerge repo and Tarstate IVM.
 - Move window-manager desktop state behind
   `subscribeProjection('workspace.surfaces')`,
   `subscribeProjection('workspace.contexts')`, and
   `subscribeProjection('workspace.layout')`.
-- Route file picker open/preview through `submitIntent('route.open')` and
-  `submitIntent('route.preview')`.
-- Route window-manager mutations through window intents.
 - Move the terminal filesystem shim behind
   `openCapability('terminal.filesystem')`.
-- Add a permissive policy hook.
-- Add the platform probe.
 - Add runtime boundary metrics.
 
-Then move the facade implementation to the required `SharedWorker` runtime.
 Delete or quarantine the in-process scaffold once the worker path owns the
-boundary.
+boundary. It must not remain as a fallback for unsupported browsers or failed
+worker handshakes.
 
 ## Later Milestones
 

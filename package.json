@@ -14,6 +14,7 @@
     "fixtures:seed": "node scripts/generate-seed-fixture.mjs",
     "lint": "oxlint . --deny-warnings --type-aware",
     "smoke": "pnpm build && node scripts/smoke.mjs",
+    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/system/src/schema.test.mjs apps/shell/src/window-manager/window-manager-state.test.mjs apps/file-picker/src/file-picker-state.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -30,7 +31,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#83a8792e5724cd05ec878540ff3f25442731faf2&path:/packages/core"
+      "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#110d1dbb38881805e95f2619d9900b73b8121773&path:/packages/core"
     },
     "patchedDependencies": {
       "@automerge/automerge-repo@2.5.6": "patches/@automerge__automerge-repo@2.5.6.patch"

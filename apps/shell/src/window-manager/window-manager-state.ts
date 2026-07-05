@@ -14,7 +14,6 @@ import {
   stringField,
   value,
   where,
-  write,
 } from '@tarstate/core';
 import { evaluate } from '@tarstate/core/evaluate';
 import { fromObjectSource } from '@tarstate/core/source';
@@ -110,17 +109,10 @@ export function commitWindowManagerState(
   handle: DocHandle<WindowManagerStateDoc>,
   update: (state: WindowManagerStateDoc) => void,
 ): void {
-  const next = cloneWindowManagerState(handle.doc());
-  update(next);
-  const changes = write(windowManagerSchema.state)
-    .updateByKey(stateId, {
-      contexts: next.contexts,
-      focus: next.focus,
-      id: stateId,
-      layout: next.layout,
-      surfaces: next.surfaces,
-    })
-    .changes as WindowManagerStateRow;
+  const draft = cloneWindowManagerState(handle.doc());
+  update(draft);
+  const normalizedState = normalizeWindowManagerState(draft);
+  const changes = windowManagerStateRow(normalizedState);
 
   handle.change((doc) => {
     doc.contexts = structuredClone(changes.contexts);
@@ -128,6 +120,24 @@ export function commitWindowManagerState(
     doc.layout = structuredClone(changes.layout);
     doc.surfaces = structuredClone(changes.surfaces);
   });
+}
+
+function windowManagerStateRow(state: WindowManagerStateDoc): WindowManagerStateRow {
+  return {
+    contexts: structuredClone(state.contexts),
+    focus: state.focus,
+    id: stateId,
+    layout: structuredClone(state.layout),
+    surfaces: structuredClone(state.surfaces),
+  };
+}
+
+export function normalizeWindowManagerState(state: WindowManagerStateDoc): WindowManagerStateDoc {
+  const normalizedState = cloneWindowManagerState(state);
+  normalizeSurfaceActiveContexts(normalizedState);
+  removeEmptyDocumentSurfaces(normalizedState);
+  repairFocus(normalizedState);
+  return normalizedState;
 }
 
 export function focusedAppId(state: WindowManagerStateDoc): string | undefined {
@@ -286,9 +296,8 @@ export function openContext(
   context: WindowContext,
   sourceSurfaceId?: string,
 ): void {
-  const surfaceId = targetDocumentSurfaceId(state, sourceSurfaceId);
-  if (surfaceId === undefined) return;
-  openContextInSurface(state, context, surfaceId);
+  const surface = targetDocumentSurface(state, sourceSurfaceId) ?? createDocumentSurface(state);
+  openContextInSurface(state, context, surface.id);
 }
 
 export function previewContext(
@@ -296,10 +305,8 @@ export function previewContext(
   context: WindowContext,
   sourceSurfaceId?: string,
 ): void {
-  const surfaceId = targetDocumentSurfaceId(state, sourceSurfaceId);
-  if (surfaceId === undefined) return;
-  const surface = surfaceById(state, surfaceId);
-  if (surface === undefined) return;
+  const surface = targetDocumentSurface(state, sourceSurfaceId) ?? createDocumentSurface(state);
+  const surfaceId = surface.id;
 
   if (surface.contexts.includes(context.id)) {
     clearPreview(state, surface);
@@ -336,14 +343,15 @@ function revealContext(
     return;
   }
 
-  const surface = targetSurfaceByRole(state, role);
-  if (surface === undefined) return;
-  showWorkspaceSurface(state, surface);
-  clearPreview(state, surface, context.id);
+  const roleSurface = targetSurfaceByRole(state, role);
+  const launchSurface = roleSurface ?? (role === SurfaceRole.DocumentSet ? createDocumentSurface(state) : undefined);
+  if (launchSurface === undefined) return;
+  showWorkspaceSurface(state, launchSurface);
+  clearPreview(state, launchSurface, context.id);
   state.contexts[context.id] = context;
-  insertContext(surface.contexts, context.id, undefined, 'after');
-  surface.activeContext = context.id;
-  focusSurface(state, surface.id);
+  insertContext(launchSurface.contexts, context.id, undefined, 'after');
+  launchSurface.activeContext = context.id;
+  focusSurface(state, launchSurface.id);
 }
 
 export function resizeSplit(state: WindowManagerStateDoc, path: SplitPath, ratio: number): void {
@@ -434,8 +442,67 @@ function removeEmptyDocumentSurface(state: WindowManagerStateDoc, surface: Windo
   return true;
 }
 
+function normalizeSurfaceActiveContexts(state: WindowManagerStateDoc): void {
+  for (const surface of Object.values(state.surfaces)) {
+    if (surface.activeContext !== undefined && surfaceHasContext(surface, surface.activeContext)) continue;
+    setActive(surface, surface.previewContext ?? surface.contexts[0]);
+  }
+}
+
+function removeEmptyDocumentSurfaces(state: WindowManagerStateDoc): void {
+  for (const surface of Object.values(state.surfaces)) {
+    if (!isEmptyDocumentSurface(surface)) continue;
+    if (!removeDocumentSurface(state, surface)) continue;
+    delete state.surfaces[surface.id];
+  }
+}
+
+function removeDocumentSurface(state: WindowManagerStateDoc, surface: WindowSurface): boolean {
+  if (!surfaceInLayout(state.layout, surface.id)) return true;
+
+  const layout = removeSurfaceFromLayout(state.layout, surface.id);
+  if (layout !== undefined) {
+    state.layout = layout;
+    return true;
+  }
+
+  const fallback = fallbackLayoutSurface(state, surface.id);
+  if (fallback === undefined) return false;
+  state.layout = surfaceNode(fallback.id);
+  return true;
+}
+
+function isEmptyDocumentSurface(surface: WindowSurface): boolean {
+  return surface.role === SurfaceRole.DocumentSet && !surfaceHasContent(surface);
+}
+
+function fallbackLayoutSurface(
+  state: WindowManagerStateDoc,
+  removedSurfaceId: string,
+): WindowSurface | undefined {
+  const candidates = Object.values(state.surfaces).filter((surface) => (
+    surface.id !== removedSurfaceId && !isEmptyDocumentSurface(surface)
+  ));
+  return candidates.find((surface) => surfaceInLayout(state.layout, surface.id))
+    ?? candidates.find((surface) => surface.role === SurfaceRole.DocumentSet)
+    ?? candidates[0];
+}
+
+function repairFocus(state: WindowManagerStateDoc): void {
+  if (state.surfaces[state.focus] !== undefined && surfaceInLayout(state.layout, state.focus)) return;
+
+  const focus = visibleDocumentSurface(state) ?? visibleSurface(state) ?? Object.values(state.surfaces).at(0);
+  if (focus !== undefined) focusSurface(state, focus.id);
+}
+
 function documentSurfaceCount(state: WindowManagerStateDoc): number {
   return Object.values(state.surfaces).filter((surface) => surface.role === SurfaceRole.DocumentSet).length;
+}
+
+function visibleDocumentSurface(state: WindowManagerStateDoc): WindowSurface | undefined {
+  return Object.values(state.surfaces).find((surface) => (
+    surface.role === SurfaceRole.DocumentSet && surfaceInLayout(state.layout, surface.id)
+  ));
 }
 
 function visibleSurface(state: WindowManagerStateDoc): WindowSurface | undefined {
@@ -468,6 +535,27 @@ function uniqueSurfaceId(state: WindowManagerStateDoc): string {
   let index = Object.keys(state.surfaces).length + 1;
   while (state.surfaces[`surface-${index}`] !== undefined) index += 1;
   return `surface-${index}`;
+}
+
+function uniqueDocumentSurfaceId(state: WindowManagerStateDoc): string {
+  return state.surfaces.main === undefined ? 'main' : uniqueSurfaceId(state);
+}
+
+function createDocumentSurface(state: WindowManagerStateDoc): WindowSurface {
+  const surfaceId = uniqueDocumentSurfaceId(state);
+  const hasVisibleSurface = Object.values(state.surfaces).some((surface) => surfaceInLayout(state.layout, surface.id));
+  const surface = { contexts: [], id: surfaceId, role: SurfaceRole.DocumentSet };
+  state.surfaces[surfaceId] = surface;
+  state.layout = hasVisibleSurface
+    ? {
+        direction: SplitDirection.Row,
+        first: state.layout,
+        kind: WindowManagerNodeKind.Split,
+        ratio: workspaceSurfaceRatio,
+        second: surfaceNode(surfaceId),
+      }
+    : surfaceNode(surfaceId);
+  return surface;
 }
 
 function splitDropNode(
@@ -550,20 +638,16 @@ function insertContext(
   contexts.splice(insertIndex, 0, contextId);
 }
 
-function targetDocumentSurfaceId(
+function targetDocumentSurface(
   state: WindowManagerStateDoc,
   sourceSurfaceId: string | undefined,
-): string | undefined {
-  if (
-    state.focus !== sourceSurfaceId
-    && state.surfaces[state.focus]?.role === SurfaceRole.DocumentSet
-  ) {
-    return state.focus;
-  }
+): WindowSurface | undefined {
+  const focused = state.surfaces[state.focus];
+  if (state.focus !== sourceSurfaceId && focused?.role === SurfaceRole.DocumentSet) return focused;
 
   return Object.values(state.surfaces).find((surface) => (
     surface.id !== sourceSurfaceId && surface.role === SurfaceRole.DocumentSet
-  ))?.id;
+  ));
 }
 
 function focusSurface(state: WindowManagerStateDoc, surfaceId: string): void {

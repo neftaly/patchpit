@@ -1,13 +1,36 @@
 import { Repo, type DocHandle } from '@automerge/automerge-repo';
 import { seedFileTypes, seedTree, type SeedNode } from '../fixtures/seed';
+import {
+  plannedSharedRuntimePlatformFeatures,
+  requiredRuntimeBootFeatures,
+  type RuntimePlatformFeature,
+  type RuntimePlatformReport,
+} from '../runtime/platform';
+import { runtimeProtocol, type RuntimeHelloAck } from '../runtime/protocol';
+import { relationSchemaRegistry, type PatchpitRelationSchemaDescriptor } from '../schema';
 import { rootContainer } from './container';
+import {
+  filePickerStateSchema,
+  patchpitDocMetadata,
+  patchpitDocSchemaRef,
+  terminalStateSchema,
+} from './schemas';
+import {
+  appendFolderEntries,
+  appendFolderEntry,
+  createPatchpitFileDoc,
+  createPatchpitFolderDoc,
+  filesystemIndexRowForResource,
+  filesystemResourceFromHandle,
+  folderEntry,
+  syncFilesystemIndexResource,
+  upsertFilesystemIndexRow,
+} from './resources';
 import {
   automergeMimeType,
   automergeExtension,
   automergeFileName,
-  isAutomergeFileName,
   PatchpitType,
-  SplitDirection,
   SurfaceRole,
   WindowManagerNodeKind,
   type AppManifestDoc,
@@ -16,11 +39,14 @@ import {
   type FileDoc,
   type FilePickerStateDoc,
   type FilesystemIndexDoc,
-  type FilesystemIndexRow,
   type FilesystemResource,
   type FileTypesDoc,
   type FolderDoc,
   type FolderEntry,
+  type RuntimeFeatureRequirement,
+  type RuntimeComponentState,
+  type RuntimeStateDoc,
+  type RuntimeStateFeatures,
   type SeedFilesystem,
   type SurfaceSpec,
   type ThemeDoc,
@@ -39,7 +65,7 @@ export function createSeedFilesystem(): SeedFilesystem {
   const filePickerStateId = 'file-picker-1';
   const terminalStateId = 'terminal-1';
   const lightThemeHandle = repo.create<ThemeDoc>({
-    '@patchpit': { type: PatchpitType.Theme },
+    '@patchpit': patchpitDocMetadata(PatchpitType.Theme),
     extension: automergeExtension,
     metrics: sharedMetrics,
     mimeType: automergeMimeType,
@@ -49,7 +75,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     typography: sharedTypography,
   });
   const darkThemeHandle = repo.create<ThemeDoc>({
-    '@patchpit': { type: PatchpitType.Theme },
+    '@patchpit': patchpitDocMetadata(PatchpitType.Theme),
     extension: automergeExtension,
     metrics: sharedMetrics,
     mimeType: automergeMimeType,
@@ -59,7 +85,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     typography: sharedTypography,
   });
   const appearanceHandle = repo.create<AppearanceDoc>({
-    '@patchpit': { type: PatchpitType.Appearance },
+    '@patchpit': patchpitDocMetadata(PatchpitType.Appearance),
     darkThemeUrl: darkThemeHandle.url,
     extension: automergeExtension,
     lightThemeUrl: lightThemeHandle.url,
@@ -73,12 +99,8 @@ export function createSeedFilesystem(): SeedFilesystem {
     icon: '📁',
     id: 'file-picker',
     name: 'File Picker',
-    surfaces: [
-      {
-        role: SurfaceRole.WorkspaceView,
-        state: { type: PatchpitType.FilePickerState },
-      },
-    ],
+    surfaces: [stateSurface(SurfaceRole.WorkspaceView, PatchpitType.FilePickerState)],
+    schemas: [filePickerStateSchema],
   });
   const viewerApp = createAppManifest(repo, {
     entry: 'viewer.html',
@@ -103,22 +125,30 @@ export function createSeedFilesystem(): SeedFilesystem {
     icon: '💬',
     id: 'terminal',
     name: 'Terminal',
+    surfaces: [stateSurface(SurfaceRole.DocumentSet, PatchpitType.TerminalState)],
+    schemas: [terminalStateSchema],
+  });
+  const stateBrowserApp = createAppManifest(repo, {
+    entry: 'state-browser.html',
+    handles: [],
+    icon: '🧭',
+    id: 'state-browser',
+    name: 'State Browser',
     surfaces: [
       {
         role: SurfaceRole.DocumentSet,
-        state: { type: PatchpitType.TerminalState },
       },
     ],
   });
   const fileTypesHandle = repo.create<FileTypesDoc>({
-    '@patchpit': { type: PatchpitType.FileTypes },
+    '@patchpit': patchpitDocMetadata(PatchpitType.FileTypes),
     extension: automergeExtension,
     fileTypes: seedFileTypes.map(({ emoji, match }) => ({ emoji, match })),
     mimeType: automergeMimeType,
     name: fileTypesName,
   });
   const filePickerStateHandle = repo.create<FilePickerStateDoc>({
-    '@patchpit': { type: PatchpitType.FilePickerState },
+    '@patchpit': patchpitDocMetadata(PatchpitType.FilePickerState),
     extension: automergeExtension,
     fileTypesUrl: fileTypesHandle.url,
     mimeType: automergeMimeType,
@@ -129,7 +159,7 @@ export function createSeedFilesystem(): SeedFilesystem {
   });
   const terminalStateHandle = createTerminalStateHandle(repo, terminalStateId);
   const windowManagerHandle = repo.create<WindowManagerStateDoc>({
-    '@patchpit': { type: PatchpitType.WindowManagerState },
+    '@patchpit': patchpitDocMetadata(PatchpitType.WindowManagerState),
     contexts: {
       'file-picker': {
         app: 'file-picker',
@@ -140,14 +170,8 @@ export function createSeedFilesystem(): SeedFilesystem {
       },
     },
     extension: automergeExtension,
-    focus: 'main',
-    layout: {
-      direction: SplitDirection.Row,
-      first: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
-      kind: WindowManagerNodeKind.Split,
-      ratio: 0.2,
-      second: { kind: WindowManagerNodeKind.Surface, surfaceId: 'main' },
-    },
+    focus: 'files',
+    layout: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
     mimeType: automergeMimeType,
     name: automergeFileName('window-manager'),
     surfaces: {
@@ -157,44 +181,45 @@ export function createSeedFilesystem(): SeedFilesystem {
         id: 'files',
         role: SurfaceRole.WorkspaceView,
       },
-      main: {
-        contexts: [],
-        id: 'main',
-        role: SurfaceRole.DocumentSet,
-      },
     },
   });
+  const runtimeStateHandle = createRuntimeStateHandle(repo, 'runtime-boot-gate');
   const apps = createFolder(repo, 'apps', [
-    entry(automergeFileName('file-picker'), PatchpitType.AppManifest, filePickerApp.url),
-    entry(automergeFileName('terminal'), PatchpitType.AppManifest, terminalApp.url),
-    entry(automergeFileName('viewer'), PatchpitType.AppManifest, viewerApp.url),
+    folderEntry(automergeFileName('file-picker'), PatchpitType.AppManifest, filePickerApp.url),
+    folderEntry(automergeFileName('state-browser'), PatchpitType.AppManifest, stateBrowserApp.url),
+    folderEntry(automergeFileName('terminal'), PatchpitType.AppManifest, terminalApp.url),
+    folderEntry(automergeFileName('viewer'), PatchpitType.AppManifest, viewerApp.url),
   ]);
   const systemApps = createFolder(repo, 'apps', [
-    entry(automergeFileName(filePickerStateId), PatchpitType.FilePickerState, filePickerStateHandle.url),
-    entry(automergeFileName(terminalStateId), PatchpitType.TerminalState, terminalStateHandle.url),
+    folderEntry(automergeFileName(filePickerStateId), PatchpitType.FilePickerState, filePickerStateHandle.url),
+    folderEntry(automergeFileName(terminalStateId), PatchpitType.TerminalState, terminalStateHandle.url),
   ]);
   const systemThemes = createFolder(repo, 'themes', [
-    entry(automergeFileName('one-dark'), PatchpitType.Theme, darkThemeHandle.url),
-    entry(automergeFileName('one-light'), PatchpitType.Theme, lightThemeHandle.url),
+    folderEntry(automergeFileName('one-dark'), PatchpitType.Theme, darkThemeHandle.url),
+    folderEntry(automergeFileName('one-light'), PatchpitType.Theme, lightThemeHandle.url),
   ]);
   const systemConfig = createFolder(repo, 'config', [
-    entry(automergeFileName('appearance'), PatchpitType.Appearance, appearanceHandle.url),
-    entry(fileTypesName, PatchpitType.FileTypes, fileTypesHandle.url),
+    folderEntry(automergeFileName('appearance'), PatchpitType.Appearance, appearanceHandle.url),
+    folderEntry(fileTypesName, PatchpitType.FileTypes, fileTypesHandle.url),
+  ]);
+  const systemRuntime = createFolder(repo, 'runtime', [
+    folderEntry(automergeFileName('runtime-boot-gate'), PatchpitType.RuntimeState, runtimeStateHandle.url),
   ]);
   const system = createFolder(repo, 'system', [
-    entry('apps', PatchpitType.Folder, systemApps.url),
-    entry('config', PatchpitType.Folder, systemConfig.url),
-    entry('themes', PatchpitType.Folder, systemThemes.url),
-    entry(automergeFileName('window-manager'), PatchpitType.WindowManagerState, windowManagerHandle.url),
+    folderEntry('apps', PatchpitType.Folder, systemApps.url),
+    folderEntry('config', PatchpitType.Folder, systemConfig.url),
+    folderEntry('runtime', PatchpitType.Folder, systemRuntime.url),
+    folderEntry('themes', PatchpitType.Folder, systemThemes.url),
+    folderEntry(automergeFileName('window-manager'), PatchpitType.WindowManagerState, windowManagerHandle.url),
   ]);
   const fixture = createFixtureEntries(repo, seedTree.children);
 
   root.change((doc) => {
-    doc.docs = [
-      entry('apps', PatchpitType.Folder, apps.url),
+    appendFolderEntries(doc, [
+      folderEntry('apps', PatchpitType.Folder, apps.url),
       ...fixture.entries,
-      entry('system', PatchpitType.Folder, system.url),
-    ];
+      folderEntry('system', PatchpitType.Folder, system.url),
+    ]);
   });
 
   const handles = [
@@ -203,8 +228,10 @@ export function createSeedFilesystem(): SeedFilesystem {
     system,
     systemApps,
     systemConfig,
+    systemRuntime,
     systemThemes,
     filePickerApp,
+    stateBrowserApp,
     terminalApp,
     viewerApp,
     fileTypesHandle,
@@ -214,12 +241,14 @@ export function createSeedFilesystem(): SeedFilesystem {
     filePickerStateHandle,
     terminalStateHandle,
     windowManagerHandle,
+    runtimeStateHandle,
     ...fixture.handles,
   ];
   const indexHandle = repo.create<FilesystemIndexDoc>({
+    '@patchpit': patchpitDocMetadata(PatchpitType.FilesystemIndex),
     filesystemIndex: {
       rootUrl: root.url,
-      documents: handles.map((handle) => indexRowForResource(handle.url, handle.doc())),
+      documents: handles.map((handle) => filesystemIndexRowForResource(handle.url, handle.doc())),
     },
   });
   return {
@@ -233,7 +262,9 @@ export function createSeedFilesystem(): SeedFilesystem {
     filePickerStateHandle,
     indexHandle,
     lightThemeHandle,
+    runtimeStateHandle,
     systemAppsHandle: systemApps,
+    systemRuntimeHandle: systemRuntime,
     terminalStateHandle,
     windowManagerHandle,
   };
@@ -241,9 +272,9 @@ export function createSeedFilesystem(): SeedFilesystem {
 
 export function createTerminalStateResource(
   filesystem: SeedFilesystem,
-  id: string,
+  stateId: string,
 ): DocHandle<TerminalStateDoc> {
-  const handle = createTerminalStateHandle(filesystem.repo, id);
+  const handle = createTerminalStateHandle(filesystem.repo, stateId);
   filesystem.documentHandles[handle.url] = handle as unknown as DocHandle<FilesystemResource>;
   registerFilesystemResource({
     folderHandle: filesystem.systemAppsHandle,
@@ -253,6 +284,35 @@ export function createTerminalStateResource(
     type: PatchpitType.TerminalState,
   });
   return handle;
+}
+
+export function recordRuntimeBootGateAck(
+  filesystem: SeedFilesystem,
+  input: {
+    readonly ack: RuntimeHelloAck;
+    readonly platform: RuntimePlatformReport;
+  },
+): void {
+  if (runtimeBootGateAckAlreadyRecorded(filesystem.runtimeStateHandle.doc(), input)) return;
+
+  filesystem.runtimeStateHandle.change((doc) => {
+    doc.protocol = {
+      id: input.ack.protocol,
+      buildId: input.ack.buildId,
+    };
+    doc.boot = {
+      status: 'ready',
+      clientId: input.ack.clientId,
+      runtimeInstanceId: input.ack.runtimeInstanceId,
+      workspaceId: input.ack.workspaceId,
+    };
+    doc.features = runtimeStateFeatures(input.platform, true);
+    doc.workers = [
+      sharedWorkerBootGateState('ready', input.ack),
+      bootstrapRuntimeState(),
+    ];
+  });
+  syncFilesystemIndexResource(filesystem.indexHandle, filesystem.runtimeStateHandle);
 }
 
 function registerFilesystemResource<T extends FilesystemResource>({
@@ -268,22 +328,30 @@ function registerFilesystemResource<T extends FilesystemResource>({
   readonly name: string;
   readonly type: PatchpitType | string;
 }): void {
+  const newFolderEntry = folderEntry(name, type, handle.url);
+
   folderHandle.change((doc) => {
-    doc.docs = [...doc.docs, entry(name, type, handle.url)];
+    appendFolderEntry(doc, newFolderEntry);
   });
 
   indexHandle.change((doc) => {
-    upsertIndexRow(doc.filesystemIndex.documents, indexRowForResource(folderHandle.url, folderHandle.doc()));
-    upsertIndexRow(doc.filesystemIndex.documents, indexRowForResource(handle.url, filesystemResource(handle)));
+    upsertFilesystemIndexRow(
+      doc.filesystemIndex.documents,
+      filesystemIndexRowForResource(folderHandle.url, folderHandle.doc()),
+    );
+    upsertFilesystemIndexRow(
+      doc.filesystemIndex.documents,
+      filesystemIndexRowForResource(handle.url, filesystemResourceFromHandle(handle)),
+    );
   });
 }
 
 function createTerminalStateHandle(
   repo: Repo,
-  id: string,
+  stateId: string,
 ): DocHandle<TerminalStateDoc> {
   return repo.create<TerminalStateDoc>({
-    '@patchpit': { type: PatchpitType.TerminalState },
+    '@patchpit': patchpitDocMetadata(PatchpitType.TerminalState),
     capabilities: {
       network: {
         allowAll: true,
@@ -297,8 +365,121 @@ function createTerminalStateHandle(
     history: [],
     lines: [],
     mimeType: automergeMimeType,
-    name: automergeFileName(id),
+    name: automergeFileName(stateId),
   });
+}
+
+function createRuntimeStateHandle(
+  repo: Repo,
+  stateId: string,
+): DocHandle<RuntimeStateDoc> {
+  return repo.create<RuntimeStateDoc>({
+    '@patchpit': patchpitDocMetadata(PatchpitType.RuntimeState),
+    boot: {
+      status: 'waiting-for-boot-gate-helloAck',
+    },
+    extension: automergeExtension,
+    features: runtimeStateFeatures(),
+    mimeType: automergeMimeType,
+    name: automergeFileName(stateId),
+    ownership: runtimeStateOwnership,
+    protocol: {
+      id: runtimeProtocol,
+      buildId: 'unrecorded',
+    },
+    title: 'Runtime Boot Gate',
+    workers: [
+      sharedWorkerBootGateState('waiting-for-boot-gate-helloAck'),
+      bootstrapRuntimeState(),
+    ],
+  });
+}
+
+const runtimeStateOwnership = {
+  canonicalState: 'automerge',
+  currentAutomergeHandleOwner: 'apps/shell/src/runtime/bootstrap-runtime.ts',
+  note: 'The in-process bootstrap runtime owns Automerge handles; the SharedWorker is only a hello/ack and stale-build boot gate until runtime ownership moves.',
+} as const;
+
+function runtimeStateFeatures(
+  platform?: RuntimePlatformReport,
+  helloAckAvailable = false,
+): RuntimeStateFeatures {
+  return {
+    requiredCurrentBoot: [
+      ...requiredRuntimeBootFeatures.map((feature) => runtimePlatformFeature(feature, platform)),
+      helloAckFeature(platform, helloAckAvailable),
+    ],
+    plannedRuntime: plannedSharedRuntimePlatformFeatures.map((feature) => runtimePlatformFeature(feature, platform)),
+  };
+}
+
+function runtimePlatformFeature(
+  feature: RuntimePlatformFeature,
+  platform: RuntimePlatformReport | undefined,
+): RuntimeFeatureRequirement {
+  const requirement: RuntimeFeatureRequirement = { name: feature };
+  if (platform !== undefined) requirement.available = platform.features[feature];
+  return requirement;
+}
+
+function helloAckFeature(
+  platform: RuntimePlatformReport | undefined,
+  available: boolean,
+): RuntimeFeatureRequirement {
+  const requirement: RuntimeFeatureRequirement = {
+    name: 'moduleSharedWorkerHelloAck',
+    note: 'Module SharedWorker hello/ack with the page build id.',
+  };
+  if (platform !== undefined) requirement.available = available;
+  return requirement;
+}
+
+function sharedWorkerBootGateState(
+  status: Extract<RuntimeComponentState['status'], 'waiting-for-boot-gate-helloAck' | 'ready'>,
+  ack?: RuntimeHelloAck,
+): RuntimeComponentState {
+  return {
+    id: 'shared-worker-boot-gate',
+    kind: 'shared-worker-boot-gate',
+    status,
+    ...(ack === undefined
+      ? {}
+      : {
+          buildId: ack.buildId,
+          clientId: ack.clientId,
+          runtimeInstanceId: ack.runtimeInstanceId,
+          workspaceId: ack.workspaceId,
+        }),
+    ownsAutomergeHandles: false,
+    note: 'The SharedWorker currently owns only module hello/ack and stale-build shutdown.',
+  };
+}
+
+function bootstrapRuntimeState(): RuntimeComponentState {
+  return {
+    id: 'bootstrap-runtime',
+    kind: 'in-process-bootstrap-runtime',
+    status: 'active',
+    ownsAutomergeHandles: true,
+    note: 'The in-process bootstrap runtime currently owns seed Automerge handles and commits runtime intents.',
+  };
+}
+
+function runtimeBootGateAckAlreadyRecorded(
+  doc: RuntimeStateDoc,
+  input: {
+    readonly ack: RuntimeHelloAck;
+    readonly platform: RuntimePlatformReport;
+  },
+): boolean {
+  return doc.boot.status === 'ready'
+    && doc.boot.clientId === input.ack.clientId
+    && doc.boot.runtimeInstanceId === input.ack.runtimeInstanceId
+    && doc.boot.workspaceId === input.ack.workspaceId
+    && doc.protocol.id === input.ack.protocol
+    && doc.protocol.buildId === input.ack.buildId
+    && JSON.stringify(doc.features) === JSON.stringify(runtimeStateFeatures(input.platform, true));
 }
 
 const sharedMetrics = {
@@ -352,8 +533,8 @@ const darkPalette = {
   treeGuide: '#363c46ff',
 } as const satisfies ThemePalette;
 
-function entry(name: string, type: PatchpitType | string, entryUrl: string): FolderEntry {
-  return { name, type, url: entryUrl };
+function stateSurface(role: SurfaceRole, type: PatchpitType): SurfaceSpec {
+  return { role, state: { schema: patchpitDocSchemaRef(type), type } };
 }
 
 function createFixtureEntries(repo: Repo, nodes: readonly SeedNode[]) {
@@ -373,13 +554,13 @@ function createFixtureNode(repo: Repo, node: SeedNode): {
   if (node.kind === 'file') {
     if (node.url !== undefined) {
       return {
-        entry: entry(node.name, PatchpitType.File, node.url),
+        entry: folderEntry(node.name, PatchpitType.File, node.url),
         handles: [],
       };
     }
     const handle = createFile(repo, node.name, node.content ?? '');
     return {
-      entry: entry(node.name, PatchpitType.File, handle.url),
+      entry: folderEntry(node.name, PatchpitType.File, handle.url),
       handles: [handle],
     };
   }
@@ -387,7 +568,7 @@ function createFixtureNode(repo: Repo, node: SeedNode): {
   const children = createFixtureEntries(repo, node.children);
   const handle = createFolder(repo, node.name, children.entries);
   return {
-    entry: entry(node.name, PatchpitType.Folder, handle.url),
+    entry: folderEntry(node.name, PatchpitType.Folder, handle.url),
     handles: [handle, ...children.handles],
   };
 }
@@ -400,11 +581,12 @@ function createAppManifest(
     icon: string;
     id: string;
     name: string;
+    schemas?: readonly PatchpitRelationSchemaDescriptor[];
     surfaces: SurfaceSpec[];
   },
 ): DocHandle<AppManifestDoc> {
   return repo.create<AppManifestDoc>({
-    '@patchpit': { type: PatchpitType.AppManifest },
+    '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
     entry: input.entry,
     extension: automergeExtension,
     handles: input.handles,
@@ -413,6 +595,7 @@ function createAppManifest(
     manifestVersion: 1,
     mimeType: automergeMimeType,
     name: input.name,
+    ...(input.schemas === undefined ? {} : { schemas: relationSchemaRegistry(...input.schemas) }),
     surfaces: input.surfaces,
   });
 }
@@ -422,12 +605,7 @@ function createFolder(
   name: string,
   entries: FolderEntry[],
 ): DocHandle<FolderDoc> {
-  return repo.create<FolderDoc>({
-    '@patchpit': { type: PatchpitType.Folder },
-    docs: entries,
-    name,
-    title: name || '/',
-  });
+  return repo.create<FolderDoc>(createPatchpitFolderDoc(name, entries));
 }
 
 function createFile(
@@ -435,55 +613,5 @@ function createFile(
   name: string,
   content: string,
 ): DocHandle<FileDoc> {
-  return repo.create<FileDoc>({
-    '@patchpit': { type: PatchpitType.File },
-    content,
-    extension: extensionFromName(name),
-    mimeType: mimeTypeFromName(name),
-    name,
-  });
-}
-
-function indexRowForResource(url: string, doc: FilesystemResource): FilesystemIndexRow {
-  const type = doc['@patchpit'].type;
-  if ('docs' in doc) {
-    return {
-      content: JSON.stringify(doc, null, 2),
-      entries: doc.docs,
-      title: doc.title,
-      type,
-      url,
-    };
-  }
-  return {
-    content: 'content' in doc ? doc.content : JSON.stringify(doc, null, 2),
-    mimeType: doc.mimeType,
-    type,
-    url,
-  };
-}
-
-function upsertIndexRow(rows: FilesystemIndexRow[], row: FilesystemIndexRow): void {
-  const index = rows.findIndex((item) => item.url === row.url);
-  if (index === -1) rows.push(row);
-  else rows[index] = row;
-}
-
-function filesystemResource<T extends FilesystemResource>(handle: DocHandle<T>): FilesystemResource {
-  return handle.doc() as unknown as FilesystemResource;
-}
-
-function extensionFromName(name: string): string {
-  const index = name.lastIndexOf('.');
-  return index === -1 ? '' : name.slice(index + 1);
-}
-
-function mimeTypeFromName(name: string): string {
-  if (isAutomergeFileName(name)) return automergeMimeType;
-  if (name.endsWith('.json')) return 'application/json';
-  if (name.endsWith('.log')) return 'text/plain';
-  if (name.endsWith('.md')) return 'text/markdown';
-  if (name.endsWith('.svg')) return 'image/svg+xml';
-  if (name.endsWith('.txt')) return 'text/plain';
-  return 'application/octet-stream';
+  return repo.create<FileDoc>(createPatchpitFileDoc(name, content));
 }

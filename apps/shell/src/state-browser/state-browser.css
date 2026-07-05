@@ -1,0 +1,59 @@
+.state-browser {
+  gap: 0;
+  background: var(--color-surface);
+}
+
+.state-browser-header {
+  flex: 0 0 auto;
+  border-bottom: var(--app-border) solid var(--color-border);
+  padding: var(--detail-pad);
+  background: var(--color-bg);
+}
+
+.state-browser-header h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.state-browser-sections {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.state-browser-section {
+  border-bottom: var(--app-border) solid var(--color-border);
+}
+
+.state-browser-section summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--detail-pad);
+  padding: var(--detail-pad);
+  cursor: default;
+  font-size: var(--font-code-size);
+}
+
+.state-browser-section summary:focus {
+  outline: none;
+}
+
+.state-browser-section summary:focus-visible {
+  outline: var(--app-border) solid currentColor;
+  outline-offset: calc(var(--app-border) * -1);
+}
+
+.state-browser-section summary small {
+  color: var(--color-muted);
+  font: inherit;
+  text-align: end;
+}
+
+.state-browser-json {
+  border-top: var(--app-border) solid var(--color-border);
+  background: var(--color-bg);
+}

@@ -1,4 +1,4 @@
-import { StrictMode, useMemo } from 'react';
+import { StrictMode, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   createSeedFilesystem,
@@ -9,9 +9,9 @@ import '@patchpit/system/theme.css';
 import { Viewer } from './index';
 
 function App() {
-  const seed = useMemo(createSeedFilesystem, []);
+  const [seed] = useState(createSeedFilesystem);
   const filesystem = useMemo(() => projectFilesystem(seed.indexDoc, seed.rootUrl), [seed]);
-  const url = useMemo(() => firstFileUrl(filesystem.root), [filesystem.root]);
+  const url = firstFileUrl(filesystem.root);
 
   if (filesystem.root === null) {
     return <pre className="diagnostics-json">{JSON.stringify(filesystem, null, 2)}</pre>;

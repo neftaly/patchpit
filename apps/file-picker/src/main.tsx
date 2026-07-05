@@ -1,5 +1,5 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import { StrictMode, useMemo, useSyncExternalStore } from 'react';
+import { StrictMode, useMemo, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   createSeedFilesystem,
@@ -17,7 +17,7 @@ import {
 } from './index';
 
 function App() {
-  const seed = useMemo(createSeedFilesystem, []);
+  const [seed] = useState(createSeedFilesystem);
   const state = useAutomergeDoc(seed.filePickerStateHandle);
   const fileTypes = useAutomergeDoc(seed.fileTypesHandle);
   const filesystem = useMemo(() => projectFilesystem(seed.indexDoc, seed.rootUrl), [seed]);

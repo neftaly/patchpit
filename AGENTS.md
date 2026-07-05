@@ -1,11 +1,22 @@
 # Agent Instructions
 
+## State Ownership
+
+Before adding or changing state machinery, choose the owning layer first:
+canonical storage, Tarstate relational machinery, or Patchpit product/runtime
+semantics. Keep state logic in that layer, using projections or canonical
+writers at boundaries.
+
 ## Tarstate / FRelP
 
-Keep Automerge docs as canonical state. Use Tarstate for relational projections,
-live derived views, indexes, and write intents. Do not flatten compatible tree
-docs just to fit Tarstate; project trees into relations and compile mutations
-back to the doc shape.
+For React/app state management, reach for Tarstate when building derived state:
+projections, live state views, indexes, queries/tooling, write intents, and
+row/schema validation. This does not decide where canonical state lives; choose
+that separately under State Ownership.
+
+When creating or repairing relation rows, use Tarstate schema tooling and
+generated artifacts (`agent-card.md`, `rows.d.ts`, JSON Schema), regenerating
+them from schema sources instead of hand-editing.
 
 ## Automerge Moves
 
