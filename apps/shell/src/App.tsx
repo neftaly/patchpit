@@ -12,7 +12,6 @@ import {
   recordRuntimeBootGateAck,
   resolveTheme,
   themeStyle,
-  type TerminalStateDoc,
 } from '@patchpit/system';
 import {
   connectRuntimeBootGate,
@@ -40,6 +39,7 @@ import { LauncherBar } from './launcher/LauncherBar';
 import { launcherItems } from './launcher/launch-router';
 import { createBootstrapRuntimeClient, type BootstrapRuntimeClient } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
+import { managedTerminalStateHandles } from './runtime/managed-terminal-state';
 import runtimeSharedWorkerUrl from './runtime/shared-worker.ts?sharedworker&url';
 import { submitFilePickerIntent, type FilePickerSelectUrlInput } from './runtime/file-picker-intents';
 import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/launch-intents';
@@ -94,12 +94,10 @@ function ShellApp({
 }) {
   const [seed] = useState(createSeedFilesystem);
   const nextTerminalId = useRef(2);
-  const [terminalHandles, setTerminalHandles] = useState<readonly DocHandle<TerminalStateDoc>[]>([]);
   const [runtime] = useState(() => createBootstrapRuntimeClient({
     createTerminalState: () => {
       const handle = createTerminalStateResource(seed, `terminal-${nextTerminalId.current}`);
       nextTerminalId.current += 1;
-      setTerminalHandles((handles) => [...handles, handle]);
       return handle;
     },
     seed,
@@ -115,7 +113,9 @@ function ShellApp({
   const nextRuntimeIssueId = useRef(1);
   const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly StateBrowserRuntimeIssueEntry[]>([]);
   const filePickerState = useAutomergeDoc(seed.filePickerStateHandle);
+  const systemApps = useAutomergeDoc(seed.systemAppsHandle);
   const terminalState = useAutomergeDoc(seed.terminalStateHandle);
+  const terminalHandles = useMemo(() => managedTerminalStateHandles(seed, systemApps), [seed, systemApps]);
   const terminalStates = useAutomergeDocs(terminalHandles);
   const runtimeState = useAutomergeDoc(seed.runtimeStateHandle);
   const windowManagerDocument = useAutomergeDoc(seed.windowManagerHandle);

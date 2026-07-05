@@ -5,6 +5,7 @@ import {
   filePickerIntentBoundary,
   createSeedFilesystem,
   createTerminalStateResource,
+  removeSystemAppResource,
   routeIntentBoundary,
   SplitDirection,
   SurfaceRole,
@@ -31,6 +32,7 @@ import {
   workspaceSurfacesRelation,
 } from '@patchpit/system/runtime';
 import { createBootstrapRuntimeClient } from './bootstrap-runtime.ts';
+import { managedTerminalStateHandles } from './managed-terminal-state.ts';
 import { workspaceProjectionFromRelationSet } from './workspace-projection.ts';
 
 void test('bootstrap runtime serves a live filesystem tree projection', () => {
@@ -249,6 +251,22 @@ void test('bootstrap runtime removes managed terminal state after closing its co
   assert.ok(relaunchedContext);
   assert.notEqual(relaunchedContext.url, terminalContext.url);
   assert.equal(systemAppUrls(seed).has(relaunchedContext.url), true);
+});
+
+void test('managed terminal state handles follow the system apps folder', () => {
+  const seed = createSeedFilesystem();
+  const extraTerminal = createTerminalStateResource(seed, 'terminal-extra');
+
+  assert.deepEqual(
+    managedTerminalStateHandles(seed, seed.systemAppsHandle.doc()).map((handle) => handle.url),
+    [seed.terminalStateHandle.url, extraTerminal.url],
+  );
+
+  assert.equal(removeSystemAppResource(seed, extraTerminal.url), true);
+  assert.deepEqual(
+    managedTerminalStateHandles(seed, seed.systemAppsHandle.doc()).map((handle) => handle.url),
+    [seed.terminalStateHandle.url],
+  );
 });
 
 void test('bootstrap runtime opens a narrowed terminal filesystem capability', async () => {
