@@ -127,7 +127,7 @@
 .window-manager-tab[data-drop-target]::after {
   position: absolute;
   inset-block: var(--tab-control-margin);
-  inline-size: var(--window-resize-handle-size);
+  inline-size: calc(var(--window-resize-handle-size) / 2);
   content: "";
   background: currentColor;
 }

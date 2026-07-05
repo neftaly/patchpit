@@ -267,7 +267,7 @@ function SurfaceView({
                   onDragOver={(event) => {
                     acceptTabDrag(event, runtime, {
                       contextId,
-                      placement: dropPlacement(event),
+                      placement: tabDropPlacement(event, tabIds, runtime.draggedTab, surface.id, contextId),
                       surfaceId: surface.id,
                     }, true);
                   }}
@@ -288,7 +288,7 @@ function SurfaceView({
                         dragged.contextId,
                         surface.id,
                         contextId,
-                        dropPlacement(event),
+                        tabDropPlacement(event, tabIds, dragged, surface.id, contextId),
                       );
                     }, true);
                   }}
@@ -394,7 +394,10 @@ function acceptTabDrag(
   stopPropagation = false,
 ): void {
   if (!allowTabDrop(event)) return;
-  if (!canDropTab(runtime.draggedTab, target)) return;
+  if (!canDropTab(runtime.draggedTab, target)) {
+    runtime.setDropTarget(undefined);
+    return;
+  }
   if (stopPropagation) event.stopPropagation();
   runtime.setDropTarget(target);
 }
@@ -441,7 +444,21 @@ function canDropTab(dragged: DraggedTab | undefined, target: DropTarget): boolea
   return target.area !== 'surface' || target.surfaceId !== dragged.surfaceId;
 }
 
-function dropPlacement(event: DragEvent<HTMLElement>): ContextMovePlacement {
+function tabDropPlacement(
+  event: DragEvent<HTMLElement>,
+  tabIds: readonly string[],
+  dragged: DraggedTab | undefined,
+  targetSurfaceId: string,
+  targetContextId: string,
+): ContextMovePlacement {
+  if (dragged?.surfaceId === targetSurfaceId) {
+    const draggedIndex = tabIds.indexOf(dragged.contextId);
+    const targetIndex = tabIds.indexOf(targetContextId);
+    if (draggedIndex !== -1 && targetIndex !== -1 && Math.abs(draggedIndex - targetIndex) === 1) {
+      return draggedIndex < targetIndex ? 'after' : 'before';
+    }
+  }
+
   const rect = event.currentTarget.getBoundingClientRect();
   return event.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
 }
