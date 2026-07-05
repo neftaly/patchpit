@@ -11,10 +11,5 @@
     "@tarstate/core": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
-  },
-  "devDependencies": {
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "typescript": "catalog:"
   }
 }

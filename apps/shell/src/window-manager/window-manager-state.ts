@@ -143,7 +143,7 @@ export function pinContext(
   focusSurface(state, surfaceId);
 }
 
-export function moveContext(
+function moveContext(
   state: WindowManagerStateDoc,
   sourceSurfaceId: string,
   contextId: string,
@@ -167,17 +167,7 @@ export function moveContext(
   }
 
   clearPreview(state, target, contextId);
-  const existingTargetIndex = target.contexts.indexOf(contextId);
-  if (existingTargetIndex !== -1) target.contexts.splice(existingTargetIndex, 1);
-
-  const targetIndex = targetContextId === undefined ? -1 : target.contexts.indexOf(targetContextId);
-  const insertIndex = targetIndex === -1
-    ? target.contexts.length
-    : placement === 'before'
-      ? targetIndex
-      : targetIndex + 1;
-
-  target.contexts.splice(insertIndex, 0, contextId);
+  insertContext(target.contexts, contextId, targetContextId, placement);
   target.activeContext = contextId;
   focusSurface(state, targetSurfaceId);
 }
@@ -336,17 +326,26 @@ function openContextInSurface(
   else clearPreview(state, surface);
 
   state.contexts[context.id] = context;
-  const existingIndex = surface.contexts.indexOf(context.id);
-  if (existingIndex !== -1) surface.contexts.splice(existingIndex, 1);
-  const targetIndex = targetContextId === undefined ? -1 : surface.contexts.indexOf(targetContextId);
+  insertContext(surface.contexts, context.id, targetContextId, placement);
+  surface.activeContext = context.id;
+  focusSurface(state, surfaceId);
+}
+
+function insertContext(
+  contexts: string[],
+  contextId: string,
+  targetContextId: string | undefined,
+  placement: ContextMovePlacement,
+): void {
+  const existingIndex = contexts.indexOf(contextId);
+  if (existingIndex !== -1) contexts.splice(existingIndex, 1);
+  const targetIndex = targetContextId === undefined ? -1 : contexts.indexOf(targetContextId);
   const insertIndex = targetIndex === -1
-    ? surface.contexts.length
+    ? contexts.length
     : placement === 'before'
       ? targetIndex
       : targetIndex + 1;
-  surface.contexts.splice(insertIndex, 0, context.id);
-  surface.activeContext = context.id;
-  focusSurface(state, surfaceId);
+  contexts.splice(insertIndex, 0, contextId);
 }
 
 function targetDocumentSurfaceId(

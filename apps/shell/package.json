@@ -4,20 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "dependencies": {
-    "@automerge/automerge": "catalog:",
     "@automerge/automerge-repo": "^2.5.6",
     "@patchpit/file-picker": "workspace:*",
     "@patchpit/terminal": "workspace:*",
     "@patchpit/viewer": "workspace:*",
     "@patchpit/system": "workspace:*",
-    "@tarstate/automerge": "catalog:",
     "@tarstate/core": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
-  },
-  "devDependencies": {
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "typescript": "catalog:"
   }
 }

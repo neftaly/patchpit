@@ -21,13 +21,11 @@ import {
   dropContext,
   dropNewContext,
   focusContext,
-  moveContext,
   openContext,
   pinContext,
   previewContext,
   resizeSplit,
   type ContextDropTarget,
-  type ContextMovePlacement,
   type SplitPath,
 } from './window-manager/window-manager-state';
 
@@ -76,17 +74,6 @@ export function App() {
     dropUrl: (url: string, title: string, target: ContextDropTarget) => {
       commitWindowManagerState(seed.windowManagerHandle, (doc) => {
         dropNewContext(doc, viewerContext(url, title, seed.rootUrl), target);
-      });
-    },
-    moveContext: (
-      sourceSurfaceId: string,
-      contextId: string,
-      targetSurfaceId: string,
-      targetContextId?: string,
-      placement?: ContextMovePlacement,
-    ) => {
-      commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-        moveContext(doc, sourceSurfaceId, contextId, targetSurfaceId, targetContextId, placement);
       });
     },
     pinContext: (surfaceId: string, contextId: string) => {

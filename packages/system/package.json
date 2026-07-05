@@ -12,8 +12,5 @@
     "@automerge/automerge-repo": "^2.5.6",
     "@tarstate/automerge": "catalog:",
     "@tarstate/core": "catalog:"
-  },
-  "devDependencies": {
-    "typescript": "catalog:"
   }
 }

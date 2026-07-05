@@ -41,18 +41,11 @@ import {
 } from './window-manager-state';
 import './window-manager.css';
 
-export type WindowManagerActions = {
+type WindowManagerActions = {
   readonly closeContext: (surfaceId: string, contextId: string) => void;
   readonly dropContext: (sourceSurfaceId: string, contextId: string, target: ContextDropTarget) => void;
   readonly dropUrl: (url: string, title: string, target: ContextDropTarget) => void;
   readonly focusContext: (surfaceId: string, contextId: string) => void;
-  readonly moveContext: (
-    sourceSurfaceId: string,
-    contextId: string,
-    targetSurfaceId: string,
-    targetContextId?: string,
-    placement?: ContextMovePlacement,
-  ) => void;
   readonly pinContext: (surfaceId: string, contextId: string) => void;
   readonly resizeSplit: (path: SplitPath, ratio: number) => void;
 };
@@ -84,9 +77,7 @@ type WindowManagerRuntime = {
   readonly theme: ThemeDoc;
 };
 
-type DropTarget = {
-  readonly contextId?: string;
-} & ContextDropTarget;
+type DropTarget = ContextDropTarget;
 
 export function WindowManager({
   actions,
@@ -359,22 +350,21 @@ function SurfaceContent({
   readonly runtime: WindowManagerRuntime;
   readonly surfaceId: string;
 }) {
-  const filePickerStateUrl = context?.app === 'file-picker' ? context.url : undefined;
-  const filePicker = filePickerStateUrl === undefined ? undefined : runtime.filePickers[filePickerStateUrl];
-  const rootUrl = context === undefined
-    ? undefined
-    : containerRootUrl(context.container) ?? filePicker?.state.rootUrl;
-  const root = rootUrl === undefined ? null : findNode(runtime.filesystemRoot, rootUrl);
+  if (context?.app === 'file-picker') {
+    const filePicker = runtime.filePickers[context.url];
+    const rootUrl = containerRootUrl(context.container) ?? filePicker?.state.rootUrl;
+    const root = rootUrl === undefined ? null : findNode(runtime.filesystemRoot, rootUrl);
 
-  if (filePicker !== undefined && root !== null) {
-    return (
-      <FilePicker
-        actions={filePicker.actions(surfaceId)}
-        fileIcons={filePicker.fileIcons}
-        root={root}
-        state={filePicker.state}
-      />
-    );
+    if (filePicker !== undefined && root !== null) {
+      return (
+        <FilePicker
+          actions={filePicker.actions(surfaceId)}
+          fileIcons={filePicker.fileIcons}
+          root={root}
+          state={filePicker.state}
+        />
+      );
+    }
   }
 
   if (context?.app === 'terminal') {
@@ -461,25 +451,18 @@ function dropItem(runtime: WindowManagerRuntime, dragged: DraggedItem, target: C
 }
 
 function draggedItem(event: DragEvent): DraggedItem | undefined {
-  const tab = draggedTab(event);
+  const tab = dragData<DraggedTab>(event, tabDragType);
   if (tab !== undefined) return { kind: 'tab', ...tab };
 
-  const value = event.dataTransfer.getData(filePickerDragType);
-  if (value === '') return undefined;
-
-  try {
-    return { kind: 'url', ...JSON.parse(value) as DraggedFilePickerUrl };
-  } catch {
-    return undefined;
-  }
+  const url = dragData<DraggedFilePickerUrl>(event, filePickerDragType);
+  return url === undefined ? undefined : { kind: 'url', ...url };
 }
 
-function draggedTab(event: DragEvent): DraggedTab | undefined {
-  const value = event.dataTransfer.getData(tabDragType);
+function dragData<T>(event: DragEvent, type: string): T | undefined {
+  const value = event.dataTransfer.getData(type);
   if (value === '') return undefined;
-
   try {
-    return JSON.parse(value) as { contextId: string; surfaceId: string };
+    return JSON.parse(value) as T;
   } catch {
     return undefined;
   }
@@ -487,7 +470,7 @@ function draggedTab(event: DragEvent): DraggedTab | undefined {
 
 function canDrop(dragged: DraggedTab | undefined, target: DropTarget): boolean {
   if (dragged === undefined) return true;
-  if (target.contextId === dragged.contextId) return false;
+  if (target.area === 'tabs' && target.contextId === dragged.contextId) return false;
   return target.area !== 'content' || target.zone !== 'center' || target.surfaceId !== dragged.surfaceId;
 }
 
@@ -497,7 +480,7 @@ function contentDropTarget(
   event: DragEvent<HTMLElement>,
   path: SplitPath,
   surfaceId: string,
-): ContextDropTarget & DropTarget {
+): ContextDropTarget {
   return {
     area: 'content',
     path,
