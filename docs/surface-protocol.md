@@ -17,11 +17,12 @@ Patchpit currently seeds three durable roots and reserves one live-service root:
 - `/system` contains shell-owned persistent state
 - `/srv` is reserved for future live mountable services
 
-The bootloader creates the initial filesystem, app manifests, app instance state
-docs, and window-manager state doc. Apps are opened through intents after boot:
-file picker open/preview and file drag/drop requests submit route intents, and
-the runtime commits the resulting viewer context effects to the window-manager
-doc.
+The bootloader creates the initial filesystem, app manifests, shell state docs,
+the file picker state doc, and the window-manager state doc. Managed app state
+docs such as terminal sessions are created by launch intents and removed when
+their owning context closes. Apps are opened through intents after boot: file
+picker open/preview and file drag/drop requests submit route intents, and the
+runtime commits the resulting viewer context effects to the window-manager doc.
 
 The window manager owns:
 
@@ -288,8 +289,9 @@ The first useful implementation should stay small:
 
 1. App manifests live under `/apps`.
 2. File picker, viewer, and terminal each run as contexts.
-3. File picker state, terminal state, runtime state, themes, and window-manager
-   state live as Automerge docs under `/system`.
+3. File picker state, runtime state, themes, and window-manager state live as
+   boot-seeded Automerge docs under `/system`; managed app states such as
+   terminal sessions are created under `/system/apps` on launch.
 4. The window-manager doc owns surfaces, tabs, focus, and split layout.
 5. A router creates viewer contexts from route intents; file picker UI submits
    open/preview intents instead of constructing viewer contexts directly.
