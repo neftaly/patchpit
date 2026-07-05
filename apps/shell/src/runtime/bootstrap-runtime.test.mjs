@@ -7,6 +7,9 @@ import {
   WindowManagerNodeKind,
 } from '@patchpit/system';
 import {
+  filesystemTreeNodesRelation,
+  filesystemTreeProjection,
+  filesystemTreeSchemaId,
   workspaceContextsRelation,
   workspaceLayoutProjection,
   workspaceProjectionSchemaId,
@@ -15,6 +18,88 @@ import {
 } from '@patchpit/system/runtime';
 import { createBootstrapRuntimeClient } from './bootstrap-runtime.ts';
 import { workspaceProjectionFromRelationSet } from './workspace-projection.ts';
+
+void test('bootstrap runtime serves a live filesystem tree projection', () => {
+  const seed = createSeedFilesystem();
+  const runtime = createBootstrapRuntimeClient({ seed, workspaceId: 'test-workspace' });
+  const events = [];
+  const subscription = runtime.subscribeProjection(
+    {
+      projection: filesystemTreeProjection,
+      schemaId: filesystemTreeSchemaId,
+      basis: { kind: 'live' },
+    },
+    (event) => events.push(event),
+  );
+
+  try {
+    assert.equal(events.length, 1);
+    const snapshotEvent = events[0];
+    assert.equal(snapshotEvent.type, 'snapshot');
+
+    const snapshot = snapshotEvent.snapshot;
+    assert.equal(snapshot.projection, filesystemTreeProjection);
+    assert.equal(snapshot.schemaId, filesystemTreeSchemaId);
+    assert.equal(snapshot.schema?.schemaId, filesystemTreeSchemaId);
+    assert.match(snapshot.schemaHash, /^sha256:[a-f0-9]{64}$/);
+    assert.deepEqual(Object.keys(snapshot.storageHeads ?? {}), [seed.indexHandle.url]);
+    assert.deepEqual(Object.keys(snapshot.relations.relations), [filesystemTreeNodesRelation]);
+
+    const rows = snapshot.relations.relations[filesystemTreeNodesRelation] ?? [];
+    const rootRows = rows.filter((row) => row.url === seed.rootUrl);
+    assert.equal(rootRows.length, 1);
+    assert.equal(rootRows[0].isRoot, true);
+    assert.equal(rootRows[0].parentUrl, null);
+  } finally {
+    subscription.close();
+  }
+
+  const diagnostics = runtime.diagnostics.getSnapshot().projectionSubscriptions[0];
+  assert.equal(diagnostics.projection, filesystemTreeProjection);
+  assert.equal(diagnostics.status, 'closed');
+  assert.deepEqual(diagnostics.counters, {
+    errors: 0,
+    patches: 0,
+    resets: 0,
+    snapshots: 1,
+  });
+});
+
+void test('bootstrap runtime emits filesystem resets from index changes', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = createBootstrapRuntimeClient({ seed, workspaceId: 'test-workspace' });
+  const events = [];
+  const subscription = runtime.subscribeProjection(
+    {
+      projection: filesystemTreeProjection,
+      schemaId: filesystemTreeSchemaId,
+      basis: { kind: 'live' },
+    },
+    (event) => events.push(event),
+  );
+
+  try {
+    seed.indexHandle.change((doc) => {
+      doc.filesystemIndex.documents.push({
+        content: 'projection test',
+        mimeType: 'text/plain',
+        type: 'file',
+        url: 'automerge:projection-test',
+      });
+    });
+
+    await waitFor(() => events.length >= 2);
+    assert.equal(events[1].type, 'reset');
+    assert.equal(events[1].reason, 'source-change');
+    assert.equal(events[1].snapshot.storageHeads?.[seed.indexHandle.url]?.length > 0, true);
+  } finally {
+    subscription.close();
+  }
+
+  const diagnostics = runtime.diagnostics.getSnapshot().projectionSubscriptions[0];
+  assert.equal(diagnostics.status, 'closed');
+  assert.equal(diagnostics.counters.resets, 1);
+});
 
 void test('bootstrap runtime serves a live workspace layout projection', async () => {
   const seed = createSeedFilesystem();
@@ -96,6 +181,50 @@ void test('bootstrap runtime rejects workspace projection schema mismatches', ()
   } finally {
     subscription.close();
   }
+});
+
+void test('bootstrap runtime rejects unknown projections and unsupported bases', () => {
+  const seed = createSeedFilesystem();
+  const runtime = createBootstrapRuntimeClient({ seed, workspaceId: 'test-workspace' });
+  const unknownEvents = [];
+  const unknown = runtime.subscribeProjection(
+    {
+      projection: 'appManifests.handlers',
+      schemaId: 'patchpit.system.appManifest@1',
+      basis: { kind: 'live' },
+    },
+    (event) => unknownEvents.push(event),
+  );
+  const historicalEvents = [];
+  const historical = runtime.subscribeProjection(
+    {
+      projection: workspaceLayoutProjection,
+      schemaId: workspaceProjectionSchemaId,
+      basis: { kind: 'heads', heads: {} },
+    },
+    (event) => historicalEvents.push(event),
+  );
+
+  try {
+    assert.equal(unknownEvents.length, 1);
+    assert.equal(unknownEvents[0].type, 'error');
+    assert.equal(unknownEvents[0].error.code, 'unknown_projection');
+    assert.equal(historicalEvents.length, 1);
+    assert.equal(historicalEvents[0].type, 'error');
+    assert.equal(historicalEvents[0].error.code, 'unsupported_basis');
+  } finally {
+    unknown.close();
+    historical.close();
+  }
+
+  const diagnostics = runtime.diagnostics.getSnapshot().projectionSubscriptions;
+  assert.equal(diagnostics.length, 2);
+  assert.equal(diagnostics[0].status, 'error');
+  assert.equal(diagnostics[0].counters.errors, 1);
+  assert.equal(diagnostics[0].closedAt !== undefined, true);
+  assert.equal(diagnostics[1].status, 'error');
+  assert.equal(diagnostics[1].counters.errors, 1);
+  assert.equal(diagnostics[1].closedAt !== undefined, true);
 });
 
 void test('workspace projection decoder rejects inconsistent workspace relations', () => {
