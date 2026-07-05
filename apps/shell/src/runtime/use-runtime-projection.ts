@@ -8,18 +8,25 @@ import {
   filesystemTreeNodesRelation,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  workspaceLayoutProjection,
+  workspaceProjectionSchemaId,
   type ProjectionEvent,
   type ProjectionSubscription,
   type RelationSet,
   type RuntimeClient,
-  type RuntimeError,
 } from '@patchpit/system/runtime';
+import {
+  runtimeProjectionFailureFromRuntimeError,
+  runtimeProjectionFailureFromUnknownError,
+  type RuntimeProjectionFailure,
+} from './runtime-projection-failure';
+import {
+  workspaceProjectionFromProjectionEvent,
+  type WorkspaceProjectionState,
+} from './workspace-projection';
 
-export type RuntimeProjectionFailure = {
-  readonly title: string;
-  readonly message: string;
-  readonly details: readonly string[];
-};
+export type { RuntimeProjectionFailure } from './runtime-projection-failure';
+export type { WorkspaceProjection, WorkspaceProjectionState } from './workspace-projection';
 
 export type FilesystemTreeProjectionState =
   | { readonly status: 'initializing' }
@@ -51,10 +58,42 @@ export function useFilesystemTreeProjection(
         },
       );
     } catch (error) {
-      setProjection({ status: 'failed', failure: failureFromUnknownError(error) });
+      setProjection({ status: 'failed', failure: runtimeProjectionFailureFromUnknownError(error) });
     }
     return () => subscription?.close();
   }, [rootUrl, runtime]);
+
+  return projection;
+}
+
+export function useWorkspaceProjection(runtime: RuntimeClient): WorkspaceProjectionState {
+  const [projection, setProjection] = useState<WorkspaceProjectionState>({ status: 'initializing' });
+
+  useEffect(() => {
+    setProjection({ status: 'initializing' });
+    let subscription: ProjectionSubscription | undefined;
+    try {
+      subscription = runtime.subscribeProjection(
+        {
+          projection: workspaceLayoutProjection,
+          schemaId: workspaceProjectionSchemaId,
+          basis: { kind: 'live' },
+        },
+        (event) => {
+          if (event.type !== 'patch') setProjection(workspaceProjectionFromProjectionEvent(event));
+        },
+      );
+    } catch (error) {
+      setProjection({
+        status: 'failed',
+        failure: runtimeProjectionFailureFromUnknownError(
+          error,
+          'Workspace projection subscription failed.',
+        ),
+      });
+    }
+    return () => subscription?.close();
+  }, [runtime]);
 
   return projection;
 }
@@ -63,7 +102,9 @@ function filesystemFromProjectionEvent(
   event: ProjectionEvent,
   rootUrl: string,
 ): FilesystemTreeProjectionState {
-  if (event.type === 'error') return { status: 'failed', failure: failureFromRuntimeError(event.error) };
+  if (event.type === 'error') {
+    return { status: 'failed', failure: runtimeProjectionFailureFromRuntimeError(event.error) };
+  }
   if (event.type === 'patch') return { status: 'initializing' };
   return filesystemFromRelationSet(event.snapshot.relations, rootUrl);
 }
@@ -81,53 +122,4 @@ function filesystemFromRelationSet(relations: RelationSet, rootUrl: string): Fil
       details: filesystem.diagnostics.map((diagnostic) => String(diagnostic)),
     },
   };
-}
-
-function failureFromRuntimeError(error: RuntimeError): RuntimeProjectionFailure {
-  return {
-    title: projectionFailureTitle(error),
-    message: error.message,
-    details: [
-      `code: ${error.code}`,
-      ...(error.reason === undefined ? [] : [`reason: ${error.reason}`]),
-      ...metadataDetails(error.metadata),
-    ],
-  };
-}
-
-function failureFromUnknownError(error: unknown): RuntimeProjectionFailure {
-  return {
-    title: 'Projection unavailable',
-    message: error instanceof Error ? error.message : 'Filesystem projection subscription failed.',
-    details: detailFromUnknown(error),
-  };
-}
-
-function projectionFailureTitle(error: RuntimeError): string {
-  if (error.code === 'unknown_projection') return 'Projection unavailable';
-  if (error.code === 'schema_mismatch') return 'Projection schema mismatch';
-  if (error.code === 'unsupported_basis') return 'Projection basis unavailable';
-  if (error.code === 'runtime_unavailable') return 'Runtime unavailable';
-  if (error.code === 'policy_denied') return 'Projection denied by policy';
-  if (error.code === 'policy_quarantined') return 'Projection quarantined by policy';
-  return 'Filesystem projection unavailable';
-}
-
-function detailFromUnknown(value: unknown): readonly string[] {
-  if (value === undefined || value instanceof Error) return [];
-  if (typeof value === 'string') return [value];
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return [String(value)];
-  }
-  try {
-    const json = JSON.stringify(value);
-    return json === undefined ? [] : [json];
-  } catch {
-    return [Object.prototype.toString.call(value)];
-  }
-}
-
-function metadataDetails(metadata: RuntimeError['metadata']): readonly string[] {
-  if (metadata === undefined) return [];
-  return Object.entries(metadata).map(([key, value]) => `${key}: ${JSON.stringify(value)}`);
 }

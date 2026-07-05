@@ -50,7 +50,7 @@ import {
   createStateBrowserSnapshot,
   type StateBrowserRuntimeIssueEntry,
 } from './state-browser/StateBrowser';
-import { useFilesystemTreeProjection } from './runtime/use-runtime-projection';
+import { useFilesystemTreeProjection, useWorkspaceProjection } from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
 import { WindowManager } from './window-manager/WindowManager';
 import {
@@ -119,7 +119,7 @@ function ShellApp({
   const terminalState = useAutomergeDoc(seed.terminalStateHandle);
   const terminalStates = useAutomergeDocs(terminalHandles);
   const runtimeState = useAutomergeDoc(seed.runtimeStateHandle);
-  const windowManagerState = useAutomergeDoc(seed.windowManagerHandle);
+  const windowManagerDocument = useAutomergeDoc(seed.windowManagerHandle);
   const prefersDark = usePrefersDark();
   const theme = resolveTheme(appearance, lightTheme, darkTheme, prefersDark);
 
@@ -135,10 +135,11 @@ function ShellApp({
     [seed.lightThemeHandle.url]: lightTheme,
     [seed.runtimeStateHandle.url]: runtimeState,
     [seed.terminalStateHandle.url]: terminalState,
-    [seed.windowManagerHandle.url]: windowManagerState,
+    [seed.windowManagerHandle.url]: windowManagerDocument,
     ...terminalStates,
   };
   const filesystemProjection = useFilesystemTreeProjection(runtime, seed.rootUrl);
+  const workspaceProjection = useWorkspaceProjection(runtime);
   const stateBrowserSnapshot = createStateBrowserSnapshot({
     filesystemProjection,
     runtimeAck: runtimeConnection.ack,
@@ -148,7 +149,7 @@ function ShellApp({
     runtimePlatform,
     runtimeState,
     schemaDocuments: liveDocuments,
-    windowManagerState,
+    workspaceProjection,
   });
   const recordRuntimeIssue = (source: StateBrowserRuntimeIssueEntry['source'], issue: RuntimePanelFailure) => {
     const entry: StateBrowserRuntimeIssueEntry = {
@@ -254,7 +255,9 @@ function ShellApp({
     },
   ]));
   const launchers = launcherItems({
-    focusedAppId: focusedAppId(windowManagerState),
+    focusedAppId: workspaceProjection.status === 'ready'
+      ? focusedAppId(workspaceProjection.workspace)
+      : undefined,
     filePickerStateHandle: seed.filePickerStateHandle,
     launchApp,
     rootUrl: seed.rootUrl,
@@ -265,7 +268,7 @@ function ShellApp({
       {runtimeFault === undefined ? null : <RuntimeIssueBanner failure={runtimeFault} />}
       {filesystemProjection.status === 'initializing' ? (
         <RuntimeStatusPanel
-          title="Projection initializing"
+          title="Filesystem projection initializing"
           message="Waiting for the filesystem.tree snapshot from the runtime."
         />
       ) : filesystemProjection.status === 'failed' ? (
@@ -274,6 +277,17 @@ function ShellApp({
           message={filesystemProjection.failure.message}
           details={filesystemProjection.failure.details}
         />
+      ) : workspaceProjection.status === 'initializing' ? (
+        <RuntimeStatusPanel
+          title="Workspace projection initializing"
+          message="Waiting for the workspace.layout snapshot from the runtime."
+        />
+      ) : workspaceProjection.status === 'failed' ? (
+        <RuntimeStatusPanel
+          title={workspaceProjection.failure.title}
+          message={workspaceProjection.failure.message}
+          details={workspaceProjection.failure.details}
+        />
       ) : (
         <>
           <WindowManager
@@ -281,10 +295,10 @@ function ShellApp({
             filePickers={filePickers}
             filesystemRoot={filesystemProjection.root}
             liveDocuments={liveDocuments}
-            state={windowManagerState}
             stateBrowser={stateBrowserSnapshot}
             terminals={terminals}
             theme={theme}
+            workspace={workspaceProjection.workspace}
           />
           <LauncherBar items={launchers} onResetSession={onResetSession} />
         </>

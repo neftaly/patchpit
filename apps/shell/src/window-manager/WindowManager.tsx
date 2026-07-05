@@ -63,6 +63,8 @@ type RunningTerminal = {
   readonly state: TerminalStateDoc;
 };
 
+export type WindowManagerWorkspace = Pick<WindowManagerStateDoc, 'contexts' | 'focus' | 'layout' | 'surfaces'>;
+
 type WindowManagerRuntime = {
   readonly actions: WindowManagerActions;
   readonly contexts: Readonly<Record<string, WindowContext>>;
@@ -97,19 +99,19 @@ export function WindowManager({
   filePickers,
   filesystemRoot,
   liveDocuments,
-  state,
   stateBrowser,
   terminals,
   theme,
+  workspace,
 }: {
   readonly actions: WindowManagerActions;
   readonly filePickers: Readonly<Record<string, RunningFilePicker>>;
   readonly filesystemRoot: FilesystemNode;
   readonly liveDocuments: Readonly<Record<string, unknown>>;
-  readonly state: WindowManagerStateDoc;
   readonly stateBrowser: StateBrowserSnapshot;
   readonly terminals: Readonly<Record<string, RunningTerminal>>;
   readonly theme: ThemeDoc;
+  readonly workspace: WindowManagerWorkspace;
 }) {
   const [draggedTab, setDraggedTab] = useState<DraggedTab>();
   const [dropTarget, setDropTargetState] = useState<DropTarget>();
@@ -118,7 +120,7 @@ export function WindowManager({
   };
   const runtime = {
     actions,
-    contexts: state.contexts,
+    contexts: workspace.contexts,
     draggedTab,
     dropTarget,
     filePickers,
@@ -127,14 +129,14 @@ export function WindowManager({
     setDraggedTab,
     setDropTarget,
     stateBrowser,
-    surfaces: state.surfaces,
+    surfaces: workspace.surfaces,
     terminals,
     theme,
   };
 
   return (
     <section className="window-manager" aria-label="window manager">
-      <LayoutNodeView node={state.layout} path={[]} runtime={runtime} />
+      <LayoutNodeView node={workspace.layout} path={[]} runtime={runtime} />
     </section>
   );
 }

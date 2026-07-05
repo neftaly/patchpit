@@ -140,7 +140,9 @@ export function normalizeWindowManagerState(state: WindowManagerStateDoc): Windo
   return normalizedState;
 }
 
-export function focusedAppId(state: WindowManagerStateDoc): string | undefined {
+export function focusedAppId(
+  state: Pick<WindowManagerStateDoc, 'contexts' | 'focus' | 'surfaces'>,
+): string | undefined {
   const result = evaluate(
     fromObjectSource({
       contexts: Object.values(state.contexts),

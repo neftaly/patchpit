@@ -11,10 +11,12 @@ import '@patchpit/system/theme.css';
 import {
   FilePicker,
   fileIcons,
+} from './index';
+import {
   selectFilePickerUrl,
   toggleFilePickerFolder,
   type FileSelectionOptions,
-} from './index';
+} from './file-picker-state';
 
 function App() {
   const [seed] = useState(createSeedFilesystem);

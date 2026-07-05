@@ -5,7 +5,6 @@ import {
   type RuntimeStateDoc,
   type WindowLayoutNode,
   WindowManagerNodeKind,
-  type WindowManagerStateDoc,
 } from '@patchpit/system';
 import {
   runtimePlatformFeatureLabel,
@@ -14,7 +13,11 @@ import {
   type RuntimePlatformReport,
 } from '@patchpit/system/runtime';
 import type { BootstrapRuntimeDiagnostics } from '../runtime/bootstrap-runtime';
-import type { FilesystemTreeProjectionState } from '../runtime/use-runtime-projection';
+import type {
+  FilesystemTreeProjectionState,
+  WorkspaceProjection,
+  WorkspaceProjectionState,
+} from '../runtime/use-runtime-projection';
 import './state-browser.css';
 
 export type StateBrowserRuntimeIssue = {
@@ -39,7 +42,7 @@ export type StateBrowserSnapshotInput = {
   readonly runtimePlatform: RuntimePlatformReport;
   readonly runtimeState: RuntimeStateDoc;
   readonly schemaDocuments: Readonly<Record<string, unknown>>;
-  readonly windowManagerState: WindowManagerStateDoc;
+  readonly workspaceProjection: WorkspaceProjectionState;
 };
 
 export type StateBrowserSnapshot = {
@@ -113,15 +116,23 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
       },
       {
         id: 'window-manager',
-        title: 'Window Manager Summary',
-        summary: windowManagerSummaryText(input.windowManagerState),
-        data: windowManagerSummary(input.windowManagerState),
+        title: 'Workspace Layout Summary',
+        summary: workspaceSummaryText(input.workspaceProjection),
+        data: workspaceSummary(input.workspaceProjection),
       },
       {
         id: 'projection-status',
         title: 'Projection Status And Counters',
-        summary: projectionStatusSummary(input.filesystemProjection, input.runtimeDiagnostics),
-        data: projectionStatusData(input.filesystemProjection, input.runtimeDiagnostics),
+        summary: projectionStatusSummary(
+          input.filesystemProjection,
+          input.workspaceProjection,
+          input.runtimeDiagnostics,
+        ),
+        data: projectionStatusData(
+          input.filesystemProjection,
+          input.workspaceProjection,
+          input.runtimeDiagnostics,
+        ),
       },
       {
         id: 'schemas',
@@ -221,13 +232,30 @@ function platformFeatureSummary(feature: RuntimePlatformFeature) {
   };
 }
 
-function windowManagerSummaryText(state: WindowManagerStateDoc): string {
+function workspaceSummaryText(projection: WorkspaceProjectionState): string {
+  if (projection.status === 'initializing') return 'Workspace projection initializing';
+  if (projection.status === 'failed') return projection.failure.title;
+  return windowManagerSummaryText(projection.workspace);
+}
+
+function workspaceSummary(projection: WorkspaceProjectionState) {
+  if (projection.status === 'initializing') return { status: projection.status };
+  if (projection.status === 'failed') return { status: projection.status, failure: projection.failure };
+  return {
+    status: projection.status,
+    schemaHash: projection.workspace.schemaHash,
+    storageHeadDocs: Object.keys(projection.workspace.storageHeads ?? {}),
+    ...windowManagerSummary(projection.workspace),
+  };
+}
+
+function windowManagerSummaryText(state: WorkspaceProjection): string {
   const surfaceCount = Object.keys(state.surfaces).length;
   const contextCount = Object.keys(state.contexts).length;
   return `${surfaceCount} surfaces, ${contextCount} contexts`;
 }
 
-function windowManagerSummary(state: WindowManagerStateDoc) {
+function windowManagerSummary(state: WorkspaceProjection) {
   return {
     focus: state.focus,
     counts: {
@@ -247,13 +275,13 @@ function windowManagerSummary(state: WindowManagerStateDoc) {
   };
 }
 
-function contextsByApp(state: WindowManagerStateDoc): Readonly<Record<string, number>> {
+function contextsByApp(state: WorkspaceProjection): Readonly<Record<string, number>> {
   const counts: Record<string, number> = {};
   for (const context of Object.values(state.contexts)) counts[context.app] = (counts[context.app] ?? 0) + 1;
   return counts;
 }
 
-function contextSummary(state: WindowManagerStateDoc, contextId: string) {
+function contextSummary(state: WorkspaceProjection, contextId: string) {
   const context = state.contexts[contextId];
   if (context === undefined) return { id: contextId, missing: true };
   return {
@@ -283,18 +311,28 @@ function layoutSummary(node: WindowLayoutNode): unknown {
 
 function projectionStatusSummary(
   projection: FilesystemTreeProjectionState,
+  workspaceProjection: WorkspaceProjectionState,
   diagnostics: BootstrapRuntimeDiagnostics,
 ): string {
   const counters = totalProjectionCounters(diagnostics);
-  return `${projection.status}, ${counters.resets} resets, ${counters.errors} errors`;
+  return [
+    `filesystem ${projection.status}`,
+    `workspace ${workspaceProjection.status}`,
+    `${counters.resets} resets`,
+    `${counters.errors} errors`,
+  ].join(', ');
 }
 
 function projectionStatusData(
   projection: FilesystemTreeProjectionState,
+  workspaceProjection: WorkspaceProjectionState,
   diagnostics: BootstrapRuntimeDiagnostics,
 ) {
   return {
-    current: filesystemProjectionData(projection),
+    current: {
+      filesystem: filesystemProjectionData(projection),
+      workspace: workspaceProjectionData(workspaceProjection),
+    },
     subscriptions: diagnostics.projectionSubscriptions,
     totals: totalProjectionCounters(diagnostics),
   };
@@ -312,6 +350,22 @@ function filesystemProjectionData(projection: FilesystemTreeProjectionState) {
     status: projection.status,
     rootUrl: projection.root.url,
     nodeCount: countFilesystemNodes(projection.root),
+  };
+}
+
+function workspaceProjectionData(projection: WorkspaceProjectionState) {
+  if (projection.status === 'initializing') return { status: projection.status };
+  if (projection.status === 'failed') return {
+    status: projection.status,
+    failure: projection.failure,
+  };
+  return {
+    status: projection.status,
+    focus: projection.workspace.focus,
+    contextCount: Object.keys(projection.workspace.contexts).length,
+    surfaceCount: Object.keys(projection.workspace.surfaces).length,
+    schemaHash: projection.workspace.schemaHash,
+    storageHeadDocs: Object.keys(projection.workspace.storageHeads ?? {}),
   };
 }
 

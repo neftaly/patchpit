@@ -3,7 +3,7 @@ import {
   selectFilePickerUrl,
   toggleFilePickerFolder,
   type FileSelectionOptions,
-} from '@patchpit/file-picker';
+} from '@patchpit/file-picker/state';
 import {
   appLaunchIntentBoundary,
   filePickerIntentBoundary,
@@ -19,6 +19,7 @@ import {
   SurfaceRole,
   terminalContainer,
   windowIntentBoundary,
+  windowManagerStateSchema,
   WindowManagerNodeKind,
   type AppManifestDoc,
   type AppContainer,
@@ -43,6 +44,11 @@ import {
   runtimeError,
   runtimeIntentRequestRow,
   windowCloseContextIntent,
+  workspaceContextsRelation,
+  workspaceLayoutProjection,
+  workspaceProjectionSchemaId,
+  workspaceStateRelation,
+  workspaceSurfacesRelation,
   windowFocusIntent,
   windowMoveTabIntent,
   windowPinPreviewIntent,
@@ -65,6 +71,7 @@ import {
   type RuntimeClient,
   type RuntimeError,
   type TarstateRow,
+  type WorkspaceProjectionRelations,
   type WindowIntentRow,
 } from '@patchpit/system/runtime';
 import {
@@ -178,6 +185,11 @@ const filesystemTreeSnapshotSchema = {
   schema: filesystemTreeSchema,
   ...(filesystemTreeSchemaRef.hash === undefined ? {} : { schemaHash: filesystemTreeSchemaRef.hash }),
 } as const;
+const workspaceProjectionSchemaRef = patchpitSystemSchemaRef(windowManagerStateSchema);
+const workspaceProjectionSnapshotSchema = {
+  schema: windowManagerStateSchema,
+  ...(workspaceProjectionSchemaRef.hash === undefined ? {} : { schemaHash: workspaceProjectionSchemaRef.hash }),
+} as const;
 
 export function createBootstrapRuntimeClient({
   createTerminalState,
@@ -195,59 +207,62 @@ export function createBootstrapRuntimeClient({
     subscribeProjection(request, listener) {
       const subscriptionId = `${workspaceId}:projection:${nextSubscriptionId++}`;
       diagnostics.recordProjectionOpened(subscriptionId, request);
-      if (request.projection !== filesystemTreeProjection) {
-        return errorSubscription(subscriptionId, listener, runtimeError(
-          'unknown_projection',
-          `Unknown projection: ${request.projection}`,
-        ), diagnostics);
-      }
-      if (request.schemaId !== filesystemTreeSchemaId) {
-        return errorSubscription(subscriptionId, listener, runtimeError(
-          'schema_mismatch',
-          `Projection ${request.projection} requires schema ${filesystemTreeSchemaId}.`,
-        ), diagnostics);
-      }
-      if (!isLiveBasis(request.basis)) {
-        return errorSubscription(subscriptionId, listener, runtimeError(
-          'unsupported_basis',
-          'The bootstrap runtime only serves live filesystem projections.',
-        ), diagnostics);
-      }
-
-      let closed = false;
-      const emit = (type: 'snapshot' | 'reset', reason?: string) => {
-        if (closed) return;
-        const snapshot = filesystemSnapshot(subscriptionId, request);
-        if (isRuntimeError(snapshot)) {
-          const event = { type: 'error', error: snapshot } satisfies ProjectionEvent;
-          diagnostics.recordProjectionEvent(subscriptionId, event);
-          listener(event);
-          return;
+      if (request.projection === filesystemTreeProjection) {
+        if (request.schemaId !== filesystemTreeSchemaId) {
+          return errorSubscription(subscriptionId, listener, runtimeError(
+            'schema_mismatch',
+            `Projection ${request.projection} requires schema ${filesystemTreeSchemaId}.`,
+          ), diagnostics);
         }
-        const event = (
-          type === 'snapshot'
-            ? { type, snapshot }
-            : reason === undefined
-              ? { type, snapshot }
-              : { type, snapshot, reason }
-        ) satisfies ProjectionEvent;
-        diagnostics.recordProjectionEvent(subscriptionId, event);
-        listener(event);
-      };
-      const update = () => emit('reset', 'source-change');
+        if (!isLiveBasis(request.basis)) {
+          return errorSubscription(subscriptionId, listener, runtimeError(
+            'unsupported_basis',
+            `The bootstrap runtime only serves live ${request.projection} projections.`,
+          ), diagnostics);
+        }
 
-      seed.indexHandle.on('change', update);
-      emit('snapshot');
+        return liveProjectionSubscription(
+          subscriptionId,
+          listener,
+          diagnostics,
+          (update) => {
+            seed.indexHandle.on('change', update);
+            return () => seed.indexHandle.off('change', update);
+          },
+          () => filesystemSnapshot(subscriptionId, request),
+        );
+      }
 
-      return {
-        subscriptionId,
-        close() {
-          if (closed) return;
-          closed = true;
-          seed.indexHandle.off('change', update);
-          diagnostics.recordProjectionClosed(subscriptionId);
-        },
-      };
+      if (request.projection === workspaceLayoutProjection) {
+        if (request.schemaId !== workspaceProjectionSchemaId) {
+          return errorSubscription(subscriptionId, listener, runtimeError(
+            'schema_mismatch',
+            `Projection ${request.projection} requires schema ${workspaceProjectionSchemaId}.`,
+          ), diagnostics);
+        }
+        if (!isLiveBasis(request.basis)) {
+          return errorSubscription(subscriptionId, listener, runtimeError(
+            'unsupported_basis',
+            `The bootstrap runtime only serves live ${request.projection} projections.`,
+          ), diagnostics);
+        }
+
+        return liveProjectionSubscription(
+          subscriptionId,
+          listener,
+          diagnostics,
+          (update) => {
+            seed.windowManagerHandle.on('change', update);
+            return () => seed.windowManagerHandle.off('change', update);
+          },
+          () => workspaceSnapshot(subscriptionId, request),
+        );
+      }
+
+      return errorSubscription(subscriptionId, listener, runtimeError(
+        'unknown_projection',
+        `Unknown projection: ${request.projection}`,
+      ), diagnostics);
     },
 
     async submitIntent(request) {
@@ -384,9 +399,99 @@ export function createBootstrapRuntimeClient({
       relations,
     };
   }
+
+  function workspaceSnapshot(
+    subscriptionId: string,
+    request: ProjectionSubscriptionRequest,
+  ): ProjectionSnapshot {
+    return {
+      subscriptionId,
+      projection: request.projection,
+      schemaId: request.schemaId,
+      ...workspaceProjectionSnapshotSchema,
+      basis: request.basis ?? { kind: 'live' },
+      storageHeads: automergeHeadSetForHandle(seed.windowManagerHandle),
+      relations: relationSet(workspaceProjectionRelations(seed.windowManagerHandle.doc())),
+    };
+  }
 }
 
 const diagnosticsLogLimit = 50;
+
+function workspaceProjectionRelations(
+  state: WindowManagerStateDoc,
+): WorkspaceProjectionRelations {
+  return {
+    [workspaceStateRelation]: [
+      {
+        focus: state.focus,
+        id: 'window-manager',
+        layout: structuredClone(state.layout),
+      },
+    ],
+    [workspaceContextsRelation]: Object.values(state.contexts)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((context) => ({
+        app: context.app,
+        container: structuredClone(context.container),
+        id: context.id,
+        ...(context.title === undefined ? {} : { title: context.title }),
+        url: context.url,
+      })),
+    [workspaceSurfacesRelation]: Object.values(state.surfaces)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((surface) => ({
+        ...(surface.activeContext === undefined ? {} : { activeContext: surface.activeContext }),
+        contexts: [...surface.contexts],
+        id: surface.id,
+        ...(surface.previewContext === undefined ? {} : { previewContext: surface.previewContext }),
+        role: surface.role,
+      })),
+  };
+}
+
+function liveProjectionSubscription(
+  subscriptionId: string,
+  listener: (event: ProjectionEvent) => void,
+  diagnostics: BootstrapRuntimeDiagnosticsStoreInternal,
+  subscribeChange: (update: () => void) => () => void,
+  snapshot: () => ProjectionSnapshot | RuntimeError,
+): ProjectionSubscription {
+  let closed = false;
+  const emit = (type: 'snapshot' | 'reset', reason?: string) => {
+    if (closed) return;
+    const nextSnapshot = snapshot();
+    if (isRuntimeError(nextSnapshot)) {
+      const event = { type: 'error', error: nextSnapshot } satisfies ProjectionEvent;
+      diagnostics.recordProjectionEvent(subscriptionId, event);
+      listener(event);
+      return;
+    }
+    const event = (
+      type === 'snapshot'
+        ? { type, snapshot: nextSnapshot }
+        : reason === undefined
+          ? { type, snapshot: nextSnapshot }
+          : { type, snapshot: nextSnapshot, reason }
+    ) satisfies ProjectionEvent;
+    diagnostics.recordProjectionEvent(subscriptionId, event);
+    listener(event);
+  };
+  const update = () => emit('reset', 'source-change');
+  const unsubscribe = subscribeChange(update);
+
+  emit('snapshot');
+
+  return {
+    subscriptionId,
+    close() {
+      if (closed) return;
+      closed = true;
+      unsubscribe();
+      diagnostics.recordProjectionClosed(subscriptionId);
+    },
+  };
+}
 
 function createBootstrapRuntimeDiagnosticsStore(): BootstrapRuntimeDiagnosticsStoreInternal {
   let nextIntentSequence = 1;

@@ -1,6 +1,6 @@
 import { validateRelationRow } from '@tarstate/core/evaluate';
 import { hydrateSchemaManifest, type HydratedSchema, type RelationRef } from '@tarstate/core/schema';
-import type { SurfaceRole, WindowContext } from '../filesystem/types';
+import type { SurfaceRole, WindowContext, WindowLayoutNode, WindowSurface } from '../filesystem/types';
 import type {
   PatchpitRelationSchemaDescriptor,
   PatchpitSchemaHash,
@@ -189,6 +189,11 @@ export type ProjectionName =
 export const filesystemTreeProjection = 'filesystem.tree' as const satisfies ProjectionName;
 export const filesystemTreeSchemaId = 'patchpit.filesystem.tree@1' as const;
 export const filesystemTreeNodesRelation = 'nodes' as const;
+export const workspaceLayoutProjection = 'workspace.layout' as const satisfies ProjectionName;
+export const workspaceProjectionSchemaId = 'patchpit.system.windowManager.state@1' as const;
+export const workspaceStateRelation = 'state' as const;
+export const workspaceContextsRelation = 'contexts' as const;
+export const workspaceSurfacesRelation = 'surfaces' as const;
 
 export type FilesystemTreeNodeKind = 'folder' | 'file';
 export type FilesystemTreeNodeRow = {
@@ -204,6 +209,18 @@ export type FilesystemTreeNodeRow = {
   readonly type: string;
   readonly url: string;
 };
+
+export type WorkspaceProjectionStateRow = {
+  readonly focus: string;
+  readonly id: string;
+  readonly layout: WindowLayoutNode;
+};
+
+export type WorkspaceProjectionRelations = Readonly<{
+  [workspaceStateRelation]: readonly WorkspaceProjectionStateRow[];
+  [workspaceContextsRelation]: readonly WindowContext[];
+  [workspaceSurfacesRelation]: readonly WindowSurface[];
+}>;
 
 export type ProjectionSubscriptionRequest = {
   readonly projection: ProjectionName;
