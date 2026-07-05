@@ -7,6 +7,15 @@ import {
   PatchpitType,
   terminalContainer,
 } from '@patchpit/system';
+import {
+  terminalFilesystemCapability,
+  terminalFilesystemProtocol,
+} from '@patchpit/system/runtime';
+import {
+  createPatchpitFilesystem,
+  createTerminalFilesystemClient,
+  serveTerminalFilesystemCapability,
+} from './filesystem.ts';
 import { PatchpitFs } from './patchpit-fs.ts';
 import { createTerminalRuntime, runTerminalCommand } from './terminal-bash.ts';
 
@@ -106,6 +115,43 @@ void test('terminal runtime opens roots through a scoped filesystem adapter', as
   assert.equal(overlayResult.stderr, '');
   assert.equal(overlayResult.stdout, 'overlay\n');
   assert.deepEqual(openedRoots, [rootUrl, overlayUrl]);
+});
+
+void test('terminal filesystem capability serves operations over a port', async () => {
+  const seed = createSeedFilesystem();
+  const filesystem = createPatchpitFilesystem({
+    documentHandles: seed.documentHandles,
+    indexHandle: seed.indexHandle,
+    repo: seed.repo,
+    rootUrl: seed.rootUrl,
+  });
+  const grant = {
+    capability: terminalFilesystemCapability,
+    capabilityId: 'terminal-filesystem:test',
+    endpoint: {
+      protocol: terminalFilesystemProtocol,
+      rootUrl: seed.rootUrl,
+      initialPaths: filesystem.openRoot(seed.rootUrl).getAllPaths(),
+    },
+    verbs: ['read', 'write', 'stat', 'list', 'mount'],
+  };
+  const { port1, port2 } = new MessageChannel();
+  const closeServer = serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
+  const client = createTerminalFilesystemClient({ grant, port: port2 });
+  const fs = client.openRoot(seed.rootUrl);
+
+  try {
+    assert.equal(fs.getAllPaths().includes('/'), true);
+
+    await fs.writeFile('/home/capability.txt', 'hello from capability');
+
+    assert.equal(await fs.readFile('/home/capability.txt'), 'hello from capability');
+    assert.equal((await fs.stat('/home/capability.txt')).isFile, true);
+    assert.equal(fs.getAllPaths().includes('/home/capability.txt'), true);
+  } finally {
+    closeServer();
+    port2.close();
+  }
 });
 
 function createTestFilesystem() {

@@ -775,7 +775,14 @@ type CapabilityGrant = {
   capability: string;
   verbs: readonly string[];
   bounds?: CapabilityBounds;
+  endpoint?: CapabilityEndpoint;
   schemas?: Record<TarstateSchemaId, PatchpitRelationSchemaDescriptor>;
+};
+
+type CapabilityEndpoint = {
+  protocol: string;
+  rootUrl?: string;
+  initialPaths?: readonly string[];
 };
 
 type CapabilityBounds = {
@@ -826,6 +833,52 @@ verbs, TTLs, and queue bounds.
 Capability lifecycle events are delivered through `RuntimeEvent` with
 `type: 'capability'`. Capability-specific traffic uses the returned
 `MessagePort`.
+
+### Terminal Filesystem Capability
+
+`terminal.filesystem` exposes a scoped `just-bash` filesystem over a capability
+port. The bootstrap runtime serves it from the canonical Patchpit filesystem,
+and terminal UIs consume the returned port instead of raw `Repo` or `DocHandle`
+authority.
+
+The grant endpoint is explicit:
+
+```ts
+const terminalFilesystemCapability = 'terminal.filesystem';
+const terminalFilesystemProtocol = 'patchpit.terminal.filesystem@1';
+
+type TerminalFilesystemCapabilityGrant = CapabilityGrant & {
+  capability: 'terminal.filesystem';
+  verbs: readonly ('read' | 'write' | 'stat' | 'list' | 'mount')[];
+  endpoint: {
+    protocol: 'patchpit.terminal.filesystem@1';
+    rootUrl: string;
+    initialPaths: readonly string[];
+  };
+};
+```
+
+Port traffic is request/response. `rootUrl` selects the mounted Automerge root
+for the operation, so overlay mounts use the same capability without receiving
+broad filesystem authority.
+
+```ts
+type TerminalFilesystemRequest = {
+  protocol: 'patchpit.terminal.filesystem@1';
+  id: string;
+  capabilityId: string;
+  rootUrl: string;
+  op: TerminalFilesystemOperation;
+  args: readonly unknown[];
+};
+
+type TerminalFilesystemResponse =
+  | { protocol: 'patchpit.terminal.filesystem@1'; id: string; ok: true; result?: unknown; paths?: readonly string[] }
+  | { protocol: 'patchpit.terminal.filesystem@1'; id: string; ok: false; error: { code?: string; message: string } };
+```
+
+`paths` updates the client's synchronous `getAllPaths()` cache. This is a cache
+of already-granted filesystem names, not canonical state.
 
 ## Realtime Capabilities
 
@@ -1130,6 +1183,10 @@ landed the handshake gate and the first shell extraction scaffold:
   construction in the UI.
 - Normal window controls now go through window intents for focus, close,
   preview pinning, tab drops, and split resize.
+- Terminal filesystems now open through
+  `openCapability('terminal.filesystem')`. The shell UI consumes a scoped
+  port-backed adapter instead of constructing the raw filesystem from
+  `Repo`/`DocHandle` authority.
 
 Next work:
 
@@ -1139,8 +1196,6 @@ Next work:
   `subscribeProjection('workspace.surfaces')`,
   `subscribeProjection('workspace.contexts')`, and
   `subscribeProjection('workspace.layout')`.
-- Move the terminal filesystem shim behind
-  `openCapability('terminal.filesystem')`.
 - Add runtime boundary metrics.
 
 Delete or quarantine the in-process scaffold once the worker path owns the

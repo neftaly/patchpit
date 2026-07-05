@@ -1,5 +1,9 @@
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
+  createPatchpitFilesystem,
+  serveTerminalFilesystemCapability,
+} from '@patchpit/terminal/filesystem';
+import {
   appLaunchIntentBoundary,
   ContainerMountKind,
   PatchpitType,
@@ -20,7 +24,12 @@ import {
   automergeHeadSetForHandle,
   runtimeError,
   runtimeIntentRequestRow,
+  terminalFilesystemCapability,
+  terminalFilesystemProtocol,
+  terminalFilesystemVerbs,
   type AppLaunchIntentRow,
+  type CapabilityRequest,
+  type CapabilityPort,
   type IntentName,
   type IntentRequest,
   type IntentResult,
@@ -31,6 +40,8 @@ import {
   type ProjectionSubscriptionRequest,
   type RuntimeClient,
   type RuntimeError,
+  type TerminalFilesystemCapabilityGrant,
+  type TerminalFilesystemVerb,
 } from '@patchpit/system/runtime';
 import {
   commitWindowManagerState,
@@ -144,6 +155,7 @@ type AppLaunchCommitOptions = {
 };
 
 const defaultAppLaunchSlot = 'default';
+let nextCapabilityId = 1;
 
 export function createBootstrapRuntimeClient({
   createTerminalState,
@@ -190,9 +202,54 @@ export function createBootstrapRuntimeClient({
     },
 
     async openCapability(request) {
-      throw runtimeError('unknown_capability', `Unknown capability: ${request.capability}`);
+      return openBootstrapCapability(seed, request);
     },
   };
+}
+
+function openBootstrapCapability(
+  seed: SeedFilesystem,
+  request: CapabilityRequest,
+): CapabilityPort {
+  if (request.capability !== terminalFilesystemCapability) {
+    throw runtimeError('unknown_capability', `Unknown capability: ${request.capability}`);
+  }
+
+  const verbs = terminalFilesystemGrantVerbs(request.verbs);
+  if (verbs.length === 0) {
+    throw runtimeError(
+      'bad_request',
+      `${terminalFilesystemCapability} request did not include any supported verbs.`,
+    );
+  }
+
+  const filesystem = createPatchpitFilesystem({
+    documentHandles: seed.documentHandles,
+    indexHandle: seed.indexHandle,
+    repo: seed.repo,
+    rootUrl: seed.rootUrl,
+  });
+  const grant: TerminalFilesystemCapabilityGrant = {
+    capability: terminalFilesystemCapability,
+    capabilityId: `terminal-filesystem:${nextCapabilityId++}`,
+    endpoint: {
+      protocol: terminalFilesystemProtocol,
+      rootUrl: seed.rootUrl,
+      initialPaths: filesystem.openRoot(seed.rootUrl).getAllPaths(),
+    },
+    verbs,
+  };
+  const { port1, port2 } = new MessageChannel();
+  serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
+
+  return { grant, port: port2 };
+}
+
+function terminalFilesystemGrantVerbs(
+  requested: readonly string[] | undefined,
+): readonly TerminalFilesystemVerb[] {
+  if (requested === undefined) return terminalFilesystemVerbs;
+  return terminalFilesystemVerbs.filter((verb) => requested.includes(verb));
 }
 
 type BootstrapAppLaunchIntentOptions = {

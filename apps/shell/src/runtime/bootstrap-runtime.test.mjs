@@ -17,6 +17,8 @@ import {
   filesystemTreeSchemaId,
   routeOpenIntent,
   submitRuntimeIntent,
+  terminalFilesystemCapability,
+  terminalFilesystemProtocol,
   windowFocusIntent,
   workspaceContextsRelation,
   workspaceLayoutProjection,
@@ -175,6 +177,25 @@ void test('bootstrap runtime commits route, file-picker, and window intents', as
       [windowFocusIntent, 'committed'],
     ],
   );
+});
+
+void test('bootstrap runtime opens a narrowed terminal filesystem capability', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = createBootstrapRuntimeClient({ seed, workspaceId: 'test-workspace' });
+  const capability = await runtime.openCapability({
+    capability: terminalFilesystemCapability,
+    verbs: ['read', 'list', 'unsupported'],
+  });
+
+  try {
+    assert.equal(capability.grant.capability, terminalFilesystemCapability);
+    assert.deepEqual(capability.grant.verbs, ['read', 'list']);
+    assert.equal(capability.grant.endpoint?.protocol, terminalFilesystemProtocol);
+    assert.equal(capability.grant.endpoint?.rootUrl, seed.rootUrl);
+    assert.equal(capability.grant.endpoint?.initialPaths?.includes('/'), true);
+  } finally {
+    capability.port.close();
+  }
 });
 
 void test('bootstrap runtime serves a live workspace layout projection', async () => {

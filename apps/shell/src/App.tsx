@@ -6,9 +6,10 @@ import {
   replaceTerminalState,
   terminalStateWithExecution,
   terminalStateWithPrompt,
+  type PatchpitFilesystem,
   type TerminalStateActions,
 } from '@patchpit/terminal';
-import { createPatchpitFilesystem } from '@patchpit/terminal/filesystem';
+import { createTerminalFilesystemClient } from '@patchpit/terminal/filesystem';
 import {
   createTerminalStateResource,
   createSeedFilesystem,
@@ -26,6 +27,7 @@ import {
   routePreviewIntent,
   RuntimeBootGateConnectError,
   runtimePlatformFeatureLabel,
+  terminalFilesystemCapability,
   windowCloseContextIntent,
   windowFocusIntent,
   windowMoveTabIntent,
@@ -182,6 +184,21 @@ function ShellApp({
     setRuntimeFault(failure);
     recordRuntimeIssue('runtime', failure);
   };
+  const terminalFilesystemState = useTerminalFilesystemCapability(runtime);
+  const lastTerminalCapabilityIssueKey = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (terminalFilesystemState.status !== 'failed') {
+      lastTerminalCapabilityIssueKey.current = undefined;
+      return;
+    }
+
+    const issue = terminalFilesystemState.failure;
+    const issueKey = `${issue.title}:${issue.message}:${issue.details.join('\n')}`;
+    if (lastTerminalCapabilityIssueKey.current === issueKey) return;
+    lastTerminalCapabilityIssueKey.current = issueKey;
+    setRuntimeFault(issue);
+    recordRuntimeIssue('capability', issue);
+  }, [terminalFilesystemState]);
   const launchApp = (input: AppLaunchIntentInput) => {
     void submitAppLaunchIntent(runtime, input).then(reportIntentResult).catch(reportRuntimeError);
   };
@@ -239,23 +256,19 @@ function ShellApp({
       state: filePickerState,
     },
   };
-  const terminalFilesystem = useMemo(() => createPatchpitFilesystem({
-    documentHandles: seed.documentHandles,
-    indexHandle: seed.indexHandle,
-    repo: seed.repo,
-    rootUrl: seed.rootUrl,
-  }), [seed]);
-  const terminalRuntimeOptions = useMemo(() => ({
-    filesystem: terminalFilesystem,
-  }), [terminalFilesystem]);
-  const terminals = Object.fromEntries(terminalHandles.map((handle) => [
-    handle.url,
-    {
-      actions: createShellTerminalActions(handle),
-      runtimeOptions: terminalRuntimeOptions,
-      state: terminalStates[handle.url] ?? handle.doc(),
-    },
-  ]));
+  const terminalRuntimeOptions = terminalFilesystemState.status === 'ready'
+    ? { filesystem: terminalFilesystemState.filesystem }
+    : undefined;
+  const terminals = terminalRuntimeOptions === undefined
+    ? {}
+    : Object.fromEntries(terminalHandles.map((handle) => [
+        handle.url,
+        {
+          actions: createShellTerminalActions(handle),
+          runtimeOptions: terminalRuntimeOptions,
+          state: terminalStates[handle.url] ?? handle.doc(),
+        },
+      ]));
   const launchers = launcherItems({
     focusedAppId: workspaceProjection.status === 'ready'
       ? focusedAppId(workspaceProjection.workspace)
@@ -289,6 +302,17 @@ function ShellApp({
           title={workspaceProjection.failure.title}
           message={workspaceProjection.failure.message}
           details={workspaceProjection.failure.details}
+        />
+      ) : terminalFilesystemState.status === 'opening' ? (
+        <RuntimeStatusPanel
+          title="Terminal filesystem capability opening"
+          message="Waiting for the terminal.filesystem grant from the runtime."
+        />
+      ) : terminalFilesystemState.status === 'failed' ? (
+        <RuntimeStatusPanel
+          title={terminalFilesystemState.failure.title}
+          message={terminalFilesystemState.failure.message}
+          details={terminalFilesystemState.failure.details}
         />
       ) : (
         <>
@@ -357,6 +381,54 @@ function useRuntimeDiagnostics(runtime: BootstrapRuntimeClient) {
     (listener) => runtime.diagnostics.subscribe(listener),
     () => runtime.diagnostics.getSnapshot(),
   );
+}
+
+type TerminalFilesystemCapabilityState =
+  | { readonly status: 'opening' }
+  | { readonly status: 'ready'; readonly filesystem: PatchpitFilesystem }
+  | { readonly status: 'failed'; readonly failure: RuntimePanelFailure };
+
+function useTerminalFilesystemCapability(runtime: BootstrapRuntimeClient): TerminalFilesystemCapabilityState {
+  const [capability, setCapability] = useState<TerminalFilesystemCapabilityState>({ status: 'opening' });
+
+  useEffect(() => {
+    let closed = false;
+    let port: MessagePort | undefined;
+    setCapability({ status: 'opening' });
+
+    void runtime.openCapability({ capability: terminalFilesystemCapability })
+      .then((capabilityPort) => {
+        if (closed) {
+          capabilityPort.port.close();
+          return;
+        }
+
+        port = capabilityPort.port;
+        setCapability({
+          filesystem: createTerminalFilesystemClient(capabilityPort),
+          status: 'ready',
+        });
+      })
+      .catch((error: unknown) => {
+        if (!closed) {
+          setCapability({
+            failure: failureFromUnknownError(
+              'Terminal filesystem unavailable',
+              'Runtime could not open the terminal filesystem capability.',
+              error,
+            ),
+            status: 'failed',
+          });
+        }
+      });
+
+    return () => {
+      closed = true;
+      port?.close();
+    };
+  }, [runtime]);
+
+  return capability;
 }
 
 const runtimeIssueHistoryLimit = 50;
