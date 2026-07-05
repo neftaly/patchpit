@@ -29,6 +29,15 @@ export function LauncherBar({
         ))}
       </nav>
       <div className="launcher-bar-system-buttons" aria-label="system">
+        <a
+          className="launcher-bar-button"
+          href="https://github.com/neftaly/patchpit/"
+          rel="noreferrer"
+          target="_blank"
+          title="Patchpit GitHub"
+        >
+          <span>Patchpit GitHub</span>
+        </a>
         <button
           aria-label="Reset current in-memory session state"
           className="launcher-bar-button launcher-bar-reset-button"
