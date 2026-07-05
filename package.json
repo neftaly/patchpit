@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "vite build --config vite.config.ts --logLevel warn",
+    "build:pages": "vite build --config vite.config.ts --logLevel warn --base=/patchpit/",
     "dev": "vite --config vite.config.ts",
     "fixtures:check": "pnpm fixtures:seed && git diff --exit-code -- packages/system/src/fixtures/seed.ts",
     "fixtures:seed": "node scripts/generate-seed-fixture.mjs",
