@@ -1,9 +1,4 @@
-import {
-  type FilesystemNode,
-  type RuntimeStateDoc,
-  type WindowLayoutNode,
-  WindowManagerNodeKind,
-} from '@patchpit/system';
+import { type FilesystemNode, type RuntimeStateDoc } from '@patchpit/system';
 import {
   runtimePlatformFeatureLabel,
   type RuntimeHelloAck,
@@ -13,7 +8,6 @@ import {
 import type { BootstrapRuntimeDiagnostics } from '../runtime/bootstrap-runtime';
 import type {
   FilesystemTreeProjectionState,
-  WorkspaceProjection,
   WorkspaceProjectionState,
 } from '../runtime/use-runtime-projection';
 import './state-browser.css';
@@ -57,7 +51,8 @@ export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnap
   return (
     <section className="state-browser surface-content" aria-label="State Browser">
       <header className="state-browser-header">
-        <h1>State Browser</h1>
+        <h1>Runtime Diagnostics</h1>
+        <p>Temporary developer view for boot, projection health, and runtime events.</p>
       </header>
       <div className="state-browser-sections">
         {snapshot.sections.map((section) => (
@@ -82,38 +77,20 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
   return {
     sections: [
       {
-        id: 'runtime-boot',
-        title: 'Runtime Boot Gate',
-        summary: input.runtimeState.boot.status,
-        data: runtimeBootGateData(input),
+        id: 'runtime',
+        title: 'Runtime',
+        summary: runtimeSummary(input),
+        data: runtimeDiagnosticsData(input),
       },
       {
         id: 'runtime-issues',
-        title: 'Current Runtime Issue',
-        summary: input.runtimeIssue?.title ?? 'No current runtime issue',
-        data: runtimeIssueData(input.runtimeIssue),
-      },
-      {
-        id: 'runtime-issue-history',
-        title: 'Runtime Issue History',
-        summary: runtimeIssueHistorySummary(input.runtimeIssueHistory),
-        data: runtimeIssueHistoryData(input.runtimeIssueHistory),
-      },
-      {
-        id: 'platform-features',
-        title: 'Platform And Feature Checks',
-        summary: input.runtimePlatform.ok ? 'Required boot APIs available' : 'Required boot APIs missing',
-        data: platformFeatureData(input.runtimePlatform),
-      },
-      {
-        id: 'window-manager',
-        title: 'Workspace Layout Summary',
-        summary: workspaceSummaryText(input.workspaceProjection),
-        data: workspaceSummary(input.workspaceProjection),
+        title: 'Issues',
+        summary: runtimeIssuesSummary(input.runtimeIssue, input.runtimeIssueHistory),
+        data: runtimeIssuesData(input.runtimeIssue, input.runtimeIssueHistory),
       },
       {
         id: 'projection-status',
-        title: 'Projection Status And Counters',
+        title: 'Projections',
         summary: projectionStatusSummary(
           input.filesystemProjection,
           input.workspaceProjection,
@@ -127,70 +104,46 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
         ),
       },
       {
-        id: 'projection-snapshots',
-        title: 'Projection Snapshots',
-        summary: projectionSnapshotsSummary(input.filesystemProjection, input.workspaceProjection),
-        data: projectionSnapshotsData(input.filesystemProjection, input.workspaceProjection),
-      },
-      {
         id: 'intent-log',
-        title: 'Intent Request And Result Log',
+        title: 'Events',
         summary: intentLogSummary(input.runtimeDiagnostics.intentLog),
         data: intentLogData(input.runtimeDiagnostics.intentLog),
-      },
-      {
-        id: 'policy-capabilities',
-        title: 'Policy And Capability Placeholders',
-        summary: 'Bootstrap runtime placeholders',
-        data: {
-          policy: {
-            stateKind: 'live',
-            current: 'allowAllRuntimePolicy',
-            scope: 'submitIntent admission',
-            note: 'The bootstrap runtime currently allows all admitted intents after shape and target validation.',
-          },
-          capabilities: {
-            stateKind: 'live',
-            activeGrants: [],
-            providerRegistration: 'bootstrap runtime dispatches registered capability providers',
-            note: 'Capability grants are opened on demand; persistent grant tracking is not represented yet.',
-          },
-        },
       },
     ],
   };
 }
 
-function runtimeBootGateData(input: StateBrowserSnapshotInput) {
+function runtimeSummary(input: StateBrowserSnapshotInput): string {
+  return [
+    `boot ${input.runtimeState.boot.status}`,
+    input.runtimePlatform.ok ? 'platform ok' : 'platform missing APIs',
+  ].join(', ');
+}
+
+function runtimeDiagnosticsData(input: StateBrowserSnapshotInput) {
   return {
     connection: {
       stateKind: 'live',
       status: 'ready',
       ack: input.runtimeAck,
     },
-    stateDocument: {
+    runtimeState: {
       stateKind: 'canonical',
-      appInstances: input.runtimeState.appInstances,
       boot: input.runtimeState.boot,
       features: input.runtimeState.features,
-      ownership: input.runtimeState.ownership,
       protocol: input.runtimeState.protocol,
       title: input.runtimeState.title,
       workers: input.runtimeState.workers,
     },
+    platform: platformFeatureData(input.runtimePlatform),
   };
 }
 
-function runtimeIssueData(runtimeIssue: StateBrowserRuntimeIssue | undefined) {
-  return runtimeIssue === undefined
-    ? { status: 'none' }
-    : {
-        status: 'current',
-        issue: runtimeIssue,
-      };
-}
-
-function runtimeIssueHistorySummary(history: readonly StateBrowserRuntimeIssueEntry[]): string {
+function runtimeIssuesSummary(
+  runtimeIssue: StateBrowserRuntimeIssue | undefined,
+  history: readonly StateBrowserRuntimeIssueEntry[],
+): string {
+  if (runtimeIssue !== undefined) return runtimeIssue.title;
   if (history.length === 0) return 'No session issues recorded';
   const latest = history.at(-1);
   return latest === undefined
@@ -198,10 +151,19 @@ function runtimeIssueHistorySummary(history: readonly StateBrowserRuntimeIssueEn
     : `${history.length} session issues, latest ${latest.issue.title}`;
 }
 
-function runtimeIssueHistoryData(history: readonly StateBrowserRuntimeIssueEntry[]) {
+function runtimeIssuesData(
+  runtimeIssue: StateBrowserRuntimeIssue | undefined,
+  history: readonly StateBrowserRuntimeIssueEntry[],
+) {
   return {
+    current: runtimeIssue === undefined
+      ? { status: 'none' }
+      : {
+          status: 'current',
+          issue: runtimeIssue,
+        },
     count: history.length,
-    issues: [...history].reverse(),
+    recent: [...history].reverse(),
   };
 }
 
@@ -222,83 +184,6 @@ function platformFeatureSummary(feature: RuntimePlatformFeature) {
   return {
     feature,
     label: runtimePlatformFeatureLabel(feature),
-  };
-}
-
-function workspaceSummaryText(projection: WorkspaceProjectionState): string {
-  if (projection.status === 'initializing') return 'Workspace projection initializing';
-  if (projection.status === 'failed') return projection.failure.title;
-  return windowManagerSummaryText(projection.workspace);
-}
-
-function workspaceSummary(projection: WorkspaceProjectionState) {
-  if (projection.status === 'initializing') return { status: projection.status };
-  if (projection.status === 'failed') return { status: projection.status, failure: projection.failure };
-  return {
-    status: projection.status,
-    schemaHash: projection.workspace.schemaHash,
-    storageHeadDocs: Object.keys(projection.workspace.storageHeads ?? {}),
-    ...windowManagerSummary(projection.workspace),
-  };
-}
-
-function windowManagerSummaryText(state: WorkspaceProjection): string {
-  const surfaceCount = Object.keys(state.surfaces).length;
-  const contextCount = Object.keys(state.contexts).length;
-  return `${surfaceCount} surfaces, ${contextCount} contexts`;
-}
-
-function windowManagerSummary(state: WorkspaceProjection) {
-  return {
-    focus: state.focus,
-    counts: {
-      contexts: Object.keys(state.contexts).length,
-      surfaces: Object.keys(state.surfaces).length,
-      contextsByApp: contextsByApp(state),
-    },
-    layout: layoutSummary(state.layout),
-    surfaces: Object.values(state.surfaces).map((surface) => ({
-      id: surface.id,
-      role: surface.role,
-      ...(surface.activeContext === undefined ? {} : { activeContext: surface.activeContext }),
-      ...(surface.previewContext === undefined ? {} : { previewContext: surface.previewContext }),
-      pinnedContextCount: surface.contexts.length,
-      pinnedContexts: surface.contexts.map((contextId) => contextSummary(state, contextId)),
-    })),
-  };
-}
-
-function contextsByApp(state: WorkspaceProjection): Readonly<Record<string, number>> {
-  const counts: Record<string, number> = {};
-  for (const context of Object.values(state.contexts)) counts[context.app] = (counts[context.app] ?? 0) + 1;
-  return counts;
-}
-
-function contextSummary(state: WorkspaceProjection, contextId: string) {
-  const context = state.contexts[contextId];
-  if (context === undefined) return { id: contextId, missing: true };
-  return {
-    id: context.id,
-    app: context.app,
-    ...(context.title === undefined ? {} : { title: context.title }),
-    url: context.url,
-  };
-}
-
-function layoutSummary(node: WindowLayoutNode): unknown {
-  if (node.kind === WindowManagerNodeKind.Surface) {
-    return {
-      kind: node.kind,
-      surfaceId: node.surfaceId,
-    };
-  }
-
-  return {
-    kind: node.kind,
-    direction: node.direction,
-    ratio: node.ratio,
-    first: layoutSummary(node.first),
-    second: layoutSummary(node.second),
   };
 }
 
@@ -353,42 +238,6 @@ function workspaceProjectionData(projection: WorkspaceProjectionState) {
     surfaceCount: Object.keys(projection.workspace.surfaces).length,
     schemaHash: projection.workspace.schemaHash,
     storageHeadDocs: Object.keys(projection.workspace.storageHeads ?? {}),
-  };
-}
-
-function projectionSnapshotsSummary(
-  filesystemProjection: FilesystemTreeProjectionState,
-  workspaceProjection: WorkspaceProjectionState,
-): string {
-  return `filesystem ${filesystemProjection.status}, workspace ${workspaceProjection.status}`;
-}
-
-function projectionSnapshotsData(
-  filesystemProjection: FilesystemTreeProjectionState,
-  workspaceProjection: WorkspaceProjectionState,
-) {
-  return {
-    stateKind: 'derived',
-    filesystem: filesystemProjectionSnapshotData(filesystemProjection),
-    workspace: workspaceProjectionSnapshotData(workspaceProjection),
-  };
-}
-
-function filesystemProjectionSnapshotData(projection: FilesystemTreeProjectionState) {
-  if (projection.status !== 'ready') return unavailableProjectionData(projection);
-  return {
-    stateKind: 'derived',
-    status: projection.status,
-    root: projection.root,
-  };
-}
-
-function workspaceProjectionSnapshotData(projection: WorkspaceProjectionState) {
-  if (projection.status !== 'ready') return unavailableProjectionData(projection);
-  return {
-    stateKind: 'derived',
-    status: projection.status,
-    workspace: projection.workspace,
   };
 }
 

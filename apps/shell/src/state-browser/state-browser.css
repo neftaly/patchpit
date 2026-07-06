@@ -6,7 +6,7 @@
 .state-browser-header {
   flex: 0 0 auto;
   border-bottom: var(--app-border) solid var(--color-border);
-  padding: var(--detail-pad);
+  padding: calc(var(--detail-pad) * 0.75) var(--detail-pad);
   background: var(--color-bg);
 }
 
@@ -15,6 +15,12 @@
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0;
+}
+
+.state-browser-header p {
+  margin: calc(var(--detail-pad) * 0.25) 0 0;
+  color: var(--color-muted);
+  font-size: var(--font-code-size);
 }
 
 .state-browser-sections {
@@ -33,7 +39,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--detail-pad);
-  padding: var(--detail-pad);
+  padding: calc(var(--detail-pad) * 0.75) var(--detail-pad);
   cursor: default;
   font-size: var(--font-code-size);
 }
