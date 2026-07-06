@@ -309,6 +309,10 @@ function shellAppHost({
       return nodePath(filesystemRoot, context.url) ?? context.title ?? appsById.get(context.app)?.manifest.name;
     },
 
+    contextTooltip(context) {
+      return contextLaunchUrl(filesystemRoot, appsById.get(context.app), context);
+    },
+
     droppedUrl(event) {
       return filePickerDroppedUrl(event);
     },
@@ -342,6 +346,17 @@ function shellAppHost({
       );
     },
   };
+}
+
+function contextLaunchUrl(
+  filesystemRoot: FilesystemNode,
+  app: InstalledApp | undefined,
+  context: { readonly url: string },
+): string | undefined {
+  const entryPath = app?.entry === undefined ? undefined : nodePath(filesystemRoot, app.entry.url);
+  if (entryPath === undefined) return undefined;
+  const src = nodePath(filesystemRoot, context.url) ?? context.url;
+  return `${entryPath}#${JSON.stringify({ src })}`;
 }
 
 function SurfaceNotice({

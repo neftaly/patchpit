@@ -37,6 +37,7 @@ type WindowManagerActions = {
 export type WindowManagerAppHost = {
   acceptsDroppedUrl(event: DragEvent): boolean;
   contextLabel(context: WindowContext): string | undefined;
+  contextTooltip(context: WindowContext): string | undefined;
   droppedUrl(event: DragEvent): WindowManagerDroppedUrl | undefined;
   renderSurface(input: {
     readonly context: WindowContext | undefined;
@@ -302,6 +303,7 @@ function SurfaceView({
           >
             {tabIds.map((contextId) => {
               const label = contextLabel(runtime, contextId);
+              const tooltip = contextTooltip(runtime, contextId);
               const tabDropTarget = dropTarget?.area === 'tabs' && dropTarget.contextId === contextId
                 ? dropTarget.placement
                 : undefined;
@@ -355,7 +357,7 @@ function SurfaceView({
                   }}
                   role="tab"
                   tabIndex={0}
-                  title={label}
+                  title={tooltip ?? label}
                 >
                   <span className="window-manager-tab-label">{label}</span>
                   <button
@@ -572,6 +574,11 @@ function contextLabel(runtime: WindowManagerRuntime, contextId: string): string 
   const context = runtime.contexts[contextId];
   if (context === undefined) return contextId;
   return runtime.appHost.contextLabel(context) ?? context.title ?? context.url;
+}
+
+function contextTooltip(runtime: WindowManagerRuntime, contextId: string): string | undefined {
+  const context = runtime.contexts[contextId];
+  return context === undefined ? undefined : runtime.appHost.contextTooltip(context);
 }
 
 function resizeRatioFromPointer(

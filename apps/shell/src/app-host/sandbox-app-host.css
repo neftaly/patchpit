@@ -4,7 +4,7 @@
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  background: var(--color-surface);
+  background: transparent;
 }
 
 .sandbox-app-frame {
@@ -15,7 +15,8 @@
   min-height: 0;
   flex: 1 1 auto;
   border: 0;
-  background: canvas;
+  background: transparent;
+  color-scheme: light dark;
 }
 
 .sandbox-app-notice {
