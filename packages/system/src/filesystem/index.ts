@@ -20,7 +20,6 @@ export {
 } from './resources';
 export { containerOverlayMounts, containerRootUrl, rootContainer } from './container';
 export {
-  appManifestSchema,
   appLaunchIntentBoundary,
   appLaunchIntentSchema,
   appearanceSchema,

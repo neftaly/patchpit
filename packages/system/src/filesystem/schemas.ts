@@ -65,62 +65,6 @@ const refField = (relation: string, field = 'id') => ({
   target: { relation, field },
 } as const);
 
-export const appManifestSchema = defineRelationSchema({
-  kind: 'tarstate.schema',
-  formatVersion: 1,
-  schemaId: 'patchpit.system.appManifest@1',
-  description: 'Patchpit app manifest documents seeded under /home/apps.',
-  metadata: schemaMetadata(PatchpitType.AppManifest),
-  relations: {
-    manifests: {
-      key: 'id',
-      fields: {
-        entry: { type: 'string' },
-        entryKind: {
-          type: 'string',
-          description: 'How the current host interprets entry. Current app entries are HTML documents.',
-          metadata: enumMetadata(['html']),
-        },
-        extension: { type: 'string' },
-        id: idField('app'),
-        manifestVersion: { type: 'number' },
-        mimeType: { type: 'string' },
-        name: { type: 'string' },
-        version: { type: 'string' },
-      },
-    },
-    handlers: {
-      key: ['appId', 'position'],
-      fields: {
-        accepts: {
-          type: 'json',
-          description: 'MIME-like accept patterns in manifest order.',
-        },
-        appId: refField('manifests'),
-        intent: {
-          type: 'string',
-          metadata: enumMetadata(['preview', 'open', 'reveal', 'activate']),
-        },
-        port: { type: 'string' },
-        position: { type: 'number' },
-      },
-    },
-    surfaces: {
-      key: ['appId', 'position'],
-      fields: {
-        appId: refField('manifests'),
-        position: { type: 'number' },
-        role: {
-          type: 'string',
-          metadata: enumMetadata(['document-set', 'workspace-view']),
-        },
-        stateSchemaId: { type: 'string', optional: true },
-        stateType: { type: 'string', optional: true },
-      },
-    },
-  },
-});
-
 export const folderSchema = defineRelationSchema({
   kind: 'tarstate.schema',
   formatVersion: 1,
@@ -626,7 +570,6 @@ export const appearanceSchema = defineRelationSchema({
 });
 
 export const patchpitSystemSchemas = [
-  appManifestSchema,
   folderSchema,
   fileResourceSchema,
   filesystemIndexSchema,
@@ -659,7 +602,6 @@ const patchpitSystemSchemaHashes = {
   'patchpit.intent.route@1': 'sha256:b788b4f922f50dc25d36141190ec1872e8d1ec24cc0cbc205235c6a88f2bbf85',
   'patchpit.intent.window@1': 'sha256:f6fc795ee96f61af948e486b88765757967171387ac641bbfb9ad25b69f205e0',
   'patchpit.runtime.state@1': 'sha256:af7929434c05cc236c47e6284362b775362ae198e8a7b2068251a5c015f636cf',
-  'patchpit.system.appManifest@1': 'sha256:d669fe4c41059f3897dc736a6c5265af06992ee80be805b980acfd75a91344ad',
   'patchpit.system.appearance@1': 'sha256:a3a297b433293a35d1380c666821e6883016adbaab760ed3b8e898f77dad46d4',
   'patchpit.system.theme@1': 'sha256:b7ccfb5659debca60a397102a96c5ae722434f14ffc4d19af085e39c8806ec4f',
   'patchpit.system.windowManager.state@1': 'sha256:190de691672cd1ed04f23d654bbca0819301f44785ef37427d709cb5208f3586',
@@ -667,7 +609,6 @@ const patchpitSystemSchemaHashes = {
 
 export const patchpitSystemSchemaByDocType = {
   [PatchpitType.Appearance]: appearanceSchema,
-  [PatchpitType.AppManifest]: appManifestSchema,
   [PatchpitType.File]: fileResourceSchema,
   [PatchpitType.FilePickerState]: filePickerStateSchema,
   [PatchpitType.FileTypes]: fileTypesSchema,

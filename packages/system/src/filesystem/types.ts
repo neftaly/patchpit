@@ -9,7 +9,6 @@ import type { AutomergeMoveRoot } from '../shared/automerge-moves';
 
 export enum PatchpitType {
   Appearance = 'appearance',
-  AppManifest = 'app-manifest',
   File = 'file',
   FilePickerState = 'file-picker-state',
   FileTypes = 'file-types',
@@ -81,38 +80,6 @@ export type FileDoc = PatchpitDoc<PatchpitType.File> & {
   name: string;
   extension: string;
   mimeType: string;
-};
-
-export type AppManifestDoc = PatchpitDoc<PatchpitType.AppManifest> & {
-  manifestVersion: 1;
-  id: string;
-  name: string;
-  entry: string;
-  entryKind: AppManifestEntryKind;
-  extension: string;
-  handles?: AppManifestHandler[];
-  icons?: AppManifestIcon[];
-  mimeType: string;
-  schemas?: Readonly<Record<PatchpitSchemaId, PatchpitRelationSchemaDescriptor>>;
-  surfaces?: SurfaceSpec[];
-  version: string;
-};
-
-export type AppManifestEntryKind = 'html';
-
-export type AppManifestHandler = {
-  port: string;
-  intent: 'preview' | 'open' | 'reveal' | 'activate';
-  accepts: string[];
-};
-
-export type AppManifestIcon = {
-  emoji: string;
-};
-
-export type SurfaceSpec = {
-  role: SurfaceRole;
-  state?: { type: string; schema?: PatchpitSchemaRef };
 };
 
 export type FilesystemIndexDoc = PatchpitDoc<PatchpitType.FilesystemIndex> & {
@@ -326,7 +293,6 @@ export type WindowManagerStateDoc = PatchpitDoc<PatchpitType.WindowManagerState>
 
 export type FilesystemResource =
   | AppearanceDoc
-  | AppManifestDoc
   | FilePickerStateDoc
   | FileTypesDoc
   | FileDoc

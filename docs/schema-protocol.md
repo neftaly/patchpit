@@ -402,12 +402,11 @@ The implementation should land in these places:
   source-location refs, hashes, and doc-type metadata helpers for current
   Patchpit-owned docs.
 - `packages/system/src/filesystem/types.ts`: `PatchpitDoc['@patchpit']`
-  metadata gains `schema` and `schemas`; `AppManifestDoc` gains `schemas`;
-  `SurfaceSpec.state.schema` becomes `PatchpitSchemaRef`.
+  metadata gains `schema` and `schemas`.
 - `packages/system/src/runtime/protocol.ts`: projection snapshots and capability
   grants gain optional schema descriptors and schema hashes.
 - Seed data in `packages/system/src/filesystem/seed.ts` embeds schema refs in
-  durable docs and lets app manifests advertise descriptor registries for state
+  durable docs and lets app package metadata advertise descriptor registries for state
   docs they create. State docs keep refs only.
 
 V0 can use registered app/runtime lenses to project hierarchical Automerge docs
