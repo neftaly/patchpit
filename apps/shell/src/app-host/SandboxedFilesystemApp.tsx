@@ -10,13 +10,19 @@ import type { RuntimeClient } from '@patchpit/system/runtime';
 import { SandboxAppHost, type SandboxAppHostSessionEvent } from './SandboxAppHost';
 import type { InstalledApp } from './installed-apps';
 import { sandboxFilesystemAppEntry } from './sandbox-package-loader';
-import type { SandboxAppFilePickerType, SandboxFilePickerServiceScope } from './sandbox-service-bridge';
+import type {
+  SandboxAppFilePickerType,
+  SandboxFilePickerServiceScope,
+  SandboxSurfaceDragOffer,
+} from './sandbox-service-bridge';
 
 export function SandboxedFilesystemApp({
   app,
   context,
   filePicker,
   filesystemRoot,
+  onDragOfferEnd,
+  onDragOfferStart,
   onSessionEvent,
   surfaceId,
 }: {
@@ -24,6 +30,8 @@ export function SandboxedFilesystemApp({
   readonly context: WindowContext;
   readonly filePicker?: SandboxFilePickerHostScope | undefined;
   readonly filesystemRoot: FilesystemNode;
+  readonly onDragOfferEnd?: ((offer: SandboxSurfaceDragOffer) => void) | undefined;
+  readonly onDragOfferStart?: ((offer: SandboxSurfaceDragOffer) => void) | undefined;
   readonly onSessionEvent?: ((event: SandboxAppHostSessionEvent) => void) | undefined;
   readonly surfaceId: string;
 }) {
@@ -41,6 +49,8 @@ export function SandboxedFilesystemApp({
       appId={app.manifest.id}
       entry={entry}
       filePicker={sandboxFilePickerServiceScope({ app, context, filePicker, filesystemRoot, surfaceId })}
+      onDragOfferEnd={onDragOfferEnd}
+      onDragOfferStart={onDragOfferStart}
       onSessionEvent={onSessionEvent}
       resourceRoot={filesystemRoot}
       session={{

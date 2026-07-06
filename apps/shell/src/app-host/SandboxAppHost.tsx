@@ -12,6 +12,7 @@ import {
   type SandboxAppServiceCapabilities,
   type SandboxHostToFrameMessage,
   type SandboxAppSession,
+  type SandboxSurfaceDragOffer,
 } from './sandbox-service-bridge';
 import './sandbox-app-host.css';
 
@@ -22,6 +23,8 @@ export type SandboxAppHostProps = {
   readonly appId: string;
   readonly entry: SandboxFilesystemAppEntry | undefined;
   readonly filePicker?: SandboxFilePickerServiceScope | undefined;
+  readonly onDragOfferEnd?: ((offer: SandboxSurfaceDragOffer) => void) | undefined;
+  readonly onDragOfferStart?: ((offer: SandboxSurfaceDragOffer) => void) | undefined;
   readonly onSessionEvent?: ((event: SandboxAppHostSessionEvent) => void) | undefined;
   readonly resourceRoot?: FilesystemNode | undefined;
   readonly session: SandboxAppSession;
@@ -53,6 +56,8 @@ export function SandboxAppHost({
   appId,
   entry,
   filePicker,
+  onDragOfferEnd,
+  onDragOfferStart,
   onSessionEvent,
   resourceRoot,
   session,
@@ -71,6 +76,7 @@ export function SandboxAppHost({
     serviceBridge.capabilities.view,
   ]);
   const onSessionEventRef = useRef(onSessionEvent);
+  const activeDragOfferRef = useRef<SandboxSurfaceDragOffer | undefined>(undefined);
   const srcDoc = useMemo(() => (
     loadPlan === undefined || loadPlan.kind === 'error'
       ? undefined
@@ -94,6 +100,12 @@ export function SandboxAppHost({
     recorder(event);
     return true;
   }, []);
+
+  useEffect(() => () => {
+    const offer = activeDragOfferRef.current;
+    activeDragOfferRef.current = undefined;
+    if (offer !== undefined) onDragOfferEnd?.(offer);
+  }, [onDragOfferEnd]);
 
   useEffect(() => {
     if (loadPlan !== undefined && loadPlan.kind !== 'error') {
@@ -125,6 +137,29 @@ export function SandboxAppHost({
           kind: 'sandbox.frame.running',
           sessionUrl: session.url,
           status: 'running',
+        });
+      } else if (message.type === 'surface.drag.start') {
+        activeDragOfferRef.current = message.offer;
+        onDragOfferStart?.(message.offer);
+        recordSessionEvent({
+          appId,
+          contextId: session.id,
+          data: message.offer,
+          kind: 'sandbox.surface.drag.start',
+          sessionUrl: session.url,
+          status: 'active',
+        });
+      } else if (message.type === 'surface.drag.end') {
+        const offer = activeDragOfferRef.current;
+        activeDragOfferRef.current = undefined;
+        if (offer !== undefined) onDragOfferEnd?.(offer);
+        recordSessionEvent({
+          appId,
+          contextId: session.id,
+          data: offer,
+          kind: 'sandbox.surface.drag.end',
+          sessionUrl: session.url,
+          status: 'ended',
         });
       } else if (message.type === 'error') {
         const diagnosticsRecorded = recordSessionEvent({
@@ -184,7 +219,7 @@ export function SandboxAppHost({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [appId, recordSessionEvent, serviceBridge, session.id, session.url]);
+  }, [appId, onDragOfferEnd, onDragOfferStart, recordSessionEvent, serviceBridge, session.id, session.url]);
 
   if (entry === undefined || loadPlan === undefined) {
     return (
@@ -525,6 +560,15 @@ function sandboxBridgeScript({
           act: (request) => requestService('act', request),
           open: (request) => requestService('open', request),
           view: (request) => requestService('view', request),
+        }),
+        surface: Object.freeze({
+          startDrag: (offer) => {
+            if (offer?.type !== 'patchpit.url' || typeof offer.url !== 'string' || typeof offer.title !== 'string') {
+              throw new TypeError('Patchpit drag offers must be { type: "patchpit.url", url, title }.');
+            }
+            post({ type: 'surface.drag.start', offer });
+          },
+          endDrag: () => post({ type: 'surface.drag.end' }),
         }),
       });
 

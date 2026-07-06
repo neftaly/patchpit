@@ -86,6 +86,27 @@ async function smokeSandboxApps() {
       const viewerFolder = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerFolderExpression, 5_000);
       if (viewerFolder.status !== 'passed') throw smokeError('Viewer did not render the docs folder preview', viewerFolder);
 
+      const fileDragStarted = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        startFilePickerDragExpression({ name: 'README.md' }),
+        5_000,
+      );
+      if (fileDragStarted.status !== 'passed') {
+        throw smokeError('File Picker sandbox did not start a host-visible file drag', fileDragStarted);
+      }
+
+      const fileDragAccepted = await waitForBrowserState(pageCdp, shellAcceptsSandboxFileDragExpression, 5_000);
+      if (fileDragAccepted.status !== 'passed') {
+        throw smokeError('Shell did not accept the sandbox file drag offer', fileDragAccepted);
+      }
+
+      const fileDragEnded = await waitForSandboxState(pageCdp, targets, mainFrameId, endFilePickerDragExpression, 5_000);
+      if (fileDragEnded.status !== 'passed') {
+        throw smokeError('File Picker sandbox did not end the host-visible file drag', fileDragEnded);
+      }
+
       const filePickerAfterFolderPreview = await waitForSandboxState(
         pageCdp,
         targets,
@@ -319,6 +340,86 @@ function clickFilePickerTreeItemExpression({ name, occurrence = 0 }) {
 })()
 `;
 }
+
+function startFilePickerDragExpression({ name, occurrence = 0 }) {
+  return `
+(() => {
+  const buttons = [...document.querySelectorAll('button.tree-item')];
+  const names = buttons.map((button) => button.querySelector('.tree-name')?.textContent?.trim() ?? '');
+  const matches = buttons.filter((button) => (
+    button.querySelector('.tree-name')?.textContent?.trim() === ${JSON.stringify(name)}
+  ));
+  const button = matches[${occurrence}];
+  if (button === undefined) {
+    return {
+      status: 'pending',
+      reason: ${JSON.stringify(`Waiting for File Picker item ${name} before drag`)},
+      names,
+      body: document.body.innerText,
+    };
+  }
+
+  const event = new DragEvent('dragstart', {
+    bubbles: true,
+    cancelable: true,
+    dataTransfer: new DataTransfer(),
+  });
+  button.dispatchEvent(event);
+  return {
+    status: 'passed',
+    dragged: ${JSON.stringify(name)},
+    types: [...event.dataTransfer.types],
+  };
+})()
+`;
+}
+
+const endFilePickerDragExpression = `
+(() => {
+  window.patchpit?.surface?.endDrag?.();
+  return { status: 'passed' };
+})()
+`;
+
+const shellAcceptsSandboxFileDragExpression = `
+(() => {
+  const contents = [...document.querySelectorAll('.window-manager-content')];
+  const target = contents.find((content) => content.querySelector('iframe[title="Viewer"]')) ?? contents.at(-1);
+  if (target === undefined) {
+    return {
+      status: 'pending',
+      reason: 'Waiting for a shell content drop zone',
+      body: document.body.innerText,
+    };
+  }
+
+  const rect = target.getBoundingClientRect();
+  const event = new DragEvent('dragover', {
+    bubbles: true,
+    cancelable: true,
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.top + rect.height / 2,
+    dataTransfer: new DataTransfer(),
+  });
+  target.dispatchEvent(event);
+
+  if (event.defaultPrevented) {
+    return {
+      status: 'passed',
+      dropEffect: event.dataTransfer.dropEffect,
+      targetClass: target.className,
+    };
+  }
+
+  return {
+    status: 'pending',
+    reason: 'Shell has not accepted the sandbox file drag offer yet',
+    dropEffect: event.dataTransfer.dropEffect,
+    targetClass: target.className,
+    body: document.body.innerText,
+  };
+})()
+`;
 
 const viewerFolderExpression = `
 (() => {

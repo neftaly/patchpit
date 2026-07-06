@@ -102,8 +102,12 @@ function treeItem(node, view, depth) {
     void selectFromPointer(event, node, view, displayName, primaryPointerActivationCount(event, node.url));
   });
   button.addEventListener('dragstart', (event) => {
+    hostEnv.surface?.startDrag?.({ title: displayName, type: 'patchpit.url', url: node.url });
     event.dataTransfer.effectAllowed = 'copyMove';
     event.dataTransfer.setData(filePickerDragType, JSON.stringify({ title: displayName, url: node.url }));
+  });
+  button.addEventListener('dragend', () => {
+    hostEnv.surface?.endDrag?.();
   });
 
   item.append(button);
