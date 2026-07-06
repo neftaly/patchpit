@@ -9,12 +9,16 @@ void test('installed app discovery paths use package manifests in filesystem ord
     ['automerge:zeta-manifest', appManifest('zeta', 'Zeta')],
     ['automerge:alpha-manifest', appManifest('alpha', 'Alpha')],
     ['automerge:direct-manifest', appManifest('direct', 'Direct')],
+    ['automerge:missing-manifest-version-manifest', appManifest('missing-manifest-version', 'Missing Manifest Version', { manifestVersion: undefined })],
+    ['automerge:bad-manifest-version-manifest', appManifest('bad-manifest-version', 'Bad Manifest Version', { manifestVersion: 2 })],
     ['automerge:missing-version-manifest', appManifest('missing-version', 'Missing Version', { version: undefined })],
     ['automerge:bad-entry-kind-manifest', appManifest('bad-entry-kind', 'Bad Entry Kind', { entryKind: 'script' })],
   ]);
   const root = filesystemRoot([
     appPackageNode('zeta', 'automerge:zeta-package', 'automerge:zeta-manifest'),
     directManifestNode('direct.app', 'automerge:direct-manifest'),
+    appPackageNode('missing-manifest-version', 'automerge:missing-manifest-version-package', 'automerge:missing-manifest-version-manifest'),
+    appPackageNode('bad-manifest-version', 'automerge:bad-manifest-version-package', 'automerge:bad-manifest-version-manifest'),
     appPackageNode('missing-version', 'automerge:missing-version-package', 'automerge:missing-version-manifest'),
     appPackageNode('bad-entry-kind', 'automerge:bad-entry-kind-package', 'automerge:bad-entry-kind-manifest'),
     appPackageNode('alpha', 'automerge:alpha-package', 'automerge:alpha-manifest'),
