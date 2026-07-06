@@ -71,11 +71,20 @@ inspect the SharedWorker boot-gate handshake, current boot status, platform
 feature requirements, and the explicit note that the in-process bootstrap
 runtime still owns Automerge handles until that ownership moves into the worker.
 
+Runtime projection catalogs and live projection snapshots are runtime views, not
+persisted filesystem docs.
+
 The linked Automerge docs are the real filesystem format. `FilesystemIndexDoc`
 is an internal runtime-maintained projection/cache used to read the linked tree
 efficiently. Runtime clients consume `filesystem.tree` with
 `schemaId: patchpit.filesystem.tree@1` as a public `nodes` relation. The index
 doc should not become the interchange format.
+
+The active runtime also serves `runtime.projections` with
+`schemaId: patchpit.runtime.projections@1` as a catalog of projections and their
+schemas. A future read-only `/srv/projections` tree may export this kind of live
+state for inspection, but it should be a virtual service export rather than
+canonical filesystem storage.
 
 ## App Manifests
 
@@ -305,7 +314,8 @@ The first useful implementation should stay small:
 5. Runtime state under `/system/runtime` is diagnostic. Active app/session state
    is derived from workspace sessions and app-host runner diagnostics, not from a
    second app-instance registry.
-6. Runtime projections expose schema-bound relation views over durable docs.
+6. Runtime projections expose schema-bound relation views over durable docs and
+   live runtime state.
 7. `/srv` remains reserved for future live services, not persisted app state.
 
 Do not implement permissions, spatial placement, or multiple viewports until the

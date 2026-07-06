@@ -176,6 +176,7 @@ export type RuntimeEvent =
 
 export type ProjectionName =
   | 'filesystem.tree'
+  | 'runtime.projections'
   | 'appManifests.handlers'
   | 'workspace.surfaces'
   | 'workspace.contexts'
@@ -187,6 +188,9 @@ export type ProjectionName =
 export const filesystemTreeProjection = 'filesystem.tree' as const satisfies ProjectionName;
 export const filesystemTreeSchemaId = 'patchpit.filesystem.tree@1' as const;
 export const filesystemTreeNodesRelation = 'nodes' as const;
+export const runtimeProjectionsProjection = 'runtime.projections' as const satisfies ProjectionName;
+export const runtimeProjectionsSchemaId = 'patchpit.runtime.projections@1' as const;
+export const runtimeProjectionsRelation = 'projections' as const;
 export const workspaceLayoutProjection = 'workspace.layout' as const satisfies ProjectionName;
 export const workspaceProjectionSchemaId = 'patchpit.system.windowManager.state@1' as const;
 export const workspaceStateRelation = 'state' as const;
@@ -219,6 +223,16 @@ export type WorkspaceProjectionRelations = Readonly<{
   [workspaceContextsRelation]: readonly WindowContext[];
   [workspaceSurfacesRelation]: readonly WindowSurface[];
 }>;
+
+export type RuntimeProjectionCatalogRow = {
+  readonly basisKinds: readonly ProjectionBasis['kind'][];
+  readonly description?: string;
+  readonly name: ProjectionName;
+  readonly owner?: string;
+  readonly schemaHash: PatchpitSchemaHash;
+  readonly schemaId: TarstateSchemaId;
+  readonly schemaUrl?: string;
+};
 
 export type ProjectionSubscriptionRequest = {
   readonly projection: ProjectionName;

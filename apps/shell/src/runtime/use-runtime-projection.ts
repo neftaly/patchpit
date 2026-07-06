@@ -11,9 +11,15 @@ import {
   workspaceLayoutProjection,
   workspaceProjectionFromRelationSet,
   workspaceProjectionSchemaId,
+  runtimeProjectionsProjection,
+  runtimeProjectionsRelation,
+  runtimeProjectionsSchemaId,
   type ProjectionEvent,
+  type ProjectionSnapshot,
   type ProjectionSubscription,
+  type ProjectionSubscriptionRequest,
   type RelationSet,
+  type RuntimeProjectionCatalogRow,
   type RuntimeClient,
   type WorkspaceProjection,
   type WorkspaceProjectionState,
@@ -28,6 +34,20 @@ import {
 export type { RuntimeProjectionFailure } from './runtime-projection-failure';
 export type { WorkspaceProjection, WorkspaceProjectionState };
 
+export type RuntimeProjectionSnapshotState =
+  | { readonly status: 'initializing' }
+  | { readonly status: 'ready'; readonly snapshot: ProjectionSnapshot }
+  | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
+
+export type RuntimeProjectionCatalogState =
+  | { readonly status: 'initializing' }
+  | {
+      readonly status: 'ready';
+      readonly rows: readonly RuntimeProjectionCatalogRow[];
+      readonly snapshot: ProjectionSnapshot;
+    }
+  | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
+
 export type FilesystemTreeProjectionState =
   | { readonly status: 'initializing' }
   | {
@@ -36,6 +56,57 @@ export type FilesystemTreeProjectionState =
       readonly root: FilesystemNode;
     }
   | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
+
+export function useRuntimeProjectionCatalog(runtime: RuntimeClient): RuntimeProjectionCatalogState {
+  const projection = useRuntimeProjectionSnapshot(runtime, {
+    projection: runtimeProjectionsProjection,
+    schemaId: runtimeProjectionsSchemaId,
+  });
+
+  if (projection.status !== 'ready') return projection;
+
+  return {
+    status: 'ready',
+    rows: relationRows<unknown>(
+      projection.snapshot.relations,
+      runtimeProjectionsRelation,
+    ).filter(isRuntimeProjectionCatalogRow),
+    snapshot: projection.snapshot,
+  };
+}
+
+export function useRuntimeProjectionSnapshot(
+  runtime: RuntimeClient,
+  request: Pick<ProjectionSubscriptionRequest, 'projection' | 'schemaId'> | undefined,
+): RuntimeProjectionSnapshotState {
+  const [projection, setProjection] = useState<RuntimeProjectionSnapshotState>({ status: 'initializing' });
+
+  useEffect(() => {
+    if (request === undefined) {
+      setProjection({ status: 'initializing' });
+      return undefined;
+    }
+    setProjection({ status: 'initializing' });
+    let subscription: ProjectionSubscription | undefined;
+    try {
+      subscription = runtime.subscribeProjection(
+        {
+          projection: request.projection,
+          schemaId: request.schemaId,
+          basis: { kind: 'live' },
+        },
+        (event) => {
+          if (event.type !== 'patch') setProjection(snapshotFromProjectionEvent(event));
+        },
+      );
+    } catch (error) {
+      setProjection({ status: 'failed', failure: runtimeProjectionFailureFromUnknownError(error) });
+    }
+    return () => subscription?.close();
+  }, [request?.projection, request?.schemaId, runtime]);
+
+  return projection;
+}
 
 export function useFilesystemTreeProjection(
   runtime: RuntimeClient,
@@ -98,6 +169,14 @@ export function useWorkspaceProjection(runtime: RuntimeClient): WorkspaceProject
   return projection;
 }
 
+function snapshotFromProjectionEvent(event: ProjectionEvent): RuntimeProjectionSnapshotState {
+  if (event.type === 'error') {
+    return { status: 'failed', failure: runtimeProjectionFailureFromRuntimeError(event.error) };
+  }
+  if (event.type === 'patch') return { status: 'initializing' };
+  return { status: 'ready', snapshot: event.snapshot };
+}
+
 function filesystemFromProjectionEvent(
   event: ProjectionEvent,
   rootUrl: string,
@@ -134,4 +213,19 @@ function workspaceProjectionFromProjectionEvent(event: ProjectionEvent): Workspa
     event.snapshot.schemaHash,
     event.snapshot.storageHeads,
   );
+}
+
+function isRuntimeProjectionCatalogRow(row: unknown): row is RuntimeProjectionCatalogRow {
+  if (row === null || typeof row !== 'object') return false;
+  const candidate = row as {
+    readonly basisKinds?: unknown;
+    readonly name?: unknown;
+    readonly schemaHash?: unknown;
+    readonly schemaId?: unknown;
+  };
+  return typeof candidate.name === 'string'
+    && typeof candidate.schemaId === 'string'
+    && typeof candidate.schemaHash === 'string'
+    && Array.isArray(candidate.basisKinds)
+    && candidate.basisKinds.every((kind) => typeof kind === 'string');
 }

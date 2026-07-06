@@ -27,6 +27,9 @@ import {
   filesystemTreeProjection,
   filesystemTreeSchemaId,
   routeOpenIntent,
+  runtimeProjectionsProjection,
+  runtimeProjectionsRelation,
+  runtimeProjectionsSchemaId,
   submitRuntimeIntent,
   windowCloseContextIntent,
   windowFocusIntent,
@@ -92,6 +95,60 @@ void test('bootstrap runtime serves a live filesystem tree projection', () => {
     resets: 0,
     snapshots: 1,
   });
+});
+
+void test('bootstrap runtime serves a runtime projection catalog including itself', () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+  const events = [];
+  const subscription = runtime.subscribeProjection(
+    {
+      projection: runtimeProjectionsProjection,
+      schemaId: runtimeProjectionsSchemaId,
+      basis: { kind: 'live' },
+    },
+    (event) => events.push(event),
+  );
+
+  try {
+    assert.equal(events.length, 1);
+    const snapshotEvent = events[0];
+    assert.equal(snapshotEvent.type, 'snapshot');
+
+    const snapshot = snapshotEvent.snapshot;
+    assert.equal(snapshot.projection, runtimeProjectionsProjection);
+    assert.equal(snapshot.schemaId, runtimeProjectionsSchemaId);
+    assert.equal(snapshot.schema?.schemaId, runtimeProjectionsSchemaId);
+    assert.match(snapshot.schemaHash, /^sha256:[a-f0-9]{64}$/);
+    assert.deepEqual(Object.keys(snapshot.storageHeads ?? {}), []);
+    assert.deepEqual(relationSetNames(snapshot.relations), [runtimeProjectionsRelation]);
+
+    const rows = relationRows(snapshot.relations, runtimeProjectionsRelation);
+    assert.deepEqual(rows.map((row) => row.name), [
+      filesystemTreeProjection,
+      runtimeProjectionsProjection,
+      workspaceLayoutProjection,
+    ]);
+    for (const row of rows) {
+      assert.equal(typeof row.schemaId, 'string');
+      assert.match(row.schemaHash, /^sha256:[a-f0-9]{64}$/);
+      assert.deepEqual(row.basisKinds, ['live']);
+    }
+    assert.equal(
+      rows.find((row) => row.name === filesystemTreeProjection)?.schemaId,
+      filesystemTreeSchemaId,
+    );
+    assert.equal(
+      rows.find((row) => row.name === workspaceLayoutProjection)?.schemaId,
+      workspaceProjectionSchemaId,
+    );
+    assert.equal(
+      rows.find((row) => row.name === runtimeProjectionsProjection)?.schemaId,
+      runtimeProjectionsSchemaId,
+    );
+  } finally {
+    subscription.close();
+  }
 });
 
 void test('bootstrap runtime emits filesystem resets from index changes', async () => {

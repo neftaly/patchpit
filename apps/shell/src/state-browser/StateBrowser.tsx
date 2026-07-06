@@ -1,15 +1,24 @@
-import { type FilesystemNode, type RuntimeStateDoc } from '@patchpit/system';
+import { useState } from 'react';
+import { type RuntimeStateDoc } from '@patchpit/system';
 import {
+  type ProjectionName,
+  type ProjectionSnapshot,
+  type RuntimeClient,
   runtimePlatformFeatureLabel,
   type RuntimeHelloAck,
   type RuntimePlatformFeature,
   type RuntimePlatformReport,
+  type RuntimeProjectionCatalogRow,
 } from '@patchpit/system/runtime';
+import { relationRows, relationSetNames } from '@patchpit/system/runtime/relations';
 import type { BootstrapRuntimeDiagnostics } from '../runtime/bootstrap-runtime';
 import type {
   FilesystemTreeProjectionState,
+  RuntimeProjectionCatalogState,
+  RuntimeProjectionSnapshotState,
   WorkspaceProjectionState,
 } from '../runtime/use-runtime-projection';
+import { useRuntimeProjectionSnapshot } from '../runtime/use-runtime-projection';
 import './state-browser.css';
 
 export type StateBrowserRuntimeIssue = {
@@ -32,6 +41,7 @@ export type StateBrowserSnapshotInput = {
   readonly runtimeIssue: StateBrowserRuntimeIssue | undefined;
   readonly runtimeIssueHistory: readonly StateBrowserRuntimeIssueEntry[];
   readonly runtimePlatform: RuntimePlatformReport;
+  readonly runtimeProjectionCatalog: RuntimeProjectionCatalogState;
   readonly runtimeState: RuntimeStateDoc;
   readonly workspaceProjection: WorkspaceProjectionState;
 };
@@ -47,25 +57,42 @@ type StateBrowserSection = {
   readonly title: string;
 };
 
-export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnapshot }) {
+export function StateBrowser({
+  projectionCatalog,
+  runtime,
+  snapshot,
+}: {
+  readonly projectionCatalog: RuntimeProjectionCatalogState;
+  readonly runtime: RuntimeClient;
+  readonly snapshot: StateBrowserSnapshot;
+}) {
   return (
-    <section className="state-browser surface-content" aria-label="State Browser">
+    <section className="state-browser surface-content" aria-label="Runtime Diagnostics">
       <header className="state-browser-header">
         <h1>Runtime Diagnostics</h1>
-        <p>Temporary developer view for boot, projection health, and runtime events.</p>
+        <p>Projection catalog, runtime health, and session events.</p>
       </header>
       <div className="state-browser-sections">
-        {snapshot.sections.map((section) => (
-          <details className="state-browser-section" key={section.id}>
-            <summary>
-              <span>{section.title}</span>
-              <small>{section.summary}</small>
-            </summary>
-            <pre className="diagnostics-json state-browser-json">
-              {formatStateBrowserJson(section.data)}
-            </pre>
-          </details>
-        ))}
+        {snapshot.sections.map((section) => section.id === 'projection-status'
+          ? (
+              <ProjectionInspectorSection
+                key={section.id}
+                projectionCatalog={projectionCatalog}
+                runtime={runtime}
+                section={section}
+              />
+            )
+          : (
+              <details className="state-browser-section" key={section.id}>
+                <summary>
+                  <span>{section.title}</span>
+                  <small>{section.summary}</small>
+                </summary>
+                <pre className="diagnostics-json state-browser-json">
+                  {formatStateBrowserJson(section.data)}
+                </pre>
+              </details>
+            ))}
       </div>
     </section>
   );
@@ -91,14 +118,9 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
       {
         id: 'projection-status',
         title: 'Projections',
-        summary: projectionStatusSummary(
-          input.filesystemProjection,
-          input.workspaceProjection,
-          projectionCounters,
-        ),
+        summary: projectionStatusSummary(input.runtimeProjectionCatalog, projectionCounters),
         data: projectionStatusData(
-          input.filesystemProjection,
-          input.workspaceProjection,
+          input.runtimeProjectionCatalog,
           input.runtimeDiagnostics,
           projectionCounters,
         ),
@@ -188,63 +210,47 @@ function platformFeatureSummary(feature: RuntimePlatformFeature) {
 }
 
 function projectionStatusSummary(
-  projection: FilesystemTreeProjectionState,
-  workspaceProjection: WorkspaceProjectionState,
+  catalog: RuntimeProjectionCatalogState,
   counters: ProjectionCounters,
 ): string {
+  const catalogSummary = catalog.status === 'ready'
+    ? `${catalog.rows.length} catalog rows`
+    : `catalog ${catalog.status}`;
   return [
-    `filesystem ${projection.status}`,
-    `workspace ${workspaceProjection.status}`,
+    catalogSummary,
     `${counters.resets} resets`,
     `${counters.errors} errors`,
   ].join(', ');
 }
 
 function projectionStatusData(
-  projection: FilesystemTreeProjectionState,
-  workspaceProjection: WorkspaceProjectionState,
+  catalog: RuntimeProjectionCatalogState,
   diagnostics: BootstrapRuntimeDiagnostics,
   counters: ProjectionCounters,
 ) {
   return {
-    current: {
-      stateKind: 'derived',
-      filesystem: filesystemProjectionData(projection),
-      workspace: workspaceProjectionData(workspaceProjection),
-    },
+    catalog: projectionCatalogData(catalog),
     stateKind: 'live',
     subscriptions: diagnostics.projectionSubscriptions,
     totals: counters,
   };
 }
 
-function filesystemProjectionData(projection: FilesystemTreeProjectionState) {
-  if (projection.status !== 'ready') return unavailableProjectionData(projection);
+function projectionCatalogData(catalog: RuntimeProjectionCatalogState) {
+  if (catalog.status !== 'ready') return catalog;
   return {
-    stateKind: 'derived',
-    status: projection.status,
-    rootUrl: projection.root.url,
-    nodeCount: countFilesystemNodes(projection.root),
+    status: catalog.status,
+    rows: catalog.rows.map((row) => ({
+      basisKinds: row.basisKinds,
+      description: row.description,
+      name: row.name,
+      owner: row.owner,
+      schemaHash: row.schemaHash,
+      schemaId: row.schemaId,
+      schemaUrl: row.schemaUrl,
+    })),
+    snapshot: projectionSnapshotData(catalog.snapshot),
   };
-}
-
-function workspaceProjectionData(projection: WorkspaceProjectionState) {
-  if (projection.status !== 'ready') return unavailableProjectionData(projection);
-  return {
-    stateKind: 'derived',
-    status: projection.status,
-    focus: projection.workspace.focus,
-    contextCount: Object.keys(projection.workspace.contexts).length,
-    surfaceCount: Object.keys(projection.workspace.surfaces).length,
-    schemaHash: projection.workspace.schemaHash,
-    storageHeadDocs: Object.keys(projection.workspace.storageHeads ?? {}),
-  };
-}
-
-function unavailableProjectionData(projection: { readonly status: 'initializing' } | { readonly status: 'failed'; readonly failure: unknown }) {
-  return projection.status === 'initializing'
-    ? { stateKind: 'derived', status: projection.status }
-    : { stateKind: 'derived', status: projection.status, failure: projection.failure };
 }
 
 type ProjectionCounters = ReturnType<typeof totalProjectionCounters>;
@@ -266,11 +272,6 @@ function totalProjectionCounters(diagnostics: BootstrapRuntimeDiagnostics) {
   );
 }
 
-function countFilesystemNodes(node: FilesystemNode): number {
-  if (node.kind === 'file') return 1;
-  return 1 + node.entries.reduce((count, entry) => count + countFilesystemNodes(entry), 0);
-}
-
 function intentLogSummary(log: BootstrapRuntimeDiagnostics['intentLog']): string {
   if (log.length === 0) return 'No session intents recorded';
   const latest = log.at(-1);
@@ -288,4 +289,179 @@ function intentLogData(log: BootstrapRuntimeDiagnostics['intentLog']) {
 
 function formatStateBrowserJson(data: unknown): string {
   return JSON.stringify(data, null, 2);
+}
+
+function ProjectionInspectorSection({
+  projectionCatalog,
+  runtime,
+  section,
+}: {
+  readonly projectionCatalog: RuntimeProjectionCatalogState;
+  readonly runtime: RuntimeClient;
+  readonly section: StateBrowserSection;
+}) {
+  const rows = projectionCatalog.status === 'ready' ? projectionCatalog.rows : [];
+  const [selectedName, setSelectedName] = useState<ProjectionName | undefined>(undefined);
+  const selectedRow = rows.find((row) => row.name === selectedName) ?? rows[0];
+  const selectedSnapshot = useRuntimeProjectionSnapshot(
+    runtime,
+    selectedRow === undefined
+      ? undefined
+      : { projection: selectedRow.name, schemaId: selectedRow.schemaId },
+  );
+
+  return (
+    <details className="state-browser-section projection-inspector" open>
+      <summary>
+        <span>{section.title}</span>
+        <small>{section.summary}</small>
+      </summary>
+      <div className="projection-inspector-body">
+        {projectionCatalog.status === 'failed'
+          ? <ProjectionFailure failure={projectionCatalog.failure} />
+          : null}
+        {projectionCatalog.status === 'initializing'
+          ? <p className="projection-empty">Loading projection catalog.</p>
+          : null}
+        {projectionCatalog.status === 'ready'
+          ? (
+              <>
+                <div className="projection-list" role="list" aria-label="Projection catalog">
+                  {rows.map((row) => (
+                    <button
+                      aria-pressed={row.name === selectedRow?.name}
+                      className="projection-row"
+                      key={row.name}
+                      onClick={() => setSelectedName(row.name)}
+                      type="button"
+                    >
+                      <span className="projection-row-name">{row.name}</span>
+                      <span className="projection-row-schema">{row.schemaId}</span>
+                      <span className="projection-row-meta">
+                        {row.schemaHash} / {row.basisKinds.join(', ')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <ProjectionDetail row={selectedRow} snapshotState={selectedSnapshot} />
+              </>
+            )
+          : null}
+        <details className="projection-json">
+          <summary>Raw diagnostics JSON</summary>
+          <pre className="diagnostics-json state-browser-json">
+            {formatStateBrowserJson(section.data)}
+          </pre>
+        </details>
+      </div>
+    </details>
+  );
+}
+
+function ProjectionDetail({
+  row,
+  snapshotState,
+}: {
+  readonly row: RuntimeProjectionCatalogRow | undefined;
+  readonly snapshotState: RuntimeProjectionSnapshotState;
+}) {
+  if (row === undefined) return <p className="projection-empty">No projections advertised.</p>;
+
+  return (
+    <section className="projection-detail" aria-label={`${row.name} projection details`}>
+      <header>
+        <h2>{row.name}</h2>
+        <p>{row.description ?? 'No description advertised.'}</p>
+      </header>
+      <dl className="projection-metadata">
+        <div>
+          <dt>Schema</dt>
+          <dd>{row.schemaId}</dd>
+        </div>
+        <div>
+          <dt>Hash</dt>
+          <dd>{row.schemaHash}</dd>
+        </div>
+        <div>
+          <dt>Basis</dt>
+          <dd>{row.basisKinds.join(', ')}</dd>
+        </div>
+        <div>
+          <dt>Owner</dt>
+          <dd>{row.owner ?? 'runtime'}</dd>
+        </div>
+        {row.schemaUrl === undefined
+          ? null
+          : (
+              <div>
+                <dt>Schema URL</dt>
+                <dd>{row.schemaUrl}</dd>
+              </div>
+            )}
+      </dl>
+      <ProjectionSnapshotSummary snapshotState={snapshotState} />
+    </section>
+  );
+}
+
+function ProjectionSnapshotSummary({
+  snapshotState,
+}: {
+  readonly snapshotState: RuntimeProjectionSnapshotState;
+}) {
+  if (snapshotState.status === 'initializing') {
+    return <p className="projection-empty">Loading selected projection snapshot.</p>;
+  }
+  if (snapshotState.status === 'failed') return <ProjectionFailure failure={snapshotState.failure} />;
+
+  const relationSummaries = relationSetNames(snapshotState.snapshot.relations).map((name) => ({
+    name,
+    rows: relationRows<unknown>(snapshotState.snapshot.relations, name).length,
+  }));
+
+  return (
+    <>
+      <div className="projection-counts" aria-label="Relation row counts">
+        {relationSummaries.map((relation) => (
+          <span key={relation.name}>
+            <strong>{relation.rows}</strong>
+            {relation.name}
+          </span>
+        ))}
+      </div>
+      <details className="projection-json">
+        <summary>Selected snapshot JSON</summary>
+        <pre className="diagnostics-json state-browser-json">
+          {formatStateBrowserJson(projectionSnapshotData(snapshotState.snapshot))}
+        </pre>
+      </details>
+    </>
+  );
+}
+
+function ProjectionFailure({ failure }: { readonly failure: unknown }) {
+  return (
+    <pre className="diagnostics-json state-browser-json projection-failure">
+      {formatStateBrowserJson(failure)}
+    </pre>
+  );
+}
+
+function projectionSnapshotData(snapshot: ProjectionSnapshot) {
+  return {
+    basis: snapshot.basis,
+    lensPath: snapshot.lensPath,
+    projection: snapshot.projection,
+    relationRowCounts: Object.fromEntries(
+      relationSetNames(snapshot.relations).map((name) => [
+        name,
+        relationRows<unknown>(snapshot.relations, name).length,
+      ]),
+    ),
+    schema: snapshot.schema,
+    schemaHash: snapshot.schemaHash,
+    schemaId: snapshot.schemaId,
+    storageHeads: snapshot.storageHeads,
+    subscriptionId: snapshot.subscriptionId,
+  };
 }

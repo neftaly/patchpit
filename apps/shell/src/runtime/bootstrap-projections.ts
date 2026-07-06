@@ -3,12 +3,17 @@ import {
   filesystemTreeSchema,
   patchpitSystemSchemaRef,
   projectFilesystemTreeRows,
+  runtimeProjectionsSchema,
   windowManagerStateSchema,
+  type PatchpitSchemaRef,
   type SeedFilesystem,
 } from '@patchpit/system';
 import {
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  runtimeProjectionsProjection,
+  runtimeProjectionsRelation,
+  runtimeProjectionsSchemaId,
   runtimeError,
   workspaceProjectionRelationSet,
   type AutomergeHeadSet,
@@ -21,6 +26,7 @@ import {
   type ProjectionSubscription,
   type ProjectionSubscriptionRequest,
   type RelationSet,
+  type RuntimeProjectionCatalogRow,
   type RuntimeClient,
   type RuntimeError,
 } from '@patchpit/system/runtime';
@@ -41,8 +47,11 @@ type BootstrapProjectionSubscriberOptions = {
 
 type BootstrapProjectionDefinition = {
   readonly projection: ProjectionName;
+  readonly description: string;
+  readonly owner: string;
   readonly schemaId: ProjectionSubscriptionRequest['schemaId'];
   readonly schema: ProjectionSnapshotSchema;
+  readonly schemaRef: PatchpitSchemaRef;
   readonly subscribe: (seed: SeedFilesystem, update: () => void) => () => void;
   readonly payload: (seed: SeedFilesystem) => ProjectionPayload | RuntimeError;
 };
@@ -67,6 +76,12 @@ const filesystemTreeSnapshotSchema = {
   ...(filesystemTreeSchemaRef.hash === undefined ? {} : { schemaHash: filesystemTreeSchemaRef.hash }),
 } as const;
 
+const runtimeProjectionsSchemaRef = patchpitSystemSchemaRef(runtimeProjectionsSchema);
+const runtimeProjectionsSnapshotSchema = {
+  schema: runtimeProjectionsSchema,
+  ...(runtimeProjectionsSchemaRef.hash === undefined ? {} : { schemaHash: runtimeProjectionsSchemaRef.hash }),
+} as const;
+
 const workspaceProjectionSchemaRef = patchpitSystemSchemaRef(windowManagerStateSchema);
 const workspaceProjectionSnapshotSchema = {
   schema: windowManagerStateSchema,
@@ -76,18 +91,34 @@ const workspaceProjectionSnapshotSchema = {
 const bootstrapProjectionDefinitions: Partial<Record<ProjectionName, BootstrapProjectionDefinition>> = {
   [filesystemTreeProjection]: {
     projection: filesystemTreeProjection,
+    description: 'Public filesystem tree projection served as Tarstate relation rows.',
+    owner: '@patchpit/system/filesystem',
     schemaId: filesystemTreeSchemaId,
     schema: filesystemTreeSnapshotSchema,
+    schemaRef: filesystemTreeSchemaRef,
     subscribe: (seed, update) => {
       seed.indexHandle.on('change', update);
       return () => seed.indexHandle.off('change', update);
     },
     payload: filesystemTreePayload,
   },
+  [runtimeProjectionsProjection]: {
+    projection: runtimeProjectionsProjection,
+    description: 'Runtime projection catalog advertised by the active Patchpit runtime.',
+    owner: '@patchpit/system/runtime',
+    schemaId: runtimeProjectionsSchemaId,
+    schema: runtimeProjectionsSnapshotSchema,
+    schemaRef: runtimeProjectionsSchemaRef,
+    subscribe: () => () => {},
+    payload: projectionCatalogPayload,
+  },
   [workspaceLayoutProjection]: {
     projection: workspaceLayoutProjection,
+    description: 'Shared Patchpit window-manager state projected as runtime layout relations.',
+    owner: '@patchpit/system/runtime',
     schemaId: workspaceProjectionSchemaId,
     schema: workspaceProjectionSnapshotSchema,
+    schemaRef: workspaceProjectionSchemaRef,
     subscribe: (seed, update) => {
       seed.windowManagerHandle.on('change', update);
       return () => seed.windowManagerHandle.off('change', update);
@@ -95,6 +126,8 @@ const bootstrapProjectionDefinitions: Partial<Record<ProjectionName, BootstrapPr
     payload: workspaceLayoutPayload,
   },
 } as const satisfies Partial<Record<ProjectionName, BootstrapProjectionDefinition>>;
+
+assertProjectionDefinitionsShipSchemas(bootstrapProjectionDefinitions);
 
 export function createBootstrapProjectionSubscriber({
   diagnostics,
@@ -236,6 +269,54 @@ function workspaceLayoutPayload(seed: SeedFilesystem): ProjectionPayload {
     storageHeads: automergeHeadSetForHandle(seed.windowManagerHandle),
     relations: workspaceProjectionRelationSet(seed.windowManagerHandle.doc()),
   };
+}
+
+function projectionCatalogPayload(): ProjectionPayload {
+  const rows = Object.values(bootstrapProjectionDefinitions)
+    .map((definition) => projectionCatalogRow(assertProjectionDefinition(definition)))
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  return {
+    storageHeads: {},
+    relations: relationSetFromRows({ [runtimeProjectionsRelation]: rows }),
+  };
+}
+
+function projectionCatalogRow(definition: BootstrapProjectionDefinition): RuntimeProjectionCatalogRow {
+  const schemaHash = definition.schemaRef.hash ?? definition.schema.schemaHash;
+  if (schemaHash === undefined) {
+    throw new Error(`Projection ${definition.projection} must ship a schema hash.`);
+  }
+  return {
+    basisKinds: ['live'],
+    description: definition.description,
+    name: definition.projection,
+    owner: definition.owner,
+    schemaHash,
+    schemaId: definition.schemaId,
+    ...(definition.schemaRef.url === undefined ? {} : { schemaUrl: definition.schemaRef.url }),
+  };
+}
+
+function assertProjectionDefinitionsShipSchemas(
+  definitions: Partial<Record<ProjectionName, BootstrapProjectionDefinition>>,
+): void {
+  for (const definition of Object.values(definitions)) {
+    const projectionDefinition = assertProjectionDefinition(definition);
+    if (projectionDefinition.schema.schema === undefined) {
+      throw new Error(`Projection ${projectionDefinition.projection} must ship an inline schema descriptor.`);
+    }
+    if (projectionDefinition.schemaRef.hash === undefined && projectionDefinition.schema.schemaHash === undefined) {
+      throw new Error(`Projection ${projectionDefinition.projection} must ship a schema hash.`);
+    }
+  }
+}
+
+function assertProjectionDefinition(
+  definition: BootstrapProjectionDefinition | undefined,
+): BootstrapProjectionDefinition {
+  if (definition === undefined) throw new Error('Bootstrap projection definition is missing.');
+  return definition;
 }
 
 function liveProjectionSubscription(

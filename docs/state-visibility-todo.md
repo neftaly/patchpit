@@ -27,9 +27,11 @@ diagnostics and derived projections.
 - Current runtime issue banner state and bounded session issue history with
   observed time and source.
 - Runtime platform and feature checks.
-- Current filesystem projection status, subscription lifecycle, event counters,
-  storage-head document summaries, and latest event diagnostics.
-- Full current derived filesystem and workspace projection snapshots.
+- Runtime projection catalog with advertised schema ids, schema hashes, owners,
+  descriptions, and supported basis kinds.
+- Generic live projection inspector for catalog rows, relation row counts,
+  selected snapshot metadata, subscription lifecycle, event counters,
+  storage-head summaries, and latest event diagnostics.
 - Intent request/result log with request relation counts, outcomes, timings, and
   thrown errors.
 - Window-manager surface/context/layout summary.
@@ -43,9 +45,8 @@ diagnostics and derived projections.
   affected intent ids, recovery status, or durable failure-relation rows.
 - Policy and capability state is still mostly hard-coded placeholder behavior;
   there is no visible effective grants/quarantine/revocation state.
-- Projection diagnostics include current snapshots and bootstrap subscription
-  entries, but there is no general projection catalog, historical basis browser,
-  or full patch/storage-head inspector.
+- Projection diagnostics include the live projection catalog and current
+  snapshots, but there is no historical basis browser or full patch inspector.
 - Schema catalog and document schema ref detail are not currently covered by
   State Browser.
 - Client/session/presence/viewport state is protocol-shaped in docs but not

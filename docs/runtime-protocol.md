@@ -531,6 +531,7 @@ Rules:
 - Patches are ordered per subscription.
 - The runtime may send a reset when patch history is unavailable or too large.
 - Clients must tolerate reset followed by a new snapshot.
+- Every projection must ship a schema descriptor and schema hash on snapshots.
 - Projections may be redacted by policy, but redaction must still satisfy the
   advertised schema. If it cannot, return a different redacted schema or reject.
 - Projection caches are disposable. Automerge remains canonical.
@@ -544,8 +545,15 @@ Initial projections:
 ```txt
 filesystem.tree
 appManifests.handlers
+runtime.projections
 workspace.layout
 ```
+
+`runtime.projections` with `schemaId: patchpit.runtime.projections@1` is the
+live projection catalog. It advertises the projections the active runtime can
+serve, their schema ids, schema hashes, owners, descriptions, and supported
+basis kinds. Runtime Diagnostics uses this catalog to inspect projections
+generically instead of hard-coding each projection shape.
 
 `workspace.layout` carries the V0 workspace relation set: state, contexts, and
 surfaces. Split `workspace.surfaces`, `workspace.contexts`,

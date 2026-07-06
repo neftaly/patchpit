@@ -23,6 +23,8 @@ import {
   routeOpenIntent,
   routePreviewIntent,
   routeRequestsRelation,
+  runtimeProjectionsRelation,
+  runtimeProjectionsSchemaId,
   windowCloseContextIntent,
   windowFocusIntent,
   windowIntentSchemaId,
@@ -465,6 +467,37 @@ export const runtimeStateSchema = defineRelationSchema({
   },
 });
 
+export const runtimeProjectionsSchema = defineRelationSchema({
+  kind: 'tarstate.schema',
+  formatVersion: 1,
+  schemaId: runtimeProjectionsSchemaId,
+  description: 'Runtime projection catalog advertised by the active Patchpit runtime.',
+  metadata: schemaMetadata('runtime.projections', {
+    lifecycle: 'derived-projection',
+    projectionOwner: '@patchpit/system/runtime',
+  }),
+  relations: {
+    [runtimeProjectionsRelation]: {
+      key: 'name',
+      metadata: relationMetadata({
+        lifecycle: 'derived-projection',
+      }),
+      fields: {
+        basisKinds: {
+          type: 'json',
+          description: 'Projection basis kinds accepted by this runtime for the projection.',
+        },
+        description: { type: 'string', optional: true },
+        name: idField('runtimeProjection'),
+        owner: { type: 'string', optional: true },
+        schemaHash: { type: 'string' },
+        schemaId: { type: 'string' },
+        schemaUrl: { type: 'string', optional: true },
+      },
+    },
+  },
+});
+
 export const appLaunchIntentSchema = defineRelationSchema({
   kind: 'tarstate.schema',
   formatVersion: 1,
@@ -684,6 +717,7 @@ export const patchpitSystemSchemas = [
   terminalStateSchema,
   windowManagerStateSchema,
   runtimeStateSchema,
+  runtimeProjectionsSchema,
   appLaunchIntentSchema,
   routeIntentSchema,
   filePickerIntentSchema,
@@ -708,6 +742,7 @@ const patchpitSystemSchemaHashes = {
   'patchpit.intent.filePicker@1': 'sha256:9d22ea794acb16f21159f3a41ee2f7b5085579d4d91b168cbd20af465dffc970',
   'patchpit.intent.route@1': 'sha256:b788b4f922f50dc25d36141190ec1872e8d1ec24cc0cbc205235c6a88f2bbf85',
   'patchpit.intent.window@1': 'sha256:f6fc795ee96f61af948e486b88765757967171387ac641bbfb9ad25b69f205e0',
+  'patchpit.runtime.projections@1': 'sha256:fa728734e053397f5a70e4fc8a2278e49992aeb96bb00bb77e9fbba8052d37f9',
   'patchpit.runtime.state@1': 'sha256:b277e00869d466d3523f1e166c9f229deae749ba6ec1a238a73dbe362e1a760a',
   'patchpit.system.appManifest@1': 'sha256:ef3ab14a21e0f124dbd262a5984bb3f09a3a6e90c0b27f458976b4a10fac5518',
   'patchpit.system.appearance@1': 'sha256:a3a297b433293a35d1380c666821e6883016adbaab760ed3b8e898f77dad46d4',
