@@ -646,10 +646,11 @@ void test('bootstrap runtime removes stale app instance rows without deleting mi
   assertResourcePresent(seed, seed.runtimeStateHandle.url);
 });
 
-void test('bootstrap runtime admits only registered contextless app instance launches', async () => {
+void test('bootstrap runtime reuses existing matching context for contextless file picker launch', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
   const initialSystemAppUrls = systemAppUrls(seed);
+  const context = seed.windowManagerHandle.doc().contexts['file-picker'];
 
   const result = await launchApp(runtime, {
     app: 'file-picker',
@@ -658,13 +659,13 @@ void test('bootstrap runtime admits only registered contextless app instance lau
     role: SurfaceRole.WorkspaceView,
   });
 
-  assert.equal(result.status, 'rejected');
-  assert.equal(result.error.code, 'missing_handler');
-  assert.match(result.error.reason, /file-picker-state/);
+  assert.equal(result.status, 'committed');
+  assert.equal(seed.windowManagerHandle.doc().contexts['file-picker'].url, context.url);
+  assert.equal(seed.windowManagerHandle.doc().surfaces.files.activeContext, 'file-picker');
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 
-void test('bootstrap runtime rejects contextless toggle launches', async () => {
+void test('bootstrap runtime resolves contextless toggle launches to existing file picker context', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
   const initialSystemAppUrls = systemAppUrls(seed);
@@ -676,9 +677,49 @@ void test('bootstrap runtime rejects contextless toggle launches', async () => {
     role: SurfaceRole.WorkspaceView,
   });
 
+  assert.equal(result.status, 'committed');
+  assert.equal(seed.windowManagerHandle.doc().contexts['file-picker'].app, 'file-picker');
+  assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
+});
+
+void test('bootstrap runtime creates stateless package context for contextless module app launch', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+  const initialSystemAppUrls = systemAppUrls(seed);
+
+  const result = await launchApp(runtime, {
+    app: 'hello-world',
+    behavior: 'open-context',
+    id: 'hello-world-contextless-launch-test',
+    role: SurfaceRole.DocumentSet,
+  });
+
+  assert.equal(result.status, 'committed');
+  const context = Object.values(seed.windowManagerHandle.doc().contexts).find((candidate) => (
+    candidate.app === 'hello-world'
+  ));
+  assert.ok(context);
+  assert.equal(context.title, 'Hello World');
+  assert.match(context.id, /^hello-world:automerge:/);
+  assert.equal(seed.documentHandles[context.url]?.doc().name, 'app.js');
+  assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
+});
+
+void test('bootstrap runtime rejects contextless stateless shell-compat app launch', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+  const initialSystemAppUrls = systemAppUrls(seed);
+
+  const result = await launchApp(runtime, {
+    app: 'viewer',
+    behavior: 'open-context',
+    id: 'viewer-contextless-launch-test',
+    role: SurfaceRole.DocumentSet,
+  });
+
   assert.equal(result.status, 'rejected');
-  assert.equal(result.error.code, 'bad_request');
-  assert.match(result.error.message, /Context-less app\.launch/);
+  assert.equal(result.error.code, 'missing_handler');
+  assert.match(result.error.reason, /shell-compat stateless app\.launch/);
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 

@@ -4,6 +4,10 @@ import {
   createSandboxPackageLoadPlan,
   sandboxFilesystemAppEntry,
 } from './sandbox-package-loader.ts';
+import {
+  createSandboxAppServiceBridge,
+  sandboxAppProtocol,
+} from './sandbox-service-bridge.ts';
 
 void test('sandbox module entries resolve package-relative imports', async () => {
   const entry = appEntry({
@@ -80,6 +84,124 @@ void test('sandbox package loader rejects shell compatibility entries', () => {
   });
 });
 
+void test('sandbox service bridge reports host-decided capabilities', () => {
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'viewer',
+    session: { app: 'viewer', id: 'viewer:doc', url: 'automerge:doc' },
+  });
+
+  assert.deepEqual(bridge.capabilities, {
+    act: false,
+    open: false,
+    view: true,
+  });
+});
+
+void test('sandbox service bridge serves host-scoped launch view data', () => {
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'trusted-viewer',
+    session: { app: 'trusted-viewer', id: 'trusted-session', url: 'automerge:trusted' },
+  });
+
+  const response = bridge.respond(serviceRequest('view', {
+    name: 'launch',
+  }));
+
+  assert.deepEqual(response, {
+    id: 'request-1',
+    ok: true,
+    protocol: sandboxAppProtocol,
+    result: {
+      appId: 'trusted-viewer',
+      session: { app: 'trusted-viewer', id: 'trusted-session', url: 'automerge:trusted' },
+      view: 'launch',
+    },
+    type: 'serviceResponse',
+  });
+});
+
+void test('sandbox service bridge rejects app-supplied authority scope', () => {
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'trusted-viewer',
+    session: { app: 'trusted-viewer', id: 'trusted-session', url: 'automerge:trusted' },
+  });
+
+  const response = bridge.respond(serviceRequest('view', {
+    appId: 'forged-app',
+    name: 'launch',
+    scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
+    session: { app: 'forged-app', id: 'forged-session', url: 'automerge:forged' },
+  }));
+
+  assert.deepEqual(response, {
+    error: {
+      code: 'missing_scope',
+      message: 'Sandbox service requests cannot carry app-supplied authority scope.',
+    },
+    id: 'request-1',
+    ok: false,
+    protocol: sandboxAppProtocol,
+    type: 'serviceResponse',
+  });
+});
+
+void test('sandbox service bridge rejects views outside the host scope', () => {
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'viewer',
+    session: { app: 'viewer', id: 'viewer:doc', url: 'automerge:doc' },
+  });
+
+  const response = bridge.respond(serviceRequest('view', {
+    name: 'filesystem.tree',
+  }));
+
+  assert.deepEqual(response, {
+    error: {
+      code: 'missing_scope',
+      message: 'Sandbox view filesystem.tree is not available in this host scope.',
+    },
+    id: 'request-1',
+    ok: false,
+    protocol: sandboxAppProtocol,
+    type: 'serviceResponse',
+  });
+});
+
+void test('sandbox service bridge rejects unsupported act and open services', () => {
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'viewer',
+    session: { app: 'viewer', id: 'viewer:doc', url: 'automerge:doc' },
+  });
+
+  assert.deepEqual(bridge.respond(serviceRequest('act', {
+    intent: 'route.open',
+    scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
+  })), {
+    error: {
+      code: 'unsupported_service',
+      message: 'Sandbox service act is not supported by this host scope.',
+    },
+    id: 'request-1',
+    ok: false,
+    protocol: sandboxAppProtocol,
+    type: 'serviceResponse',
+  });
+
+  assert.deepEqual(bridge.respond(serviceRequest('open', {
+    capability: 'terminal.filesystem',
+    scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
+  })), {
+    error: {
+      code: 'unsupported_service',
+      message: 'Sandbox service open is not supported by this host scope.',
+    },
+    id: 'request-1',
+    ok: false,
+    protocol: sandboxAppProtocol,
+    type: 'serviceResponse',
+  });
+});
+
 function appEntry({
   entryKind,
   entryPath,
@@ -125,4 +247,14 @@ function findFile(node, path) {
   if (child === undefined) return null;
   if (rest.length === 0) return child.kind === 'file' ? child : null;
   return findFile(child, rest.join('/'));
+}
+
+function serviceRequest(service, payload) {
+  return {
+    id: 'request-1',
+    payload,
+    protocol: sandboxAppProtocol,
+    service,
+    type: 'serviceRequest',
+  };
 }

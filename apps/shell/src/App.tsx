@@ -259,10 +259,8 @@ function ShellApp({
     focusedAppId: workspaceProjection.status === 'ready'
       ? focusedAppId(workspaceProjection.workspace)
       : undefined,
-    filePickerStateUrl: documentUrls.filePickerState,
     installedApps,
     launchApp,
-    rootUrl,
   });
   return (
     <main className="standalone-app shell-app" style={themeStyle(theme)}>

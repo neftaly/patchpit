@@ -1,55 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { WindowContext } from '@patchpit/system';
 import { createSandboxPackageLoadPlan, type SandboxFilesystemAppEntry } from './sandbox-package-loader';
+import {
+  createSandboxAppServiceBridge,
+  sandboxAppProtocol,
+  sandboxFrameMessage,
+  type SandboxAppProtocol,
+  type SandboxAppReportedError,
+  type SandboxAppServiceCapabilities,
+  type SandboxAppSession,
+} from './sandbox-service-bridge';
 import './sandbox-app-host.css';
 
-export const sandboxAppProtocol = 'patchpit.app@1' as const;
-
-export type SandboxAppProtocol = typeof sandboxAppProtocol;
-export type SandboxAppServiceName = 'act' | 'open' | 'view';
-export type SandboxAppSession = Pick<WindowContext, 'app' | 'id' | 'url'>;
-
-export type SandboxAppServiceRequest = {
-  readonly protocol: SandboxAppProtocol;
-  readonly type: 'serviceRequest';
-  readonly id: string;
-  readonly payload: unknown;
-  readonly service: SandboxAppServiceName;
-};
-
-export type SandboxAppReportedError = {
-  readonly message: string;
-  readonly stack?: string;
-};
-
-export type SandboxFrameToHostMessage =
-  | SandboxAppServiceRequest
-  | {
-      readonly protocol: SandboxAppProtocol;
-      readonly type: 'error';
-      readonly error: SandboxAppReportedError;
-    }
-  | {
-      readonly protocol: SandboxAppProtocol;
-      readonly type: 'running';
-    };
+export { sandboxAppProtocol };
+export type { SandboxAppProtocol, SandboxAppReportedError, SandboxAppSession };
 
 export type SandboxAppHostProps = {
   readonly appId: string;
   readonly entry: SandboxFilesystemAppEntry | undefined;
   readonly session: SandboxAppSession;
   readonly title?: string;
-};
-
-type SandboxHostToFrameMessage = {
-  readonly protocol: SandboxAppProtocol;
-  readonly type: 'serviceResponse';
-  readonly id: string;
-  readonly ok: false;
-  readonly error: {
-    readonly code: 'unsupported';
-    readonly message: string;
-  };
 };
 
 type SandboxStatus =
@@ -67,16 +36,20 @@ export function SandboxAppHost({
   const loadPlan = useMemo(() => (
     entry === undefined ? undefined : createSandboxPackageLoadPlan(entry)
   ), [entry]);
+  const serviceBridge = useMemo(() => (
+    createSandboxAppServiceBridge({ appId, session })
+  ), [appId, session.app, session.id, session.url]);
   const srcDoc = useMemo(() => (
     loadPlan === undefined || loadPlan.kind === 'error'
       ? undefined
       : sandboxSrcDoc({
           appId,
+          capabilities: serviceBridge.capabilities,
           loadPlan,
           protocol: sandboxAppProtocol,
           session,
         })
-  ), [appId, loadPlan, session.app, session.id, session.url]);
+  ), [appId, loadPlan, serviceBridge, session.app, session.id, session.url]);
   const [status, setStatus] = useState<SandboxStatus>({ kind: 'starting' });
 
   useEffect(() => {
@@ -96,13 +69,13 @@ export function SandboxAppHost({
       } else if (message.type === 'error') {
         setStatus({ kind: 'error', error: message.error });
       } else {
-        frameWindow.postMessage(unsupportedServiceResponse(message), '*');
+        frameWindow.postMessage(serviceBridge.respond(message), '*');
       }
     }
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, []);
+  }, [serviceBridge]);
 
   if (entry === undefined || loadPlan === undefined) {
     return (
@@ -184,70 +157,20 @@ function SandboxNotice({
   );
 }
 
-function unsupportedServiceResponse(request: SandboxAppServiceRequest): SandboxHostToFrameMessage {
-  return {
-    error: {
-      code: 'unsupported',
-      message: `Sandbox service ${request.service} is not supported by this host yet.`,
-    },
-    id: request.id,
-    ok: false,
-    protocol: sandboxAppProtocol,
-    type: 'serviceResponse',
-  };
-}
-
-function sandboxFrameMessage(value: unknown): SandboxFrameToHostMessage | undefined {
-  if (!isRecord(value) || value.protocol !== sandboxAppProtocol || typeof value.type !== 'string') {
-    return undefined;
-  }
-
-  if (value.type === 'running') return { protocol: sandboxAppProtocol, type: 'running' };
-
-  if (value.type === 'error') {
-    const error = reportedError(value.error);
-    return error === undefined ? undefined : { error, protocol: sandboxAppProtocol, type: 'error' };
-  }
-
-  if (
-    value.type === 'serviceRequest'
-    && typeof value.id === 'string'
-    && isSandboxAppServiceName(value.service)
-  ) {
-    return {
-      id: value.id,
-      payload: value.payload,
-      protocol: sandboxAppProtocol,
-      service: value.service,
-      type: 'serviceRequest',
-    };
-  }
-
-  return undefined;
-}
-
-function isSandboxAppServiceName(value: unknown): value is SandboxAppServiceName {
-  return value === 'act' || value === 'open' || value === 'view';
-}
-
-function reportedError(value: unknown): SandboxAppReportedError | undefined {
-  if (!isRecord(value) || typeof value.message !== 'string') return undefined;
-  if (typeof value.stack !== 'string') return { message: value.message };
-  return { message: value.message, stack: value.stack };
-}
-
 function sandboxSrcDoc({
   appId,
+  capabilities,
   loadPlan,
   protocol,
   session,
 }: {
   readonly appId: string;
+  readonly capabilities: SandboxAppServiceCapabilities;
   readonly loadPlan: Exclude<ReturnType<typeof createSandboxPackageLoadPlan>, { readonly kind: 'error' }>;
   readonly protocol: SandboxAppProtocol;
   readonly session: SandboxAppSession;
 }): string {
-  const bridgeScript = sandboxBridgeScript({ appId, protocol, session });
+  const bridgeScript = sandboxBridgeScript({ appId, capabilities, protocol, session });
 
   if (loadPlan.kind === 'html') {
     return injectSandboxBridge(loadPlan.html, bridgeScript, htmlReadyScript());
@@ -295,14 +218,16 @@ function sandboxSrcDoc({
 
 function sandboxBridgeScript({
   appId,
+  capabilities,
   protocol,
   session,
 }: {
   readonly appId: string;
+  readonly capabilities: SandboxAppServiceCapabilities;
   readonly protocol: SandboxAppProtocol;
   readonly session: SandboxAppSession;
 }): string {
-  const config = scriptJson({ appId, protocol, session });
+  const config = scriptJson({ appId, capabilities: { services: capabilities }, protocol, session });
 
   return `
     (() => {
@@ -324,11 +249,13 @@ function sandboxBridgeScript({
         });
       }
 
-      function unsupportedError(error) {
-        const unsupported = new Error(error.message);
-        unsupported.name = 'UnsupportedPatchpitService';
-        unsupported.code = error.code;
-        return unsupported;
+      function serviceError(error) {
+        const serviceError = new Error(error.message);
+        serviceError.name = error.code === 'missing_scope'
+          ? 'MissingPatchpitServiceScope'
+          : 'PatchpitServiceError';
+        serviceError.code = error.code;
+        return serviceError;
       }
 
       function requestService(service, payload) {
@@ -348,7 +275,7 @@ function sandboxBridgeScript({
         pending.delete(message.id);
 
         if (message.ok === true) request.resolve(message.result);
-        else request.reject(unsupportedError(message.error));
+        else request.reject(serviceError(message.error));
       });
 
       window.addEventListener('error', (event) => {
@@ -359,16 +286,18 @@ function sandboxBridgeScript({
         reportError(event.reason);
       });
 
+      const serviceCapabilities = Object.freeze({
+        act: config.capabilities.services.act === true,
+        open: config.capabilities.services.open === true,
+        view: config.capabilities.services.view === true,
+      });
+
       const env = Object.freeze({
         protocol: config.protocol,
         appId: config.appId,
         session: Object.freeze(config.session),
         capabilities: Object.freeze({
-          services: Object.freeze({
-            act: false,
-            open: false,
-            view: false,
-          }),
+          services: serviceCapabilities,
         }),
         services: Object.freeze({
           act: (request) => requestService('act', request),
@@ -409,8 +338,4 @@ function htmlReadyScript(): string {
 
 function scriptJson(value: unknown): string {
   return JSON.stringify(value).replaceAll('<', '\\u003C');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

@@ -2,14 +2,17 @@ import type { DocHandle } from '@automerge/automerge-repo';
 import {
   appLaunchIntentBoundary,
   ContainerMountKind,
+  PatchpitType,
   removeSystemAppResource,
   RuntimeMountProvider,
+  rootContainer,
   SurfaceRole,
   windowIntentBoundary,
   type AppManifestDoc,
   type AppContainer,
   type ContainerMount,
   type FilesystemResource,
+  type FolderDoc,
   type RuntimeAppInstanceState,
   type SeedFilesystem,
   type WindowContext,
@@ -69,6 +72,7 @@ import { installedAppManifests } from './manifest-routing';
 import type { AppInstanceStateHandler } from './app-instance-state';
 import { automergeHeadSetForHandle } from './automerge-heads';
 import { allowAllRuntimePolicy, type RuntimePolicy } from './policy';
+import { isPackageAppManifestDoc } from './app-manifest-discovery';
 
 export type BootstrapRuntimeOptions = {
   readonly appInstanceStateHandlers?: readonly AppInstanceStateHandler[];
@@ -293,30 +297,33 @@ function submitBootstrapAppLaunchIntent(
   const launch = appLaunchIntentRequest(request);
   if (isRuntimeError(launch)) return rejected(launch);
 
+  const resolvedLaunch = resolveAppLaunchContext(options.seed, launch);
+  if (isRuntimeError(resolvedLaunch)) return rejected(resolvedLaunch);
+
   const appInstanceStateHandler = prepareAppLaunchIntent(
     options.seed,
     request,
-    launch,
+    resolvedLaunch,
     options.appInstanceStateHandlers,
   );
   if (isRuntimeError(appInstanceStateHandler)) {
     return appLaunchAdmissionFailure(options.seed, appInstanceStateHandler);
   }
 
-  const commit = appLaunchCommit(options.seed, launch, appInstanceStateHandler);
+  const commit = appLaunchCommit(options.seed, resolvedLaunch, appInstanceStateHandler);
   if ('code' in commit) return rejected(commit);
 
   try {
     commitWindowManagerState(options.seed.windowManagerHandle, (doc) => {
       launchContext(doc, {
-        behavior: launch.behavior,
+        behavior: resolvedLaunch.behavior,
         context: commit.context,
-        role: launch.role,
+        role: resolvedLaunch.role,
       });
     });
   } catch (error) {
     rollbackAppInstanceState(options.seed, commit.appInstanceStateHandle);
-    return rejected(appLaunchCommitError(launch, error));
+    return rejected(appLaunchCommitError(resolvedLaunch, error));
   }
 
   const committedError = validateAppLaunchCommitted(options.seed.windowManagerHandle.doc(), commit.context);
@@ -611,6 +618,108 @@ function appLaunchCommit(
     rollbackNewAppInstanceStateResources(seed, handler, freshness);
     return appLaunchCommitError(launch, error);
   }
+}
+
+function resolveAppLaunchContext(seed: SeedFilesystem, launch: AppLaunchRequest): AppLaunchRequest | RuntimeError {
+  if (launch.context !== undefined) return launch;
+
+  const manifest = appManifestForApp(seed, launch.app);
+  if (manifest === undefined) {
+    return runtimeError('missing_handler', `No installed app.launch handler was found for ${launch.app}.`);
+  }
+
+  const surface = manifest.surfaces?.find((spec) => spec.role === launch.role);
+  if (surface === undefined) {
+    return runtimeError('missing_handler', `App ${launch.app} has no ${launch.role} launch surface.`);
+  }
+
+  if (surface.state !== undefined) {
+    const existing = launch.app === 'file-picker'
+      ? existingStatefulLaunchContext(seed, launch.app, surface.state.type)
+      : undefined;
+    return existing === undefined ? launch : { ...launch, context: existing };
+  }
+
+  if (manifest.entryKind === 'shell-compat') {
+    return runtimeError(
+      'missing_handler',
+      `App ${launch.app} cannot be launched without a routed target yet.`,
+      'shell-compat stateless app.launch requires a host adapter migration',
+    );
+  }
+
+  const entryUrl = installedAppEntryUrl(seed, manifest);
+  if (entryUrl === undefined) {
+    return runtimeError('missing_handler', `App ${launch.app} entry ${manifest.entry} is not installed.`);
+  }
+
+  return {
+    ...launch,
+    context: {
+      app: launch.app,
+      container: rootContainer(seed.rootUrl),
+      id: `${launch.app}:${entryUrl}`,
+      title: manifest.name,
+      url: entryUrl,
+    },
+  };
+}
+
+function existingStatefulLaunchContext(
+  seed: SeedFilesystem,
+  app: string,
+  stateType: string,
+): WindowContext | undefined {
+  return Object.values(seed.windowManagerHandle.doc().contexts).find((context) => {
+    if (context.app !== app) return false;
+    return seed.documentHandles[context.url]?.doc()['@patchpit'].type === stateType;
+  });
+}
+
+function installedAppEntryUrl(seed: SeedFilesystem, manifest: AppManifestDoc): string | undefined {
+  const root = seed.documentHandles[seed.rootUrl]?.doc();
+  if (!isFolderDoc(root)) return undefined;
+
+  const appsEntry = root.docs.find((entry) => entry.name === 'apps' && entry.type === PatchpitType.Folder);
+  const appsFolder = appsEntry === undefined ? undefined : seed.documentHandles[appsEntry.url]?.doc();
+  if (!isFolderDoc(appsFolder)) return undefined;
+
+  for (const appEntry of appsFolder.docs) {
+    const packageFolder = seed.documentHandles[appEntry.url]?.doc();
+    if (!isFolderDoc(packageFolder)) continue;
+    if (!packageContainsManifest(seed, packageFolder, manifest.id)) continue;
+    const entryUrl = folderEntryUrl(seed, packageFolder, manifest.entry);
+    if (entryUrl !== undefined) return entryUrl;
+  }
+
+  return undefined;
+}
+
+function packageContainsManifest(seed: SeedFilesystem, folder: FolderDoc, app: string): boolean {
+  return folder.docs.some((entry) => {
+    const doc = seed.documentHandles[entry.url]?.doc();
+    return isPackageAppManifestDoc(doc) && doc.id === app;
+  });
+}
+
+function folderEntryUrl(seed: SeedFilesystem, folder: FolderDoc, path: string): string | undefined {
+  const parts = path.split('/').filter((part) => part !== '' && part !== '.');
+  let current: FolderDoc | undefined = folder;
+  let url: string | undefined;
+
+  for (const part of parts) {
+    const entry: FolderDoc['docs'][number] | undefined = current?.docs.find((candidate) => candidate.name === part);
+    if (entry === undefined) return undefined;
+    url = entry.url;
+    const doc: FilesystemResource | undefined = seed.documentHandles[entry.url]?.doc();
+    current = isFolderDoc(doc) ? doc : undefined;
+  }
+
+  return url;
+}
+
+function isFolderDoc(doc: FilesystemResource | undefined): doc is FolderDoc {
+  return doc?.['@patchpit'].type === PatchpitType.Folder;
 }
 
 function validateCreatedAppInstanceState(
@@ -1069,9 +1178,6 @@ function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | Runt
   if (context instanceof Error) return badRequest(context);
   if (context !== undefined && context.app !== row.app) {
     return badRequest('App launch context app must match the request app.');
-  }
-  if (context === undefined && behavior === ContextLaunchBehavior.ToggleSurface) {
-    return badRequest('Context-less app.launch cannot use toggle-surface; provide an explicit context.');
   }
 
   return {
