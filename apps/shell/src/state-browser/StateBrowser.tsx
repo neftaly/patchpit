@@ -1,6 +1,4 @@
 import {
-  patchpitSystemSchemaRef,
-  patchpitSystemSchemas,
   type FilesystemNode,
   type RuntimeStateDoc,
   type WindowLayoutNode,
@@ -41,7 +39,6 @@ export type StateBrowserSnapshotInput = {
   readonly runtimeIssueHistory: readonly StateBrowserRuntimeIssueEntry[];
   readonly runtimePlatform: RuntimePlatformReport;
   readonly runtimeState: RuntimeStateDoc;
-  readonly stateDocuments: Readonly<Record<string, unknown>>;
   readonly workspaceProjection: WorkspaceProjectionState;
 };
 
@@ -55,26 +52,6 @@ type StateBrowserSection = {
   readonly summary: string;
   readonly title: string;
 };
-type PatchpitMetadataSummary = Readonly<Record<string, unknown>> & {
-  readonly type: string;
-};
-type StateDocumentSummary = {
-  readonly stateKind: 'canonical';
-  readonly exposure: {
-    readonly fileBrowser: 'reachable' | 'not-in-file-tree';
-    readonly path?: string;
-    readonly viewer: 'raw-state-not-rendered';
-  };
-  readonly metadata: PatchpitMetadataSummary;
-  readonly url: string;
-};
-type DocumentSchemaRef = {
-  readonly inlineSchemaIds?: readonly string[];
-  readonly schema?: unknown;
-  readonly type: string;
-  readonly url: string;
-};
-type SystemSchemaCatalogSummary = ReturnType<typeof systemSchemaCatalogSummary>;
 
 export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnapshot }) {
   return (
@@ -100,10 +77,7 @@ export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnap
 }
 
 export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): StateBrowserSnapshot {
-  const schemaRefs = documentSchemaRefs(input.stateDocuments);
-  const schemaCatalog = systemSchemaCatalogSummary();
   const projectionCounters = totalProjectionCounters(input.runtimeDiagnostics);
-  const stateDocuments = stateDocumentSummaries(input);
 
   return {
     sections: [
@@ -153,26 +127,10 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
         ),
       },
       {
-        id: 'state-documents',
-        title: 'State Documents',
-        summary: stateDocumentsSummary(stateDocuments),
-        data: stateDocumentsData(input.stateDocuments, stateDocuments),
-      },
-      {
         id: 'projection-snapshots',
         title: 'Projection Snapshots',
         summary: projectionSnapshotsSummary(input.filesystemProjection, input.workspaceProjection),
         data: projectionSnapshotsData(input.filesystemProjection, input.workspaceProjection),
-      },
-      {
-        id: 'schemas',
-        title: 'Schema Refs And Catalog Summary',
-        summary: `${schemaCatalog.length} system schemas, ${schemaRefs.length} observed document refs`,
-        data: {
-          summary: schemaSummary(schemaCatalog, schemaRefs),
-          catalog: schemaCatalog,
-          documentRefs: schemaRefs,
-        },
       },
       {
         id: 'intent-log',
@@ -398,58 +356,6 @@ function workspaceProjectionData(projection: WorkspaceProjectionState) {
   };
 }
 
-function stateDocumentsSummary(entries: readonly StateDocumentSummary[]): string {
-  const hiddenCount = entries.filter((entry) => entry.exposure.fileBrowser === 'not-in-file-tree').length;
-  return `${entries.length} canonical docs, ${hiddenCount} not in file tree`;
-}
-
-function stateDocumentsData(
-  documents: Readonly<Record<string, unknown>>,
-  summaries: readonly StateDocumentSummary[],
-) {
-  return {
-    stateKind: 'canonical',
-    summary: {
-      count: summaries.length,
-      notInFileTree: summaries.filter((entry) => entry.exposure.fileBrowser === 'not-in-file-tree').length,
-      byType: countBy(summaries, (entry) => entry.metadata.type),
-    },
-    documents: summaries.map((summary) => ({
-      ...summary,
-      document: documents[summary.url],
-    })),
-  };
-}
-
-function stateDocumentSummaries(input: StateBrowserSnapshotInput): readonly StateDocumentSummary[] {
-  const pathsByUrl = fileTreePathsByUrl(input.filesystemProjection);
-  return Object.entries(input.stateDocuments)
-    .map(([url, document]) => {
-      const metadata = patchpitMetadata(document);
-      if (metadata === undefined) return undefined;
-
-      const path = pathsByUrl.get(url);
-      return {
-        stateKind: 'canonical',
-        url,
-        metadata,
-        exposure: {
-          fileBrowser: path === undefined ? 'not-in-file-tree' : 'reachable',
-          ...(path === undefined ? {} : { path }),
-          viewer: 'raw-state-not-rendered',
-        },
-      } satisfies StateDocumentSummary;
-    })
-    .filter(isDefined)
-    .sort(compareStateDocumentSummaries);
-}
-
-function compareStateDocumentSummaries(left: StateDocumentSummary, right: StateDocumentSummary): number {
-  return left.metadata.type.localeCompare(right.metadata.type)
-    || (left.exposure.path ?? '').localeCompare(right.exposure.path ?? '')
-    || left.url.localeCompare(right.url);
-}
-
 function projectionSnapshotsSummary(
   filesystemProjection: FilesystemTreeProjectionState,
   workspaceProjection: WorkspaceProjectionState,
@@ -492,24 +398,6 @@ function unavailableProjectionData(projection: { readonly status: 'initializing'
     : { stateKind: 'derived', status: projection.status, failure: projection.failure };
 }
 
-function fileTreePathsByUrl(projection: FilesystemTreeProjectionState): ReadonlyMap<string, string> {
-  if (projection.status !== 'ready') return new Map();
-
-  const paths = new Map<string, string>();
-  collectFilesystemPaths(projection.root, paths);
-  return paths;
-}
-
-function collectFilesystemPaths(node: FilesystemNode, paths: Map<string, string>, path = '/'): void {
-  paths.set(node.url, path);
-  if (node.kind === 'file') return;
-  for (const entry of node.entries) collectFilesystemPaths(entry, paths, childPath(path, entry.name));
-}
-
-function childPath(parent: string, child: string): string {
-  return parent === '/' ? `/${child}` : `${parent}/${child}`;
-}
-
 type ProjectionCounters = ReturnType<typeof totalProjectionCounters>;
 
 function totalProjectionCounters(diagnostics: BootstrapRuntimeDiagnostics) {
@@ -534,35 +422,6 @@ function countFilesystemNodes(node: FilesystemNode): number {
   return 1 + node.entries.reduce((count, entry) => count + countFilesystemNodes(entry), 0);
 }
 
-function systemSchemaCatalogSummary() {
-  return patchpitSystemSchemas.map((schema) => {
-    const ref = patchpitSystemSchemaRef(schema);
-    return {
-      id: schema.schemaId,
-      ...(schema.description === undefined ? {} : { description: schema.description }),
-      ref,
-      relations: Object.entries(schema.relations).map(([name, relation]) => ({
-        name,
-        key: relation.key,
-        fieldCount: Object.keys(relation.fields).length,
-      })),
-    };
-  });
-}
-
-function schemaSummary(
-  catalog: SystemSchemaCatalogSummary,
-  refs: readonly DocumentSchemaRef[],
-) {
-  return {
-    systemSchemaCount: catalog.length,
-    systemRelationCount: catalog.reduce((count, schema) => count + schema.relations.length, 0),
-    observedDocumentRefCount: refs.length,
-    observedDocumentTypes: countBy(refs, (ref) => ref.type),
-    inlineSchemaDocumentCount: refs.filter((ref) => ref.inlineSchemaIds !== undefined).length,
-  };
-}
-
 function intentLogSummary(log: BootstrapRuntimeDiagnostics['intentLog']): string {
   if (log.length === 0) return 'No session intents recorded';
   const latest = log.at(-1);
@@ -576,50 +435,6 @@ function intentLogData(log: BootstrapRuntimeDiagnostics['intentLog']) {
     count: log.length,
     entries: [...log].reverse(),
   };
-}
-
-function documentSchemaRefs(documents: Readonly<Record<string, unknown>>): readonly DocumentSchemaRef[] {
-  return Object.entries(documents)
-    .map(([url, document]) => documentSchemaRef(url, document))
-    .filter(isDefined)
-    .sort((left, right) => left.type.localeCompare(right.type) || left.url.localeCompare(right.url));
-}
-
-function documentSchemaRef(url: string, document: unknown): DocumentSchemaRef | undefined {
-  const metadata = patchpitMetadata(document);
-  if (metadata === undefined) return undefined;
-
-  const inlineSchemaIds = isRecord(metadata.schemas) ? Object.keys(metadata.schemas).sort() : [];
-  return {
-    url,
-    type: metadata.type,
-    ...(metadata.schema === undefined ? {} : { schema: metadata.schema }),
-    ...(inlineSchemaIds.length === 0 ? {} : { inlineSchemaIds }),
-  };
-}
-
-function patchpitMetadata(document: unknown): PatchpitMetadataSummary | undefined {
-  if (!isRecord(document)) return undefined;
-  const metadata = document['@patchpit'];
-  if (!isRecord(metadata) || typeof metadata.type !== 'string') return undefined;
-  return metadata as PatchpitMetadataSummary;
-}
-
-function countBy<T>(items: readonly T[], keyFor: (item: T) => string): Readonly<Record<string, number>> {
-  const counts: Record<string, number> = {};
-  for (const item of items) {
-    const key = keyFor(item);
-    counts[key] = (counts[key] ?? 0) + 1;
-  }
-  return counts;
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isDefined<T>(value: T | undefined): value is T {
-  return value !== undefined;
 }
 
 function formatStateBrowserJson(data: unknown): string {

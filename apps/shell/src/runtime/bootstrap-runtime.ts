@@ -2,7 +2,6 @@ import type { DocHandle } from '@automerge/automerge-repo';
 import {
   appLaunchIntentBoundary,
   ContainerMountKind,
-  PatchpitType,
   removeSystemAppResource,
   RuntimeMountProvider,
   SurfaceRole,
@@ -93,9 +92,7 @@ export type BootstrapRuntimeResourceStore = {
   readonly documentUrls: BootstrapRuntimeDocumentUrls;
   readonly rootUrl: string;
   getDocument<T = unknown>(url: string): T | undefined;
-  getStateDocumentsSnapshot(): Readonly<Record<string, unknown>>;
   subscribeDocument(url: string, listener: () => void): () => void;
-  subscribeStateDocuments(listener: () => void): () => void;
 };
 
 export type BootstrapRuntimeDocumentUrls = {
@@ -239,45 +236,6 @@ export function createBootstrapRuntimeClient({
 }
 
 function createBootstrapRuntimeResourceStore(seed: SeedFilesystem): BootstrapRuntimeResourceStore {
-  let stateDocumentsSnapshot = stateDocumentsSnapshotForSeed(seed);
-  const stateDocumentListeners = new Set<() => void>();
-  const stateDocumentSubscriptions = new Map<string, StateDocumentSubscription>();
-
-  const refreshStateDocumentsSnapshot = () => {
-    const next = stateDocumentsSnapshotForSeed(seed);
-    if (!sameDocumentSnapshot(stateDocumentsSnapshot, next)) stateDocumentsSnapshot = next;
-  };
-
-  const notifyStateDocuments = () => {
-    syncStateDocumentSubscriptions();
-    refreshStateDocumentsSnapshot();
-    for (const listener of stateDocumentListeners) listener();
-  };
-
-  const syncStateDocumentSubscriptions = () => {
-    const nextHandles = new Map<string, DocHandle<unknown>>(
-      inspectableStateDocumentHandles(seed).map((handle) => [handle.url, handle]),
-    );
-    for (const [url, subscription] of stateDocumentSubscriptions) {
-      if (nextHandles.get(url) === subscription.handle) continue;
-      subscription.unsubscribe();
-      stateDocumentSubscriptions.delete(url);
-    }
-    for (const [url, handle] of nextHandles) {
-      if (stateDocumentSubscriptions.has(url)) continue;
-      handle.on('change', notifyStateDocuments);
-      stateDocumentSubscriptions.set(url, {
-        handle,
-        unsubscribe: () => handle.off('change', notifyStateDocuments),
-      });
-    }
-  };
-
-  const clearStateDocumentSubscriptions = () => {
-    for (const subscription of stateDocumentSubscriptions.values()) subscription.unsubscribe();
-    stateDocumentSubscriptions.clear();
-  };
-
   return {
     documentUrls: {
       appearance: seed.appearanceHandle.url,
@@ -295,67 +253,18 @@ function createBootstrapRuntimeResourceStore(seed: SeedFilesystem): BootstrapRun
       return documentHandleForUrl(seed, url)?.doc() as T | undefined;
     },
 
-    getStateDocumentsSnapshot() {
-      refreshStateDocumentsSnapshot();
-      return stateDocumentsSnapshot;
-    },
-
     subscribeDocument(url: string, listener) {
       const handle = documentHandleForUrl(seed, url);
       if (handle === undefined) return () => {};
       handle.on('change', listener);
       return () => handle.off('change', listener);
     },
-
-    subscribeStateDocuments(listener) {
-      stateDocumentListeners.add(listener);
-      syncStateDocumentSubscriptions();
-      refreshStateDocumentsSnapshot();
-      return () => {
-        stateDocumentListeners.delete(listener);
-        if (stateDocumentListeners.size === 0) clearStateDocumentSubscriptions();
-      };
-    },
   };
 }
-
-type StateDocumentSubscription = {
-  readonly handle: DocHandle<unknown>;
-  readonly unsubscribe: () => void;
-};
 
 function documentHandleForUrl(seed: SeedFilesystem, url: string): DocHandle<unknown> | undefined {
   if (url === seed.indexHandle.url) return seed.indexHandle as DocHandle<unknown>;
   return seed.documentHandles[url] as DocHandle<unknown> | undefined;
-}
-
-function stateDocumentsSnapshotForSeed(seed: SeedFilesystem): Readonly<Record<string, unknown>> {
-  return Object.fromEntries(inspectableStateDocumentHandles(seed).map((handle) => [handle.url, handle.doc()]));
-}
-
-function inspectableStateDocumentHandles(seed: SeedFilesystem): readonly DocHandle<unknown>[] {
-  return [
-    seed.indexHandle as DocHandle<unknown>,
-    ...Object.values(seed.documentHandles)
-      .filter(isInspectableStateDocumentHandle)
-      .map((handle) => handle as DocHandle<unknown>),
-  ];
-}
-
-function isInspectableStateDocumentHandle(handle: DocHandle<FilesystemResource>): boolean {
-  const doc = handle.doc() as { readonly '@patchpit'?: { readonly type?: unknown } };
-  const type = doc['@patchpit']?.type;
-  return type !== PatchpitType.File && type !== PatchpitType.Folder;
-}
-
-function sameDocumentSnapshot(
-  left: Readonly<Record<string, unknown>>,
-  right: Readonly<Record<string, unknown>>,
-): boolean {
-  const leftUrls = Object.keys(left);
-  const rightUrls = Object.keys(right);
-  return leftUrls.length === rightUrls.length
-    && leftUrls.every((url) => Object.hasOwn(right, url) && left[url] === right[url]);
 }
 
 function openBootstrapCapability(

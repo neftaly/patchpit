@@ -1,6 +1,5 @@
 import {
   PatchpitType,
-  automergeMimeType,
   type AppManifestDoc,
   type AppManifestHandler,
   type FilesystemResource,
@@ -33,6 +32,7 @@ export function manifestRouteHandler(
   url: string,
 ): ManifestRouteHandler | RuntimeError {
   const targetTypes = routeTargetTypes(seed, url);
+  if ('code' in targetTypes) return targetTypes;
   const match = bestManifestRouteHandler(seed, routeHandlerIntent(intent), targetTypes);
   if (match === undefined) {
     return runtimeError(
@@ -94,7 +94,6 @@ function isAppManifestDoc(doc: FilesystemResource | undefined): doc is AppManife
 
 function installedAppManifestFromEntry(seed: SeedFilesystem, url: string): readonly AppManifestDoc[] {
   const doc = seed.documentHandles[url]?.doc();
-  if (isAppManifestDoc(doc)) return [doc];
   if (!isFolderDoc(doc)) return [];
 
   return doc.docs.flatMap((entry) => {
@@ -107,9 +106,9 @@ function isFolderDoc(doc: FilesystemResource | undefined): doc is FolderDoc {
   return doc?.['@patchpit'].type === PatchpitType.Folder;
 }
 
-function routeTargetTypes(seed: SeedFilesystem, url: string): readonly string[] {
+function routeTargetTypes(seed: SeedFilesystem, url: string): readonly string[] | RuntimeError {
   const doc = seed.documentHandles[url]?.doc();
-  if (doc === undefined) return [automergeMimeType];
+  if (doc === undefined) return runtimeError('not_found', `Route target ${url} is not in the filesystem.`);
 
   const types = new Set<string>();
   if ('mimeType' in doc && typeof doc.mimeType === 'string') {

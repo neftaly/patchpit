@@ -142,11 +142,6 @@ void test('bootstrap runtime exposes read-only resource snapshots', async () => 
   );
   assert.equal(runtime.resources.getDocument('automerge:missing-resource'), undefined);
 
-  const initialStateDocuments = runtime.resources.getStateDocumentsSnapshot();
-  assert.equal(initialStateDocuments[seed.indexHandle.url], seed.indexHandle.doc());
-  assert.equal(initialStateDocuments[seed.filePickerStateHandle.url], seed.filePickerStateHandle.doc());
-  assert.equal(Object.hasOwn(initialStateDocuments, seed.rootUrl), false);
-
   const documentEvents = [];
   const unsubscribeDocument = runtime.resources.subscribeDocument(
     runtime.resources.documentUrls.filePickerState,
@@ -161,24 +156,13 @@ void test('bootstrap runtime exposes read-only resource snapshots', async () => 
   } finally {
     unsubscribeDocument();
   }
-
-  const stateDocumentEvents = [];
-  const unsubscribeStateDocuments = runtime.resources.subscribeStateDocuments(() => {
-    stateDocumentEvents.push(runtime.resources.getStateDocumentsSnapshot());
-  });
-  try {
-    const appStateHandle = createFakeAppStateResource(seed, 'resource-facade-test');
-    await waitFor(() => stateDocumentEvents.some((snapshot) => Object.hasOwn(snapshot, appStateHandle.url)));
-    assert.equal(runtime.resources.getStateDocumentsSnapshot()[appStateHandle.url], appStateHandle.doc());
-  } finally {
-    unsubscribeStateDocuments();
-  }
 });
 
 void test('bootstrap runtime commits route, file-picker, and window intents', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
-  const routeUrl = 'automerge:runtime-intent-target';
+  const routeTarget = createFakeRouteResource(seed, 'runtime-intent-target', 'text/plain');
+  const routeUrl = routeTarget.url;
   const viewerContextId = `viewer:${routeUrl}`;
 
   const routeResult = await submitRuntimeIntent(runtime, {
@@ -270,6 +254,51 @@ void test('bootstrap runtime routes documents through installed manifest handler
   assert.equal(seed.windowManagerHandle.doc().surfaces.main.activeContext, contextId);
   assert.equal(seed.windowManagerHandle.doc().contexts[contextId].app, 'fake-viewer');
   assert.equal(seed.windowManagerHandle.doc().contexts[contextId].title, 'Manifest Route Target');
+});
+
+void test('bootstrap runtime rejects route targets missing from seeded handles', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+
+  const result = await submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
+    intent: routeOpenIntent,
+    row: {
+      id: 'missing-route-target-test',
+      title: 'Missing Route Target',
+      url: 'automerge:missing-route-target',
+    },
+  });
+
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.error.code, 'not_found');
+  assert.match(result.error.message, /Route target automerge:missing-route-target/);
+});
+
+void test('bootstrap runtime ignores direct app manifest files under apps folder', async () => {
+  const seed = createSeedFilesystem();
+  const target = createFakeRouteResource(seed, 'direct-manifest-route-target', 'text/x-direct-manifest-test');
+  clearInstalledApps(seed);
+  installDirectAppManifest(seed, {
+    app: 'direct-manifest-viewer',
+    handles: [
+      { accepts: ['text/x-direct-manifest-test'], intent: 'open', port: 'view' },
+    ],
+  });
+  const runtime = bootstrapRuntime(seed);
+
+  const result = await submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
+    intent: routeOpenIntent,
+    row: {
+      id: 'direct-manifest-route-open-test',
+      title: 'Direct Manifest Route Target',
+      url: target.url,
+    },
+  });
+
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.error.code, 'missing_handler');
 });
 
 void test('bootstrap runtime creates a fresh app instance for each contextless launch', async () => {
@@ -895,12 +924,56 @@ function installFakeAppManifest(seed, {
   return handle;
 }
 
-function registerFakeInstalledAppManifest(seed, handle, app) {
+function installDirectAppManifest(seed, {
+  app,
+  handles = [],
+}) {
+  const handle = seed.repo.create({
+    '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
+    entry: `${app}.html`,
+    extension: automergeExtension,
+    handles,
+    icons: [],
+    id: app,
+    manifestVersion: 1,
+    mimeType: automergeMimeType,
+    name: app,
+    surfaces: [
+      { role: SurfaceRole.DocumentSet },
+    ],
+  });
+  seed.documentHandles[handle.url] = handle;
   const appsHandle = appsFolderHandle(seed);
   appsHandle.change((doc) => {
     appendFolderEntry(doc, folderEntry(automergeFileName(app), PatchpitType.AppManifest, handle.url));
   });
   syncFilesystemIndexResources(seed.indexHandle, [appsHandle, handle]);
+  return handle;
+}
+
+function clearInstalledApps(seed) {
+  const appsHandle = appsFolderHandle(seed);
+  appsHandle.change((doc) => {
+    doc.docs = [];
+  });
+  syncFilesystemIndexResources(seed.indexHandle, [appsHandle]);
+}
+
+function registerFakeInstalledAppManifest(seed, handle, app) {
+  const packageHandle = seed.repo.create({
+    '@patchpit': patchpitDocMetadata(PatchpitType.Folder),
+    docs: [
+      folderEntry(automergeFileName('manifest'), PatchpitType.AppManifest, handle.url),
+    ],
+    name: app,
+    title: app,
+  });
+  seed.documentHandles[packageHandle.url] = packageHandle;
+  const appsHandle = appsFolderHandle(seed);
+  appsHandle.change((doc) => {
+    appendFolderEntry(doc, folderEntry(app, PatchpitType.Folder, packageHandle.url));
+  });
+  syncFilesystemIndexResources(seed.indexHandle, [appsHandle, packageHandle, handle]);
 }
 
 function appsFolderHandle(seed) {

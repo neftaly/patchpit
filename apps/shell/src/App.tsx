@@ -364,7 +364,7 @@ function shellAppHost({
     },
 
     renderSurface({ context, surfaceId }) {
-      if (context === undefined) return <Viewer filesystemRoot={filesystemRoot} url={undefined} />;
+      if (context === undefined) return <SurfaceNotice message="No active app session." />;
       const installedApp = appsById.get(context.app);
       if (installedApp === undefined) {
         return (

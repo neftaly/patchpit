@@ -1,9 +1,9 @@
 # State Visibility TODO
 
 This list tracks runtime and system state that should be visible through a
-state/debug surface. Normal user file/folder documents stay in the file picker;
-state-shaped Automerge docs are also inspectable in the State Browser because
-the viewer does not render their raw document shape.
+state/debug surface. Normal user file/folder documents and canonical state docs
+stay in the file picker or document viewers; State Browser keeps live runtime
+diagnostics and derived projections.
 
 ## Upstream Candidates
 
@@ -29,14 +29,10 @@ the viewer does not render their raw document shape.
 - Runtime platform and feature checks.
 - Current filesystem projection status, subscription lifecycle, event counters,
   storage-head document summaries, and latest event diagnostics.
-- Canonical non-file/folder state documents, including filesystem visibility
-  metadata that distinguishes file-tree-reachable docs from hidden docs such as
-  the filesystem index.
 - Full current derived filesystem and workspace projection snapshots.
 - Intent request/result log with request relation counts, outcomes, timings, and
   thrown errors.
 - Window-manager surface/context/layout summary.
-- System schema catalog refs and observed document schema refs.
 - Current policy/capability placeholder behavior in the bootstrap runtime.
 
 ## Remaining Gaps
@@ -50,7 +46,7 @@ the viewer does not render their raw document shape.
 - Projection diagnostics include current snapshots and bootstrap subscription
   entries, but there is no general projection catalog, historical basis browser,
   or full patch/storage-head inspector.
-- Schema refs are visible as refs/catalog summaries, but there is no dedicated
-  schema-detail browser or ref integrity checker.
+- Schema catalog and document schema ref detail are not currently covered by
+  State Browser.
 - Client/session/presence/viewport state is protocol-shaped in docs but not
   implemented as inspectable runtime state yet.

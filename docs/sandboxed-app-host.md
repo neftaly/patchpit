@@ -2,9 +2,9 @@
 
 Patchpit apps should run behind the same runtime boundary whether they are
 first-party apps, installed apps, terminal command runners, or later third-party
-packages. This document defines the target sandboxed app host shape and records
-the decomplection checks for state ownership, capabilities, process placement,
-and app rendering.
+packages. This document defines the sandboxed app host shape and records the
+decomplection checks for state ownership, capabilities, process placement, and
+app rendering.
 
 The app host is not a new state owner. It is a runtime client with
 `clientKind: 'sandbox'` that runs app code in a sandbox and talks to Patchpit
@@ -50,8 +50,8 @@ other way around.
 
 Current apps are installed as package folders under `/apps`. Each package
 contains a manifest doc plus entry resources. The shell derives launcher items
-from those installed manifests, and both `app.launch` and document routing
-resolve installed manifests before creating sessions.
+from those app package manifests, and both `app.launch` and document routing
+resolve app package manifests before creating sessions.
 
 `WindowManagerAppHost.renderSurface` is now a manifest-driven host boundary:
 the host resolves `context.app` through `/apps`, renders first-party React apps
@@ -655,10 +655,13 @@ Example package shape:
     app.js
 ```
 
-The source manifest compiles or links to the installed registry form:
+The source package installs into the registry as a package folder:
 
 ```txt
-/apps/acme.notes.am
+/apps/acme.notes/
+  manifest.am
+  entries/
+    app.js
 ```
 
 The installed manifest should stay close to existing app manifest concepts:
@@ -671,7 +674,7 @@ A local authoring loop should:
 1. validate `patchpit.app.json`;
 2. regenerate Tarstate schema artifacts from schema sources;
 3. build or serve `dist/`;
-4. link or update the installed manifest under `/apps`;
+4. link or update the installed package under `/apps`;
 5. launch through normal `app.launch`, `route.open`, or `route.preview`;
 6. hot-reload the app session without changing compositor-owned state.
 
@@ -852,27 +855,24 @@ Runner placement, SES lockdown, and `bubblewrap` are later containment layers.
 They should be added after the app/runtime seam is small enough that changing
 placement does not change app semantics.
 
-## First Landing Plan
+## First Landing
 
-The first implementation should prove the clean app-host boundary without
-rewriting all current apps at once.
+The first app-host boundary is in place without rewriting all current apps at
+once.
 
-1. Keep the current in-process render switch only as a compatibility path.
-2. Add one manifest-driven app-host path behind `WindowManagerAppHost`.
-3. Add an installed-app projection for manifests, handlers, launcher visibility,
-   and app-management status.
-4. Add a minimal manifest-hosted app that is not a product feature. It should
-   prove manifest lookup, entry loading, bootstrap, scoped app services, and a
-   tiny surface action such as `surface.setTitle`.
-5. Add Settings and Launcher as first-party manifests that use the same app-host
+1. Keep the current in-process render switch only as a compatibility path while
+   first-party apps migrate.
+2. Keep manifest-driven rendering, installed-app projection, and the minimal
+   manifest-hosted app on the same app-host path.
+3. Add Settings and Launcher as first-party manifests that use the same app-host
    path. The first-run script installs them by calling the normal installer.
-6. Migrate viewer as the first real app because it is read-only and pressures
+4. Migrate viewer as the first real app because it is read-only and pressures
    view/content boundaries without write authority.
-7. Migrate file picker after viewer because it adds app state views and route or
+5. Migrate file picker after viewer because it adds app state views and route or
    file-picker actions.
-8. Migrate terminal last because it adds filesystem ports, streaming, command
+6. Migrate terminal last because it adds filesystem ports, streaming, command
    execution, output limits, and performance-sensitive rendering.
-9. Add SES and OS runner placement after the app API works through the
+7. Add SES and OS runner placement after the app API works through the
    compatibility placement.
 
 The old path should disappear only after the manifest-hosted path can run
@@ -881,23 +881,22 @@ app API.
 
 ## Migration Plan
 
-1. Document this smaller model and keep it separate from runtime ownership
-   changes.
-2. Add a manifest-driven `SandboxAppHost` behind
-   `WindowManagerAppHost.renderSurface` while preserving existing app behavior.
-3. Add scoped app services that attach runtime scope server-side and reject
+1. Keep the manifest-driven `SandboxAppHost` behind
+   `WindowManagerAppHost.renderSurface` while preserving existing app behavior
+   through compatibility adapters.
+2. Add scoped app services that attach runtime scope server-side and reject
    app-supplied scope.
-4. Add app/document views through Tarstate schemas instead of passing raw
+3. Add app/document views through Tarstate schemas instead of passing raw
    `DocHandle` state to apps.
-5. Replace hard-coded launcher specs and app render switches with manifest
+4. Replace hard-coded launcher specs and app render switches with manifest
    projection plus manifest entry resolution.
-6. Migrate viewer through the sandbox host.
-7. Migrate file picker through views and actions.
-8. Migrate terminal state and filesystem access through views, actions, and
+5. Migrate viewer through the sandbox host.
+6. Migrate file picker through views and actions.
+7. Migrate terminal state and filesystem access through views, actions, and
    ports; keep command execution in `patchpit-command-runner`.
-9. Add local OS placement for command runners, then for app hosts where a local
+8. Add local OS placement for command runners, then for app hosts where a local
    supervisor exists.
-10. Move runtime ownership from the in-process bootstrap scaffold into the
+9. Move runtime ownership from the in-process bootstrap scaffold into the
    SharedWorker runtime. The app API should not change when this happens.
 
 ## Review Checks

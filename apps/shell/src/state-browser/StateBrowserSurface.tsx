@@ -6,7 +6,7 @@ import {
   type StateBrowserSnapshotInput,
 } from './StateBrowser';
 
-type StateBrowserSurfaceProps = Omit<StateBrowserSnapshotInput, 'runtimeDiagnostics' | 'stateDocuments'> & {
+type StateBrowserSurfaceProps = Omit<StateBrowserSnapshotInput, 'runtimeDiagnostics'> & {
   readonly runtime: BootstrapRuntimeClient;
 };
 
@@ -21,7 +21,6 @@ export function StateBrowserSurface({
   workspaceProjection,
 }: StateBrowserSurfaceProps) {
   const runtimeDiagnostics = useRuntimeDiagnostics(runtime);
-  const stateDocuments = useRuntimeStateDocuments(runtime);
 
   return (
     <StateBrowser
@@ -33,7 +32,6 @@ export function StateBrowserSurface({
         runtimeIssueHistory,
         runtimePlatform,
         runtimeState,
-        stateDocuments,
         workspaceProjection,
       })}
     />
@@ -44,12 +42,5 @@ function useRuntimeDiagnostics(runtime: BootstrapRuntimeClient) {
   return useSyncExternalStore(
     (listener) => runtime.diagnostics.subscribe(listener),
     () => runtime.diagnostics.getSnapshot(),
-  );
-}
-
-function useRuntimeStateDocuments(runtime: BootstrapRuntimeClient) {
-  return useSyncExternalStore(
-    (listener) => runtime.resources.subscribeStateDocuments(listener),
-    () => runtime.resources.getStateDocumentsSnapshot(),
   );
 }

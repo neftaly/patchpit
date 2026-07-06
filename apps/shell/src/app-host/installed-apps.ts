@@ -26,8 +26,7 @@ export function installedAppsFromFilesystem({
   if (appsFolder === undefined) return [];
 
   return appsFolder.entries
-    .flatMap((entry) => installedAppFromNode(entry, `/apps/${entry.name}`, getDocument))
-    .sort((left, right) => appLaunchOrder(left) - appLaunchOrder(right) || left.manifest.name.localeCompare(right.manifest.name));
+    .flatMap((entry) => installedAppFromNode(entry, `/apps/${entry.name}`, getDocument));
 }
 
 export function installedAppRole(app: InstalledApp): SurfaceRole {
@@ -43,12 +42,7 @@ function installedAppFromNode(
   path: string,
   getDocument: (url: string) => unknown,
 ): readonly InstalledApp[] {
-  if (node.kind === 'file') {
-    const manifest = getDocument(node.url);
-    return isAppManifestDoc(manifest)
-      ? [installedApp(manifest, node.url, undefined, path)]
-      : [];
-  }
+  if (node.kind === 'file') return [];
 
   const manifestNode = node.entries.find((entry) => isAppManifestDoc(getDocument(entry.url)));
   if (manifestNode === undefined) return [];
@@ -103,12 +97,4 @@ function isAppManifestDoc(value: unknown): value is AppManifestDoc {
     && typeof (value as { name?: unknown }).name === 'string'
     && typeof (value as { entry?: unknown }).entry === 'string'
   );
-}
-
-function appLaunchOrder(app: InstalledApp): number {
-  if (app.manifest.id === 'file-picker') return 0;
-  if (app.manifest.id === 'viewer') return 1;
-  if (app.manifest.id === 'terminal') return 2;
-  if (app.manifest.id === 'state-browser') return 3;
-  return 10;
 }

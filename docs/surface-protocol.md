@@ -12,7 +12,7 @@ notes at the end, but the model here is Patchpit's own runtime contract.
 
 Patchpit currently seeds three durable roots and reserves one live-service root:
 
-- `/apps` contains installed app manifest docs
+- `/apps` contains installed app package folders
 - `/home` contains user and workspace documents
 - `/system` contains runtime/compositor-owned persistent state
 - `/srv` is reserved for future live mountable services
@@ -25,8 +25,9 @@ script may automate those installs, but it must call the normal installer rather
 than seed a second app registry.
 
 Apps are opened through one runtime admission path: route, launch, preview, and
-activation requests resolve an installed manifest, create or reuse a session,
-and commit the resulting compositor effects to the window-manager document.
+activation requests resolve an installed app package manifest, create or reuse a
+session, and commit the resulting compositor effects to the window-manager
+document.
 
 The window manager owns:
 
@@ -295,7 +296,7 @@ runtime exposes relation-shaped `surfaces`, `contexts`, `layoutNodes`, or
 
 The first useful implementation should stay small:
 
-1. App manifests live under `/apps`.
+1. App packages live under `/apps`.
 2. Settings, Launcher, Files, Viewer, Terminal, and State Browser are apps.
 3. The window-manager doc owns surfaces, tabs, focus, reserved slots, and split
    layout.
