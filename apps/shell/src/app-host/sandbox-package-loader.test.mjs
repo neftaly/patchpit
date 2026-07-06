@@ -180,6 +180,40 @@ void test('sandbox service bridge serves current session resource view data', ()
   });
 });
 
+void test('sandbox service bridge serves Automerge document resource text', () => {
+  const resourceRoot = folder('root', [
+    file('window-manager.am', 'application/vnd.automerge', '{\\n  "surfaces": {}\\n}'),
+  ]);
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'trusted-viewer',
+    resourceRoot,
+    session: { app: 'trusted-viewer', id: 'trusted-session', url: 'automerge:window-manager.am' },
+  });
+
+  const response = bridge.respond(serviceRequest('view', {
+    name: 'resource',
+  }));
+
+  assert.deepEqual(response, {
+    id: 'request-1',
+    ok: true,
+    protocol: sandboxAppProtocol,
+    result: {
+      resource: {
+        kind: 'file',
+        mediaType: 'application/vnd.automerge',
+        name: 'window-manager.am',
+        sourceUrl: null,
+        text: '{\\n  "surfaces": {}\\n}',
+        title: 'window-manager.am',
+        url: 'automerge:window-manager.am',
+      },
+      view: 'resource',
+    },
+    type: 'serviceResponse',
+  });
+});
+
 void test('sandbox service bridge serves scoped folder resource summaries', () => {
   const resourceRoot = folder('root', [
     folder('docs', [

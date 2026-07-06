@@ -8,7 +8,9 @@ import {
   type SandboxAppProtocol,
   type SandboxFilePickerServiceScope,
   type SandboxAppReportedError,
+  type SandboxAppServiceRequest,
   type SandboxAppServiceCapabilities,
+  type SandboxHostToFrameMessage,
   type SandboxAppSession,
 } from './sandbox-service-bridge';
 import './sandbox-app-host.css';
@@ -44,18 +46,23 @@ export function SandboxAppHost({
   ), [entry]);
   const serviceBridge = useMemo(() => (
     createSandboxAppServiceBridge({ appId, filePicker, resourceRoot, session })
-  ), [appId, filePicker, resourceRoot, session.app, session.id, session.url]);
+  ), [appId, filePicker, resourceRoot, session.app, session.delegation, session.id, session.url]);
+  const serviceCapabilities = useMemo(() => serviceBridge.capabilities, [
+    serviceBridge.capabilities.act,
+    serviceBridge.capabilities.open,
+    serviceBridge.capabilities.view,
+  ]);
   const srcDoc = useMemo(() => (
     loadPlan === undefined || loadPlan.kind === 'error'
       ? undefined
       : sandboxSrcDoc({
           appId,
-          capabilities: serviceBridge.capabilities,
+          capabilities: serviceCapabilities,
           loadPlan,
           protocol: sandboxAppProtocol,
           session,
         })
-  ), [appId, loadPlan, serviceBridge, session.app, session.id, session.url]);
+  ), [appId, loadPlan, serviceCapabilities, session.app, session.delegation, session.id, session.url]);
   const [status, setStatus] = useState<SandboxStatus>({ kind: 'starting' });
 
   useEffect(() => {
@@ -77,6 +84,14 @@ export function SandboxAppHost({
       } else {
         void Promise.resolve(serviceBridge.respond(message)).then((response) => {
           frameWindow.postMessage(response, '*');
+        }).catch((error: unknown) => {
+          const reportedError = sandboxServiceBridgeError(error);
+          try {
+            frameWindow.postMessage(sandboxServiceBridgeFailure(message, reportedError), '*');
+          } catch {
+            // The frame may have navigated before the failure response could be delivered.
+          }
+          setStatus({ kind: 'error', error: reportedError });
         });
       }
     }
@@ -163,6 +178,29 @@ function SandboxNotice({
       {details === undefined ? null : <code>{details}</code>}
     </section>
   );
+}
+
+function sandboxServiceBridgeFailure(
+  request: SandboxAppServiceRequest,
+  error: SandboxAppReportedError,
+): SandboxHostToFrameMessage {
+  return {
+    error: {
+      code: 'bad_request',
+      message: error.message,
+    },
+    id: request.id,
+    ok: false,
+    protocol: sandboxAppProtocol,
+    type: 'serviceResponse',
+  };
+}
+
+function sandboxServiceBridgeError(error: unknown): SandboxAppReportedError {
+  return {
+    message: `Sandbox service bridge failed: ${error instanceof Error ? error.message : String(error)}`,
+    ...(error instanceof Error && error.stack !== undefined ? { stack: error.stack } : {}),
+  };
 }
 
 function sandboxSrcDoc({

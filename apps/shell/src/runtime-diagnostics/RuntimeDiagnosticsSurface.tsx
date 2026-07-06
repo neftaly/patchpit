@@ -6,7 +6,7 @@ import {
   type RuntimeDiagnosticsSnapshotInput,
 } from './RuntimeDiagnostics';
 
-type RuntimeDiagnosticsSurfaceProps = Omit<RuntimeDiagnosticsSnapshotInput, 'runtimeDiagnostics'> & {
+type RuntimeDiagnosticsSurfaceProps = Omit<RuntimeDiagnosticsSnapshotInput, 'runtimeDiagnostics' | 'runtimeResources'> & {
   readonly runtime: BootstrapRuntimeClient;
 };
 
@@ -24,6 +24,10 @@ export function RuntimeDiagnosticsSurface({
       snapshot={createRuntimeDiagnosticsSnapshot({
         runtimeAck,
         runtimeDiagnostics,
+        runtimeResources: {
+          documentUrls: runtime.resources.documentUrls,
+          rootUrl: runtime.resources.rootUrl,
+        },
         runtimeIssue,
         runtimeIssueHistory,
         runtimePlatform,

@@ -39,6 +39,7 @@ import {
 import { SandboxedFilesystemApp, type SandboxFilePickerHostScope } from './app-host/SandboxedFilesystemApp';
 import { createBootstrapRuntimeClient } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
+import { parseHashLaunchConfig } from './runtime/launch-from-hash';
 import { detailFromUnknown, metadataDetails } from './runtime/runtime-error-details';
 import runtimeSharedWorkerUrl from './runtime/shared-worker.ts?sharedworker&url';
 import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/launch-intents';
@@ -105,6 +106,8 @@ function ShellApp({
   const filePickerTypes = useMemo(() => normalizedFileTypes(fileTypes), [fileTypes]);
   const lightTheme = useRuntimeDocument<ThemeDoc>(runtime.resources, documentUrls.lightTheme);
   const [runtimeFault, setRuntimeFault] = useState<RuntimePanelFailure>();
+  const launchHash = useLocationHash();
+  const processedLaunchHash = useRef<string | undefined>(undefined);
   const nextRuntimeIssueId = useRef(1);
   const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly RuntimeDiagnosticsIssueEntry[]>([]);
   const filePickerState = useRuntimeDocument<FilePickerStateDoc>(runtime.resources, documentUrls.filePickerState);
@@ -157,6 +160,40 @@ function ShellApp({
   const launchApp = (input: AppLaunchIntentInput) => {
     void submitAppLaunchIntent(runtime, input).then(reportIntentResult).catch(reportRuntimeError);
   };
+  useEffect(() => {
+    const parsed = parseHashLaunchConfig(launchHash);
+    if (parsed.status === 'empty') {
+      processedLaunchHash.current = undefined;
+      return;
+    }
+    if (processedLaunchHash.current === launchHash) return;
+
+    if (parsed.status === 'invalid') {
+      const failure = hashLaunchFailure(parsed.message, parsed.details);
+      processedLaunchHash.current = launchHash;
+      setRuntimeFault(failure);
+      recordRuntimeIssue('runtime', failure);
+      return;
+    }
+
+    if (filesystemProjection.status !== 'ready' || workspaceProjection.status !== 'ready') return;
+
+    const target = resolveHashLaunchTarget({
+      filesystemRoot: filesystemProjection.root,
+      getDocument: (url) => runtime.resources.getDocument(url),
+      src: parsed.src,
+    });
+    if (target.status === 'invalid') {
+      const failure = hashLaunchFailure(target.message, target.details);
+      processedLaunchHash.current = launchHash;
+      setRuntimeFault(failure);
+      recordRuntimeIssue('runtime', failure);
+      return;
+    }
+
+    processedLaunchHash.current = launchHash;
+    routeUrl(routeOpenIntent, { rootUrl, title: target.title, url: target.url });
+  }, [filesystemProjection, launchHash, rootUrl, runtime.resources, workspaceProjection]);
   const windowManagerActions = {
     focusContext: (surfaceId: string, contextId: string) => {
       void windowIntent(windowFocusIntent, { contextId, surfaceId }).catch(reportRuntimeError);
@@ -331,6 +368,87 @@ function SurfaceNotice({
 function filePickerDroppedUrl(event: DragEvent): WindowManagerDroppedUrl | undefined {
   const data = dragDataFromEvent(event, filePickerDragType);
   return isDraggedFilePickerUrl(data) ? data : undefined;
+}
+
+function resolveHashLaunchTarget({
+  filesystemRoot,
+  getDocument,
+  src,
+}: {
+  readonly filesystemRoot: FilesystemNode;
+  readonly getDocument: (url: string) => unknown;
+  readonly src: string;
+}): HashLaunchTarget {
+  if (isAutomergeUrl(src)) {
+    if (getDocument(src) === undefined) {
+      return invalidHashLaunchTarget(`Hash launch src ${src} is not an existing Automerge document.`);
+    }
+    return {
+      status: 'resolved',
+      title: nodePath(filesystemRoot, src) ?? src,
+      url: src,
+    };
+  }
+
+  if (!src.startsWith('/')) {
+    return invalidHashLaunchTarget('Hash launch src must be an Automerge URL or an absolute filesystem path.');
+  }
+
+  const node = filesystemNodeAtPath(filesystemRoot, src);
+  if (node === undefined) return invalidHashLaunchTarget(`Hash launch path ${src} was not found.`);
+
+  return {
+    status: 'resolved',
+    title: src,
+    url: node.url,
+  };
+}
+
+function filesystemNodeAtPath(root: FilesystemNode, path: string): FilesystemNode | undefined {
+  if (path === '/') return root;
+  const parts = path.split('/').filter((part) => part !== '');
+  if (parts.some((part) => part === '.' || part === '..')) return undefined;
+
+  let current: FilesystemNode | undefined = root;
+  for (const part of parts) {
+    if (current?.kind !== 'folder') return undefined;
+    current = current.entries.find((entry) => entry.name === part);
+  }
+  return current;
+}
+
+function isAutomergeUrl(value: string): boolean {
+  return value.startsWith('automerge:');
+}
+
+type HashLaunchTarget =
+  | { readonly status: 'invalid'; readonly message: string; readonly details: readonly string[] }
+  | { readonly status: 'resolved'; readonly title: string; readonly url: string };
+
+function invalidHashLaunchTarget(message: string): HashLaunchTarget {
+  return {
+    status: 'invalid',
+    message,
+    details: ['source: location.hash'],
+  };
+}
+
+function hashLaunchFailure(message: string, details: readonly string[]): RuntimePanelFailure {
+  return {
+    title: 'Hash launch failed',
+    message,
+    details,
+  };
+}
+
+function useLocationHash(): string {
+  return useSyncExternalStore(
+    (update) => {
+      window.addEventListener('hashchange', update);
+      return () => window.removeEventListener('hashchange', update);
+    },
+    () => window.location.hash,
+  );
 }
 
 function runtimeDiagnosticsEnabled(): boolean {

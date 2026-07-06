@@ -5,6 +5,7 @@ import {
   type FilesystemNode,
   type WindowContext,
 } from '@patchpit/system';
+import { useMemo } from 'react';
 import type { RuntimeClient } from '@patchpit/system/runtime';
 import { SandboxAppHost } from './SandboxAppHost';
 import type { InstalledApp } from './installed-apps';
@@ -24,14 +25,14 @@ export function SandboxedFilesystemApp({
   readonly filesystemRoot: FilesystemNode;
   readonly surfaceId: string;
 }) {
-  const entry = app.entry?.kind === 'file'
+  const entry = useMemo(() => (app.entry?.kind === 'file'
     ? sandboxFilesystemAppEntry({
         entry: app.entry,
         entryKind: app.manifest.entryKind,
         entryPath: app.manifest.entry,
         packageRoot: app.packageRoot,
       })
-    : undefined;
+    : undefined), [app.entry, app.manifest.entry, app.manifest.entryKind, app.packageRoot]);
 
   return (
     <SandboxAppHost

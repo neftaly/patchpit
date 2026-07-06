@@ -4,7 +4,7 @@ import {
   type RuntimePlatformFeature,
   type RuntimePlatformReport,
 } from '@patchpit/system/runtime';
-import type { BootstrapRuntimeDiagnostics } from '../runtime/bootstrap-runtime';
+import type { BootstrapRuntimeDiagnostics, BootstrapRuntimeDocumentUrls } from '../runtime/bootstrap-runtime';
 import './runtime-diagnostics.css';
 
 export type RuntimeDiagnosticsIssue = {
@@ -23,9 +23,15 @@ export type RuntimeDiagnosticsIssueEntry = {
 export type RuntimeDiagnosticsSnapshotInput = {
   readonly runtimeAck: RuntimeHelloAck;
   readonly runtimeDiagnostics: BootstrapRuntimeDiagnostics;
+  readonly runtimeResources: RuntimeDiagnosticsResources;
   readonly runtimeIssue: RuntimeDiagnosticsIssue | undefined;
   readonly runtimeIssueHistory: readonly RuntimeDiagnosticsIssueEntry[];
   readonly runtimePlatform: RuntimePlatformReport;
+};
+
+export type RuntimeDiagnosticsResources = {
+  readonly documentUrls: BootstrapRuntimeDocumentUrls;
+  readonly rootUrl: string;
 };
 
 export type RuntimeDiagnosticsSnapshot = {
@@ -107,6 +113,10 @@ function runtimeDiagnosticsData(input: RuntimeDiagnosticsSnapshotInput) {
       stateKind: 'live',
       status: 'ready',
       ack: input.runtimeAck,
+    },
+    automerge: {
+      rootUrl: input.runtimeResources.rootUrl,
+      documentUrls: input.runtimeResources.documentUrls,
     },
     platform: platformFeatureData(input.runtimePlatform),
   };

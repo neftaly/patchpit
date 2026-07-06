@@ -54,6 +54,23 @@ async function smokeSandboxApps() {
       const filePicker = await waitForSandboxState(pageCdp, targets, mainFrameId, filePickerTreeExpression, 10_000);
       if (filePicker.status !== 'passed') throw smokeError('File Picker sandbox did not render cleanly', filePicker);
 
+      const filePickerMarked = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        markFilePickerAliveExpression,
+        5_000,
+      );
+      if (filePickerMarked.status !== 'passed') {
+        throw smokeError('File Picker sandbox could not be marked before preview clicks', filePickerMarked);
+      }
+
+      const homeClickTarget = await waitForBrowserState(pageCdp, filePickerHomeClickTargetExpression, 5_000);
+      if (homeClickTarget.status !== 'passed') {
+        throw smokeError('File Picker home folder click target could not be located', homeClickTarget);
+      }
+      await clickPoint(pageCdp, homeClickTarget.x, homeClickTarget.y);
+
       const docsClickTarget = await waitForBrowserState(pageCdp, filePickerDocsClickTargetExpression, 5_000);
       if (docsClickTarget.status !== 'passed') {
         throw smokeError('File Picker docs folder click target could not be located', docsClickTarget);
@@ -62,6 +79,17 @@ async function smokeSandboxApps() {
 
       const viewerFolder = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerFolderExpression, 5_000);
       if (viewerFolder.status !== 'passed') throw smokeError('Viewer did not render the docs folder preview', viewerFolder);
+
+      const filePickerAfterFolderPreview = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        filePickerAliveAfterPreviewExpression,
+        5_000,
+      );
+      if (filePickerAfterFolderPreview.status !== 'passed') {
+        throw smokeError('File Picker sandbox did not stay alive after folder preview', filePickerAfterFolderPreview);
+      }
 
       await sleep(1_500);
       const readmeClickTarget = await waitForBrowserState(pageCdp, filePickerReadmeClickTargetExpression, 5_000);
@@ -72,6 +100,17 @@ async function smokeSandboxApps() {
 
       const viewerReadme = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerReadmeExpression, 5_000);
       if (viewerReadme.status !== 'passed') throw smokeError('Viewer did not render the seeded README.md text', viewerReadme);
+
+      const filePickerAfterReadmePreview = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        filePickerAliveAfterPreviewExpression,
+        5_000,
+      );
+      if (filePickerAfterReadmePreview.status !== 'passed') {
+        throw smokeError('File Picker sandbox did not stay alive after file preview', filePickerAfterReadmePreview);
+      }
 
       const clicked = await evaluate(pageCdp, clickHelloWorldExpression);
       if (clicked.status !== 'passed') throw smokeError('Hello World launcher could not be clicked', clicked);
@@ -224,7 +263,7 @@ const filePickerTreeExpression = `
   const names = [...document.querySelectorAll('.tree-name')]
     .map((node) => node.textContent?.trim() ?? '')
     .filter((name) => name !== '');
-  if (tree !== null && names.includes('docs')) {
+  if (tree !== null && names.includes('home') && !names.includes('docs')) {
     return {
       status: 'passed',
       names,
@@ -241,18 +280,79 @@ const filePickerTreeExpression = `
 })()
 `;
 
-const filePickerDocsClickTargetExpression = filePickerClickTargetExpression({
+const markFilePickerAliveExpression = `
+(() => {
+  const tree = document.querySelector('[role="tree"][aria-label="project files"]');
+  if (tree === null) {
+    return {
+      status: 'pending',
+      reason: 'Waiting for File Picker tree before marking sandbox document',
+      body: document.body.innerText,
+    };
+  }
+
+  document.documentElement.dataset.patchpitSmokeFilePickerAlive = 'before-preview-click';
+  return {
+    status: 'passed',
+    body: document.body.innerText,
+  };
+})()
+`;
+
+const filePickerAliveAfterPreviewExpression = `
+(() => {
+  const tree = document.querySelector('[role="tree"][aria-label="project files"]');
+  const names = [...document.querySelectorAll('.tree-name')]
+    .map((node) => node.textContent?.trim() ?? '')
+    .filter((name) => name !== '');
+  if (tree === null) {
+    return {
+      status: 'pending',
+      reason: 'Waiting for File Picker tree after preview click',
+      names,
+      body: document.body.innerText,
+    };
+  }
+
+  const marker = document.documentElement.dataset.patchpitSmokeFilePickerAlive;
+  if (marker === 'before-preview-click') {
+    return {
+      status: 'passed',
+      marker,
+      names,
+      body: document.body.innerText,
+    };
+  }
+
+  return {
+    status: 'failed',
+    reason: 'File Picker sandbox document was replaced after preview click',
+    marker,
+    names,
+    body: document.body.innerText,
+  };
+})()
+`;
+
+const filePickerHomeClickTargetExpression = filePickerClickTargetExpression({
   minHeight: 110,
-  reason: 'docs folder',
+  reason: 'home folder',
   rowCenterY: 76,
   xOffset: 56,
 });
 
+const filePickerDocsClickTargetExpression = filePickerClickTargetExpression({
+  minHeight: 145,
+  reason: 'docs folder',
+  rowCenterY: 104,
+  xOffset: 72,
+});
+
 const filePickerReadmeClickTargetExpression = filePickerClickTargetExpression({
-  minHeight: 170,
+  minHeight: 200,
   reason: 'README.md',
-  rowCenterY: 132,
-  xOffset: 96,
+  rowCenterY: 160,
+  xOffset: 112,
 });
 
 function filePickerClickTargetExpression({

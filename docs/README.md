@@ -1,7 +1,7 @@
 # Patchpit Docs
 
 `docs/` is the source of truth for Patchpit specs and protocol notes. The
-virtual filesystem seeds this directory as `/docs`.
+virtual filesystem seeds this directory as `/home/docs`.
 
 Current specs:
 

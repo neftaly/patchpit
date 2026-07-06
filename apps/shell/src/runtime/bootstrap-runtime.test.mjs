@@ -151,6 +151,22 @@ void test('bootstrap runtime serves a live filesystem tree projection', () => {
   });
 });
 
+void test('seeded filesystem mounts fixture docs under home', () => {
+  const seed = createSeedFilesystem();
+  const root = seededFilesystemRoot(seed);
+
+  assert.deepEqual(root.entries.map((entry) => entry.name), ['apps', 'home', 'system']);
+  assert.equal(nodeAtPath(root, '/apps')?.kind, 'folder');
+  assert.equal(nodeAtPath(root, '/home')?.kind, 'folder');
+  assert.equal(nodeAtPath(root, '/system')?.kind, 'folder');
+  assert.equal(nodeAtPath(root, '/home/docs')?.kind, 'folder');
+  assert.equal(nodeAtPath(root, '/home/docs/README.md')?.kind, 'file');
+  assert.equal(nodeAtPath(root, '/home/README.md')?.kind, 'file');
+  assert.equal(nodeAtPath(root, '/home/ghostscript-tiger.svg')?.kind, 'file');
+  assert.equal(nodeAtPath(root, '/docs'), undefined);
+  assert.equal(nodeAtPath(root, '/home/home'), undefined);
+});
+
 void test('bootstrap runtime serves a runtime projection catalog including itself', () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
@@ -401,8 +417,8 @@ void test('bootstrap runtime routes projection virtual JSON files without Autome
 void test('bootstrap runtime route-opened Viewer resolves sandbox resource views for files and folders', async () => {
   const seed = createSeedFilesystem();
   const root = seededFilesystemRoot(seed);
-  const readme = nodeAtPath(root, '/docs/README.md');
-  const docs = nodeAtPath(root, '/docs');
+  const readme = nodeAtPath(root, '/home/docs/README.md');
+  const docs = nodeAtPath(root, '/home/docs');
   assert.equal(readme?.kind, 'file');
   assert.equal(docs?.kind, 'folder');
 
@@ -730,11 +746,17 @@ void test('bootstrap runtime serves a live workspace layout projection', async (
       {
         focus: 'files',
         id: 'window-manager',
-        layout: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
+        layout: {
+          direction: SplitDirection.Row,
+          first: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
+          kind: WindowManagerNodeKind.Split,
+          ratio: 0.32,
+          second: { kind: WindowManagerNodeKind.Surface, surfaceId: 'main' },
+        },
       },
     ]);
     assert.equal(relationRows(snapshot.relations, workspaceContextsRelation).length, 1);
-    assert.equal(relationRows(snapshot.relations, workspaceSurfacesRelation).length, 1);
+    assert.equal(relationRows(snapshot.relations, workspaceSurfacesRelation).length, 2);
 
     seed.windowManagerHandle.change((doc) => {
       doc.surfaces.secondary = {
@@ -756,7 +778,7 @@ void test('bootstrap runtime serves a live workspace layout projection', async (
     assert.equal(resetEvent.type, 'reset');
     assert.equal(resetEvent.reason, 'source-change');
     assert.equal(resetEvent.snapshot.storageHeads?.[seed.windowManagerHandle.url]?.length > 0, true);
-    assert.equal(relationRows(resetEvent.snapshot.relations, workspaceSurfacesRelation).length, 2);
+    assert.equal(relationRows(resetEvent.snapshot.relations, workspaceSurfacesRelation).length, 3);
   } finally {
     subscription.close();
   }

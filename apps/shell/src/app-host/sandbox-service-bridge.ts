@@ -1,4 +1,5 @@
 import {
+  automergeMimeType,
   findNode,
   type FilePickerStateDoc,
   type FileType,
@@ -554,6 +555,7 @@ function isTextMediaType(mediaType: string): boolean {
     || normalized === 'application/json'
     || normalized === 'application/javascript'
     || normalized === 'application/ecmascript'
+    || normalized === automergeMimeType
     || normalized === 'application/xml'
     || normalized.endsWith('+json')
     || normalized.endsWith('+xml');

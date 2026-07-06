@@ -121,7 +121,7 @@ export const seedTree = {
         {
           "kind": "file",
           "name": "README.md",
-          "content": "# Patchpit Docs\n\n`docs/` is the source of truth for Patchpit specs and protocol notes. The\nvirtual filesystem seeds this directory as `/docs`.\n\nCurrent specs:\n\n- [`runtime-protocol.md`](runtime-protocol.md)\n- [`schema-protocol.md`](schema-protocol.md)\n- [`surface-protocol.md`](surface-protocol.md)\n\nArchitecture notes:\n\n- [`architecture.md`](architecture.md)\n- [`sandboxed-app-host.md`](sandboxed-app-host.md)\n\nState/debug notes:\n\n- [`state-visibility-todo.md`](state-visibility-todo.md)\n\nThe old `research/` location is replaced; do not add duplicate spec copies\nthere.\n"
+          "content": "# Patchpit Docs\n\n`docs/` is the source of truth for Patchpit specs and protocol notes. The\nvirtual filesystem seeds this directory as `/home/docs`.\n\nCurrent specs:\n\n- [`runtime-protocol.md`](runtime-protocol.md)\n- [`schema-protocol.md`](schema-protocol.md)\n- [`surface-protocol.md`](surface-protocol.md)\n\nArchitecture notes:\n\n- [`architecture.md`](architecture.md)\n- [`sandboxed-app-host.md`](sandboxed-app-host.md)\n\nState/debug notes:\n\n- [`state-visibility-todo.md`](state-visibility-todo.md)\n\nThe old `research/` location is replaced; do not add duplicate spec copies\nthere.\n"
         },
         {
           "kind": "file",

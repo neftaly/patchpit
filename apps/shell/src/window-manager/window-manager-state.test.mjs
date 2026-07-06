@@ -14,12 +14,13 @@ import {
   openContext,
 } from './window-manager-state.ts';
 
-void test('seeded window manager starts without an empty document surface', () => {
+void test('seeded window manager starts with a stable empty document surface', () => {
   const state = createSeedFilesystem().windowManagerHandle.doc();
 
-  assert.deepEqual(documentSurfaceIds(state), []);
+  assert.deepEqual(documentSurfaceIds(state), ['main']);
   assert.equal(state.focus, 'files');
-  assert.deepEqual(state.layout, surfaceNode('files'));
+  assert.deepEqual(state.layout, row(surfaceNode('files'), surfaceNode('main'), 0.32));
+  assert.deepEqual(state.surfaces.main.contexts, []);
 });
 
 void test('normalizer removes seed-like empty document surfaces from layout and focus', () => {

@@ -29,6 +29,7 @@ import {
   automergeExtension,
   automergeFileName,
   PatchpitType,
+  SplitDirection,
   SurfaceRole,
   WindowManagerNodeKind,
   type AppManifestDoc,
@@ -164,7 +165,13 @@ export function createSeedFilesystem(): SeedFilesystem {
     },
     extension: automergeExtension,
     focus: 'files',
-    layout: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
+    layout: {
+      direction: SplitDirection.Row,
+      first: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
+      kind: WindowManagerNodeKind.Split,
+      ratio: 0.32,
+      second: { kind: WindowManagerNodeKind.Surface, surfaceId: 'main' },
+    },
     mimeType: automergeMimeType,
     name: automergeFileName('window-manager'),
     surfaces: {
@@ -173,6 +180,11 @@ export function createSeedFilesystem(): SeedFilesystem {
         contexts: ['file-picker'],
         id: 'files',
         role: SurfaceRole.WorkspaceView,
+      },
+      main: {
+        contexts: [],
+        id: 'main',
+        role: SurfaceRole.DocumentSet,
       },
     },
   });
@@ -199,12 +211,13 @@ export function createSeedFilesystem(): SeedFilesystem {
     folderEntry('themes', PatchpitType.Folder, systemThemes.url),
     folderEntry(automergeFileName('window-manager'), PatchpitType.WindowManagerState, windowManagerHandle.url),
   ]);
-  const fixture = createFixtureEntries(repo, seedTree.children);
+  const homeFixture = createFixtureEntries(repo, homeSeedChildren(seedTree.children));
+  const home = createFolder(repo, 'home', homeFixture.entries);
 
   root.change((doc) => {
     appendFolderEntries(doc, [
       folderEntry('apps', PatchpitType.Folder, apps.url),
-      ...fixture.entries,
+      folderEntry('home', PatchpitType.Folder, home.url),
       folderEntry('system', PatchpitType.Folder, system.url),
     ]);
   });
@@ -218,6 +231,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     systemRuntime,
     systemThemes,
     ...appPackages.flatMap((appPackage) => appPackage.handles),
+    home,
     fileTypesHandle,
     appearanceHandle,
     darkThemeHandle,
@@ -225,7 +239,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     filePickerStateHandle,
     windowManagerHandle,
     runtimeStateHandle,
-    ...fixture.handles,
+    ...homeFixture.handles,
   ];
   const indexHandle = repo.create<FilesystemIndexDoc>(createFilesystemIndexDoc(root.url, handles));
   return {
@@ -462,6 +476,12 @@ const darkPalette = {
 
 function stateSurface(role: SurfaceRole, type: PatchpitType): SurfaceSpec {
   return { role, state: { schema: patchpitDocSchemaRef(type), type } };
+}
+
+function homeSeedChildren(nodes: readonly SeedNode[]): readonly SeedNode[] {
+  return nodes.flatMap((node) => (
+    node.kind === 'folder' && node.name === 'home' ? node.children : [node]
+  ));
 }
 
 function createFixtureEntries(repo: Repo, nodes: readonly SeedNode[]) {
