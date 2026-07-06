@@ -5,7 +5,7 @@ tab UI, input, compositor"]
   Runtime["Runtime authority
 boot gate, policy, intents"]
   Filesystem["Automerge filesystem
-/apps packages, /home docs, /system state"]
+/home apps and docs, /system state"]
   Window["Window manager
 surfaces, sessions, focus"]
   Host["App host

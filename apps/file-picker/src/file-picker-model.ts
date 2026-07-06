@@ -1,14 +1,16 @@
 import type { FilesystemNode } from '@patchpit/system';
 
+export const defaultFilePickerFolderOpen = true;
+
 export type FileSelectionOptions =
   | { readonly selectedUrls: readonly string[]; readonly toggle?: never }
   | { readonly selectedUrls?: never; readonly toggle: true };
 
 export function isDefaultFilePickerFolderOpen(
-  rootUrl: string,
-  url: string,
+  _rootUrl: string,
+  _url: string,
 ): boolean {
-  return url === rootUrl;
+  return defaultFilePickerFolderOpen;
 }
 
 export function isFilePickerFolderOpen(

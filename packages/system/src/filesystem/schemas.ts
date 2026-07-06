@@ -69,7 +69,7 @@ export const appManifestSchema = defineRelationSchema({
   kind: 'tarstate.schema',
   formatVersion: 1,
   schemaId: 'patchpit.system.appManifest@1',
-  description: 'Patchpit app manifest documents seeded under /apps.',
+  description: 'Patchpit app manifest documents seeded under /home/apps.',
   metadata: schemaMetadata(PatchpitType.AppManifest),
   relations: {
     manifests: {

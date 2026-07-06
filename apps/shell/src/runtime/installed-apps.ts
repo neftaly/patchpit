@@ -34,7 +34,7 @@ const coreAppSpecs: readonly CoreAppSpec[] = [
     icon: '📁',
     id: 'file-picker',
     name: 'File Picker',
-    packagePath: '/apps/file-picker',
+    packagePath: '/home/apps/file-picker',
   },
   {
     entryKind: 'html',
@@ -42,7 +42,7 @@ const coreAppSpecs: readonly CoreAppSpec[] = [
     icon: '📄',
     id: 'viewer',
     name: 'Viewer',
-    packagePath: '/apps/viewer',
+    packagePath: '/home/apps/viewer',
   },
   {
     entryKind: 'html',
@@ -50,7 +50,7 @@ const coreAppSpecs: readonly CoreAppSpec[] = [
     icon: '👋',
     id: 'hello-world',
     name: 'Hello World',
-    packagePath: '/apps/hello-world',
+    packagePath: '/home/apps/hello-world',
   },
 ];
 

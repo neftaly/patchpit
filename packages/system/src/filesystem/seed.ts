@@ -162,11 +162,13 @@ export function createSeedFilesystem(): SeedFilesystem {
     folderEntry(automergeFileName('window-manager'), PatchpitType.WindowManagerState, windowManagerHandle.url),
   ]);
   const homeFixture = createFixtureEntries(repo, homeSeedChildren(seedTree.children));
-  const home = createFolder(repo, 'home', homeFixture.entries);
+  const home = createFolder(repo, 'home', [
+    folderEntry('apps', PatchpitType.Folder, apps.url),
+    ...homeFixture.entries,
+  ]);
 
   root.change((doc) => {
     appendFolderEntries(doc, [
-      folderEntry('apps', PatchpitType.Folder, apps.url),
       folderEntry('home', PatchpitType.Folder, home.url),
       folderEntry('system', PatchpitType.Folder, system.url),
     ]);

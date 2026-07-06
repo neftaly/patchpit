@@ -201,13 +201,13 @@ const coreLaunchSpecs: readonly CoreLaunchSpec[] = [
     title: 'File Picker',
   },
   {
-    entryPath: '/apps/viewer/index.html',
+    entryPath: '/home/apps/viewer/index.html',
     id: 'viewer',
     role: SurfaceRole.DocumentSet,
     title: 'Viewer',
   },
   {
-    entryPath: '/apps/hello-world/index.html',
+    entryPath: '/home/apps/hello-world/index.html',
     id: 'hello-world',
     role: SurfaceRole.DocumentSet,
     title: 'Hello World',

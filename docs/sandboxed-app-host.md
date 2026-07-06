@@ -48,7 +48,7 @@ other way around.
 
 ## Current Slice
 
-Current apps are installed as package folders under `/apps`. Each package
+Current apps are installed as package folders under `/home/apps`. Each package
 contains a manifest doc plus package resources. The implemented manifest fields
 are `manifestVersion`, `id`, `name`, `version`, `entry`, `entryKind`, `handles`,
 `surfaces`, and `schemas`. The shell derives launcher items from those app
@@ -56,11 +56,11 @@ package manifests. Both `app.launch` and document routing resolve app package
 manifests before creating sessions.
 
 `WindowManagerAppHost.renderSurface` is now a manifest-driven host boundary:
-the host resolves `context.app` through `/apps` and runs filesystem JavaScript
+the host resolves `context.app` through `/home/apps` and runs filesystem JavaScript
 module and HTML document entries through `SandboxAppHost` when `entryKind` is
 `module` or `html`. The seeded `hello-world` app is the canonical minimal real
 Vite-built sandbox package: its built `dist` files are inserted under
-`/apps/hello-world`, and the iframe runner uses `sandbox="allow-scripts"` with
+`/home/apps/hello-world`, and the iframe runner uses `sandbox="allow-scripts"` with
 no same-origin authority. The seeded File Picker and Viewer packages are
 runnable filesystem HTML packages built from their app entry modules.
 
@@ -105,7 +105,7 @@ of executable documents.
 - Document work belongs in file/document surfaces.
 - Deep runtime inspection belongs in trusted runtime diagnostics and
   `/system/runtime`, not in the installed app model.
-- Users should not need to know `/apps`, `/system/apps`, or capability protocol
+- Users should not need to know `/home/apps`, `/system/apps`, or capability protocol
   details to answer normal questions such as "what can this app access?".
 - Paths, manifests, schemas, and grants should remain inspectable for advanced
   users and developers.
@@ -157,7 +157,7 @@ concepts proves it cannot be represented by the four objects above.
 
 The smaller runtime shape is:
 
-- one installed-app registry: app manifests under `/apps`;
+- one installed-app registry: app manifests under `/home/apps`;
 - one install path: validate package, record manifest, optionally allow run;
 - one launch path: route or launch creates a runtime context for an installed
   app;
@@ -485,13 +485,13 @@ Patchpit should have a Settings app installed through the same app path as other
 first-party apps. It presents one unified place for installed apps, handlers,
 updates, quarantine, sandbox status, active sessions, storage, and diagnostics.
 The runtime owns app-management authority; Settings receives scoped projections
-and intents for that authority. `/apps`, `/system/apps`, and `/system/runtime`
+and intents for that authority. `/home/apps`, `/system/apps`, and `/system/runtime`
 are backing stores and diagnostics targets, not direct app privileges.
 
 The conceptual model remains:
 
 - user documents live in `/home`;
-- installed apps live in `/apps`;
+- installed apps live in `/home/apps`;
 - running app session state lives under `/system/apps`.
 
 But those paths are implementation-visible locations, not the main navigation
@@ -548,13 +548,13 @@ Importing an app should stage it before it becomes routable:
 imported bytes -> quarantine -> inspect package -> install -> allow run
 ```
 
-"Installed" means the app is present under `/apps`. "Allowed to run" means the
+"Installed" means the app is present under `/home/apps`. "Allowed to run" means the
 user or policy allows Patchpit to launch it inside the sandbox. Quarantined apps
 cannot become default handlers or auto-launch from routed documents.
 
 Settings should make install and run state separate:
 
-- Install records the app under `/apps`.
+- Install records the app under `/home/apps`.
 - Allow Run lets the app launch inside the sandbox.
 - Disable prevents future launches without deleting the app package.
 - Active means the app has running contexts now.
@@ -593,7 +593,7 @@ show source/integrity changes, handler changes, permission changes, and schema
 compatibility notes. Running contexts should keep their current app version
 until restart unless the user explicitly reloads them.
 
-Removal disables or removes the manifest under `/apps`, unregisters handlers,
+Removal disables or removes the manifest under `/home/apps`, unregisters handlers,
 revokes active capabilities, prevents new launches, and leaves `/home`
 documents untouched. If app instance state remains under `/system/apps`, the
 user should choose whether to keep, archive, or delete it.
@@ -607,7 +607,7 @@ optionally handle app-owned session state.
 The default file picker should center user work, not system registries.
 
 - `/home` is the normal place users open and organize documents.
-- `/apps` is visible as installed app registry data when system locations are
+- `/home/apps` is visible as installed app registry data when system locations are
   shown.
 - `/system/apps` is visible as running app state when diagnostics or system
   locations are shown.
@@ -659,7 +659,7 @@ app type, or hidden source of launcher entries.
 
 ## Developer Experience
 
-App authoring should be package-first. `/apps` is the installed registry;
+App authoring should be package-first. `/home/apps` is the installed registry;
 source packages can live in `/home/dev/apps`, a checkout, or an imported bundle.
 
 Example package shape:
@@ -684,7 +684,7 @@ Example package shape:
 The source package installs into the registry as a package folder:
 
 ```txt
-/apps/acme.notes/
+/home/apps/acme.notes/
   manifest.am
   entries/
     app.js
@@ -700,7 +700,7 @@ A local authoring loop should:
 1. validate `patchpit.app.json`;
 2. regenerate Tarstate schema artifacts from schema sources;
 3. build or serve `dist/`;
-4. link or update the installed package under `/apps`;
+4. link or update the installed package under `/home/apps`;
 5. launch through normal `app.launch`, `route.open`, or `route.preview`;
 6. hot-reload the app session without changing compositor-owned state.
 

@@ -39,7 +39,8 @@ void test('bootstrap runtime exposes the seeded filesystem through a live tree p
   const runtime = bootstrapRuntime(seed);
   const root = seededFilesystemRoot(seed);
 
-  assert.deepEqual(root.entries.map((entry) => entry.name), ['apps', 'home', 'system']);
+  assert.deepEqual(root.entries.map((entry) => entry.name), ['home', 'system']);
+  assert.equal(nodeAtPath(root, '/home/apps/hello-world/index.html')?.kind, 'file');
   assert.equal(nodeAtPath(root, '/home/docs/README.md')?.kind, 'file');
   assert.equal(nodeAtPath(root, '/home/README.md')?.kind, 'file');
   assert.equal(nodeAtPath(root, '/home/ghostscript-tiger.svg')?.kind, 'file');
@@ -60,7 +61,7 @@ void test('bootstrap runtime exposes the seeded filesystem through a live tree p
 
     const rows = relationRows(events[0].snapshot.relations, filesystemTreeNodesRelation);
     assert.ok(rows.some((row) => row.url === seed.rootUrl && row.isRoot === true));
-    assert.ok(rows.some((row) => row.url === nodeAtPath(root, '/apps/viewer/index.html')?.url));
+    assert.ok(rows.some((row) => row.url === nodeAtPath(root, '/home/apps/viewer/index.html')?.url));
     assert.ok(rows.some((row) => row.url === nodeAtPath(root, '/home/docs/README.md')?.url));
   } finally {
     subscription.close();

@@ -3,6 +3,7 @@ const toggleFolderAction = 'filePicker.toggleFolder';
 const previewAction = 'route.preview';
 const openAction = 'route.open';
 const doublePointerActivationMs = 500;
+const defaultFolderOpen = true;
 
 export const patchpitApp = {
   handles: [],
@@ -208,7 +209,7 @@ function toggleSelection(selectedUrls, url) {
 }
 
 function isFolderOpen(state, url) {
-  return state.openFolders[url] ?? url === state.rootUrl;
+  return state.openFolders[url] ?? defaultFolderOpen;
 }
 
 function visibleFilePickerUrls(node, state) {

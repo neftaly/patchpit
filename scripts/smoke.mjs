@@ -54,30 +54,6 @@ async function smokeSandboxApps() {
       const filePicker = await waitForSandboxState(pageCdp, targets, mainFrameId, filePickerTreeExpression, 10_000);
       if (filePicker.status !== 'passed') throw smokeError('File Picker sandbox did not render cleanly', filePicker);
 
-      const homeClicked = await waitForSandboxState(
-        pageCdp,
-        targets,
-        mainFrameId,
-        clickFilePickerTreeItemExpression({ name: 'home' }),
-        5_000,
-      );
-      if (homeClicked.status !== 'passed') throw smokeError('File Picker home folder could not be clicked', homeClicked);
-
-      const viewerHome = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerHomeExpression, 5_000);
-      if (viewerHome.status !== 'passed') throw smokeError('Viewer did not render the home folder preview', viewerHome);
-
-      const docsClicked = await waitForSandboxState(
-        pageCdp,
-        targets,
-        mainFrameId,
-        clickFilePickerTreeItemExpression({ name: 'docs' }),
-        5_000,
-      );
-      if (docsClicked.status !== 'passed') throw smokeError('File Picker docs folder could not be clicked', docsClicked);
-
-      const viewerFolder = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerFolderExpression, 5_000);
-      if (viewerFolder.status !== 'passed') throw smokeError('Viewer did not render the docs folder preview', viewerFolder);
-
       const readmeClicked = await waitForSandboxState(
         pageCdp,
         targets,
@@ -104,21 +80,45 @@ async function smokeSandboxApps() {
       const viewerTiger = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerTigerExpression, 5_000);
       if (viewerTiger.status !== 'passed') throw smokeError('Viewer did not render ghostscript-tiger.svg', viewerTiger);
 
-      for (const name of ['apps', 'hello-world', 'index.html']) {
-        const clicked = await waitForSandboxState(
-          pageCdp,
-          targets,
-          mainFrameId,
-          clickFilePickerTreeItemExpression({ name }),
-          5_000,
-        );
-        if (clicked.status !== 'passed') throw smokeError(`File Picker ${name} could not be clicked`, clicked);
+      const helloIndexClicked = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        clickFilePickerTreeItemExpression({ name: 'index.html', occurrence: 1 }),
+        5_000,
+      );
+      if (helloIndexClicked.status !== 'passed') {
+        throw smokeError('File Picker Hello World index.html could not be clicked', helloIndexClicked);
       }
 
       const helloWorld = await waitForSandboxState(pageCdp, targets, mainFrameId, helloWorldExpression, 5_000);
       if (helloWorld.status !== 'passed') {
-        throw smokeError('Hello World sandbox did not render from /apps/hello-world/index.html', helloWorld);
+        throw smokeError('Hello World sandbox did not render from /home/apps/hello-world/index.html', helloWorld);
       }
+
+      const docsClicked = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        clickFilePickerTreeItemExpression({ name: 'docs' }),
+        5_000,
+      );
+      if (docsClicked.status !== 'passed') throw smokeError('File Picker docs folder could not be clicked', docsClicked);
+
+      const viewerFolder = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerFolderExpression, 5_000);
+      if (viewerFolder.status !== 'passed') throw smokeError('Viewer did not render the docs folder preview', viewerFolder);
+
+      const homeClicked = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        clickFilePickerTreeItemExpression({ name: 'home' }),
+        5_000,
+      );
+      if (homeClicked.status !== 'passed') throw smokeError('File Picker home folder could not be clicked', homeClicked);
+
+      const viewerHome = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerHomeExpression, 5_000);
+      if (viewerHome.status !== 'passed') throw smokeError('Viewer did not render the home folder preview', viewerHome);
 
     } finally {
       await pageCdp?.close().catch(() => {});
@@ -194,7 +194,7 @@ const filePickerTreeExpression = `
   const names = [...document.querySelectorAll('.tree-name')]
     .map((node) => node.textContent?.trim() ?? '')
     .filter((name) => name !== '');
-  if (tree !== null && names.includes('home') && !names.includes('docs')) {
+  if (tree !== null && names.includes('home') && names.includes('apps') && names.includes('docs')) {
     return {
       status: 'passed',
       names,
@@ -375,7 +375,7 @@ const helloWorldExpression = `
 (() => {
   const body = document.body?.innerText ?? '';
   const title = document.title;
-  if (title === 'Hello World' && body.includes('Hello from /apps/hello-world')) {
+  if (title === 'Hello World' && body.includes('Hello from /home/apps/hello-world')) {
     return {
       status: 'passed',
       title,

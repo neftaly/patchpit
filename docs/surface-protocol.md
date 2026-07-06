@@ -12,14 +12,13 @@ notes at the end, but the model here is Patchpit's own runtime contract.
 
 Patchpit currently seeds three durable roots:
 
-- `/apps` contains installed app package folders
-- `/home` contains user and workspace documents
+- `/home` contains user and workspace documents, including installed app packages under `/home/apps`
 - `/system` contains runtime/compositor-owned persistent state
 
 The bootloader creates only the initial filesystem, the minimal runtime state
 needed to boot, and the compositor/window-manager state needed to display
 surfaces. The active seed installs File Picker, Viewer, and Hello World as
-filesystem app packages under `/apps`; Terminal is archived under
+filesystem app packages under `/home/apps`; Terminal is archived under
 `archive/terminal-shell-compat` and is not part of the active architecture.
 Future first-party apps should use the same installer path rather than seed a
 second app registry.
@@ -163,7 +162,7 @@ type RoutedIntent = Intent & {
 };
 ```
 
-The router reads the intent, chooses a matching app handler from `/apps`, and
+The router reads the intent, chooses a matching app handler from `/home/apps`, and
 produces a routed intent with a concrete `port`.
 
 Intent behavior:
@@ -321,7 +320,7 @@ runtime exposes relation-shaped `surfaces`, `contexts`, `layoutNodes`, or
 
 The first useful implementation should stay small:
 
-1. App packages live under `/apps`.
+1. App packages live under `/home/apps`.
 2. File Picker, Viewer, and Hello World are active seeded filesystem apps; runtime
    diagnostics are shell/dev tooling, not an installed app.
 3. The window-manager doc owns surfaces, tabs, focus, reserved slots, and split
