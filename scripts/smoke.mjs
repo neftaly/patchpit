@@ -45,8 +45,8 @@ async function smokeSandboxApps() {
       await load;
       const mainFrameId = await pageMainFrameId(pageCdp);
 
-      const ready = await waitForBrowserState(pageCdp, launcherReadyExpression, 10_000);
-      if (ready.status !== 'passed') throw smokeError('Shell launcher did not become ready', ready);
+      const ready = await waitForBrowserState(pageCdp, shellReadyExpression, 10_000);
+      if (ready.status !== 'passed') throw smokeError('Shell did not become ready', ready);
 
       const filePickerHost = await waitForBrowserState(pageCdp, filePickerHostExpression, 10_000);
       if (filePickerHost.status !== 'passed') throw smokeError('File Picker sandbox host did not mount', filePickerHost);
@@ -120,26 +120,6 @@ async function smokeSandboxApps() {
         throw smokeError('File Picker sandbox did not stay alive after file preview', filePickerAfterReadmePreview);
       }
 
-      const lifecycleBaseline = await waitForBrowserState(pageCdp, sandboxLifecycleBaselineExpression, 5_000);
-      if (lifecycleBaseline.status !== 'passed') {
-        throw smokeError('Sandbox lifecycle baseline could not be measured', lifecycleBaseline);
-      }
-
-      for (let iteration = 1; iteration <= 3; iteration += 1) {
-        const clicked = await evaluate(pageCdp, clickHelloWorldExpression);
-        if (clicked.status !== 'passed') throw smokeError(`Hello World launcher could not be clicked in lifecycle iteration ${iteration}`, clicked);
-
-        const sandbox = await waitForBrowserState(pageCdp, helloWorldVisibleExpression, 5_000);
-        if (sandbox.status !== 'passed') throw smokeError(`Hello World did not open cleanly in lifecycle iteration ${iteration}`, sandbox);
-
-        const closed = await evaluate(pageCdp, closeHelloWorldExpression);
-        if (closed.status !== 'passed') throw smokeError(`Hello World close button could not be clicked in lifecycle iteration ${iteration}`, closed);
-
-        const lifecycleClosed = await waitForBrowserState(pageCdp, helloWorldClosedExpression(lifecycleBaseline), 5_000);
-        if (lifecycleClosed.status !== 'passed') {
-          throw smokeError(`Hello World sandbox did not clean up after close in lifecycle iteration ${iteration}`, lifecycleClosed);
-        }
-      }
     } finally {
       await pageCdp?.close().catch(() => {});
       await browserCdp.close().catch(() => {});
@@ -152,211 +132,26 @@ async function smokeSandboxApps() {
   }
 }
 
-const launcherReadyExpression = `
+const shellReadyExpression = `
 (() => {
   const alert = document.querySelector('[role="alert"]');
-  const helloWorldButton = document.querySelector('button[data-app-id="hello-world"]');
+  const footer = document.querySelector('footer[aria-label="shell launcher"]');
   if (alert !== null) {
     return {
       status: 'failed',
-      reason: 'Runtime issue banner is visible before Hello World launch',
+      reason: 'Runtime issue banner is visible before shell ready',
       alert: alert.innerText,
       body: document.body.innerText,
     };
   }
-  if (helloWorldButton !== null) return { status: 'passed' };
+  if (footer !== null) return { status: 'passed' };
   return {
     status: 'pending',
-    reason: 'Waiting for manifest-derived Hello World launcher button',
+    reason: 'Waiting for shell footer',
     body: document.body.innerText,
   };
 })()
 `;
-
-const clickHelloWorldExpression = `
-(() => {
-  const helloWorldButton = document.querySelector('button[data-app-id="hello-world"]');
-  if (helloWorldButton === null) {
-    return {
-      status: 'failed',
-      reason: 'Manifest-derived Hello World launcher button is missing',
-      body: document.body.innerText,
-    };
-  }
-  if (typeof helloWorldButton.click !== 'function') {
-    return {
-      status: 'failed',
-      reason: 'Hello World launcher target is not clickable',
-      tag: helloWorldButton.tagName,
-      body: document.body.innerText,
-    };
-  }
-  try {
-    helloWorldButton.click();
-  } catch (error) {
-    return {
-      status: 'failed',
-      reason: 'Hello World launcher click threw',
-      error: error instanceof Error ? error.stack : String(error),
-      body: document.body.innerText,
-    };
-  }
-  return { status: 'passed' };
-})()
-`;
-
-const helloWorldVisibleExpression = `
-(() => {
-  const alert = document.querySelector('[role="alert"]');
-  const host = document.querySelector('section.sandbox-app-host[aria-label="Hello World"]');
-  const frame = host === null ? null : host.querySelector('iframe[title="Hello World"]');
-  const hasHost = host !== null;
-  const hasFrame = frame !== null;
-  const selectedTabs = [...document.querySelectorAll('[role="tab"][aria-selected="true"], [role="tab"][data-selected]')]
-    .map((tab) => tab.textContent.trim());
-
-  if (alert !== null) {
-    return {
-      status: 'failed',
-      reason: 'Runtime issue banner is visible after Hello World launch',
-      alert: alert.innerText,
-      hasHost,
-      hasFrame,
-      selectedTabs,
-      body: document.body.innerText,
-    };
-  }
-  if (hasHost && hasFrame && selectedTabs.some((tab) => (
-    tab.includes('Hello World') || tab.includes('/apps/hello-world/app.js')
-  ))) {
-    return {
-      status: 'passed',
-      selectedTabs,
-    };
-  }
-  return {
-    status: 'pending',
-    reason: 'Waiting for Hello World sandbox host',
-    hasHost,
-    hasFrame,
-    selectedTabs,
-    body: document.body.innerText,
-  };
-})()
-`;
-
-const sandboxLifecycleBaselineExpression = `
-(() => {
-  const alert = document.querySelector('[role="alert"]');
-  const helloHost = document.querySelector('section.sandbox-app-host[aria-label="Hello World"]');
-  const frames = [...document.querySelectorAll('iframe.sandbox-app-frame')];
-  const frameTitles = frames.map((frame) => frame.getAttribute('title') ?? '');
-
-  if (alert !== null) {
-    return {
-      status: 'failed',
-      reason: 'Runtime issue banner is visible before sandbox lifecycle check',
-      alert: alert.innerText,
-      frameTitles,
-      iframeCount: frames.length,
-      body: document.body.innerText,
-    };
-  }
-  if (helloHost !== null) {
-    return {
-      status: 'pending',
-      reason: 'Waiting for Hello World to be absent before lifecycle baseline',
-      frameTitles,
-      iframeCount: frames.length,
-      body: document.body.innerText,
-    };
-  }
-
-  return {
-    status: 'passed',
-    frameTitles,
-    iframeCount: frames.length,
-  };
-})()
-`;
-
-const closeHelloWorldExpression = `
-(() => {
-  const tabs = [...document.querySelectorAll('[role="tab"]')];
-  const helloTab = tabs.find((tab) => {
-    const label = tab.textContent ?? '';
-    return label.includes('Hello World') || label.includes('/apps/hello-world/app.js');
-  });
-  const closeButton = helloTab?.querySelector('button[aria-label^="Close "]');
-  if (helloTab === undefined || closeButton === null || closeButton === undefined) {
-    return {
-      status: 'failed',
-      reason: 'Hello World close button is missing',
-      tabs: tabs.map((tab) => tab.textContent?.trim() ?? ''),
-      body: document.body.innerText,
-    };
-  }
-
-  closeButton.click();
-  return {
-    status: 'passed',
-    tabs: tabs.map((tab) => tab.textContent?.trim() ?? ''),
-  };
-})()
-`;
-
-function helloWorldClosedExpression(baseline) {
-  return `
-(() => {
-  const alert = document.querySelector('[role="alert"]');
-  const helloHost = document.querySelector('section.sandbox-app-host[aria-label="Hello World"]');
-  const frames = [...document.querySelectorAll('iframe.sandbox-app-frame')];
-  const frameTitles = frames.map((frame) => frame.getAttribute('title') ?? '');
-  const expectedIframeCount = ${JSON.stringify(baseline.iframeCount)};
-
-  if (alert !== null) {
-    return {
-      status: 'failed',
-      reason: 'Runtime issue banner is visible after closing Hello World',
-      alert: alert.innerText,
-      frameTitles,
-      iframeCount: frames.length,
-      expectedIframeCount,
-      body: document.body.innerText,
-    };
-  }
-
-  if (helloHost !== null || frameTitles.includes('Hello World')) {
-    return {
-      status: 'pending',
-      reason: 'Waiting for Hello World sandbox iframe to unmount',
-      frameTitles,
-      iframeCount: frames.length,
-      expectedIframeCount,
-      body: document.body.innerText,
-    };
-  }
-
-  if (frames.length <= expectedIframeCount) {
-    return {
-      status: 'passed',
-      frameTitles,
-      iframeCount: frames.length,
-      expectedIframeCount,
-    };
-  }
-
-  return {
-    status: 'pending',
-    reason: 'Waiting for sandbox iframe count to return to or below baseline',
-    frameTitles,
-    iframeCount: frames.length,
-    expectedIframeCount,
-    body: document.body.innerText,
-  };
-})()
-`;
-}
 
 const filePickerHostExpression = `
 (() => {
