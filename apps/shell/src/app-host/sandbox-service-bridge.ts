@@ -143,6 +143,25 @@ export type SandboxAppServiceBridge = {
   ) => SandboxHostToFrameMessage | Promise<SandboxHostToFrameMessage>;
 };
 
+type SandboxAppServiceGrant = SandboxAppViewGrant | SandboxAppActGrant;
+
+type SandboxAppViewGrant = {
+  readonly id: string;
+  readonly name: string;
+  readonly respond: (request: SandboxAppServiceRequest) => SandboxHostToFrameMessage;
+  readonly service: 'view';
+};
+
+type SandboxAppActGrant = {
+  readonly id: string;
+  readonly name: SandboxFilePickerActionName;
+  readonly respond: (
+    request: SandboxAppServiceRequest,
+    action: SandboxFilePickerActionRequest,
+  ) => Promise<SandboxHostToFrameMessage> | SandboxHostToFrameMessage;
+  readonly service: 'act';
+};
+
 export function createSandboxAppServiceBridge({
   appId,
   filePicker,
@@ -154,23 +173,16 @@ export function createSandboxAppServiceBridge({
   readonly resourceRoot?: FilesystemNode | undefined;
   readonly session: SandboxAppSession;
 }): SandboxAppServiceBridge {
-  const canAct = sandboxFilePickerScopeApplies(appId, session, filePicker);
+  const grants = sandboxAppServiceGrants({ appId, filePicker, resourceRoot, session });
   return {
     capabilities: Object.freeze({
-      act: canAct,
+      act: grants.some((grant) => grant.service === 'act'),
       open: false,
-      view: true,
+      view: grants.some((grant) => grant.service === 'view'),
     }),
     respond(request) {
       if (request.service === 'act') {
-        if (!sandboxFilePickerScopeApplies(appId, session, filePicker)) {
-          return serviceErrorResponse(
-            request,
-            'unsupported_service',
-            'Sandbox service act is not supported by this host scope.',
-          );
-        }
-        return sandboxActResponse(request, filePicker);
+        return sandboxActResponse(request, grants);
       }
 
       if (request.service !== 'view') {
@@ -181,36 +193,45 @@ export function createSandboxAppServiceBridge({
         );
       }
 
-      const viewRequest = sandboxViewRequest(request.payload);
-      if (viewRequest.kind === 'app_supplied_authority') {
-        return serviceErrorResponse(
-          request,
-          'missing_scope',
-          'Sandbox service requests cannot carry app-supplied authority scope.',
-        );
-      }
-      if (viewRequest.view === sandboxLaunchView) {
-        return serviceSuccessResponse(request, {
-          appId,
-          session: {
-            app: session.app,
-            ...(session.delegation === undefined ? {} : { delegation: session.delegation }),
-            id: session.id,
-            url: session.url,
-          },
-          view: sandboxLaunchView,
-        });
-      }
+      return sandboxViewResponse(request, grants);
+    },
+  };
+}
 
-      if (viewRequest.view === sandboxResourceView) {
-        if (resourceRoot === undefined) {
-          return serviceErrorResponse(
-            request,
-            'missing_scope',
-            'Sandbox resource view is not available in this host scope.',
-          );
-        }
+function sandboxAppServiceGrants({
+  appId,
+  filePicker,
+  resourceRoot,
+  session,
+}: {
+  readonly appId: string;
+  readonly filePicker?: SandboxFilePickerServiceScope | undefined;
+  readonly resourceRoot?: FilesystemNode | undefined;
+  readonly session: SandboxAppSession;
+}): readonly SandboxAppServiceGrant[] {
+  const grants: SandboxAppServiceGrant[] = [
+    {
+      id: 'view:launch',
+      name: sandboxLaunchView,
+      respond: (request) => serviceSuccessResponse(request, {
+        appId,
+        session: {
+          app: session.app,
+          ...(session.delegation === undefined ? {} : { delegation: session.delegation }),
+          id: session.id,
+          url: session.url,
+        },
+        view: sandboxLaunchView,
+      }),
+      service: 'view',
+    },
+  ];
 
+  if (resourceRoot !== undefined) {
+    grants.push({
+      id: 'view:resource',
+      name: sandboxResourceView,
+      respond: (request) => {
         const node = findNode(resourceRoot, session.url);
         if (node === null) {
           return serviceErrorResponse(
@@ -224,35 +245,71 @@ export function createSandboxAppServiceBridge({
           resource: sandboxResourceViewData(node),
           view: sandboxResourceView,
         });
-      }
+      },
+      service: 'view',
+    });
+  }
 
-      if (viewRequest.view === sandboxFilePickerView) {
-        if (!sandboxFilePickerScopeApplies(appId, session, filePicker)) {
-          return serviceErrorResponse(
-            request,
-            'missing_scope',
-            'Sandbox file-picker view is not available in this host scope.',
-          );
-        }
+  if (sandboxFilePickerScopeApplies(appId, session, filePicker)) {
+    grants.push({
+      id: 'view:file-picker',
+      name: sandboxFilePickerView,
+      respond: (request) => serviceSuccessResponse(request, sandboxFilePickerViewData(session, filePicker)),
+      service: 'view',
+    });
 
-        return serviceSuccessResponse(request, sandboxFilePickerViewData(session, filePicker));
-      }
+    for (const action of sandboxFilePickerActionNames) {
+      grants.push({
+        id: `act:${action}`,
+        name: action,
+        respond: (request, actionRequest) => sandboxFilePickerActResponse(request, filePicker, actionRequest),
+        service: 'act',
+      });
+    }
+  }
 
-      return serviceErrorResponse(
-        request,
-        'missing_scope',
-        viewRequest.view === undefined
-          ? 'Sandbox view request is not available in this host scope.'
-          : `Sandbox view ${viewRequest.view} is not available in this host scope.`,
-      );
-    },
-  };
+  return Object.freeze(grants);
 }
 
-async function sandboxActResponse(
+function sandboxViewResponse(
   request: SandboxAppServiceRequest,
-  filePicker: SandboxFilePickerServiceScope,
-): Promise<SandboxHostToFrameMessage> {
+  grants: readonly SandboxAppServiceGrant[],
+): SandboxHostToFrameMessage {
+  const viewRequest = sandboxViewRequest(request.payload);
+  if (viewRequest.kind === 'app_supplied_authority') {
+    return serviceErrorResponse(
+      request,
+      'missing_scope',
+      'Sandbox service requests cannot carry app-supplied authority scope.',
+    );
+  }
+
+  const grant = grants.find(
+    (candidate): candidate is SandboxAppViewGrant =>
+      candidate.service === 'view' && candidate.name === viewRequest.view,
+  );
+  if (grant !== undefined) return grant.respond(request);
+
+  return serviceErrorResponse(
+    request,
+    'missing_scope',
+    sandboxMissingViewMessage(viewRequest.view),
+  );
+}
+
+function sandboxActResponse(
+  request: SandboxAppServiceRequest,
+  grants: readonly SandboxAppServiceGrant[],
+): SandboxHostToFrameMessage | Promise<SandboxHostToFrameMessage> {
+  const actGrants = grants.filter((grant): grant is SandboxAppActGrant => grant.service === 'act');
+  if (actGrants.length === 0) {
+    return serviceErrorResponse(
+      request,
+      'unsupported_service',
+      'Sandbox service act is not supported by this host scope.',
+    );
+  }
+
   const actionRequest = sandboxActionRequest(request.payload);
   if (actionRequest.kind === 'app_supplied_authority') {
     return serviceErrorResponse(
@@ -265,6 +322,23 @@ async function sandboxActResponse(
     return serviceErrorResponse(request, 'bad_request', actionRequest.message);
   }
 
+  const grant = actGrants.find((candidate) => candidate.name === actionRequest.action);
+  if (grant === undefined) {
+    return serviceErrorResponse(
+      request,
+      'missing_scope',
+      `Sandbox action ${actionRequest.action} is not available in this host scope.`,
+    );
+  }
+
+  return grant.respond(request, actionRequest);
+}
+
+async function sandboxFilePickerActResponse(
+  request: SandboxAppServiceRequest,
+  filePicker: SandboxFilePickerServiceScope,
+  actionRequest: SandboxFilePickerActionRequest,
+): Promise<SandboxHostToFrameMessage> {
   try {
     const result = await submitSandboxFilePickerAction(filePicker, actionRequest);
     return serviceSuccessResponse(request, {
@@ -314,6 +388,13 @@ type SandboxFilePickerActionName =
   | typeof filePickerToggleFolderIntent
   | typeof routeOpenIntent
   | typeof routePreviewIntent;
+
+const sandboxFilePickerActionNames = [
+  filePickerSelectUrlIntent,
+  filePickerToggleFolderIntent,
+  routeOpenIntent,
+  routePreviewIntent,
+] as const satisfies readonly SandboxFilePickerActionName[];
 
 type SandboxFilePickerActionRequest = {
   readonly action: SandboxFilePickerActionName;
@@ -390,6 +471,14 @@ function sandboxViewRequest(payload: unknown): (
 
   const name = payload.name ?? payload.view;
   return { kind: 'view', view: typeof name === 'string' ? name : undefined };
+}
+
+function sandboxMissingViewMessage(view: string | undefined): string {
+  if (view === sandboxResourceView) return 'Sandbox resource view is not available in this host scope.';
+  if (view === sandboxFilePickerView) return 'Sandbox file-picker view is not available in this host scope.';
+  return view === undefined
+    ? 'Sandbox view request is not available in this host scope.'
+    : `Sandbox view ${view} is not available in this host scope.`;
 }
 
 function sandboxActionRequest(payload: unknown): (
