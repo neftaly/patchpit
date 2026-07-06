@@ -10,7 +10,7 @@ import { Viewer } from './index';
 
 function App() {
   const [seed] = useState(createSeedFilesystem);
-  const filesystem = useMemo(() => projectFilesystem(seed.indexDoc, seed.rootUrl), [seed]);
+  const filesystem = useMemo(() => projectFilesystem(seed.indexHandle.doc(), seed.rootUrl), [seed]);
   const url = firstFileUrl(filesystem.root);
 
   if (filesystem.root === null) {

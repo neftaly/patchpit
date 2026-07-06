@@ -3,12 +3,12 @@ import {
   routePreviewIntent,
   submitRuntimeIntent,
   type IntentResult,
-  type Json,
   type RouteIntentRow,
   type RuntimeClient,
 } from '@patchpit/system/runtime';
 import { routeIntentBoundary } from '@patchpit/system';
 import type { ContextDropTarget } from '../window-manager/window-manager-state';
+import { contextDropTargetJson } from './bootstrap-window-topology';
 
 export type RouteIntentName = typeof routeOpenIntent | typeof routePreviewIntent;
 
@@ -42,7 +42,7 @@ function routeIntentRow(input: RouteIntentInput): RouteIntentRow {
     url: input.url,
     ...(input.rootUrl === undefined ? {} : { rootUrl: input.rootUrl }),
     ...(input.sourceSurfaceId === undefined ? {} : { sourceSurfaceId: input.sourceSurfaceId }),
-    ...(input.target === undefined ? {} : { target: input.target as unknown as Json }),
+    ...(input.target === undefined ? {} : { target: contextDropTargetJson(input.target) }),
     ...(input.title === undefined ? {} : { title: input.title }),
   };
 }

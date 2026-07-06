@@ -13,15 +13,16 @@ import {
   cloneFolderEntry,
   createPatchpitFileDoc,
   createPatchpitFolderDoc,
-  filesystemIndexRowForResource,
+  fileExtensionFromName,
   folderEntry,
+  mimeTypeFromFileName,
   PatchpitType,
-  removeFilesystemIndexRows,
+  recordAutomergeMove,
+  removeFilesystemIndexResources,
   replaceFolderEntries,
-  upsertFilesystemIndexRow,
+  syncFilesystemIndexResources,
   type FileDoc,
   type FilesystemIndexDoc,
-  type FilesystemIndexRow,
   type FilesystemResource,
   type FolderDoc,
   type FolderEntry,
@@ -160,8 +161,61 @@ export class PatchpitFs implements IFileSystem {
   }
 
   async mv(src: string, dest: string): Promise<void> {
-    await this.cp(src, dest, { recursive: true });
-    await this.rm(src, { recursive: true });
+    const sourcePath = normalize(src);
+    const requestedDestPath = normalize(dest);
+    const found = this.#lookup(sourcePath);
+    if (found === undefined) throw fsError('ENOENT', `no such file or directory, rename '${src}' -> '${dest}'`);
+    if (sourcePath === '/') throw fsError('EBUSY', `cannot move mount root '${src}'`);
+
+    const destFound = this.#lookup(requestedDestPath);
+    const targetPath = destFound?.kind === PatchpitType.Folder
+      ? join(requestedDestPath, basename(sourcePath))
+      : requestedDestPath;
+    if (sourcePath === targetPath) return;
+    if (found.kind === PatchpitType.Folder && isDescendantPath(targetPath, sourcePath)) {
+      throw fsError('EINVAL', `cannot move directory into itself, rename '${src}' -> '${dest}'`);
+    }
+
+    const targetParent = this.#parentFolder(targetPath, false);
+    const sourceParent = this.#parentFolder(sourcePath, false);
+    const targetName = basename(targetPath);
+    const replaced = this.#lookup(targetPath);
+    if (replaced !== undefined && replaced.entry.url !== found.entry.url) {
+      if (found.kind !== PatchpitType.File || replaced.kind !== PatchpitType.File) {
+        throw fsError('EEXIST', `destination exists, rename '${src}' -> '${dest}'`);
+      }
+    }
+
+    const movedEntry = folderEntry(targetName, found.entry.type, found.entry.url);
+    if (sourceParent.handle.url === targetParent.handle.url) {
+      this.#updateFolder(
+        sourceParent.handle,
+        [
+          ...cloneFolderEntries(sourceParent.handle.doc().docs).filter((entry) => (
+            entry.name !== basename(sourcePath) && entry.name !== targetName
+          )),
+          movedEntry,
+        ],
+      );
+    } else {
+      this.#updateFolder(
+        sourceParent.handle,
+        cloneFolderEntries(sourceParent.handle.doc().docs).filter((entry) => entry.name !== basename(sourcePath)),
+      );
+      this.#updateFolder(
+        targetParent.handle,
+        [
+          ...cloneFolderEntries(targetParent.handle.doc().docs).filter((entry) => entry.name !== targetName),
+          movedEntry,
+        ],
+      );
+    }
+
+    if (replaced !== undefined && replaced.entry.url !== found.entry.url) {
+      this.#dropIndexes(this.#subtreeUrls(replaced));
+    }
+    this.#recordMove(found, sourcePath, targetPath);
+    this.#renameMovedResource(found, basename(sourcePath), targetName);
   }
 
   resolvePath(base: string, path: string): string {
@@ -276,53 +330,78 @@ export class PatchpitFs implements IFileSystem {
     handle.change((doc) => {
       replaceFolderEntries(doc.docs, entries);
     });
-    this.#upsertIndex(filesystemIndexRowForResource(handle.url, handle.doc()));
+    this.#syncIndex(handle);
   }
 
   #updateFile(handle: DocHandle<FileDoc>, content: string): void {
     handle.change((doc) => {
       doc.content = content;
     });
-    this.#upsertIndex(filesystemIndexRowForResource(handle.url, handle.doc()));
+    this.#syncIndex(handle);
   }
 
   #createFile(name: string, content: string): DocHandle<FileDoc> {
     const handle = this.#repo.create<FileDoc>(createPatchpitFileDoc(name, content));
     this.#documentHandles[handle.url] = handle as DocHandle<FilesystemResource>;
-    this.#upsertIndex(filesystemIndexRowForResource(handle.url, handle.doc()));
+    this.#syncIndex(handle);
     return handle;
   }
 
   #createFolder(name: string): DocHandle<FolderDoc> {
     const handle = this.#repo.create<FolderDoc>(createPatchpitFolderDoc(name));
     this.#documentHandles[handle.url] = handle as DocHandle<FilesystemResource>;
-    this.#upsertIndex(filesystemIndexRowForResource(handle.url, handle.doc()));
+    this.#syncIndex(handle);
     return handle;
   }
 
   #fileHandle(url: string): DocHandle<FileDoc> | undefined {
     const handle = this.#documentHandles[url];
-    if (handle?.doc()['@patchpit'].type === PatchpitType.File) return handle as DocHandle<FileDoc>;
-    return undefined;
+    return isFileHandle(handle) ? handle : undefined;
   }
 
   #folderHandle(url: string): DocHandle<FolderDoc> {
     const handle = this.#documentHandles[url];
-    if (handle?.doc()['@patchpit'].type === PatchpitType.Folder) return handle as DocHandle<FolderDoc>;
+    if (isFolderHandle(handle)) return handle;
     throw fsError('ENOENT', `missing folder document '${url}'`);
   }
 
-  #upsertIndex(row: FilesystemIndexRow): void {
-    this.#indexHandle.change((doc) => {
-      upsertFilesystemIndexRow(doc.filesystemIndex.documents, row);
-    });
+  #syncIndex(handle: DocHandle<FileDoc> | DocHandle<FolderDoc>): void {
+    syncFilesystemIndexResources(this.#indexHandle, [handle]);
   }
 
   #dropIndexes(urls: readonly string[]): void {
-    this.#indexHandle.change((doc) => {
-      removeFilesystemIndexRows(doc.filesystemIndex.documents, urls);
-    });
+    removeFilesystemIndexResources(this.#indexHandle, urls);
     for (const url of urls) delete this.#documentHandles[url];
+  }
+
+  #recordMove(found: LookupResult, sourcePath: string, targetPath: string): void {
+    if (found.handle === undefined) return;
+    found.handle.change((doc) => {
+      recordAutomergeMove(doc, doc, {
+        from: segments(sourcePath),
+        to: segments(targetPath),
+      }, found.entry.url);
+    });
+    this.#syncIndex(found.handle);
+  }
+
+  #renameMovedResource(found: LookupResult, sourceName: string, targetName: string): void {
+    if (sourceName === targetName || found.handle === undefined) return;
+    if (found.kind === PatchpitType.Folder) {
+      found.handle.change((doc) => {
+        doc.name = targetName;
+        doc.title = targetName;
+      });
+      this.#syncIndex(found.handle);
+      return;
+    }
+
+    found.handle.change((doc) => {
+      doc.name = targetName;
+      doc.extension = fileExtensionFromName(targetName);
+      doc.mimeType = mimeTypeFromFileName(targetName);
+    });
+    this.#syncIndex(found.handle);
   }
 
   #subtreeUrls(found: LookupResult): string[] {
@@ -373,6 +452,21 @@ type LookupResult =
       handle?: DocHandle<FileDoc>;
       kind: PatchpitType.File;
     };
+
+type PatchpitFileHandle = DocHandle<FilesystemResource> & DocHandle<FileDoc>;
+type PatchpitFolderHandle = DocHandle<FilesystemResource> & DocHandle<FolderDoc>;
+
+function isFileHandle(
+  handle: DocHandle<FilesystemResource> | undefined,
+): handle is PatchpitFileHandle {
+  return handle?.doc()['@patchpit'].type === PatchpitType.File;
+}
+
+function isFolderHandle(
+  handle: DocHandle<FilesystemResource> | undefined,
+): handle is PatchpitFolderHandle {
+  return handle?.doc()['@patchpit'].type === PatchpitType.Folder;
+}
 
 function stat(isDirectory: boolean, size: number): FsStat {
   return {
@@ -425,8 +519,22 @@ function join(parent: string, child: string): string {
   return normalize(parent === '/' ? `/${child}` : `${parent}/${child}`);
 }
 
-function fsError(code: string, message: string): Error & { code: string } {
-  const error = new Error(`${code}: ${message}`) as Error & { code: string };
+function isDescendantPath(path: string, parent: string): boolean {
+  return path.startsWith(`${parent}/`);
+}
+
+type FsErrorCode =
+  | 'EBUSY'
+  | 'EEXIST'
+  | 'EINVAL'
+  | 'EISDIR'
+  | 'ENOENT'
+  | 'ENOTDIR'
+  | 'ENOTEMPTY'
+  | 'EPERM';
+
+function fsError(code: FsErrorCode, message: string): Error & { code: FsErrorCode } {
+  const error = new Error(`${code}: ${message}`) as Error & { code: FsErrorCode };
   error.code = code;
   return error;
 }

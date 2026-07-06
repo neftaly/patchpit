@@ -1,4 +1,4 @@
-import { getObjectId, type ObjID, type Prop } from '@automerge/automerge';
+import { getObjectId, type Prop } from '@automerge/automerge';
 
 export const automergeMovesKey = '__automergeMoves';
 
@@ -8,20 +8,21 @@ export type AutomergeMove = {
 };
 
 export type AutomergeMoveRoot = {
-  [automergeMovesKey]?: Record<ObjID, AutomergeMove>;
+  [automergeMovesKey]?: Record<string, AutomergeMove>;
 };
 
-// Native Automerge moves are not public yet; this keeps move intent by object id.
+// Native Automerge moves are not public yet; this keeps move intent by object id when available.
 export function recordAutomergeMove(
   root: AutomergeMoveRoot,
   object: object,
   move: AutomergeMove,
-): ObjID | undefined {
-  const objectId = getObjectId(object) ?? undefined;
+  fallbackObjectId?: string,
+): string | undefined {
+  const objectId = getObjectId(object) ?? fallbackObjectId;
   if (objectId === undefined) return undefined;
 
-  const moves = root[automergeMovesKey] ??= {};
-  moves[objectId] = {
+  if (root[automergeMovesKey] === undefined) root[automergeMovesKey] = {};
+  root[automergeMovesKey]![objectId] = {
     from: [...move.from],
     to: [...move.to],
   };

@@ -6,7 +6,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./runtime": "./src/runtime/index.ts",
-    "./runtime/automerge-heads": "./src/runtime/automerge-heads.ts",
     "./runtime/client": "./src/runtime/client.ts",
     "./runtime/platform": "./src/runtime/platform.ts",
     "./runtime/protocol": "./src/runtime/protocol.ts",

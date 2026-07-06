@@ -1,3 +1,4 @@
+import { relationSetFromRows } from '@tarstate/core/source';
 import {
   filesystemTreeProjectionRelations,
   filesystemTreeSchema,
@@ -5,23 +6,16 @@ import {
   projectFilesystemTreeRows,
   windowManagerStateSchema,
   type SeedFilesystem,
-  type WindowContext,
-  type WindowManagerStateDoc,
-  type WindowSurface,
 } from '@patchpit/system';
 import {
-  automergeHeadSetForHandle,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
-  relationSetFromRows,
   runtimeError,
+  workspaceProjectionRelationSet,
   type AutomergeHeadSet,
   type ProjectionName,
-  workspaceContextsRelation,
   workspaceLayoutProjection,
   workspaceProjectionSchemaId,
-  workspaceStateRelation,
-  workspaceSurfacesRelation,
   type ProjectionBasis,
   type ProjectionEvent,
   type ProjectionSnapshot,
@@ -30,9 +24,8 @@ import {
   type RelationSet,
   type RuntimeClient,
   type RuntimeError,
-  type WorkspaceProjectionRelations,
-  type WorkspaceProjectionStateRow,
 } from '@patchpit/system/runtime';
+import { automergeHeadSetForHandle } from './automerge-heads';
 
 type ProjectionDiagnosticsRecorder = {
   recordProjectionClosed(subscriptionId: string): void;
@@ -48,7 +41,7 @@ type BootstrapProjectionSubscriberOptions = {
 
 type BootstrapProjectionDefinition = {
   readonly projection: ProjectionName;
-  readonly schemaId: string;
+  readonly schemaId: ProjectionSubscriptionRequest['schemaId'];
   readonly schema: ProjectionSnapshotSchema;
   readonly subscribe: (seed: SeedFilesystem, update: () => void) => () => void;
   readonly payload: (seed: SeedFilesystem) => ProjectionPayload | RuntimeError;
@@ -101,7 +94,7 @@ const bootstrapProjectionDefinitions: Partial<Record<ProjectionName, BootstrapPr
     },
     payload: workspaceLayoutPayload,
   },
-};
+} as const satisfies Partial<Record<ProjectionName, BootstrapProjectionDefinition>>;
 
 export function createBootstrapProjectionSubscriber({
   diagnostics,
@@ -234,65 +227,15 @@ function filesystemTreePayload(seed: SeedFilesystem): ProjectionPayload | Runtim
 
   return {
     storageHeads: automergeHeadSetForHandle(seed.indexHandle),
-    relations: filesystemTreeRelationSet(projection.rows),
+    relations: relationSetFromRows(filesystemTreeProjectionRelations(projection.rows)),
   };
-}
-
-function filesystemTreeRelationSet(rows: Parameters<typeof filesystemTreeProjectionRelations>[0]): RelationSet {
-  return relationSetFromRows(filesystemTreeProjectionRelations(rows));
 }
 
 function workspaceLayoutPayload(seed: SeedFilesystem): ProjectionPayload {
   return {
     storageHeads: automergeHeadSetForHandle(seed.windowManagerHandle),
-    relations: workspaceLayoutRelationSet(seed.windowManagerHandle.doc()),
+    relations: workspaceProjectionRelationSet(seed.windowManagerHandle.doc()),
   };
-}
-
-function workspaceLayoutRelationSet(state: WindowManagerStateDoc): RelationSet {
-  return relationSetFromRows(workspaceProjectionRelations(state));
-}
-
-function workspaceProjectionRelations(
-  state: WindowManagerStateDoc,
-): WorkspaceProjectionRelations {
-  return {
-    [workspaceStateRelation]: [workspaceStateRow(state)],
-    [workspaceContextsRelation]: workspaceContextRows(state),
-    [workspaceSurfacesRelation]: workspaceSurfaceRows(state),
-  };
-}
-
-function workspaceStateRow(state: WindowManagerStateDoc): WorkspaceProjectionStateRow {
-  return {
-    focus: state.focus,
-    id: 'window-manager',
-    layout: structuredClone(state.layout),
-  };
-}
-
-function workspaceContextRows(state: WindowManagerStateDoc): readonly WindowContext[] {
-  return Object.values(state.contexts)
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .map((context) => ({
-      app: context.app,
-      container: structuredClone(context.container),
-      id: context.id,
-      ...(context.title === undefined ? {} : { title: context.title }),
-      url: context.url,
-    }));
-}
-
-function workspaceSurfaceRows(state: WindowManagerStateDoc): readonly WindowSurface[] {
-  return Object.values(state.surfaces)
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .map((surface) => ({
-      ...(surface.activeContext === undefined ? {} : { activeContext: surface.activeContext }),
-      contexts: [...surface.contexts],
-      id: surface.id,
-      ...(surface.previewContext === undefined ? {} : { previewContext: surface.previewContext }),
-      role: surface.role,
-    }));
 }
 
 function liveProjectionSubscription(

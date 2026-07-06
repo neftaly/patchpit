@@ -27,8 +27,11 @@ import {
   recordRuntimeBootGateAck,
   resolveTheme,
   themeStyle,
+  type AppearanceDoc,
   type FilePickerStateDoc,
+  type FileTypesDoc,
   type FilesystemNode,
+  type RuntimeStateDoc,
   type ThemeDoc,
 } from '@patchpit/system';
 import {
@@ -63,7 +66,7 @@ import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/laun
 import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from './runtime/route-intents';
 import { type StateBrowserRuntimeIssueEntry } from './state-browser/StateBrowser';
 import { StateBrowserSurface } from './state-browser/StateBrowserSurface';
-import { useAutomergeDoc, useAutomergeDocs } from './runtime/use-automerge-doc';
+import { useAutomergeDocs, useRuntimeDocument } from './runtime/use-automerge-doc';
 import { useFilesystemTreeProjection, useWorkspaceProjection } from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
 import {
@@ -127,16 +130,17 @@ function ShellApp({
     seed,
     workspaceId: 'default',
   }));
-  const appearance = useAutomergeDoc(seed.appearanceHandle);
-  const darkTheme = useAutomergeDoc(seed.darkThemeHandle);
-  const fileTypes = useAutomergeDoc(seed.fileTypesHandle);
+  const { documentUrls, rootUrl } = runtime.resources;
+  const appearance = useRuntimeDocument<AppearanceDoc>(runtime.resources, documentUrls.appearance);
+  const darkTheme = useRuntimeDocument<ThemeDoc>(runtime.resources, documentUrls.darkTheme);
+  const fileTypes = useRuntimeDocument<FileTypesDoc>(runtime.resources, documentUrls.fileTypes);
   const iconRules = useMemo(() => fileIcons(fileTypes), [fileTypes]);
-  const lightTheme = useAutomergeDoc(seed.lightThemeHandle);
+  const lightTheme = useRuntimeDocument<ThemeDoc>(runtime.resources, documentUrls.lightTheme);
   const [runtimeFault, setRuntimeFault] = useState<RuntimePanelFailure>();
   const nextRuntimeIssueId = useRef(1);
   const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly StateBrowserRuntimeIssueEntry[]>([]);
-  const filePickerState = useAutomergeDoc(seed.filePickerStateHandle);
-  const runtimeState = useAutomergeDoc(seed.runtimeStateHandle);
+  const filePickerState = useRuntimeDocument<FilePickerStateDoc>(runtime.resources, documentUrls.filePickerState);
+  const runtimeState = useRuntimeDocument<RuntimeStateDoc>(runtime.resources, documentUrls.runtimeState);
   const terminalHandles = useMemo(() => terminalAppStateHandles(seed, runtimeState), [seed, runtimeState]);
   const terminalStates = useAutomergeDocs(terminalHandles);
   const prefersDark = usePrefersDark();
@@ -146,7 +150,7 @@ function ShellApp({
     recordRuntimeBootGateAck(seed, { ack: runtimeConnection.ack, platform: runtimePlatform });
   }, [runtimeConnection.ack, runtimePlatform, seed]);
 
-  const filesystemProjection = useFilesystemTreeProjection(runtime, seed.rootUrl);
+  const filesystemProjection = useFilesystemTreeProjection(runtime, rootUrl);
   const workspaceProjection = useWorkspaceProjection(runtime);
   const recordRuntimeIssue = (source: StateBrowserRuntimeIssueEntry['source'], issue: RuntimePanelFailure) => {
     const entry: StateBrowserRuntimeIssueEntry = {
@@ -197,7 +201,7 @@ function ShellApp({
       void windowIntent(windowMoveTabIntent, { contextId, sourceSurfaceId, target }).catch(reportRuntimeError);
     },
     dropUrl: (url: string, title: string, target: ContextDropTarget) => {
-      routeUrl(routeOpenIntent, { rootUrl: seed.rootUrl, target, title, url });
+      routeUrl(routeOpenIntent, { rootUrl, target, title, url });
     },
     pinContext: (surfaceId: string, contextId: string) => {
       void windowIntent(windowPinPreviewIntent, { contextId, surfaceId }).catch(reportRuntimeError);
@@ -213,10 +217,10 @@ function ShellApp({
   };
   const filePickerActions = (sourceSurfaceId: string) => ({
     openUrl: (url: string, title: string) => {
-      routeUrl(routeOpenIntent, { rootUrl: seed.rootUrl, sourceSurfaceId, title, url });
+      routeUrl(routeOpenIntent, { rootUrl, sourceSurfaceId, title, url });
     },
     previewUrl: (url: string, title: string) => {
-      routeUrl(routePreviewIntent, { rootUrl: seed.rootUrl, sourceSurfaceId, title, url });
+      routeUrl(routePreviewIntent, { rootUrl, sourceSurfaceId, title, url });
     },
     selectUrl: (
       url: string,
@@ -242,10 +246,10 @@ function ShellApp({
     focusedAppId: workspaceProjection.status === 'ready'
       ? focusedAppId(workspaceProjection.workspace)
       : undefined,
-    filePickerStateUrl: seed.filePickerStateHandle.url,
+    filePickerStateUrl: documentUrls.filePickerState,
     launchApp,
-    rootUrl: seed.rootUrl,
-    runtimeStateUrl: seed.runtimeStateHandle.url,
+    rootUrl,
+    runtimeStateUrl: documentUrls.runtimeState,
   });
   return (
     <main className="standalone-app shell-app" style={themeStyle(theme)}>
@@ -281,7 +285,7 @@ function ShellApp({
                 actions: filePickerActions,
                 fileIcons: iconRules,
                 state: filePickerState,
-                url: seed.filePickerStateHandle.url,
+                url: documentUrls.filePickerState,
               },
               filesystemRoot: filesystemProjection.root,
               stateBrowser: (
@@ -293,7 +297,6 @@ function ShellApp({
                   runtimeIssueHistory={runtimeIssueHistory}
                   runtimePlatform={runtimePlatform}
                   runtimeState={runtimeState}
-                  seed={seed}
                   workspaceProjection={workspaceProjection}
                 />
               ),
@@ -418,19 +421,24 @@ function SurfaceNotice({
 }
 
 function filePickerDroppedUrl(event: DragEvent): WindowManagerDroppedUrl | undefined {
-  const url = dragDataFromEvent<DraggedFilePickerUrl>(event, filePickerDragType);
-  if (url === undefined || typeof url.title !== 'string' || typeof url.url !== 'string') return undefined;
-  return url;
+  const data = dragDataFromEvent(event, filePickerDragType);
+  return isDraggedFilePickerUrl(data) ? data : undefined;
 }
 
-function dragDataFromEvent<T>(event: DragEvent, type: string): T | undefined {
+function dragDataFromEvent(event: DragEvent, type: string): unknown {
   const serializedDragData = event.dataTransfer.getData(type);
   if (serializedDragData === '') return undefined;
   try {
-    return JSON.parse(serializedDragData) as T;
+    return JSON.parse(serializedDragData);
   } catch {
     return undefined;
   }
+}
+
+function isDraggedFilePickerUrl(data: unknown): data is DraggedFilePickerUrl {
+  if (typeof data !== 'object' || data === null) return false;
+  const candidate = data as Partial<Record<keyof DraggedFilePickerUrl, unknown>>;
+  return typeof candidate.title === 'string' && typeof candidate.url === 'string';
 }
 
 const runtimeIssueHistoryLimit = 50;

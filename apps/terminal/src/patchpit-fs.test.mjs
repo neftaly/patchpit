@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { InMemoryFs } from 'just-bash/browser';
 import {
+  automergeMovesKey,
   ContainerMountKind,
   createSeedFilesystem,
   createTerminalStateResource,
   PatchpitType,
   terminalContainer,
+  TerminalLineKind,
 } from '@patchpit/system';
 import {
   createPatchpitFilesystem,
@@ -15,9 +17,10 @@ import {
   terminalFilesystemCapability,
   terminalFilesystemProtocol,
 } from './filesystem.ts';
-import { terminalAppStateHandles } from './patchpit-app-runtime.ts';
+import { terminalAppSessions, terminalAppStateHandles } from './patchpit-app-runtime.ts';
 import { PatchpitFs } from './patchpit-fs.ts';
 import { createTerminalRuntime, runTerminalCommand } from './terminal-bash.ts';
+import { createTerminalStateActions } from './terminal-state.ts';
 
 void test('terminal app state handles follow the runtime app instance ledger', () => {
   const seed = createSeedFilesystem();
@@ -38,6 +41,69 @@ void test('terminal app state handles follow the runtime app instance ledger', (
     terminalAppStateHandles(seed, seed.runtimeStateHandle.doc()).map((handle) => handle.url),
     [terminalState.url],
   );
+});
+
+void test('terminal state actions commit semantic mutations through a writer capability', () => {
+  const mutations = [];
+  const actions = createTerminalStateActions({
+    commit: (mutation) => mutations.push(mutation),
+  });
+  const execution = {
+    command: 'pwd',
+    cwd: '/home',
+    env: { LANG: 'C' },
+    stderr: '',
+    stdout: '/home\n',
+  };
+
+  actions.appendPrompt();
+  actions.clear();
+  actions.commitExecution(execution);
+
+  assert.deepEqual(mutations, [
+    { type: 'appendPrompt' },
+    { type: 'clear' },
+    { execution, type: 'commitExecution' },
+  ]);
+});
+
+void test('terminal app sessions persist mutations through the runtime writer boundary', () => {
+  const seed = createSeedFilesystem();
+  const terminalState = createTerminalStateResource(seed, 'terminal-session-writer-test');
+  const sessions = terminalAppSessions({
+    handles: [terminalState],
+    runtime: { status: 'opening' },
+    states: {},
+  });
+  const session = sessions[terminalState.url];
+  assert.ok(session);
+
+  session.actions.commitExecution({
+    command: 'printf ok',
+    cwd: '/home/project',
+    env: { PWD: '/home/project' },
+    stderr: 'warn\n',
+    stdout: 'ok\n',
+  });
+
+  assert.equal(terminalState.doc().cwd, '/home/project');
+  assert.deepEqual(terminalState.doc().env, { PWD: '/home/project' });
+  assert.deepEqual(terminalState.doc().history, ['printf ok']);
+  assert.deepEqual(terminalState.doc().lines, [
+    {
+      kind: TerminalLineKind.Input,
+      prompt: '/home$ ',
+      text: 'printf ok',
+    },
+    {
+      kind: TerminalLineKind.Output,
+      text: 'ok',
+    },
+    {
+      kind: TerminalLineKind.Error,
+      text: 'warn',
+    },
+  ]);
 });
 
 void test('recursive rm drops descendant handles and filesystem index rows', async () => {
@@ -75,6 +141,101 @@ void test('rm preserves non-recursive directory-not-empty behavior', async () =>
   assert.equal(await fs.exists('/home/not-empty/file.txt'), true);
   assertHandlesPresent(seed, urls);
   assertIndexRowsPresent(seed, urls);
+});
+
+void test('mv relinks a file without changing its Automerge document identity', async () => {
+  const { fs, seed } = createTestFilesystem();
+
+  await fs.mkdir('/home/source');
+  await fs.mkdir('/home/dest');
+  await fs.writeFile('/home/source/note.txt', 'hello');
+  const originalUrl = urlAt(seed, '/home/source/note.txt');
+  const originalHandle = seed.documentHandles[originalUrl];
+
+  await fs.mv('/home/source/note.txt', '/home/dest/renamed.md');
+
+  assert.equal(await fs.exists('/home/source/note.txt'), false);
+  assert.equal(await fs.readFile('/home/dest/renamed.md'), 'hello');
+  assert.equal(urlAt(seed, '/home/dest/renamed.md'), originalUrl);
+  assert.equal(seed.documentHandles[originalUrl], originalHandle);
+  assert.equal(originalHandle.doc().name, 'renamed.md');
+  assert.equal(originalHandle.doc().extension, 'md');
+  assert.equal(originalHandle.doc().mimeType, 'text/markdown');
+  assert.deepEqual(Object.values(originalHandle.doc()[automergeMovesKey]), [{
+    from: ['home', 'source', 'note.txt'],
+    to: ['home', 'dest', 'renamed.md'],
+  }]);
+  assertIndexRowsPresent(seed, [originalUrl]);
+  assertIndexRow(seed, originalUrl, {
+    content: 'hello',
+    mimeType: 'text/markdown',
+  });
+  assertIndexFolderLacksEntry(seed, '/home/source', 'note.txt');
+  assertIndexFolderHasEntry(seed, '/home/dest', {
+    name: 'renamed.md',
+    url: originalUrl,
+  });
+});
+
+void test('mv relinks a folder subtree without changing document identities', async () => {
+  const { fs, seed } = createTestFilesystem();
+
+  await fs.mkdir('/home/source/folder', { recursive: true });
+  await fs.mkdir('/home/dest');
+  await fs.writeFile('/home/source/folder/child.txt', 'child');
+  const originalFolderUrl = urlAt(seed, '/home/source/folder');
+  const originalFolderHandle = seed.documentHandles[originalFolderUrl];
+  const originalChildUrl = urlAt(seed, '/home/source/folder/child.txt');
+  const originalChildHandle = seed.documentHandles[originalChildUrl];
+
+  await fs.mv('/home/source/folder', '/home/dest/renamed');
+
+  assert.equal(await fs.exists('/home/source/folder'), false);
+  assert.equal(await fs.readFile('/home/dest/renamed/child.txt'), 'child');
+  assert.equal(urlAt(seed, '/home/dest/renamed'), originalFolderUrl);
+  assert.equal(urlAt(seed, '/home/dest/renamed/child.txt'), originalChildUrl);
+  assert.equal(seed.documentHandles[originalFolderUrl], originalFolderHandle);
+  assert.equal(seed.documentHandles[originalChildUrl], originalChildHandle);
+  assert.equal(originalFolderHandle.doc().name, 'renamed');
+  assert.equal(originalFolderHandle.doc().title, 'renamed');
+  assert.deepEqual(Object.values(originalFolderHandle.doc()[automergeMovesKey]), [{
+    from: ['home', 'source', 'folder'],
+    to: ['home', 'dest', 'renamed'],
+  }]);
+  assertIndexRowsPresent(seed, [originalFolderUrl, originalChildUrl]);
+  assertIndexFolderLacksEntry(seed, '/home/source', 'folder');
+  assertIndexFolderHasEntry(seed, '/home/dest', {
+    name: 'renamed',
+    url: originalFolderUrl,
+  });
+});
+
+void test('mv treats existing directories as containers and safely replaces files', async () => {
+  const { fs, seed } = createTestFilesystem();
+
+  await fs.mkdir('/home/existing-dir');
+  await fs.writeFile('/home/source.txt', 'source');
+  const sourceUrl = urlAt(seed, '/home/source.txt');
+
+  await fs.mv('/home/source.txt', '/home/existing-dir');
+
+  assert.equal(await fs.exists('/home/source.txt'), false);
+  assert.equal(await fs.readFile('/home/existing-dir/source.txt'), 'source');
+  assert.equal(urlAt(seed, '/home/existing-dir/source.txt'), sourceUrl);
+
+  await fs.writeFile('/home/replacement.txt', 'replacement');
+  await fs.writeFile('/home/existing-dir/source.txt', 'old target');
+  const replacementUrl = urlAt(seed, '/home/replacement.txt');
+  const oldTargetUrl = sourceUrl;
+
+  await fs.mv('/home/replacement.txt', '/home/existing-dir/source.txt');
+
+  assert.equal(await fs.exists('/home/replacement.txt'), false);
+  assert.equal(await fs.readFile('/home/existing-dir/source.txt'), 'replacement');
+  assert.equal(urlAt(seed, '/home/existing-dir/source.txt'), replacementUrl);
+  assertHandlesRemoved(seed, [oldTargetUrl]);
+  assertIndexRowsRemoved(seed, [oldTargetUrl]);
+  assertIndexRowsPresent(seed, [replacementUrl]);
 });
 
 void test('recursive rm cleanup survives generated nested trees', async () => {
@@ -425,6 +586,19 @@ function assertIndexFolderLacksEntry(seed, path, name) {
   assert.ok(row, `Missing index row for ${path}`);
   assert.ok(Array.isArray(row.entries), `Missing folder entries for ${path}`);
   assert.equal(row.entries.some((entry) => entry.name === name), false);
+}
+
+function assertIndexFolderHasEntry(seed, path, expected) {
+  const row = seed.indexHandle.doc().filesystemIndex.documents.find((candidate) => candidate.url === urlAt(seed, path));
+  assert.ok(row, `Missing index row for ${path}`);
+  assert.ok(Array.isArray(row.entries), `Missing folder entries for ${path}`);
+  assert.ok(row.entries.some((entry) => entry.name === expected.name && entry.url === expected.url));
+}
+
+function assertIndexRow(seed, url, expected) {
+  const row = seed.indexHandle.doc().filesystemIndex.documents.find((candidate) => candidate.url === url);
+  assert.ok(row, `Missing index row for ${url}`);
+  for (const [key, value] of Object.entries(expected)) assert.equal(row[key], value);
 }
 
 function mulberry32(seedValue) {

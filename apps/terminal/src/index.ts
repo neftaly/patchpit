@@ -20,4 +20,4 @@ export {
 } from './terminal-state';
 export type { TerminalRuntimeOptions } from './terminal-bash';
 export type { PatchpitFilesystem } from './terminal-filesystem';
-export type { TerminalStateActions } from './terminal-state';
+export type { TerminalStateActions, TerminalStateMutation, TerminalStateWriter } from './terminal-state';

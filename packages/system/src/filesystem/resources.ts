@@ -7,11 +7,24 @@ import {
   PatchpitType,
   type FileDoc,
   type FilesystemIndexDoc,
+  type FilesystemIndexOwnership,
   type FilesystemIndexRow,
   type FilesystemResource,
   type FolderDoc,
   type FolderEntry,
 } from './types';
+
+export type FilesystemResourceHandle<T extends FilesystemResource = FilesystemResource> = Pick<
+  DocHandle<T>,
+  'doc' | 'url'
+>;
+
+export const runtimeMaintainedFilesystemIndexOwnership = {
+  canonicalState: 'linked-automerge-documents',
+  currentMaintainer: '@patchpit/system/filesystem',
+  indexLifecycle: 'runtime-maintained-materialized-index',
+  note: 'Runtime-maintained index over linked Automerge docs; rebuild from handles and do not treat rows as canonical state or public projection payload.',
+} as const satisfies FilesystemIndexOwnership;
 
 export function folderEntry(name: string, type: PatchpitType | string, entryUrl: string): FolderEntry {
   return { name, type, url: entryUrl };
@@ -57,7 +70,21 @@ export function createPatchpitFileDoc(name: string, content: string): FileDoc {
   };
 }
 
-export function filesystemIndexRowForResource(url: string, doc: FilesystemResource): FilesystemIndexRow {
+export function createFilesystemIndexDoc(
+  rootUrl: string,
+  handles: Iterable<FilesystemResourceHandle>,
+): FilesystemIndexDoc {
+  return {
+    '@patchpit': patchpitDocMetadata(PatchpitType.FilesystemIndex),
+    filesystemIndex: {
+      rootUrl,
+      documents: filesystemIndexRowsForResources(handles),
+    },
+    ownership: { ...runtimeMaintainedFilesystemIndexOwnership },
+  };
+}
+
+function filesystemIndexRowForResource(url: string, doc: FilesystemResource): FilesystemIndexRow {
   const type = doc['@patchpit'].type;
   if ('docs' in doc) {
     return cloneFilesystemIndexRow({
@@ -76,25 +103,57 @@ export function filesystemIndexRowForResource(url: string, doc: FilesystemResour
   });
 }
 
-export function filesystemResourceFromHandle<T extends FilesystemResource>(
-  handle: DocHandle<T>,
-): FilesystemResource {
-  return handle.doc() as unknown as FilesystemResource;
+function filesystemResourceFromHandle<T extends FilesystemResource>(
+  handle: FilesystemResourceHandle<T>,
+): T {
+  return handle.doc();
+}
+
+function filesystemIndexRowsForResources(
+  handles: Iterable<FilesystemResourceHandle>,
+): FilesystemIndexRow[] {
+  return Array.from(handles, (handle) => (
+    filesystemIndexRowForResource(handle.url, filesystemResourceFromHandle(handle))
+  ));
 }
 
 export function syncFilesystemIndexResource<T extends FilesystemResource>(
   indexHandle: DocHandle<FilesystemIndexDoc>,
   handle: DocHandle<T>,
 ): void {
+  syncFilesystemIndexResources(indexHandle, [handle]);
+}
+
+export function syncFilesystemIndexResources(
+  indexHandle: DocHandle<FilesystemIndexDoc>,
+  handles: Iterable<FilesystemResourceHandle>,
+): void {
+  const rows = filesystemIndexRowsForResources(handles);
+  if (rows.length === 0) return;
+
   indexHandle.change((doc) => {
-    upsertFilesystemIndexRow(
-      doc.filesystemIndex.documents,
-      filesystemIndexRowForResource(handle.url, filesystemResourceFromHandle(handle)),
-    );
+    for (const row of rows) upsertFilesystemIndexRow(doc.filesystemIndex.documents, row);
   });
 }
 
-export function upsertFilesystemIndexRow(
+export function removeFilesystemIndexResources(
+  indexHandle: DocHandle<FilesystemIndexDoc>,
+  urls: Iterable<string>,
+  options: {
+    readonly syncHandles?: Iterable<FilesystemResourceHandle>;
+  } = {},
+): void {
+  const removeUrls = [...urls];
+  const upsertRows = filesystemIndexRowsForResources(options.syncHandles ?? []);
+  if (removeUrls.length === 0 && upsertRows.length === 0) return;
+
+  indexHandle.change((doc) => {
+    removeFilesystemIndexRows(doc.filesystemIndex.documents, removeUrls);
+    for (const row of upsertRows) upsertFilesystemIndexRow(doc.filesystemIndex.documents, row);
+  });
+}
+
+function upsertFilesystemIndexRow(
   rows: FilesystemIndexRow[],
   row: FilesystemIndexRow,
 ): void {
@@ -104,11 +163,7 @@ export function upsertFilesystemIndexRow(
   else rows[index] = nextRow;
 }
 
-export function removeFilesystemIndexRow(rows: FilesystemIndexRow[], url: string): void {
-  removeFilesystemIndexRows(rows, [url]);
-}
-
-export function removeFilesystemIndexRows(rows: FilesystemIndexRow[], urls: Iterable<string>): void {
+function removeFilesystemIndexRows(rows: FilesystemIndexRow[], urls: Iterable<string>): void {
   const urlSet = new Set(urls);
   if (urlSet.size === 0) return;
 
@@ -118,7 +173,7 @@ export function removeFilesystemIndexRows(rows: FilesystemIndexRow[], urls: Iter
   }
 }
 
-export function cloneFilesystemIndexRow(row: FilesystemIndexRow): FilesystemIndexRow {
+function cloneFilesystemIndexRow(row: FilesystemIndexRow): FilesystemIndexRow {
   return {
     ...(row.content === undefined ? {} : { content: row.content }),
     ...(row.entries === undefined ? {} : { entries: cloneJsonValue(row.entries) }),
@@ -146,13 +201,13 @@ export function mimeTypeFromFileName(name: string): string {
 function cloneJsonValue(value: JsonValue): JsonValue {
   if (Array.isArray(value)) return value.map(cloneJsonValue);
   if (isJsonRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [key, cloneJsonValue(nestedValue as JsonValue)]),
-    ) as JsonValue;
+    const clone: Record<string, JsonValue> = {};
+    for (const [key, nestedValue] of Object.entries(value)) clone[key] = cloneJsonValue(nestedValue);
+    return clone;
   }
   return value;
 }
 
-function isJsonRecord(value: JsonValue): value is Record<string, JsonValue> {
-  return typeof value === 'object' && value !== null;
+function isJsonRecord(value: JsonValue): value is Readonly<Record<string, JsonValue>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

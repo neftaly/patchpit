@@ -16,7 +16,9 @@ import {
   PatchpitType,
   createSeedFilesystem,
   createTerminalStateResource,
+  filePickerIntentSchema,
   filePickerStateSchema,
+  filesystemIndexSchema,
   patchpitDocSchemaRef,
   patchpitSystemSchemaCatalog,
   patchpitSystemSchemaLocation,
@@ -190,6 +192,17 @@ void test('system schema catalog refs carry canonical hashes and source location
     assert.equal(ref.hash, await relationSchemaHash(schema));
     assert.equal(ref.url, patchpitSystemSchemaLocation(schema.schemaId));
   }
+});
+
+void test('filesystem index schema exposes only projected document rows', () => {
+  assert.deepEqual(Object.keys(filesystemIndexSchema.relations), ['documents']);
+});
+
+void test('file picker intent schema uses selectedUrls for precomputed selections', () => {
+  const fields = filePickerIntentSchema.relations.requests.fields;
+
+  assert.equal('selectedUrls' in fields, true);
+  assert.equal('range' in fields, false);
 });
 
 void test('seeded and dynamically created system docs carry schema refs', () => {

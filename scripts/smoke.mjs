@@ -6,13 +6,16 @@ import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 
+const smokeBasePath = smokeBasePathFromArgs(process.argv.slice(2));
 const distIndexHtml = await readFile('dist/index.html', 'utf8');
 if (!distIndexHtml.includes('<div id="root"></div>')) throw new Error('dist/index.html is missing the root mount');
-if (!distIndexHtml.includes('/assets/index-')) throw new Error('dist/index.html is missing the root app bundle');
+if (!distIndexHtml.includes(`${smokeBasePath}assets/index-`)) {
+  throw new Error(`dist/index.html is missing the root app bundle for base ${smokeBasePath}`);
+}
 
 async function smokeTerminalLauncher() {
   const distRoot = resolve('dist');
-  const staticServer = await startStaticServer(distRoot);
+  const staticServer = await startStaticServer(distRoot, smokeBasePath);
   const userDataDir = await mkdtemp(join(tmpdir(), 'patchpit-smoke-'));
   const browser = await startBrowser(userDataDir);
 
@@ -31,7 +34,7 @@ async function smokeTerminalLauncher() {
       await pageCdp.send('Runtime.enable');
 
       const load = pageCdp.waitForEvent('Page.loadEventFired', 10_000);
-      await pageCdp.send('Page.navigate', { url: `${staticServer.origin}/` });
+      await pageCdp.send('Page.navigate', { url: `${staticServer.origin}${smokeBasePath}` });
       await load;
 
       const ready = await waitForBrowserState(pageCdp, launcherReadyExpression, 10_000);
@@ -134,11 +137,15 @@ const terminalVisibleExpression = `
 })()
 `;
 
-async function startStaticServer(root) {
+async function startStaticServer(root, basePath) {
   const server = createServer(async (request, response) => {
     try {
       const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1');
-      const pathname = requestUrl.pathname.endsWith('/') ? `${requestUrl.pathname}index.html` : requestUrl.pathname;
+      const pathname = staticPathname(requestUrl.pathname, basePath);
+      if (pathname === undefined) {
+        response.writeHead(404).end('Not found');
+        return;
+      }
       const filePath = resolve(root, `.${decodeURIComponent(pathname)}`);
       if (filePath !== root && !filePath.startsWith(`${root}${sep}`)) {
         response.writeHead(403).end('Forbidden');
@@ -175,6 +182,17 @@ async function startStaticServer(root) {
     }),
     origin: `http://127.0.0.1:${address.port}`,
   };
+}
+
+function staticPathname(requestPathname, basePath) {
+  let pathname = requestPathname;
+  if (basePath !== '/') {
+    const basePrefix = basePath.slice(0, -1);
+    if (pathname === basePrefix) pathname = basePath;
+    if (!pathname.startsWith(basePath)) return undefined;
+    pathname = pathname.slice(basePrefix.length);
+  }
+  return pathname.endsWith('/') ? `${pathname}index.html` : pathname;
 }
 
 async function startBrowser(userDataDir) {
@@ -371,6 +389,20 @@ function truncate(value, maxLength) {
 
 function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
+
+function smokeBasePathFromArgs(args) {
+  const baseArg = args.find((arg) => arg.startsWith('--base='));
+  const rawBasePath = baseArg === undefined
+    ? (process.env.PATCHPIT_SMOKE_BASE_PATH ?? '/')
+    : baseArg.slice('--base='.length);
+  return normalizeBasePath(rawBasePath);
+}
+
+function normalizeBasePath(rawBasePath) {
+  if (rawBasePath === '' || rawBasePath === '/') return '/';
+  const withLeadingSlash = rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`;
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
 }
 
 async function fetchJson(url) {

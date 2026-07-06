@@ -14,6 +14,7 @@ import {
   Terminal,
 } from './index';
 import { createPatchpitFilesystem } from './filesystem';
+import { createTerminalStateHandleWriter } from './patchpit-app-runtime';
 
 function App() {
   const [seed] = useState(createSeedFilesystem);
@@ -29,7 +30,11 @@ function App() {
     repo: seed.repo,
     rootUrl: seed.rootUrl,
   }), [seed]);
-  const terminalActions = useMemo(() => createTerminalStateActions(terminalStateHandle), [terminalStateHandle]);
+  const terminalStateWriter = useMemo(
+    () => createTerminalStateHandleWriter(terminalStateHandle),
+    [terminalStateHandle],
+  );
+  const terminalActions = useMemo(() => createTerminalStateActions(terminalStateWriter), [terminalStateWriter]);
 
   return (
     <main className="standalone-app" style={themeStyle(theme)}>

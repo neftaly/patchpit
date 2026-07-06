@@ -8,7 +8,6 @@ import {
   type SeedFilesystem,
 } from '@patchpit/system';
 import {
-  automergeHeadSetForHandle,
   filePickerSelectUrlIntent,
   filePickerToggleFolderIntent,
   runtimeIntentRequestRow,
@@ -23,6 +22,7 @@ import {
   isStringArray,
   rejected,
 } from './bootstrap-intent-result';
+import { automergeHeadSetForHandle } from './automerge-heads';
 
 export type FilePickerIntentName =
   | typeof filePickerSelectUrlIntent
@@ -69,12 +69,15 @@ function filePickerIntentRequest(
 ): FilePickerIntentRow | RuntimeError {
   const row = runtimeIntentRequestRow<FilePickerIntentRow>(request, filePickerIntentBoundary);
   if (isRuntimeError(row)) return row;
-  if (row.range !== undefined && !isStringArray(row.range)) {
-    return badRequest('File picker request range must be an array of strings.');
+  if (row.selectedUrls !== undefined && !isStringArray(row.selectedUrls)) {
+    return badRequest('File picker request selectedUrls must be an array of strings.');
+  }
+  if (row.selectedUrls !== undefined && row.toggle !== undefined) {
+    return badRequest('File picker request selectedUrls and toggle are mutually exclusive.');
   }
   if (
     intent === filePickerToggleFolderIntent
-    && (row.range !== undefined || row.toggle !== undefined)
+    && (row.selectedUrls !== undefined || row.toggle !== undefined)
   ) {
     return badRequest(`${filePickerToggleFolderIntent} only accepts id and url.`);
   }
@@ -82,15 +85,13 @@ function filePickerIntentRequest(
   return {
     id: row.id,
     url: row.url,
-    ...(row.range === undefined ? {} : { range: row.range }),
+    ...(row.selectedUrls === undefined ? {} : { selectedUrls: row.selectedUrls }),
     ...(row.toggle === undefined ? {} : { toggle: row.toggle }),
   };
 }
 
 function filePickerSelectionOptions(row: FilePickerIntentRow): FileSelectionOptions | undefined {
-  if (row.range === undefined && row.toggle === undefined) return undefined;
-  return {
-    ...(row.range === undefined ? {} : { range: row.range }),
-    ...(row.toggle === undefined ? {} : { toggle: row.toggle }),
-  };
+  if (row.selectedUrls === undefined && row.toggle === undefined) return undefined;
+  if (row.selectedUrls !== undefined) return { selectedUrls: row.selectedUrls };
+  return row.toggle ? { toggle: true } : undefined;
 }

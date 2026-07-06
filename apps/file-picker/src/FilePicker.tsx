@@ -1,6 +1,11 @@
 import type { CSSProperties, DragEvent, MouseEvent } from 'react';
 import type { FilePickerStateDoc, FilesystemNode } from '@patchpit/system';
-import { isDefaultFilePickerFolderOpen, type FileSelectionOptions } from './file-picker-model';
+import {
+  filePickerSelectionRange,
+  isFilePickerFolderOpen,
+  listVisibleFilePickerUrls,
+  type FileSelectionOptions,
+} from './file-picker-model';
 import { fileIcon, folderIcon, type FileIcons } from './file-icons';
 import './file-picker.css';
 
@@ -18,6 +23,10 @@ export type DraggedFilePickerUrl = {
   readonly url: string;
 };
 
+type FilePickerItemStyle = CSSProperties & {
+  readonly '--tree-depth-size': string;
+};
+
 export function FilePicker({
   actions,
   fileIcons,
@@ -29,7 +38,7 @@ export function FilePicker({
   readonly root: FilesystemNode;
   readonly state: FilePickerStateDoc;
 }) {
-  const visibleUrls = listVisibleUrls(root, state.openFolders, state.rootUrl);
+  const visibleUrls = listVisibleFilePickerUrls(root, state.openFolders, state.rootUrl);
   return (
     <nav className="tree-pane" aria-label="project explorer">
       <ul className="tree" role="tree" aria-label="project files">
@@ -61,7 +70,9 @@ function TreeItem({
   readonly state: FilePickerStateDoc;
   readonly visibleUrls: readonly string[];
 }) {
-  const isOpen = node.kind === 'folder' ? isFolderOpen(state.openFolders, node.url, state.rootUrl) : false;
+  const isOpen = node.kind === 'folder'
+    ? isFilePickerFolderOpen(state.openFolders, node.url, state.rootUrl)
+    : false;
   const isSelected = state.selectedUrls.includes(node.url);
   const isActive = state.activeUrl === node.url;
   const icon = node.kind === 'folder' ? folderIcon(isOpen) : fileIcon(icons, node.mediaType);
@@ -79,7 +90,7 @@ function TreeItem({
         className="tree-item"
         draggable
         onClick={(event) => {
-          selectUrlFromPointer(event, node.url, visibleUrls, actions.selectUrl);
+          selectUrlFromPointer(event, state.activeUrl, node.url, visibleUrls, actions.selectUrl);
           if (!event.metaKey && !event.ctrlKey && !event.shiftKey) {
             actions.previewUrl(node.url, displayName);
             if (node.kind === 'folder') actions.toggleFolder(node.url);
@@ -121,25 +132,9 @@ function beginFileDrag(event: DragEvent, draggedFile: DraggedFilePickerUrl): voi
   event.dataTransfer.setData(filePickerDragType, JSON.stringify(draggedFile));
 }
 
-function listVisibleUrls(
-  node: FilesystemNode,
-  openFolders: Readonly<Record<string, boolean>>,
-  rootUrl: string,
-): readonly string[] {
-  if (node.kind === 'file' || !isFolderOpen(openFolders, node.url, rootUrl)) return [node.url];
-  return [node.url, ...node.entries.flatMap((entry) => listVisibleUrls(entry, openFolders, rootUrl))];
-}
-
-function isFolderOpen(
-  openFolders: Readonly<Record<string, boolean>>,
-  url: string,
-  rootUrl: string,
-): boolean {
-  return openFolders[url] ?? isDefaultFilePickerFolderOpen(rootUrl, url);
-}
-
 function selectUrlFromPointer(
   event: MouseEvent,
+  selectionAnchorUrl: string | undefined,
   url: string,
   visibleUrls: readonly string[],
   selectUrl: FilePickerActions['selectUrl'],
@@ -147,13 +142,13 @@ function selectUrlFromPointer(
   selectUrl(
     url,
     event.shiftKey
-      ? { range: visibleUrls }
+      ? { selectedUrls: filePickerSelectionRange(selectionAnchorUrl, url, visibleUrls) }
       : event.metaKey || event.ctrlKey
         ? { toggle: true }
         : undefined,
   );
 }
 
-function depthStyle(depth: number): CSSProperties {
-  return { '--tree-depth-size': `${depth}rem` } as CSSProperties;
+function depthStyle(depth: number): FilePickerItemStyle {
+  return { '--tree-depth-size': `${depth}rem` };
 }

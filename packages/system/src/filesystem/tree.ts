@@ -91,7 +91,18 @@ function mapIndexRowsByUrl(indexRows: readonly FilesystemIndexRow[]) {
 }
 
 function folderEntriesFromIndexField(input: unknown): readonly FolderEntry[] {
-  return Array.isArray(input) ? input as readonly FolderEntry[] : [];
+  return Array.isArray(input) && input.every(isFolderEntry) ? input : [];
+}
+
+function isFolderEntry(value: unknown): value is FolderEntry {
+  return isRecord(value)
+    && typeof value.name === 'string'
+    && typeof value.type === 'string'
+    && typeof value.url === 'string';
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isExternalUrl(url: string): boolean {

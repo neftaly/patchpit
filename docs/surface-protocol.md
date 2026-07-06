@@ -1,9 +1,9 @@
 # Patchpit Surface Protocol
 
-Patchpit is a small shell for Automerge-backed applications. Durable data lives
-as named documents in a filesystem-like namespace. Running apps are represented
-by contexts. The window manager arranges those contexts into surfaces, tabs, and
-split layouts.
+Patchpit is a small runtime and compositor for Automerge-backed applications.
+Durable data lives as named documents in a filesystem-like namespace. Running
+apps are represented by sessions, currently named contexts in the codebase. The
+window manager arranges those sessions into surfaces, tabs, and split layouts.
 
 This document describes the target protocol shape. External systems informed the
 notes at the end, but the model here is Patchpit's own runtime contract.
@@ -17,12 +17,16 @@ Patchpit currently seeds three durable roots and reserves one live-service root:
 - `/system` contains shell-owned persistent state
 - `/srv` is reserved for future live mountable services
 
-The bootloader creates the initial filesystem, app manifests, shell state docs,
-the file picker state doc, and the window-manager state doc. Managed app state
-docs such as terminal sessions are created by launch intents and removed when
-their owning context closes. Apps are opened through intents after boot: file
-picker open/preview and file drag/drop requests submit route intents, and the
-runtime commits the resulting viewer context effects to the window-manager doc.
+The bootloader creates only the initial filesystem, the minimal runtime state
+needed to boot, and the compositor/window-manager state needed to display
+surfaces. First-party apps such as Settings, Launcher, Files, Viewer, and
+Terminal are installed through the same installer path as other apps. A first-run
+script may automate those installs, but it must call the normal installer rather
+than seed a second app registry.
+
+Apps are opened through one runtime admission path: route, launch, preview, and
+activation requests resolve an installed manifest, create or reuse a session,
+and commit the resulting compositor effects to the window-manager document.
 
 The window manager owns:
 
@@ -35,7 +39,7 @@ The window manager owns:
 Apps own:
 
 - their manifest docs
-- their app instance state docs
+- their durable app state docs
 - interpretation of routed intents
 - titles and metadata they choose to publish
 
@@ -54,7 +58,7 @@ for reads, views, and writes.
 
 Within `/system`:
 
-- `/system/apps` contains running app instance state docs
+- `/system/apps` contains durable app state docs for installed app sessions
 - `/system/config` contains shell configuration docs
 - `/system/runtime` contains inspectable runtime and worker state docs
 - `/system/themes` contains theme docs
@@ -108,12 +112,10 @@ language as file icon rules: exact matches such as `text/markdown`, wildcards
 such as `image/*`, and a final fallback such as `*/*`.
 
 `SurfaceSpec.state` declares the app-owned persistent state document type that a
-context-less `app.launch` may create. It does not give the app placement,
-focus, or tab authority. A context-less launch is admitted only when the runtime
-has a handler for the app, surface role, and state type. Each context-less
-`open-context` launch creates a fresh app instance state doc. Toggle launches
-must provide an explicit context around an existing state doc. Apps such as the
-file picker use that explicit-context path.
+stateful launch may create. It does not give the app placement, focus, or tab
+authority. The target model is generic runtime-owned state creation from the
+manifest's declared state type and schema, or an app-scoped init action. V0 may
+keep compatibility handlers while that generic path lands.
 
 ## Intents
 
@@ -288,14 +290,14 @@ needed.
 The first useful implementation should stay small:
 
 1. App manifests live under `/apps`.
-2. File picker, viewer, and terminal each run as contexts.
-3. File picker state, runtime state, themes, and window-manager state live as
-   boot-seeded Automerge docs under `/system`; app instance state docs are
-   created under `/system/apps` on launch and removed when their owning context
-   closes.
-4. The window-manager doc owns surfaces, tabs, focus, and split layout.
-5. A router creates viewer contexts from route intents; file picker UI submits
-   open/preview intents instead of constructing viewer contexts directly.
+2. Settings, Launcher, Files, Viewer, Terminal, and State Browser are apps.
+3. The window-manager doc owns surfaces, tabs, focus, reserved slots, and split
+   layout.
+4. Route and launch requests share one admission path that resolves manifests
+   and creates or reuses sessions.
+5. Runtime state under `/system/runtime` is diagnostic. Active app/session state
+   is derived from workspace sessions and app-host runner diagnostics, not from a
+   second app-instance registry.
 6. Tarstate provides projections and write lenses over the durable docs.
 7. `/srv` remains reserved for future live services, not persisted app state.
 

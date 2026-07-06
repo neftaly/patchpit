@@ -14,8 +14,8 @@ projections.
 - Keep Automerge docs as canonical durable state.
 - Use Tarstate for named projections, shared IVM, indexes, and write lenses.
 - Let tabs, sandboxed apps, agents, and device adapters share one runtime.
-- Expose projections, intents, and capabilities instead of raw `Repo` or
-  `DocHandle` access.
+- Expose a small app/client API for views, actions, and ports instead of raw
+  `Repo` or `DocHandle` access.
 - Make Tarstate schemas the compatibility and versioning layer for projection
   and intent payloads.
 - Attach portable schema descriptors to snapshots, durable documents, and
@@ -67,6 +67,52 @@ projections.
 - No frame path may depend on an Automerge merge, Tarstate projection update,
   policy classification, durable cache write, or worker round trip.
 
+V0 should expose less than the full target protocol:
+
+- live projections only; historical heads and analysis branches are deferred;
+- snapshot/reset projection delivery only; relation patch streaming is deferred
+  until Tarstate has a stable patch vocabulary;
+- committed, rejected, quarantined, and conflict intent results only; queued
+  ticket delivery is deferred;
+- one workspace projection containing state, contexts, and surfaces; separate
+  workspace viewports and presence are deferred;
+- the terminal filesystem capability as the first port precedent; broad
+  capability catalogs and realtime queues are deferred;
+- no app-supplied full `WindowContext` or container payloads in launcher-facing
+  actions.
+
+## Smaller Public Model
+
+Runtime internals can talk about projections, intents, and capabilities because
+those names describe implementation ownership. App and UI code should not need
+that vocabulary for normal work.
+
+The target public shape is:
+
+```ts
+type PatchpitClient = {
+  view(req: ViewRequest, listener: (event: ViewEvent) => void): Subscription;
+  act(req: ActionRequest): Promise<ActionResult>;
+  open(req: PortRequest): Promise<AppPort>;
+};
+```
+
+Mapping:
+
+- `view` is a scoped read model. The runtime may implement it with Tarstate
+  projections, indexes, historical bases, redaction, or cached snapshots.
+- `act` is a scoped semantic request. The runtime may implement it with intent
+  validation, policy admission, Tarstate write lenses, and Automerge commits.
+- `open` is a scoped long-lived authority. The runtime may implement it with
+  capability grants, ports, fds, streams, or host adapters.
+
+This is a naming and surface-area constraint, not a weakening of the boundary.
+Apps still do not receive raw repo, handles, documents, DOM nodes, host objects,
+or caller-controlled scope. The existing V0 `subscribeProjection`,
+`submitIntent`, and `openCapability` names can remain as internal/runtime
+building blocks or compatibility aliases, but new app-facing SDKs should prefer
+`view`, `act`, and `open`.
+
 ## Vocabulary
 
 Use Patchpit's existing surface vocabulary where possible.
@@ -87,9 +133,10 @@ Input is not intent. A mouse event, gaze ray, controller pose, agent message, or
 BCI signal is local input. A routed action such as `route.open`,
 `window.focus`, or `filesystem.move` is an intent.
 
-## Public Operations
+## Runtime Operations
 
-The public runtime API should stay small:
+The low-level runtime transport should stay small. V0 uses explicit operation
+names that match internal ownership:
 
 ```ts
 type RuntimeClient = {
@@ -104,15 +151,19 @@ type RuntimeClient = {
 };
 ```
 
-These names are intentionally not generic RPC terms.
+These names are intentionally not generic RPC terms, but they are also not the
+preferred app SDK vocabulary.
 
 - `subscribeProjection` says the read side is Tarstate-derived.
 - `submitIntent` matches Patchpit's surface protocol and shell routing model.
 - `openCapability` says the returned port carries authority, not just messages.
 
-Avoid public APIs named `getRepo`, `getDocHandle`, `changeDoc`, `command`, or
-`view`. Those names either leak implementation authority or conflict with
-Patchpit's `Viewport` concept.
+App-facing SDKs should map these to the smaller `view`, `act`, and `open`
+shape described above.
+
+Avoid public APIs named `getRepo`, `getDocHandle`, `changeDoc`, or `command`.
+Those names leak implementation authority or imply generic RPC instead of
+scoped app services.
 
 The public protocol should not expose whether the runtime is local, worker
 backed, or hosted elsewhere. The target deployment path is:
@@ -387,9 +438,10 @@ docs, and an intent may read or write more than one doc.
 - `heads` reads a fixed historical or otherwise explicit set of Automerge heads.
 - `analysisBranch` reads a runtime-local temporary branch.
 
-Projection basis affects reads only. Durable writes still go through
-`submitIntent` and commit to normal live Automerge docs after policy,
-precondition, and conflict checks.
+V0 should accept only `live`. Historical heads and analysis branches remain
+target protocol concepts, not first-slice API surface. Projection basis affects
+reads only. Durable writes still go through `submitIntent` and commit to normal
+live Automerge docs after policy, precondition, and conflict checks.
 
 V0 requests exactly one `schemaId`. A future negotiation layer may add an
 ordered `accept` list, but V0 should reject unsupported schemas explicitly
@@ -481,18 +533,22 @@ Rules:
   advertised schema. If it cannot, return a different redacted schema or reject.
 - Projection caches are disposable. Automerge remains canonical.
 
+V0 clients should implement snapshot/reset first. Relation patches are allowed
+by the target protocol, but they are not required until Tarstate's patch
+operation vocabulary is stable and the runtime has real patch delivery.
+
 Initial projections:
 
 ```txt
 filesystem.tree
 appManifests.handlers
-workspace.surfaces
-workspace.contexts
 workspace.layout
-workspace.viewports
-policy.effectiveGrants
-presence.clients
 ```
+
+`workspace.layout` carries the V0 workspace relation set: state, contexts, and
+surfaces. Split `workspace.surfaces`, `workspace.contexts`,
+`workspace.viewports`, `policy.effectiveGrants`, and `presence.clients` only
+after multi-client or policy UX needs them.
 
 `filesystem.tree` with `schemaId: patchpit.filesystem.tree@1` returns one
 relation:
@@ -619,6 +675,10 @@ ticket result should be terminal: `committed`, `rejected`, `conflict`, or
 `quarantined`. V0 does not guarantee durable ticket history across reconnects;
 clients that need retry safety should use `idempotencyKey`.
 
+Queued tickets are target protocol behavior, not required V0 surface. The first
+runtime slice should return terminal results directly unless a concrete async
+operation needs tickets.
+
 If policy transforms a durable intent before commit, the committed result must
 report that through `policy.transformed` or `policy.obligations`. Policy must not
 silently transform a durable write without surfacing that fact to the caller.
@@ -648,11 +708,18 @@ window.closeContext
 window.moveTab
 window.resizeSplit
 asset.commitImport
-asset.classify
-asset.approveShare
 ```
 
-`route.open` is the public request to open or reuse a durable pinned context.
+Classification, sharing, policy-grant editing, historical analysis, and broad
+asset workflows are later actions. Do not add public V0 intent names for them
+until the owning product flow exists.
+
+`route.open` and `app.launch` should converge on one runtime admission path:
+resolve an installed app manifest, validate policy, create or reuse one
+session/context, then ask the compositor/window-manager to place it. Route,
+launch, preview, reveal, and activation are request shapes over the same
+operation; they should not grow separate context-creation machinery.
+
 Lower-level context creation is a runtime/window-manager effect, not a separate
 public intent in V0.
 
@@ -665,38 +732,33 @@ input.schemaId: patchpit.intent.appLaunch@1
 relation requests:
   id: string
   app: string
-  behavior: 'open-context' | 'toggle-surface'
-  context?: WindowContext
-  role: 'document-set' | 'workspace-view'
+  action?: 'open' | 'toggle' | 'focus'
+  targetUrl?: string
+  surfaceRole?: 'document-set' | 'workspace-view' | 'reserved'
 ```
 
-If `context` is absent, `behavior` must be `open-context`. The runtime creates a
-fresh app instance state doc under `/system/apps` using the app manifest's
-declared state type and registered app instance state handler. Reuse and toggles
-are not part of context-less launch; callers that want reuse should launch,
-focus, or route to an existing context or document explicitly. Tarstate projects
-and write lenses sit over the app state doc shape; state docs are not flattened
-just to make launch admission convenient.
+Launcher-facing code should not send `WindowContext`, `AppContainer`, mounted
+roots, state document handles, or placement targets. The runtime derives those
+from the installed manifest, existing workspace state, route target, and policy.
+If the app needs durable state, the runtime creates an app state document under
+`/system/apps` only when the manifest declares one and the launch shape needs it.
+Tarstate projections and write lenses sit over the app state doc shape; state
+docs are not flattened just to make launch admission convenient.
 
-If `context` is present, the runtime validates that the context app matches the
-request, the backing URL is still available, and any existing context id still
-targets the same app and URL. If `context` is absent, the app manifest's
-matching surface must declare a persisted `state` type and the runtime must have
-an app instance state handler for it. The current slice registers terminal state
-as the first app instance state handler: terminal launch omits `context`, uses
-`behavior: 'open-context'`, targets `role: 'document-set'`, and creates a normal
-terminal state resource registered under `/system/apps`. The resource is removed
-after its owning context closes.
+V0 may keep narrow compatibility handlers for apps such as Terminal, but the
+target is generic runtime-owned state creation from manifest-declared state
+schemas or an app-scoped init action, not a trusted shell registry of per-app
+state factories.
 
 `app.launch` uses explicit failure states so callers do not infer placement or
 state ownership from a generic rejection:
 
 - `schema_mismatch`: request used a schema other than
   `patchpit.intent.appLaunch@1`.
-- `bad_request`: the relation set is malformed, context-less launch uses
-  `toggle-surface`, or an explicit context does not match the requested app.
+- `bad_request`: the relation set is malformed or asks for a launch action the
+  runtime cannot derive safely.
 - `missing_handler`: the app is not installed, has no matching surface state, or
-  no app instance state handler exists for a context-less launch.
+  the requested launch shape cannot be satisfied from its manifest.
 - `policy_denied`: runtime policy rejected launch before mutation.
 - `stale_target`: `baseHeads` or an explicit context target no longer matches
   the current window-manager/filesystem state.
@@ -1019,8 +1081,8 @@ Define latency by path, not app domain.
   be lossy, replace-latest, and non-durable.
 - Durable path: Automerge mutations, sync, persistence, history, and semantic
   moves. It should be correct and convergent, not frame-critical.
-- Projection path: Tarstate IVM updates and pushes relation patches
-  asynchronously.
+- Projection path: Tarstate IVM updates and pushes snapshots, resets, or later
+  relation patches asynchronously.
 
 The worker split helps when Automerge merges, sync, persistence, indexing,
 projection maintenance, policy evaluation, and classification leave the frame
@@ -1038,7 +1100,7 @@ semantic action -> submitIntent -> durable runtime
 `subscribeProjection` is not a frame dependency. Projections update UI and
 durable read models asynchronously. Clients may keep local frame state derived
 from the latest projection snapshot, but they must not block a frame while
-waiting for projection patches.
+waiting for projection updates.
 
 `submitIntent` is not the low-latency input path. It is the durable semantic
 action path. A game, XR surface, agent bridge, or BCI adapter can provide local
@@ -1060,19 +1122,16 @@ Keep deterministic tests for:
 - initial runtime connect,
 - first projection snapshot,
 - projection event delivery,
-- historical projection by explicit Automerge heads,
 - one committed intent,
-- one queued intent resolving by ticket event,
 - one rejected policy decision,
 - one capability open and revoke,
-- one narrowed capability grant,
 - one Service Worker cache version transition.
 
 Use fuzzing/property tests for:
 
 - protocol envelope parsing and unknown-field rejection,
-- projection snapshot plus patch application equals reset snapshot,
-- relation patch ordering and idempotency,
+- projection snapshot/reset coherence,
+- relation patch ordering and idempotency once patch streaming exists,
 - schema negotiation and `schema_mismatch` diagnostics,
 - intent idempotency keys and retry behavior,
 - multi-document Automerge head-set accounting,
@@ -1150,10 +1209,10 @@ Next work:
 
 - Move the bootstrap runtime implementation into the SharedWorker so tabs share
   the same Automerge repo and Tarstate IVM.
-- Move window-manager desktop state behind
-  `subscribeProjection('workspace.surfaces')`,
-  `subscribeProjection('workspace.contexts')`, and
-  `subscribeProjection('workspace.layout')`.
+- Keep window-manager desktop state behind one V0 workspace projection,
+  `subscribeProjection('workspace.layout')`, with state, contexts, and surfaces.
+- Add `appManifests.handlers` as the installed-app projection used by Launcher,
+  Settings, and the app host.
 - Add runtime boundary metrics.
 
 Delete or quarantine the in-process scaffold once the worker path owns the

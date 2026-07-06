@@ -157,6 +157,28 @@ export function contextDropTarget(target: Json | undefined): ContextDropTarget |
   return undefined;
 }
 
+export function contextDropTargetJson(target: ContextDropTarget): Json {
+  if (target.area === 'tabs') {
+    return {
+      area: target.area,
+      surfaceId: target.surfaceId,
+      ...(target.contextId === undefined ? {} : { contextId: target.contextId }),
+      ...(target.placement === undefined ? {} : { placement: target.placement }),
+    };
+  }
+
+  return {
+    area: target.area,
+    path: splitPathJson(target.path),
+    surfaceId: target.surfaceId,
+    zone: target.zone,
+  };
+}
+
+export function splitPathJson(path: SplitPath): readonly Json[] {
+  return path.map((side) => side);
+}
+
 export function isSplitPath(value: unknown): value is readonly ('first' | 'second')[] {
   return Array.isArray(value) && value.every((item) => item === 'first' || item === 'second');
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { relationRows } from '@tarstate/core/source';
 import {
   projectFilesystemTreeFromRows,
   type FilesystemNode,
@@ -8,26 +9,24 @@ import {
   filesystemTreeNodesRelation,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
-  relationRows,
   workspaceLayoutProjection,
+  workspaceProjectionFromRelationSet,
   workspaceProjectionSchemaId,
   type ProjectionEvent,
   type ProjectionSubscription,
   type RelationSet,
   type RuntimeClient,
+  type WorkspaceProjection,
+  type WorkspaceProjectionState,
 } from '@patchpit/system/runtime';
 import {
   runtimeProjectionFailureFromRuntimeError,
   runtimeProjectionFailureFromUnknownError,
   type RuntimeProjectionFailure,
 } from './runtime-projection-failure';
-import {
-  workspaceProjectionFromProjectionEvent,
-  type WorkspaceProjectionState,
-} from './workspace-projection';
 
 export type { RuntimeProjectionFailure } from './runtime-projection-failure';
-export type { WorkspaceProjection, WorkspaceProjectionState } from './workspace-projection';
+export type { WorkspaceProjection, WorkspaceProjectionState };
 
 export type FilesystemTreeProjectionState =
   | { readonly status: 'initializing' }
@@ -111,7 +110,7 @@ function filesystemFromProjectionEvent(
 }
 
 function filesystemFromRelationSet(relations: RelationSet, rootUrl: string): FilesystemTreeProjectionState {
-  const rows = relationRows(relations, filesystemTreeNodesRelation);
+  const rows = relationRows<unknown>(relations, filesystemTreeNodesRelation);
   const filesystem = projectFilesystemTreeFromRows(rows, rootUrl);
   if (filesystem.root !== null) return { status: 'ready', filesystem, root: filesystem.root };
 
@@ -123,4 +122,16 @@ function filesystemFromRelationSet(relations: RelationSet, rootUrl: string): Fil
       details: filesystem.diagnostics.map((diagnostic) => String(diagnostic)),
     },
   };
+}
+
+function workspaceProjectionFromProjectionEvent(event: ProjectionEvent): WorkspaceProjectionState {
+  if (event.type === 'error') {
+    return { status: 'failed', failure: runtimeProjectionFailureFromRuntimeError(event.error) };
+  }
+  if (event.type === 'patch') return { status: 'initializing' };
+  return workspaceProjectionFromRelationSet(
+    event.snapshot.relations,
+    event.snapshot.schemaHash,
+    event.snapshot.storageHeads,
+  );
 }

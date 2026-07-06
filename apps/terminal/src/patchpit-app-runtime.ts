@@ -32,7 +32,11 @@ import {
 import type { PatchpitFilesystem } from './terminal-filesystem';
 import {
   createTerminalStateActions,
+  replaceTerminalState,
+  terminalStateWithMutation,
+  type TerminalStateMutation,
   type TerminalStateActions,
+  type TerminalStateWriter,
 } from './terminal-state';
 import type { TerminalRuntimeOptions } from './terminal-bash';
 
@@ -147,9 +151,21 @@ export function terminalAppStateHandles(
   return runtimeState.appInstances.flatMap((entry) => {
     if (entry.app !== 'terminal' || entry.stateType !== PatchpitType.TerminalState) return [];
     const handle = seed.documentHandles[entry.stateUrl];
-    if (handle?.doc()['@patchpit'].type !== PatchpitType.TerminalState) return [];
-    return [handle as unknown as DocHandle<TerminalStateDoc>];
+    return isTerminalStateHandle(handle) ? [handle] : [];
   });
+}
+
+export function createTerminalStateHandleWriter(
+  handle: DocHandle<TerminalStateDoc>,
+): TerminalStateWriter {
+  return {
+    commit(mutation: TerminalStateMutation) {
+      const next = terminalStateWithMutation(handle.doc(), mutation);
+      handle.change((doc) => {
+        replaceTerminalState(doc, next);
+      });
+    },
+  };
 }
 
 export function terminalAppSessions({
@@ -164,7 +180,7 @@ export function terminalAppSessions({
   return Object.fromEntries(handles.map((handle) => [
     handle.url,
     {
-      actions: createTerminalStateActions(handle),
+      actions: createTerminalStateActions(createTerminalStateHandleWriter(handle)),
       runtime,
       state: states[handle.url] ?? handle.doc(),
     },
@@ -316,4 +332,12 @@ function terminalFilesystemGrantVerbs(
 
 function currentDirectoryName(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? '/';
+}
+
+type TerminalStateHandle = DocHandle<FilesystemResource> & DocHandle<TerminalStateDoc>;
+
+function isTerminalStateHandle(
+  handle: DocHandle<FilesystemResource> | undefined,
+): handle is TerminalStateHandle {
+  return handle?.doc()['@patchpit'].type === PatchpitType.TerminalState;
 }

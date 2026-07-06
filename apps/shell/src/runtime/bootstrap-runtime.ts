@@ -1,4 +1,5 @@
 import type { DocHandle } from '@automerge/automerge-repo';
+import { relationRowCounts, relationSetCounts } from '@tarstate/core/source';
 import {
   appLaunchIntentBoundary,
   ContainerMountKind,
@@ -18,9 +19,6 @@ import {
 } from '@patchpit/system';
 import {
   appLaunchIntent,
-  automergeHeadSetForHandle,
-  relationRowCounts,
-  relationSetCounts,
   runtimeError,
   runtimeIntentRequestRow,
   windowCloseContextIntent,
@@ -66,6 +64,7 @@ import {
   targetLaunchSurface,
 } from './bootstrap-window-topology';
 import type { AppInstanceStateHandler } from './app-instance-state';
+import { automergeHeadSetForHandle } from './automerge-heads';
 import { allowAllRuntimePolicy, type RuntimePolicy } from './policy';
 
 export type BootstrapRuntimeOptions = {
@@ -78,11 +77,32 @@ export type BootstrapRuntimeOptions = {
 
 export type BootstrapRuntimeClient = RuntimeClient & {
   readonly diagnostics: BootstrapRuntimeDiagnosticsStore;
+  readonly resources: BootstrapRuntimeResourceStore;
 };
 
 export type BootstrapRuntimeDiagnosticsStore = {
   getSnapshot(): BootstrapRuntimeDiagnostics;
   subscribe(listener: () => void): () => void;
+};
+
+export type BootstrapRuntimeResourceStore = {
+  readonly documentUrls: BootstrapRuntimeDocumentUrls;
+  readonly rootUrl: string;
+  getDocument<T = unknown>(url: string): T | undefined;
+  getStateDocumentsSnapshot(): Readonly<Record<string, unknown>>;
+  subscribeDocument(url: string, listener: () => void): () => void;
+  subscribeStateDocuments(listener: () => void): () => void;
+};
+
+export type BootstrapRuntimeDocumentUrls = {
+  readonly appearance: string;
+  readonly darkTheme: string;
+  readonly filePickerState: string;
+  readonly fileTypes: string;
+  readonly filesystemIndex: string;
+  readonly lightTheme: string;
+  readonly runtimeState: string;
+  readonly windowManager: string;
 };
 
 export type BootstrapRuntimeDiagnostics = {
@@ -166,12 +186,14 @@ export function createBootstrapRuntimeClient({
   workspaceId,
 }: BootstrapRuntimeOptions): BootstrapRuntimeClient {
   const diagnostics = createBootstrapRuntimeDiagnosticsStore();
+  const resources = createBootstrapRuntimeResourceStore(seed);
   const subscribeProjection = createBootstrapProjectionSubscriber({ diagnostics, seed, workspaceId });
   const appInstanceStateHandlersByType = appInstanceStateHandlerMap(appInstanceStateHandlers);
   const capabilityProvidersByName = capabilityProviderMap(capabilityProviders);
 
   return {
     diagnostics,
+    resources,
     subscribeProjection,
 
     async submitIntent(request) {
@@ -210,6 +232,126 @@ export function createBootstrapRuntimeClient({
       return openBootstrapCapability(request, capabilityProvidersByName);
     },
   };
+}
+
+function createBootstrapRuntimeResourceStore(seed: SeedFilesystem): BootstrapRuntimeResourceStore {
+  let stateDocumentsSnapshot = stateDocumentsSnapshotForSeed(seed);
+  const stateDocumentListeners = new Set<() => void>();
+  const stateDocumentSubscriptions = new Map<string, StateDocumentSubscription>();
+
+  const refreshStateDocumentsSnapshot = () => {
+    const next = stateDocumentsSnapshotForSeed(seed);
+    if (!sameDocumentSnapshot(stateDocumentsSnapshot, next)) stateDocumentsSnapshot = next;
+  };
+
+  const notifyStateDocuments = () => {
+    syncStateDocumentSubscriptions();
+    refreshStateDocumentsSnapshot();
+    for (const listener of stateDocumentListeners) listener();
+  };
+
+  const syncStateDocumentSubscriptions = () => {
+    const nextHandles = new Map<string, DocHandle<unknown>>(
+      inspectableStateDocumentHandles(seed).map((handle) => [handle.url, handle]),
+    );
+    for (const [url, subscription] of stateDocumentSubscriptions) {
+      if (nextHandles.get(url) === subscription.handle) continue;
+      subscription.unsubscribe();
+      stateDocumentSubscriptions.delete(url);
+    }
+    for (const [url, handle] of nextHandles) {
+      if (stateDocumentSubscriptions.has(url)) continue;
+      handle.on('change', notifyStateDocuments);
+      stateDocumentSubscriptions.set(url, {
+        handle,
+        unsubscribe: () => handle.off('change', notifyStateDocuments),
+      });
+    }
+  };
+
+  const clearStateDocumentSubscriptions = () => {
+    for (const subscription of stateDocumentSubscriptions.values()) subscription.unsubscribe();
+    stateDocumentSubscriptions.clear();
+  };
+
+  return {
+    documentUrls: {
+      appearance: seed.appearanceHandle.url,
+      darkTheme: seed.darkThemeHandle.url,
+      filePickerState: seed.filePickerStateHandle.url,
+      fileTypes: seed.fileTypesHandle.url,
+      filesystemIndex: seed.indexHandle.url,
+      lightTheme: seed.lightThemeHandle.url,
+      runtimeState: seed.runtimeStateHandle.url,
+      windowManager: seed.windowManagerHandle.url,
+    },
+    rootUrl: seed.rootUrl,
+
+    getDocument<T = unknown>(url: string) {
+      return documentHandleForUrl(seed, url)?.doc() as T | undefined;
+    },
+
+    getStateDocumentsSnapshot() {
+      refreshStateDocumentsSnapshot();
+      return stateDocumentsSnapshot;
+    },
+
+    subscribeDocument(url: string, listener) {
+      const handle = documentHandleForUrl(seed, url);
+      if (handle === undefined) return () => {};
+      handle.on('change', listener);
+      return () => handle.off('change', listener);
+    },
+
+    subscribeStateDocuments(listener) {
+      stateDocumentListeners.add(listener);
+      syncStateDocumentSubscriptions();
+      refreshStateDocumentsSnapshot();
+      return () => {
+        stateDocumentListeners.delete(listener);
+        if (stateDocumentListeners.size === 0) clearStateDocumentSubscriptions();
+      };
+    },
+  };
+}
+
+type StateDocumentSubscription = {
+  readonly handle: DocHandle<unknown>;
+  readonly unsubscribe: () => void;
+};
+
+function documentHandleForUrl(seed: SeedFilesystem, url: string): DocHandle<unknown> | undefined {
+  if (url === seed.indexHandle.url) return seed.indexHandle as DocHandle<unknown>;
+  return seed.documentHandles[url] as DocHandle<unknown> | undefined;
+}
+
+function stateDocumentsSnapshotForSeed(seed: SeedFilesystem): Readonly<Record<string, unknown>> {
+  return Object.fromEntries(inspectableStateDocumentHandles(seed).map((handle) => [handle.url, handle.doc()]));
+}
+
+function inspectableStateDocumentHandles(seed: SeedFilesystem): readonly DocHandle<unknown>[] {
+  return [
+    seed.indexHandle as DocHandle<unknown>,
+    ...Object.values(seed.documentHandles)
+      .filter(isInspectableStateDocumentHandle)
+      .map((handle) => handle as DocHandle<unknown>),
+  ];
+}
+
+function isInspectableStateDocumentHandle(handle: DocHandle<FilesystemResource>): boolean {
+  const doc = handle.doc() as { readonly '@patchpit'?: { readonly type?: unknown } };
+  const type = doc['@patchpit']?.type;
+  return type !== PatchpitType.File && type !== PatchpitType.Folder;
+}
+
+function sameDocumentSnapshot(
+  left: Readonly<Record<string, unknown>>,
+  right: Readonly<Record<string, unknown>>,
+): boolean {
+  const leftUrls = Object.keys(left);
+  const rightUrls = Object.keys(right);
+  return leftUrls.length === rightUrls.length
+    && leftUrls.every((url) => Object.hasOwn(right, url) && left[url] === right[url]);
 }
 
 function openBootstrapCapability(

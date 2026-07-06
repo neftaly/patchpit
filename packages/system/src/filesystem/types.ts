@@ -123,6 +123,7 @@ export type FilesystemIndexDoc = PatchpitDoc<PatchpitType.FilesystemIndex> & {
     rootUrl: string;
     documents: FilesystemIndexRow[];
   };
+  ownership: FilesystemIndexOwnership;
 };
 
 export type FilesystemIndexRow = {
@@ -132,6 +133,13 @@ export type FilesystemIndexRow = {
   title?: string;
   mimeType?: string;
   content?: string;
+};
+
+export type FilesystemIndexOwnership = {
+  canonicalState: 'linked-automerge-documents';
+  currentMaintainer: string;
+  indexLifecycle: 'runtime-maintained-materialized-index';
+  note: string;
 };
 
 export type FilePickerStateDoc = PatchpitDoc<PatchpitType.FilePickerState> & {
@@ -372,7 +380,6 @@ export type FilesystemResource =
 export type SeedFilesystem = {
   repo: Repo;
   rootUrl: string;
-  indexDoc: FilesystemIndexDoc;
   appearanceHandle: DocHandle<AppearanceDoc>;
   darkThemeHandle: DocHandle<ThemeDoc>;
   fileTypesHandle: DocHandle<FileTypesDoc>;

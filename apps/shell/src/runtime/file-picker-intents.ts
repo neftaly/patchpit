@@ -56,7 +56,7 @@ function filePickerIntentRow(input: FilePickerIntentInput): FilePickerIntentRow 
   return {
     id: `file-picker:${nextFilePickerRequestId++}`,
     url: input.url,
-    ...(options?.range === undefined ? {} : { range: options.range }),
+    ...(options?.selectedUrls === undefined ? {} : { selectedUrls: options.selectedUrls }),
     ...(options?.toggle === undefined ? {} : { toggle: options.toggle }),
   };
 }

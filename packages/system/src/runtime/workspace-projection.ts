@@ -1,25 +1,24 @@
+import { relationRows, relationSetFromRows } from '@tarstate/core/source';
 import {
-  type PatchpitSchemaHash,
+  ContainerMountKind,
+  RuntimeMountProvider,
   SurfaceRole,
   WindowManagerNodeKind,
   type WindowContext,
   type WindowLayoutNode,
+  type WindowManagerStateDoc,
   type WindowSurface,
-} from '@patchpit/system';
+} from '../filesystem/types';
+import type { PatchpitSchemaHash } from '../schema';
 import {
   workspaceContextsRelation,
-  relationRows,
   workspaceStateRelation,
   workspaceSurfacesRelation,
   type AutomergeHeadSet,
-  type ProjectionEvent,
   type RelationSet,
+  type WorkspaceProjectionRelations,
   type WorkspaceProjectionStateRow,
-} from '@patchpit/system/runtime';
-import {
-  runtimeProjectionFailureFromRuntimeError,
-  type RuntimeProjectionFailure,
-} from './runtime-projection-failure';
+} from './protocol';
 
 export type WorkspaceProjection = {
   readonly contexts: Readonly<Record<string, WindowContext>>;
@@ -30,27 +29,32 @@ export type WorkspaceProjection = {
   readonly surfaces: Readonly<Record<string, WindowSurface>>;
 };
 
+export type WorkspaceProjectionFailure = {
+  readonly title: string;
+  readonly message: string;
+  readonly details: readonly string[];
+};
+
 export type WorkspaceProjectionState =
   | { readonly status: 'initializing' }
   | {
       readonly status: 'ready';
       readonly workspace: WorkspaceProjection;
     }
-  | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
+  | { readonly status: 'failed'; readonly failure: WorkspaceProjectionFailure };
 
-export function workspaceProjectionFromProjectionEvent(event: ProjectionEvent): WorkspaceProjectionState {
-  if (event.type === 'error') {
-    return {
-      status: 'failed',
-      failure: runtimeProjectionFailureFromRuntimeError(event.error, 'Workspace projection unavailable'),
-    };
-  }
-  if (event.type === 'patch') return { status: 'initializing' };
-  return workspaceProjectionFromRelationSet(
-    event.snapshot.relations,
-    event.snapshot.schemaHash,
-    event.snapshot.storageHeads,
-  );
+export function workspaceProjectionRelationSet(state: WindowManagerStateDoc): RelationSet {
+  return relationSetFromRows(workspaceProjectionRelations(state));
+}
+
+export function workspaceProjectionRelations(
+  state: WindowManagerStateDoc,
+): WorkspaceProjectionRelations {
+  return {
+    [workspaceStateRelation]: [workspaceStateRow(state)],
+    [workspaceContextsRelation]: workspaceContextRows(state),
+    [workspaceSurfacesRelation]: workspaceSurfaceRows(state),
+  };
 }
 
 export function workspaceProjectionFromRelationSet(
@@ -59,9 +63,9 @@ export function workspaceProjectionFromRelationSet(
   storageHeads?: AutomergeHeadSet,
 ): WorkspaceProjectionState {
   const diagnostics: string[] = [];
-  const stateRows = relationRows(relations, workspaceStateRelation);
-  const contextRows = relationRows(relations, workspaceContextsRelation);
-  const surfaceRows = relationRows(relations, workspaceSurfacesRelation);
+  const stateRows = relationRows<unknown>(relations, workspaceStateRelation);
+  const contextRows = relationRows<unknown>(relations, workspaceContextsRelation);
+  const surfaceRows = relationRows<unknown>(relations, workspaceSurfacesRelation);
 
   if (stateRows.length !== 1) {
     diagnostics.push(`Expected exactly one workspace state row, found ${stateRows.length}.`);
@@ -109,6 +113,38 @@ export function workspaceProjectionFromRelationSet(
       surfaces,
     },
   };
+}
+
+function workspaceStateRow(state: WindowManagerStateDoc): WorkspaceProjectionStateRow {
+  return {
+    focus: state.focus,
+    id: 'window-manager',
+    layout: structuredClone(state.layout),
+  };
+}
+
+function workspaceContextRows(state: WindowManagerStateDoc): readonly WindowContext[] {
+  return Object.values(state.contexts)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((context) => ({
+      app: context.app,
+      container: structuredClone(context.container),
+      id: context.id,
+      ...(context.title === undefined ? {} : { title: context.title }),
+      url: context.url,
+    }));
+}
+
+function workspaceSurfaceRows(state: WindowManagerStateDoc): readonly WindowSurface[] {
+  return Object.values(state.surfaces)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((surface) => ({
+      ...(surface.activeContext === undefined ? {} : { activeContext: surface.activeContext }),
+      contexts: [...surface.contexts],
+      id: surface.id,
+      ...(surface.previewContext === undefined ? {} : { previewContext: surface.previewContext }),
+      role: surface.role,
+    }));
 }
 
 function workspaceProjectionInvariantDiagnostics(
@@ -232,7 +268,29 @@ function isWindowLayoutNode(value: unknown): value is WindowLayoutNode {
 }
 
 function isAppContainer(value: unknown): value is WindowContext['container'] {
-  return isRecord(value) && Array.isArray(value.mounts);
+  return isRecord(value) && Array.isArray(value.mounts) && value.mounts.every(isContainerMount);
+}
+
+function isContainerMount(value: unknown): value is WindowContext['container']['mounts'][number] {
+  if (!isRecord(value)) return false;
+  if (value.kind === ContainerMountKind.Automerge) {
+    return typeof value.path === 'string' && typeof value.url === 'string';
+  }
+  return (
+    value.kind === ContainerMountKind.Runtime
+    && typeof value.path === 'string'
+    && isRuntimeMountProvider(value.provider)
+    && (value.writable === undefined || typeof value.writable === 'boolean')
+  );
+}
+
+function isRuntimeMountProvider(value: unknown): value is RuntimeMountProvider {
+  return (
+    value === RuntimeMountProvider.Device
+    || value === RuntimeMountProvider.Memory
+    || value === RuntimeMountProvider.Proc
+    || value === RuntimeMountProvider.ShellCommands
+  );
 }
 
 function isOptionalString(value: unknown): value is string | undefined {

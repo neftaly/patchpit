@@ -1,11 +1,5 @@
-import type { DocHandle } from '@automerge/automerge-repo';
-import { useMemo, useSyncExternalStore } from 'react';
-import {
-  PatchpitType,
-  type SeedFilesystem,
-} from '@patchpit/system';
+import { useSyncExternalStore } from 'react';
 import type { BootstrapRuntimeClient } from '../runtime/bootstrap-runtime';
-import { useAutomergeDocs } from '../runtime/use-automerge-doc';
 import {
   createStateBrowserSnapshot,
   StateBrowser,
@@ -14,7 +8,6 @@ import {
 
 type StateBrowserSurfaceProps = Omit<StateBrowserSnapshotInput, 'runtimeDiagnostics' | 'stateDocuments'> & {
   readonly runtime: BootstrapRuntimeClient;
-  readonly seed: SeedFilesystem;
 };
 
 export function StateBrowserSurface({
@@ -25,12 +18,10 @@ export function StateBrowserSurface({
   runtimeIssueHistory,
   runtimePlatform,
   runtimeState,
-  seed,
   workspaceProjection,
 }: StateBrowserSurfaceProps) {
   const runtimeDiagnostics = useRuntimeDiagnostics(runtime);
-  const stateHandles = useMemo(() => inspectableStateDocumentHandles(seed), [seed, runtimeState]);
-  const stateDocuments = useAutomergeDocs(stateHandles);
+  const stateDocuments = useRuntimeStateDocuments(runtime);
 
   return (
     <StateBrowser
@@ -49,21 +40,16 @@ export function StateBrowserSurface({
   );
 }
 
-function inspectableStateDocumentHandles(seed: SeedFilesystem): readonly DocHandle<unknown>[] {
-  return [
-    seed.indexHandle as DocHandle<unknown>,
-    ...Object.values(seed.documentHandles)
-      .filter((handle) => {
-        const type = handle.doc()['@patchpit'].type;
-        return type !== PatchpitType.File && type !== PatchpitType.Folder;
-      })
-      .map((handle) => handle as DocHandle<unknown>),
-  ];
-}
-
 function useRuntimeDiagnostics(runtime: BootstrapRuntimeClient) {
   return useSyncExternalStore(
     (listener) => runtime.diagnostics.subscribe(listener),
     () => runtime.diagnostics.getSnapshot(),
+  );
+}
+
+function useRuntimeStateDocuments(runtime: BootstrapRuntimeClient) {
+  return useSyncExternalStore(
+    (listener) => runtime.resources.subscribeStateDocuments(listener),
+    () => runtime.resources.getStateDocumentsSnapshot(),
   );
 }

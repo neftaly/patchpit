@@ -1,3 +1,4 @@
+import { createSchemaManifestResolver, type RelationRef } from '@tarstate/core/schema';
 import {
   defineRelationSchema,
   relationSchemaRef,
@@ -169,16 +170,18 @@ export const filesystemIndexSchema = defineRelationSchema({
   kind: 'tarstate.schema',
   formatVersion: 1,
   schemaId: 'patchpit.filesystem.index@1',
-  description: 'Internal filesystem index projection over linked Automerge docs.',
+  description: 'Internal runtime-maintained materialized filesystem index over linked Automerge docs.',
   metadata: schemaMetadata(PatchpitType.FilesystemIndex, {
-    lifecycle: 'derived-index',
-    projectionOwner: '@patchpit/system/filesystem',
+    canonicalState: 'linked-automerge-documents',
+    lifecycle: 'runtime-maintained-materialized-index',
+    maintainer: '@patchpit/system/filesystem',
+    publicProjection: false,
   }),
   relations: {
     documents: {
       key: 'url',
       metadata: relationMetadata({
-        lifecycle: 'derived-index',
+        lifecycle: 'runtime-maintained-materialized-index',
       }),
       fields: {
         content: { type: 'string', optional: true },
@@ -558,10 +561,10 @@ export const filePickerIntentSchema = defineRelationSchema({
       }),
       fields: {
         id: idField('filePickerIntentRequest'),
-        range: {
+        selectedUrls: {
           type: 'json',
           optional: true,
-          description: 'Optional selection range validated by the file-picker intent handler.',
+          description: 'Optional final selected URL list validated by the file-picker intent handler.',
         },
         toggle: { type: 'boolean', optional: true },
         url: { type: 'string' },
@@ -699,10 +702,10 @@ const patchpitSystemSchemaHashes = {
   'patchpit.filesystem.fileResource@1': 'sha256:4bf45026d8d267a3b11ff4eabad62920e9dea3c9ffd377b4b0f9954a3f1dca45',
   'patchpit.filesystem.fileTypes@1': 'sha256:0815c5b29b35282153e5a1db2e97c1c6d0f07772c286076d940a0c03a464cf97',
   'patchpit.filesystem.folder@1': 'sha256:b66316f285cdf8772105be4f6ef9de97eba1f4faf9795c07d8915f5c6f84907d',
-  'patchpit.filesystem.index@1': 'sha256:f3bbfcf1b7704236653b54645b3f59b488e8a03f663daad3f6e5eb67df01be88',
+  'patchpit.filesystem.index@1': 'sha256:9a4c2b0e876f84c540ab95aa5faddfcd86860754b76fe605338feb04508744a0',
   'patchpit.filesystem.tree@1': 'sha256:ee3cf0878502927b4b7f90839f8f10cfa8f7d8a4ad740142c6d3d0c5ce9aa168',
   'patchpit.intent.appLaunch@1': 'sha256:b2593733f0928d21084238d71ded945caecf0eaae476ae66b850cbacbce4efeb',
-  'patchpit.intent.filePicker@1': 'sha256:cf8af620a257748885a7cbf8054699d4058c07ff998b0acb0e50be726a2194d6',
+  'patchpit.intent.filePicker@1': 'sha256:9d22ea794acb16f21159f3a41ee2f7b5085579d4d91b168cbd20af465dffc970',
   'patchpit.intent.route@1': 'sha256:b788b4f922f50dc25d36141190ec1872e8d1ec24cc0cbc205235c6a88f2bbf85',
   'patchpit.intent.window@1': 'sha256:f6fc795ee96f61af948e486b88765757967171387ac641bbfb9ad25b69f205e0',
   'patchpit.runtime.state@1': 'sha256:b277e00869d466d3523f1e166c9f229deae749ba6ec1a238a73dbe362e1a760a',
@@ -736,12 +739,39 @@ export function patchpitSystemSchemaRef(
   const schemaId = typeof schema === 'string' ? schema : schema.schemaId;
   const descriptor = typeof schema === 'string' ? patchpitSystemSchemaCatalog[schema] : schema;
   if (descriptor === undefined) throw new Error(`Unknown Patchpit system schema: ${schemaId}`);
-  const hash = patchpitSystemSchemaHashes[descriptor.schemaId as PatchpitSystemSchemaId];
-  if (hash === undefined) throw new Error(`Missing Patchpit system schema hash: ${descriptor.schemaId}`);
+  if (!isPatchpitSystemSchemaId(descriptor.schemaId)) {
+    throw new Error(`Missing Patchpit system schema hash: ${descriptor.schemaId}`);
+  }
+  const hash = patchpitSystemSchemaHashes[descriptor.schemaId];
   return relationSchemaRef(descriptor, {
     hash,
     url: patchpitSystemSchemaLocation(descriptor.schemaId),
   });
+}
+
+function isPatchpitSystemSchemaId(schemaId: PatchpitSchemaId): schemaId is PatchpitSystemSchemaId {
+  return Object.hasOwn(patchpitSystemSchemaHashes, schemaId);
+}
+
+const patchpitSystemSchemaResolver = createSchemaManifestResolver({
+  catalog: patchpitSystemSchemaCatalog,
+});
+
+export function patchpitSystemRelationRef<Row extends object>(
+  schema: PatchpitSystemSchemaId | PatchpitRelationSchemaDescriptor,
+  relationName: string,
+): RelationRef<Row> {
+  const schemaId = typeof schema === 'string' ? schema : schema.schemaId;
+  try {
+    return patchpitSystemSchemaResolver.relation<Row>(schema, relationName);
+  } catch (error) {
+    if (typeof schema === 'string' && patchpitSystemSchemaCatalog[schema] === undefined) {
+      throw new Error(`Unknown Patchpit system schema: ${schemaId}`, { cause: error });
+    }
+    throw new Error(`Unknown relation ${relationName} for Patchpit system schema: ${schemaId}`, {
+      cause: error,
+    });
+  }
 }
 
 export function patchpitDocSchemaRef(type: PatchpitType): PatchpitSchemaRef {

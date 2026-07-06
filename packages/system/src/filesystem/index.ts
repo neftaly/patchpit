@@ -3,21 +3,20 @@ export type { FilesystemNode } from './tree';
 export {
   appendFolderEntries,
   appendFolderEntry,
-  cloneFilesystemIndexRow,
   cloneFolderEntries,
   cloneFolderEntry,
+  createFilesystemIndexDoc,
   createPatchpitFileDoc,
   createPatchpitFolderDoc,
   fileExtensionFromName,
-  filesystemIndexRowForResource,
-  filesystemResourceFromHandle,
   folderEntry,
   mimeTypeFromFileName,
-  removeFilesystemIndexRow,
-  removeFilesystemIndexRows,
+  removeFilesystemIndexResources,
   replaceFolderEntries,
+  runtimeMaintainedFilesystemIndexOwnership,
   syncFilesystemIndexResource,
-  upsertFilesystemIndexRow,
+  syncFilesystemIndexResources,
+  type FilesystemResourceHandle,
 } from './resources';
 export { containerOverlayMounts, containerRootUrl, rootContainer, terminalContainer } from './container';
 export {

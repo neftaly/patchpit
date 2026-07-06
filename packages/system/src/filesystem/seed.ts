@@ -18,15 +18,14 @@ import {
 import {
   appendFolderEntries,
   appendFolderEntry,
+  createFilesystemIndexDoc,
   createPatchpitFileDoc,
   createPatchpitFolderDoc,
-  filesystemIndexRowForResource,
-  filesystemResourceFromHandle,
   folderEntry,
-  removeFilesystemIndexRow,
+  removeFilesystemIndexResources,
   replaceFolderEntries,
   syncFilesystemIndexResource,
-  upsertFilesystemIndexRow,
+  syncFilesystemIndexResources,
 } from './resources';
 import {
   automergeMimeType,
@@ -95,7 +94,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     name: automergeFileName('appearance'),
   });
   const filePickerApp = createAppManifest(repo, {
-    entry: 'file-picker.html',
+    entry: 'apps/file-picker/index.html',
     handles: [],
     icon: '📁',
     id: 'file-picker',
@@ -104,7 +103,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     schemas: [filePickerStateSchema],
   });
   const viewerApp = createAppManifest(repo, {
-    entry: 'viewer.html',
+    entry: 'apps/viewer/index.html',
     handles: [
       { accepts: ['*/*'], intent: 'preview', port: 'view' },
       { accepts: ['*/*'], intent: 'open', port: 'view' },
@@ -121,7 +120,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     ],
   });
   const terminalApp = createAppManifest(repo, {
-    entry: 'terminal.html',
+    entry: 'apps/terminal/index.html',
     handles: [],
     icon: '💬',
     id: 'terminal',
@@ -130,7 +129,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     schemas: [terminalStateSchema],
   });
   const stateBrowserApp = createAppManifest(repo, {
-    entry: 'state-browser.html',
+    entry: 'index.html',
     handles: [],
     icon: '🧭',
     id: 'state-browser',
@@ -242,17 +241,10 @@ export function createSeedFilesystem(): SeedFilesystem {
     runtimeStateHandle,
     ...fixture.handles,
   ];
-  const indexHandle = repo.create<FilesystemIndexDoc>({
-    '@patchpit': patchpitDocMetadata(PatchpitType.FilesystemIndex),
-    filesystemIndex: {
-      rootUrl: root.url,
-      documents: handles.map((handle) => filesystemIndexRowForResource(handle.url, handle.doc())),
-    },
-  });
+  const indexHandle = repo.create<FilesystemIndexDoc>(createFilesystemIndexDoc(root.url, handles));
   return {
     repo,
     rootUrl: root.url,
-    indexDoc: indexHandle.doc(),
     appearanceHandle,
     darkThemeHandle,
     documentHandles: Object.fromEntries(handles.map((handle) => [handle.url, handle])),
@@ -304,12 +296,8 @@ export function removeSystemAppResource(
   delete filesystem.documentHandles[url];
 
   if (hasFolderEntry || hasIndexRow) {
-    filesystem.indexHandle.change((doc) => {
-      removeFilesystemIndexRow(doc.filesystemIndex.documents, url);
-      upsertFilesystemIndexRow(
-        doc.filesystemIndex.documents,
-        filesystemIndexRowForResource(filesystem.systemAppsHandle.url, filesystem.systemAppsHandle.doc()),
-      );
+    removeFilesystemIndexResources(filesystem.indexHandle, [url], {
+      syncHandles: hasFolderEntry ? [filesystem.systemAppsHandle] : [],
     });
   }
 
@@ -364,16 +352,7 @@ function registerFilesystemResource<T extends FilesystemResource>({
     appendFolderEntry(doc, newFolderEntry);
   });
 
-  indexHandle.change((doc) => {
-    upsertFilesystemIndexRow(
-      doc.filesystemIndex.documents,
-      filesystemIndexRowForResource(folderHandle.url, folderHandle.doc()),
-    );
-    upsertFilesystemIndexRow(
-      doc.filesystemIndex.documents,
-      filesystemIndexRowForResource(handle.url, filesystemResourceFromHandle(handle)),
-    );
-  });
+  syncFilesystemIndexResources(indexHandle, [folderHandle, handle]);
 }
 
 function createTerminalStateHandle(

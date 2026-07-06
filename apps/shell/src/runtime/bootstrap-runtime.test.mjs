@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  relationRows,
+  relationSetNames,
+} from '@tarstate/core/source';
+import {
   appendFolderEntry,
   automergeExtension,
   automergeMimeType,
   appLaunchIntentBoundary,
   filePickerIntentBoundary,
-  filesystemIndexRowForResource,
   folderEntry,
   createSeedFilesystem,
   patchpitDocMetadata,
@@ -15,7 +18,7 @@ import {
   routeIntentBoundary,
   SplitDirection,
   SurfaceRole,
-  upsertFilesystemIndexRow,
+  syncFilesystemIndexResources,
   windowIntentBoundary,
   WindowManagerNodeKind,
 } from '@patchpit/system';
@@ -26,20 +29,18 @@ import {
   filesystemTreeNodesRelation,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
-  relationRows,
-  relationSetNames,
   routeOpenIntent,
   submitRuntimeIntent,
   windowCloseContextIntent,
   windowFocusIntent,
   workspaceContextsRelation,
   workspaceLayoutProjection,
+  workspaceProjectionFromRelationSet,
   workspaceProjectionSchemaId,
   workspaceStateRelation,
   workspaceSurfacesRelation,
 } from '@patchpit/system/runtime';
 import { createBootstrapRuntimeClient } from './bootstrap-runtime.ts';
-import { workspaceProjectionFromRelationSet } from './workspace-projection.ts';
 
 const fakeApp = 'fake-app';
 const fakeAppStateType = 'fake-app-state';
@@ -126,6 +127,51 @@ void test('bootstrap runtime emits filesystem resets from index changes', async 
   const diagnostics = runtime.diagnostics.getSnapshot().projectionSubscriptions[0];
   assert.equal(diagnostics.status, 'closed');
   assert.equal(diagnostics.counters.resets, 1);
+});
+
+void test('bootstrap runtime exposes read-only resource snapshots', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+
+  assert.equal(runtime.resources.rootUrl, seed.rootUrl);
+  assert.equal(runtime.resources.documentUrls.filePickerState, seed.filePickerStateHandle.url);
+  assert.equal(
+    runtime.resources.getDocument(runtime.resources.documentUrls.filePickerState),
+    seed.filePickerStateHandle.doc(),
+  );
+  assert.equal(runtime.resources.getDocument('automerge:missing-resource'), undefined);
+
+  const initialStateDocuments = runtime.resources.getStateDocumentsSnapshot();
+  assert.equal(initialStateDocuments[seed.indexHandle.url], seed.indexHandle.doc());
+  assert.equal(initialStateDocuments[seed.filePickerStateHandle.url], seed.filePickerStateHandle.doc());
+  assert.equal(Object.hasOwn(initialStateDocuments, seed.rootUrl), false);
+
+  const documentEvents = [];
+  const unsubscribeDocument = runtime.resources.subscribeDocument(
+    runtime.resources.documentUrls.filePickerState,
+    () => documentEvents.push(runtime.resources.getDocument(runtime.resources.documentUrls.filePickerState)),
+  );
+  try {
+    seed.filePickerStateHandle.change((doc) => {
+      doc.activeUrl = seed.rootUrl;
+    });
+    await waitFor(() => documentEvents.length === 1);
+    assert.equal(documentEvents[0].activeUrl, seed.rootUrl);
+  } finally {
+    unsubscribeDocument();
+  }
+
+  const stateDocumentEvents = [];
+  const unsubscribeStateDocuments = runtime.resources.subscribeStateDocuments(() => {
+    stateDocumentEvents.push(runtime.resources.getStateDocumentsSnapshot());
+  });
+  try {
+    const appStateHandle = createFakeAppStateResource(seed, 'resource-facade-test');
+    await waitFor(() => stateDocumentEvents.some((snapshot) => Object.hasOwn(snapshot, appStateHandle.url)));
+    assert.equal(runtime.resources.getStateDocumentsSnapshot()[appStateHandle.url], appStateHandle.doc());
+  } finally {
+    unsubscribeStateDocuments();
+  }
 });
 
 void test('bootstrap runtime commits route, file-picker, and window intents', async () => {
@@ -860,16 +906,7 @@ function registerFakeSystemAppResource(seed, handle, stateType) {
     appendFolderEntry(doc, folderEntry(handle.doc().name, stateType, handle.url));
   });
 
-  seed.indexHandle.change((doc) => {
-    upsertFilesystemIndexRow(
-      doc.filesystemIndex.documents,
-      filesystemIndexRowForResource(seed.systemAppsHandle.url, seed.systemAppsHandle.doc()),
-    );
-    upsertFilesystemIndexRow(
-      doc.filesystemIndex.documents,
-      filesystemIndexRowForResource(handle.url, handle.doc()),
-    );
-  });
+  syncFilesystemIndexResources(seed.indexHandle, [seed.systemAppsHandle, handle]);
 }
 
 function fakeCapabilityProvider() {

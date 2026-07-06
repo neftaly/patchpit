@@ -1,5 +1,11 @@
-import { validateRelationRow } from '@tarstate/core/relation';
-import { hydrateSchemaManifest, type HydratedSchema, type RelationRef } from '@tarstate/core/schema';
+import {
+  parseSingleRelationRow,
+  singleRelationInput,
+  type RelationInputEnvelope,
+} from '@tarstate/core/relation';
+import type { TarstateDiagnostic } from '@tarstate/core/diagnostics';
+import { createSchemaManifestResolver, type JsonObject, type JsonValue } from '@tarstate/core/schema';
+import type { RelationSet as TarstateRelationSet } from '@tarstate/core/source';
 import type { SurfaceRole, WindowContext, WindowLayoutNode, WindowSurface } from '../filesystem/types';
 import type {
   PatchpitRelationSchemaDescriptor,
@@ -16,16 +22,10 @@ export type RuntimeBuildId = string;
 
 export type ClientKind = 'tab' | 'sandbox' | 'agent' | 'device-adapter';
 
-export type Json =
-  | null
-  | boolean
-  | number
-  | string
-  | Json[]
-  | { [key: string]: Json };
+export type Json = JsonValue;
 
 export type TarstateSchemaId = PatchpitSchemaId;
-export type TarstateRow = Readonly<Record<string, Json>>;
+export type TarstateRow = JsonObject;
 export type AutomergeUrl = string;
 export type AutomergeHeads = readonly string[];
 export type AutomergeHeadSet = Readonly<Record<AutomergeUrl, AutomergeHeads>>;
@@ -36,9 +36,7 @@ export type ProjectionBasis =
   | { readonly kind: 'heads'; readonly heads: AutomergeHeadSet }
   | { readonly kind: 'analysisBranch'; readonly branchId: AnalysisBranchId };
 
-export type RelationSet = {
-  readonly relations: Readonly<Record<string, readonly TarstateRow[]>>;
-};
+export type RelationSet = TarstateRelationSet<unknown>;
 
 export type RuntimeScope = {
   readonly clientId: string;
@@ -327,7 +325,7 @@ export type RouteIntentRow = {
 export type FilePickerIntentRow = {
   readonly id: string;
   readonly url: string;
-  readonly range?: readonly string[];
+  readonly selectedUrls?: readonly string[];
   readonly toggle?: boolean;
 };
 
@@ -341,10 +339,7 @@ export type WindowIntentRow = {
   readonly target?: Json;
 };
 
-export type TarstateIntentInput = {
-  readonly schemaId: TarstateSchemaId;
-  readonly relations: RelationSet['relations'];
-};
+export type TarstateIntentInput = RelationInputEnvelope<TarstateRow>;
 
 export type RuntimeIntentRelationBoundary = {
   readonly label: string;
@@ -465,19 +460,18 @@ export function runtimeError(code: RuntimeErrorCode, message: string, reason?: s
   return reason === undefined ? { code, message } : { code, message, reason };
 }
 
-const hydratedIntentSchemaCache = new WeakMap<PatchpitRelationSchemaDescriptor, HydratedSchema>();
+const runtimeIntentSchemaResolver = createSchemaManifestResolver();
 
 export function runtimeIntentInput<Row extends object>(
   boundary: RuntimeIntentRelationBoundary,
   row: Row,
 ): TarstateIntentInput {
-  const validationError = runtimeIntentRowValidationError(boundary, row);
-  if (validationError !== undefined) throw new Error(validationError.message);
-
-  return {
-    schemaId: boundary.schema.schemaId,
-    relations: { [boundary.relation]: [row as unknown as TarstateRow] },
-  };
+  const input = singleRelationInput(boundary.schema, boundary.relation, row);
+  const parsed = parseSingleRelationRow(input, boundary, {
+    resolver: runtimeIntentSchemaResolver,
+  });
+  if (!parsed.ok) throw new Error(runtimeIntentDiagnosticsMessage(boundary, parsed.diagnostics));
+  return input as TarstateIntentInput;
 }
 
 export type RuntimeIntentSubmission<Row extends object> = {
@@ -516,48 +510,23 @@ export function runtimeIntentRequestRow<Row extends object>(
     );
   }
 
-  const rows = request.input.relations[boundary.relation] ?? [];
-  if (rows.length !== 1) {
-    return runtimeError(
-      'bad_request',
-      `${boundary.label} request requires exactly one ${boundary.relation} row.`,
-    );
+  const parsed = parseSingleRelationRow<Row>(request.input, boundary, {
+    resolver: runtimeIntentSchemaResolver,
+  });
+  if (!parsed.ok) {
+    return runtimeError('bad_request', runtimeIntentDiagnosticsMessage(boundary, parsed.diagnostics));
   }
 
-  const row = rows[0];
-  if (row === undefined) {
-    return runtimeError('bad_request', `Missing ${boundary.relation} row.`);
-  }
-
-  const validationError = runtimeIntentRowValidationError(boundary, row);
-  if (validationError !== undefined) return validationError;
-
-  return row as unknown as Row;
+  return parsed.row;
 }
 
-function runtimeIntentRowValidationError(
+function runtimeIntentDiagnosticsMessage(
   boundary: RuntimeIntentRelationBoundary,
-  row: unknown,
-): RuntimeError | undefined {
-  const relation = runtimeIntentRelation(boundary);
-  const diagnostics = validateRelationRow(relation, row as Record<string, unknown>);
+  diagnostics: readonly TarstateDiagnostic[],
+): string {
   const errors = diagnostics.filter((diagnostic) => diagnostic.severity === 'error');
-  if (errors.length === 0) return undefined;
-
-  return runtimeError(
-    'bad_request',
-    `${boundary.label} request row does not match schema: ${errors.map((error) => error.message).join('; ')}`,
-  );
-}
-
-function runtimeIntentRelation(boundary: RuntimeIntentRelationBoundary): RelationRef {
-  const cached = hydratedIntentSchemaCache.get(boundary.schema);
-  const schema = cached ?? hydrateSchemaManifest(boundary.schema);
-  if (cached === undefined) hydratedIntentSchemaCache.set(boundary.schema, schema);
-
-  const relation = schema[boundary.relation];
-  if (relation === undefined) {
-    throw new Error(`Runtime intent schema ${boundary.schema.schemaId} has no ${boundary.relation} relation.`);
-  }
-  return relation;
+  const details = (errors.length === 0 ? diagnostics : errors)
+    .map((diagnostic) => diagnostic.message)
+    .join('; ');
+  return `${boundary.label} request row does not match schema: ${details}`;
 }

@@ -1,4 +1,3 @@
-import type { DocHandle } from '@automerge/automerge-repo';
 import {
   TerminalLineKind,
   type TerminalLine,
@@ -8,7 +7,7 @@ import {
 export type TerminalExecution = {
   readonly command: string;
   readonly cwd: string;
-  readonly env: Record<string, string>;
+  readonly env: Readonly<Record<string, string>>;
   readonly stderr: string;
   readonly stdout: string;
 };
@@ -17,6 +16,15 @@ export type TerminalStateActions = {
   readonly appendPrompt: () => void;
   readonly clear: () => void;
   readonly commitExecution: (execution: TerminalExecution) => void;
+};
+
+export type TerminalStateMutation =
+  | { readonly type: 'appendPrompt' }
+  | { readonly type: 'clear' }
+  | { readonly execution: TerminalExecution; readonly type: 'commitExecution' };
+
+export type TerminalStateWriter = {
+  commit(mutation: TerminalStateMutation): void;
 };
 
 const terminalScrollbackLines = 1000;
@@ -75,24 +83,28 @@ export function replaceTerminalState(doc: TerminalStateDoc, state: TerminalState
   doc.lines = structuredClone(state.lines);
 }
 
-export function createTerminalStateActions(handle: DocHandle<TerminalStateDoc>): TerminalStateActions {
-  return {
-    appendPrompt: () => commitTerminalState(handle, terminalStateWithPrompt),
-    clear: () => commitTerminalState(handle, clearedTerminalState),
-    commitExecution: (execution) => {
-      commitTerminalState(handle, (state) => terminalStateWithExecution(state, execution));
-    },
-  };
+export function terminalStateWithMutation(
+  state: TerminalStateDoc,
+  mutation: TerminalStateMutation,
+): TerminalStateDoc {
+  switch (mutation.type) {
+    case 'appendPrompt':
+      return terminalStateWithPrompt(state);
+    case 'clear':
+      return clearedTerminalState(state);
+    case 'commitExecution':
+      return terminalStateWithExecution(state, mutation.execution);
+  }
 }
 
-function commitTerminalState(
-  handle: DocHandle<TerminalStateDoc>,
-  update: (state: TerminalStateDoc) => TerminalStateDoc,
-): void {
-  const next = update(handle.doc());
-  handle.change((doc) => {
-    replaceTerminalState(doc, next);
-  });
+export function createTerminalStateActions(writer: TerminalStateWriter): TerminalStateActions {
+  return {
+    appendPrompt: () => writer.commit({ type: 'appendPrompt' }),
+    clear: () => writer.commit({ type: 'clear' }),
+    commitExecution: (execution) => {
+      writer.commit({ execution, type: 'commitExecution' });
+    },
+  };
 }
 
 function cloneTerminalState(state: TerminalStateDoc): TerminalStateDoc {
@@ -113,6 +125,6 @@ function terminalLinesFromOutput(kind: TerminalLineKind, text: string): Terminal
     .map((line) => ({ kind, text: line }));
 }
 
-function clippedLines(lines: TerminalLine[]): TerminalLine[] {
+function clippedLines(lines: readonly TerminalLine[]): TerminalLine[] {
   return lines.slice(-terminalScrollbackLines);
 }

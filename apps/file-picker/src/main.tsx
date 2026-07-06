@@ -22,7 +22,7 @@ function App() {
   const [seed] = useState(createSeedFilesystem);
   const state = useAutomergeDoc(seed.filePickerStateHandle);
   const fileTypes = useAutomergeDoc(seed.fileTypesHandle);
-  const filesystem = useMemo(() => projectFilesystem(seed.indexDoc, seed.rootUrl), [seed]);
+  const filesystem = useMemo(() => projectFilesystem(seed.indexHandle.doc(), seed.rootUrl), [seed]);
   const icons = useMemo(() => fileIcons(fileTypes), [fileTypes]);
 
   if (filesystem.root === null) {

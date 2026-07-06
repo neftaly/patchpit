@@ -9,6 +9,14 @@ Current specs:
 - [`schema-protocol.md`](schema-protocol.md)
 - [`surface-protocol.md`](surface-protocol.md)
 
+Architecture notes:
+
+- [`sandboxed-app-host.md`](sandboxed-app-host.md)
+
+Capability notes:
+
+- [`terminal-filesystem-capability.md`](terminal-filesystem-capability.md)
+
 State/debug notes:
 
 - [`state-visibility-todo.md`](state-visibility-todo.md)

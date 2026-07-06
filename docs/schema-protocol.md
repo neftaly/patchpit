@@ -219,7 +219,8 @@ type SurfaceSpec = {
 ```
 
 Runtime projection snapshots attach the descriptor on the snapshot/reset path.
-Patches carry only schema identity.
+V0 should rely on snapshot/reset delivery. Relation patches carry only schema
+identity when patch streaming later exists.
 
 ```ts
 type ProjectionSnapshot = {

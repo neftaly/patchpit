@@ -7,7 +7,6 @@ import {
   type WindowManagerStateDoc,
 } from '@patchpit/system';
 import {
-  automergeHeadSetForHandle,
   routeOpenIntent,
   routePreviewIntent,
   runtimeError,
@@ -50,6 +49,7 @@ import {
   validateResizeSplit,
   validateSurfaceContext,
 } from './bootstrap-window-topology';
+import { automergeHeadSetForHandle } from './automerge-heads';
 
 type RouteIntentName = typeof routeOpenIntent | typeof routePreviewIntent;
 
@@ -59,6 +59,10 @@ type WindowIntentName =
   | typeof windowMoveTabIntent
   | typeof windowPinPreviewIntent
   | typeof windowResizeSplitIntent;
+
+type ParsedWindowIntentRow = Omit<WindowIntentRow, 'path'> & {
+  readonly path?: SplitPath;
+};
 
 export function submitBootstrapRouteIntent(
   seed: SeedFilesystem,
@@ -172,17 +176,15 @@ function windowIntentName(intent: IntentRequest['intent']): WindowIntentName | u
 function windowIntentRequest(
   request: IntentRequest,
   intent: WindowIntentName,
-): WindowIntentRow | RuntimeError {
+): ParsedWindowIntentRow | RuntimeError {
   const row = runtimeIntentRequestRow<WindowIntentRow>(request, windowIntentBoundary);
   if (isRuntimeError(row)) return row;
   if (row.path !== undefined && !isSplitPath(row.path)) return badRequest('Window request path is invalid.');
   if (row.target !== undefined && contextDropTarget(row.target) === undefined) {
     return badRequest('Window request target is invalid.');
   }
-  const fieldError = windowIntentFieldError(intent, row);
-  if (fieldError !== undefined) return badRequest(fieldError);
 
-  return {
+  const parsed = {
     id: row.id,
     ...(row.contextId === undefined ? {} : { contextId: row.contextId }),
     ...(row.path === undefined ? {} : { path: row.path }),
@@ -190,12 +192,15 @@ function windowIntentRequest(
     ...(row.sourceSurfaceId === undefined ? {} : { sourceSurfaceId: row.sourceSurfaceId }),
     ...(row.surfaceId === undefined ? {} : { surfaceId: row.surfaceId }),
     ...(row.target === undefined ? {} : { target: row.target }),
-  };
+  } satisfies ParsedWindowIntentRow;
+
+  const fieldError = windowIntentFieldError(intent, parsed);
+  return fieldError === undefined ? parsed : badRequest(fieldError);
 }
 
 function windowIntentFieldError(
   intent: WindowIntentName,
-  row: WindowIntentRow,
+  row: ParsedWindowIntentRow,
 ): string | undefined {
   if (
     (intent === windowCloseContextIntent || intent === windowFocusIntent || intent === windowPinPreviewIntent)
@@ -222,7 +227,7 @@ function windowIntentFieldError(
 function validateWindowIntent(
   state: WindowManagerStateDoc,
   intent: WindowIntentName,
-  request: WindowIntentRow,
+  request: ParsedWindowIntentRow,
 ): RuntimeError | undefined {
   if (
     (intent === windowFocusIntent || intent === windowCloseContextIntent)
@@ -253,7 +258,7 @@ function validateWindowIntent(
   }
 
   if (intent === windowResizeSplitIntent && request.path !== undefined && request.ratio !== undefined) {
-    return validateResizeSplit(state, request.path as SplitPath);
+    return validateResizeSplit(state, request.path);
   }
 
   return undefined;
@@ -262,7 +267,7 @@ function validateWindowIntent(
 function commitWindowIntent(
   doc: WindowManagerStateDoc,
   intent: WindowIntentName,
-  request: WindowIntentRow,
+  request: ParsedWindowIntentRow,
 ): void {
   if (intent === windowFocusIntent && request.surfaceId !== undefined && request.contextId !== undefined) {
     focusContext(doc, request.surfaceId, request.contextId);
@@ -279,7 +284,7 @@ function commitWindowIntent(
     const target = contextDropTarget(request.target);
     if (target !== undefined) dropContext(doc, request.sourceSurfaceId, request.contextId, target);
   } else if (intent === windowResizeSplitIntent && request.path !== undefined && request.ratio !== undefined) {
-    resizeSplit(doc, request.path as SplitPath, request.ratio);
+    resizeSplit(doc, request.path, request.ratio);
   }
 }
 

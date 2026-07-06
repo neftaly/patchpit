@@ -2,20 +2,16 @@ import { automergeMapSource, defineAutomergeMapRelations } from '@tarstate/autom
 import {
   as,
   asc,
-  defineSchema,
   from,
-  jsonField,
   maybe,
-  optional,
   pipe,
   project,
-  relation,
   sort,
-  stringField,
 } from '@tarstate/core';
 import { evaluate } from '@tarstate/core/evaluate';
 import { buildFilesystem, type FilesystemNode } from './tree';
 import { mimeTypeFromFileName } from './resources';
+import { filesystemIndexSchema, patchpitSystemRelationRef } from './schemas';
 import {
   PatchpitType,
   type FilesystemIndexDoc,
@@ -47,25 +43,16 @@ export type FilesystemTreeProjectionRelations = Readonly<{
   [filesystemTreeNodesRelation]: readonly FilesystemTreeNodeRow[];
 }>;
 
-const filesystemSchema = defineSchema({
-  documents: relation<FilesystemIndexRow>({
-    key: 'url',
-    fields: {
-      url: stringField(),
-      type: stringField(),
-      entries: optional(jsonField()),
-      title: optional(stringField()),
-      mimeType: optional(stringField()),
-      content: optional(stringField()),
-    },
-  }),
-});
+const filesystemIndexDocumentsRelation = patchpitSystemRelationRef<FilesystemIndexRow>(
+  filesystemIndexSchema,
+  'documents',
+);
 
 const filesystemRelations = defineAutomergeMapRelations<FilesystemIndexDoc>()([
-  { relation: filesystemSchema.documents, path: ['filesystemIndex', 'documents'] },
+  { relation: filesystemIndexDocumentsRelation, path: ['filesystemIndex', 'documents'] },
 ]);
 
-const indexedDocument = as(filesystemSchema.documents, 'document');
+const indexedDocument = as(filesystemIndexDocumentsRelation, 'document');
 const filesystemIndexRowsQuery = pipe(
   from(indexedDocument),
   sort(asc(indexedDocument.url)),
@@ -342,7 +329,14 @@ function mapIndexRowsByUrl(indexRows: readonly FilesystemIndexRow[]) {
 }
 
 function folderEntriesFromIndexField(input: unknown): readonly FolderEntry[] {
-  return Array.isArray(input) ? input as readonly FolderEntry[] : [];
+  return Array.isArray(input) && input.every(isFolderEntry) ? input : [];
+}
+
+function isFolderEntry(value: unknown): value is FolderEntry {
+  return isRecord(value)
+    && typeof value.name === 'string'
+    && typeof value.type === 'string'
+    && typeof value.url === 'string';
 }
 
 function treeNodeKind(type: string): FilesystemTreeNodeKind {
