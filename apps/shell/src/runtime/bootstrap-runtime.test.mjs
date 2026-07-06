@@ -545,6 +545,51 @@ void test('bootstrap runtime routes projection virtual JSON files without Autome
   assert.equal(seed.windowManagerHandle.doc().contexts[contextId].url, url);
 });
 
+void test('bootstrap runtime drops a previewed route target as a duplicate pinned context', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+  const root = seededFilesystemRoot(seed);
+  const readme = nodeAtPath(root, '/home/docs/README.md');
+  assert.equal(readme?.kind, 'file');
+
+  const preview = await submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
+    intent: routePreviewIntent,
+    row: {
+      id: 'preview-before-drop-test',
+      title: 'Docs README',
+      url: readme.url,
+    },
+  });
+  assert.equal(preview.status, 'committed');
+
+  const dropped = await submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
+    intent: routeOpenIntent,
+    row: {
+      id: 'drop-previewed-route-test',
+      target: {
+        area: 'content',
+        path: ['second'],
+        surfaceId: 'main',
+        zone: 'right',
+      },
+      title: 'Docs README',
+      url: readme.url,
+    },
+  });
+
+  const previewContextId = `viewer:${readme.url}`;
+  const droppedContextId = `viewer:${readme.url}:drop-previewed-route-test`;
+  const state = seed.windowManagerHandle.doc();
+  assert.equal(dropped.status, 'committed');
+  assert.equal(state.surfaces.main.previewContext, previewContextId);
+  assert.equal(state.contexts[previewContextId].url, readme.url);
+  assert.equal(state.contexts[droppedContextId].url, readme.url);
+  assert.notEqual(droppedContextId, previewContextId);
+  assert.deepEqual(state.surfaces['surface-3'].contexts, [droppedContextId]);
+});
+
 void test('bootstrap runtime route-opened Viewer resolves sandbox resource views for files and folders', async () => {
   const seed = createSeedFilesystem();
   const root = seededFilesystemRoot(seed);

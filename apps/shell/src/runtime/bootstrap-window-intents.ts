@@ -154,8 +154,10 @@ function commitRouteIntent(
   defaultRootUrl: string,
   app: string,
 ): void {
-  const context = routedContext(app, route.url, route.title, route.rootUrl ?? defaultRootUrl);
   const target = contextDropTarget(route.target);
+  const context = target === undefined
+    ? routedContext(app, route.url, route.title, route.rootUrl ?? defaultRootUrl)
+    : duplicateRoutedContext(doc, app, route.url, route.title, route.rootUrl ?? defaultRootUrl, route.id);
 
   if (target !== undefined) {
     dropNewContext(doc, context, target);
@@ -291,6 +293,28 @@ function commitWindowIntent(
   } else if (intent === windowResizeSplitIntent && request.path !== undefined && request.ratio !== undefined) {
     resizeSplit(doc, request.path, request.ratio);
   }
+}
+
+function duplicateRoutedContext(
+  doc: WindowManagerStateDoc,
+  app: string,
+  url: string,
+  title: string | undefined,
+  rootUrl: string,
+  intentId: string,
+): WindowContext {
+  const base = routedContext(app, url, title, rootUrl);
+  return {
+    ...base,
+    id: uniqueContextId(doc, `${base.id}:${intentId}`),
+  };
+}
+
+function uniqueContextId(doc: WindowManagerStateDoc, id: string): string {
+  if (doc.contexts[id] === undefined) return id;
+  let index = 2;
+  while (doc.contexts[`${id}:${index}`] !== undefined) index += 1;
+  return `${id}:${index}`;
 }
 
 function routedContext(app: string, url: string, title: string | undefined, rootUrl: string): WindowContext {
