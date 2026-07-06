@@ -132,8 +132,8 @@ Use Patchpit's existing surface vocabulary where possible.
 - `Capability`: scoped authority granted to an app, context, or client.
 
 Input is not intent. A mouse event, gaze ray, controller pose, agent message, or
-BCI signal is local input. A routed action such as `route.open`,
-`window.focus`, or `filesystem.move` is an intent.
+BCI signal is local input. A routed action such as `route.open` or
+`window.focus` is an intent.
 
 ## Runtime Operations
 
@@ -199,10 +199,9 @@ type RuntimeScope = {
 };
 ```
 
-`workspaceId` is required for every client request. Global projections such as
-`appManifests.handlers` may ignore it for data selection, but policy,
-diagnostics, and lifecycle still need to know which workspace the request came
-from.
+`workspaceId` is required for every client request. Future global projections
+may ignore it for data selection, but policy, diagnostics, and lifecycle still
+need to know which workspace the request came from.
 
 At the runtime boundary, `workspaceId` selects the durable workspace state for
 surfaces, contexts, layout, and runtime routing. Different clients may connect to
@@ -455,15 +454,15 @@ Use:
 projection: filesystem.tree
 schemaId: patchpit.filesystem.tree@1
 
-intent: filesystem.writeFile
-input.schemaId: patchpit.intent.filesystem.writeFile@1
+intent: route.open
+input.schemaId: patchpit.intent.route@1
 ```
 
 Avoid:
 
 ```txt
 projection: filesystem.tree@1
-intent: filesystem.writeFile@1
+intent: route.open@1
 ```
 
 A runtime receiving a projection or intent request must either:
@@ -540,11 +539,10 @@ V0 clients should implement snapshot/reset first. Relation patches are allowed
 by the target protocol, but they are not required until Tarstate's patch
 operation vocabulary is stable and the runtime has real patch delivery.
 
-Initial projections:
+Current served projections:
 
 ```txt
 filesystem.tree
-appManifests.handlers
 runtime.projections
 workspace.layout
 ```
@@ -562,6 +560,13 @@ read-only virtual service files for each served projection under
 surfaces. Split `workspace.surfaces`, `workspace.contexts`,
 `workspace.viewports`, `policy.effectiveGrants`, and `presence.clients` only
 after multi-client or policy UX needs them.
+
+Target projection names such as `appManifests.handlers`,
+`workspace.surfaces`, `workspace.contexts`, `workspace.viewports`,
+`policy.effectiveGrants`, and `presence.clients` are not current requestable
+protocol names. The active runtime must reject their projection subscriptions
+and `/srv/projections/<projection>/...` service URLs until it actually serves
+them and advertises them through `runtime.projections`.
 
 `filesystem.tree` with `schemaId: patchpit.filesystem.tree@1` returns one
 relation:
@@ -701,23 +706,17 @@ If policy transforms a durable intent before commit, the committed result must
 report that through `policy.transformed` or `policy.obligations`. Policy must not
 silently transform a durable write without surfacing that fact to the caller.
 
-Initial route intents come from the surface protocol:
+Current served route intents:
 
 ```txt
 route.preview
 route.open
-route.reveal
-route.activate
 ```
 
-Initial filesystem and compositor intents:
+Current served app, file-picker, and compositor intents:
 
 ```txt
 app.launch
-filesystem.writeFile
-filesystem.mkdir
-filesystem.move
-filesystem.delete
 filePicker.selectUrl
 filePicker.toggleFolder
 window.focus
@@ -725,12 +724,12 @@ window.pinPreview
 window.closeContext
 window.moveTab
 window.resizeSplit
-asset.commitImport
 ```
 
-Classification, sharing, policy-grant editing, historical analysis, and broad
-asset workflows are later actions. Do not add public V0 intent names for them
-until the owning product flow exists.
+`route.reveal`, `route.activate`, filesystem mutation intents, asset import
+commit, classification, sharing, policy-grant editing, historical analysis, and
+broad asset workflows are later actions. Do not add public V0 intent names for
+them until the owning product flow exists and the runtime handles them.
 
 `route.open` and `app.launch` should converge on one runtime admission path:
 resolve an installed app manifest, validate policy, create or reuse one
@@ -829,14 +828,15 @@ Each window intent validates its required fields before applying the
 window-manager write lens. Missing or malformed targets are rejected instead of
 being treated as a no-op or a different placement.
 
-`asset.import` is a capability for staged import access. `asset.commitImport` is
-the durable intent that commits an approved staged asset into normal Patchpit
-state.
+The target asset flow uses `asset.import` as a capability for staged import
+access and `asset.commitImport` as the durable intent that commits an approved
+staged asset into normal Patchpit state. They are not current V0 core runtime
+names.
 
-`filesystem.move` must preserve semantic move intent. Until Automerge exposes
-native object moves, the runtime records semantic moves on doc roots as
-`__automergeMoves` keyed by `getObjectId`. Copy/delete must not be treated as an
-identity-preserving move.
+Future filesystem move intents must preserve semantic move intent. Until
+Automerge exposes native object moves, the runtime records semantic moves on doc
+roots as `__automergeMoves` keyed by `getObjectId`. Copy/delete must not be
+treated as an identity-preserving move.
 
 ## Capabilities
 
@@ -884,7 +884,7 @@ type CapabilityEvent =
   | { type: 'error'; error: RuntimeError };
 ```
 
-Initial core capabilities:
+Target core capability vocabulary:
 
 ```txt
 filesystem.read
@@ -898,6 +898,11 @@ asset.import
 agent.suggestIntent
 export.request
 ```
+
+The active protocol type accepts capability names as provider-registered
+strings. The bootstrap runtime does not implement the target core capability
+catalog above; it only opens capabilities for registered providers such as
+`terminal.filesystem`, and rejects unknown names with `unknown_capability`.
 
 Apps can register narrower app-specific capabilities such as
 `terminal.filesystem`. Their subprotocols live with the app package, not in the

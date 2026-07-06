@@ -1038,6 +1038,7 @@ function installFakeAppManifest(seed, {
   const handle = seed.repo.create({
     '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
     entry: `${app}.html`,
+    entryKind: 'html',
     extension: automergeExtension,
     handles,
     icons: [],
@@ -1053,6 +1054,7 @@ function installFakeAppManifest(seed, {
             state: { type: stateType },
           },
     ],
+    version: '0.0.0',
   });
   seed.documentHandles[handle.url] = handle;
   registerFakeInstalledAppManifest(seed, handle, app);
@@ -1066,6 +1068,7 @@ function installDirectAppManifest(seed, {
   const handle = seed.repo.create({
     '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
     entry: `${app}.html`,
+    entryKind: 'html',
     extension: automergeExtension,
     handles,
     icons: [],
@@ -1076,6 +1079,7 @@ function installDirectAppManifest(seed, {
     surfaces: [
       { role: SurfaceRole.DocumentSet },
     ],
+    version: '0.0.0',
   });
   seed.documentHandles[handle.url] = handle;
   const appsHandle = appsFolderHandle(seed);

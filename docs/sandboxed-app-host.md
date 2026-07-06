@@ -49,16 +49,22 @@ other way around.
 ## Current Slice
 
 Current apps are installed as package folders under `/apps`. Each package
-contains a manifest doc plus entry resources. The shell derives launcher items
-from those app package manifests, and both `app.launch` and document routing
-resolve app package manifests before creating sessions.
+contains a manifest doc plus package resources. The implemented manifest fields
+are `manifestVersion`, `id`, `name`, `version`, `entry`, `entryKind`, `handles`,
+`surfaces`, and `schemas`. The shell derives launcher items from those app
+package manifests, and both `app.launch` and document routing resolve app
+package manifests before creating sessions.
 
 `WindowManagerAppHost.renderSurface` is now a manifest-driven host boundary:
 the host resolves `context.app` through `/apps`, renders first-party React apps
-through compatibility adapters, and runs filesystem JavaScript entries through
-`SandboxAppHost`. The seeded `hello-world` app proves the file-backed sandbox
-path with an iframe runner using `sandbox="allow-scripts"` and no same-origin
-authority.
+through compatibility adapters when `entryKind` is `shell-compat`, and runs
+filesystem JavaScript module and HTML document entries through `SandboxAppHost`
+when `entryKind` is `module` or `html`. The seeded `hello-world` app is the
+canonical minimal real file-backed sandbox package: its manifest points at
+`app.js`, and the iframe runner uses `sandbox="allow-scripts"` with no
+same-origin authority. The seeded File Picker, Terminal, and Viewer
+`index.html` files are compatibility placeholders and are not runnable app
+bundles.
 
 The SharedWorker is still the boot gate, not the owner of Automerge handles or
 runtime operations. The in-process bootstrap runtime still owns the first
@@ -68,6 +74,7 @@ Remaining app-host work:
 
 - move first-party app UI from compatibility adapters into sandboxed app
   entries;
+- define shared library and import-map handling for installed app packages;
 - wire scoped `view`, `act`, and `open` services behind the sandbox bridge;
 - move runtime ownership from the in-process bootstrap client into the worker;
 - add local OS runner placement for command runners and later app hosts.
@@ -278,9 +285,12 @@ type AppManifestRunner = {
 ```
 
 The first app-host slice should keep manifests close to today's shape:
-`manifestVersion`, `id`, `name`, `entry`, `handles`, `surfaces`, and `schemas`,
-with optional runner metadata. Fine-grained permission declarations can be added
-later when Patchpit has the capability model and UX to support them.
+`manifestVersion`, `id`, `name`, `version`, `entry`, `entryKind`, `handles`,
+`surfaces`, and `schemas`, with optional runner metadata. `entryKind: 'module'`
+and `entryKind: 'html'` are current real sandbox paths. `entryKind:
+'shell-compat'` marks first-party packages still rendered by host adapters.
+Fine-grained permission declarations can be added later when Patchpit has the
+capability model and UX to support them.
 
 ## Runner Placement
 
@@ -666,9 +676,9 @@ The source package installs into the registry as a package folder:
 ```
 
 The installed manifest should stay close to existing app manifest concepts:
-`manifestVersion`, `id`, `name`, `entry`, `handles`, `surfaces`, and `schemas`.
-Additional app-host fields should be declarative: package `version`, `runner`,
-and `permissions`. They are requests and metadata, not grants.
+`manifestVersion`, `id`, `name`, `version`, `entry`, `entryKind`, `handles`,
+`surfaces`, and `schemas`. Additional app-host fields should be declarative:
+`runner` and `permissions`. They are requests and metadata, not grants.
 
 A local authoring loop should:
 

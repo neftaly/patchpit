@@ -95,13 +95,17 @@ export type AppManifestDoc = PatchpitDoc<PatchpitType.AppManifest> & {
   id: string;
   name: string;
   entry: string;
+  entryKind: AppManifestEntryKind;
   extension: string;
   handles?: AppManifestHandler[];
   icons?: AppManifestIcon[];
   mimeType: string;
   schemas?: Readonly<Record<PatchpitSchemaId, PatchpitRelationSchemaDescriptor>>;
   surfaces?: SurfaceSpec[];
+  version: string;
 };
+
+export type AppManifestEntryKind = 'module' | 'html' | 'shell-compat';
 
 export type AppManifestHandler = {
   port: string;

@@ -78,11 +78,17 @@ export const appManifestSchema = defineRelationSchema({
       key: 'id',
       fields: {
         entry: { type: 'string' },
+        entryKind: {
+          type: 'string',
+          description: 'How the current host interprets entry: JavaScript module, HTML document, or shell compatibility adapter.',
+          metadata: enumMetadata(['module', 'html', 'shell-compat']),
+        },
         extension: { type: 'string' },
         id: idField('app'),
         manifestVersion: { type: 'number' },
         mimeType: { type: 'string' },
         name: { type: 'string' },
+        version: { type: 'string' },
       },
     },
     handlers: {
@@ -748,7 +754,7 @@ const patchpitSystemSchemaHashes = {
   'patchpit.intent.window@1': 'sha256:f6fc795ee96f61af948e486b88765757967171387ac641bbfb9ad25b69f205e0',
   'patchpit.runtime.projections@1': 'sha256:eec2da731e157cdfe2f02b9c3a3adb273e3454c9e73ab5fad015dd1cd6fa7903',
   'patchpit.runtime.state@1': 'sha256:b277e00869d466d3523f1e166c9f229deae749ba6ec1a238a73dbe362e1a760a',
-  'patchpit.system.appManifest@1': 'sha256:ef3ab14a21e0f124dbd262a5984bb3f09a3a6e90c0b27f458976b4a10fac5518',
+  'patchpit.system.appManifest@1': 'sha256:9a4c3ad3bbb080b277330aecc82724243402da18a13b776b2c61b4615e0b6a5d',
   'patchpit.system.appearance@1': 'sha256:a3a297b433293a35d1380c666821e6883016adbaab760ed3b8e898f77dad46d4',
   'patchpit.system.theme@1': 'sha256:b7ccfb5659debca60a397102a96c5ae722434f14ffc4d19af085e39c8806ec4f',
   'patchpit.system.windowManager.state@1': 'sha256:ae080f3790d51376f411d32d3f9706193c5ed58ab77c374bb59d2d748b48db6f',

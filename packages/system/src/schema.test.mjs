@@ -220,6 +220,9 @@ void test('seeded and dynamically created system docs carry schema refs', () => 
   );
 
   const filePickerApp = appManifest(seed, 'file-picker');
+  assert.equal(filePickerApp.entry, 'index.html');
+  assert.equal(filePickerApp.entryKind, 'shell-compat');
+  assert.equal(filePickerApp.version, '0.0.0');
   assert.deepEqual(
     filePickerApp.surfaces[0].state.schema,
     patchpitDocSchemaRef(PatchpitType.FilePickerState),
@@ -227,11 +230,19 @@ void test('seeded and dynamically created system docs carry schema refs', () => 
   assert.deepEqual(filePickerApp.schemas[filePickerStateSchema.schemaId], filePickerStateSchema);
 
   const terminalApp = appManifest(seed, 'terminal');
+  assert.equal(terminalApp.entryKind, 'shell-compat');
   assert.deepEqual(
     terminalApp.surfaces[0].state.schema,
     patchpitDocSchemaRef(PatchpitType.TerminalState),
   );
   assert.deepEqual(terminalApp.schemas[terminalStateSchema.schemaId], terminalStateSchema);
+
+  const viewerApp = appManifest(seed, 'viewer');
+  assert.equal(viewerApp.entryKind, 'shell-compat');
+
+  const helloWorldApp = appManifest(seed, 'hello-world');
+  assert.equal(helloWorldApp.entry, 'app.js');
+  assert.equal(helloWorldApp.entryKind, 'module');
 
   const dynamicTerminal = createTerminalStateResource(seed, 'terminal-test');
   assert.deepEqual(

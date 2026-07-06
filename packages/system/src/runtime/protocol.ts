@@ -177,13 +177,7 @@ export type RuntimeEvent =
 export type ProjectionName =
   | 'filesystem.tree'
   | 'runtime.projections'
-  | 'appManifests.handlers'
-  | 'workspace.surfaces'
-  | 'workspace.contexts'
-  | 'workspace.layout'
-  | 'workspace.viewports'
-  | 'policy.effectiveGrants'
-  | 'presence.clients';
+  | 'workspace.layout';
 
 export const filesystemTreeProjection = 'filesystem.tree' as const satisfies ProjectionName;
 export const filesystemTreeSchemaId = 'patchpit.filesystem.tree@1' as const;
@@ -320,22 +314,13 @@ export type IntentName =
   | 'app.launch'
   | 'route.preview'
   | 'route.open'
-  | 'route.reveal'
-  | 'route.activate'
-  | 'filesystem.writeFile'
-  | 'filesystem.mkdir'
-  | 'filesystem.move'
-  | 'filesystem.delete'
   | 'filePicker.selectUrl'
   | 'filePicker.toggleFolder'
   | 'window.focus'
   | 'window.pinPreview'
   | 'window.closeContext'
   | 'window.moveTab'
-  | 'window.resizeSplit'
-  | 'asset.commitImport'
-  | 'asset.classify'
-  | 'asset.approveShare';
+  | 'window.resizeSplit';
 
 export const appLaunchIntent = 'app.launch' as const satisfies IntentName;
 export const appLaunchIntentSchemaId = 'patchpit.intent.appLaunch@1' as const;
@@ -438,19 +423,7 @@ export type AppliedPolicyEffects = {
   readonly reason?: string;
 };
 
-export type CoreCapabilityName =
-  | 'filesystem.read'
-  | 'filesystem.write'
-  | 'context.control'
-  | 'surface.place'
-  | 'viewport.present'
-  | 'presence.publish'
-  | 'analysis.branch'
-  | 'asset.import'
-  | 'agent.suggestIntent'
-  | 'export.request';
-
-export type CapabilityName = CoreCapabilityName | (string & {});
+export type CapabilityName = string;
 
 export type CapabilityRequest = {
   readonly capability: CapabilityName;

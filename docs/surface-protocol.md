@@ -99,6 +99,8 @@ type AppManifest = {
   id: string;
   name: string;
   entry: string;
+  entryKind: 'module' | 'html' | 'shell-compat';
+  version: string;
   scope?: string;
   icons?: Icon[];
   schemas?: Record<string, PatchpitRelationSchemaDescriptor>;
@@ -118,6 +120,24 @@ type Handler = {
   accepts: string[];
 };
 ```
+
+Current V0 manifests keep `entry` as a package-relative path because the
+implemented resolver still resolves a file node by path. `entryKind` records how
+that path is interpreted:
+
+- `module` is the implemented filesystem bundle path. The host loads the
+  package file as a JavaScript module whose default export is `activate(env)`.
+- `html` is an implemented filesystem document path. The host injects the
+  sandbox bridge into the package HTML document and rewrites package-relative
+  module and asset references it can resolve.
+- `shell-compat` marks first-party placeholders whose UI is still rendered by
+  shell compatibility adapters. Their seeded `index.html` files are diagnostic
+  placeholders, not runnable installed app bundles.
+
+`manifestVersion` is the Patchpit manifest format version. `version` is the app
+package version. Shared libraries, import maps, content-hashed assets, and
+network/service access from sandboxed app packages are target package features
+and are not implemented by the current installed app resolver.
 
 `handles.accepts` matches MIME-like intent types. It uses the same pattern
 language as file icon rules: exact matches such as `text/markdown`, wildcards

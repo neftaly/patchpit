@@ -13,6 +13,7 @@ import {
   runtimeError,
   type RuntimeError,
 } from '@patchpit/system/runtime';
+import { isPackageAppManifestDoc } from './app-manifest-discovery';
 
 type RouteIntentName = typeof routeOpenIntent | typeof routePreviewIntent;
 type RouteHandlerIntent = Extract<AppManifestHandler['intent'], 'open' | 'preview'>;
@@ -89,17 +90,13 @@ export function installedAppManifests(seed: SeedFilesystem): AppManifestDoc[] {
   return appsFolderDoc.docs.flatMap((entry) => installedAppManifestFromEntry(seed, entry.url));
 }
 
-function isAppManifestDoc(doc: FilesystemResource | undefined): doc is AppManifestDoc {
-  return doc?.['@patchpit'].type === PatchpitType.AppManifest;
-}
-
 function installedAppManifestFromEntry(seed: SeedFilesystem, url: string): readonly AppManifestDoc[] {
   const doc = seed.documentHandles[url]?.doc();
   if (!isFolderDoc(doc)) return [];
 
   return doc.docs.flatMap((entry) => {
     const child = seed.documentHandles[entry.url]?.doc();
-    return isAppManifestDoc(child) ? [child] : [];
+    return isPackageAppManifestDoc(child) ? [child] : [];
   });
 }
 

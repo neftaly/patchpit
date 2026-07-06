@@ -96,6 +96,7 @@ export function createSeedFilesystem(): SeedFilesystem {
   const appPackages = [
     installSeedAppPackage(repo, {
       entry: 'index.html',
+      entryKind: 'shell-compat',
       files: [firstPartyShellEntryFile('File Picker')],
       handles: [],
       icon: '📁',
@@ -106,6 +107,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     }),
     installSeedAppPackage(repo, {
       entry: 'index.html',
+      entryKind: 'shell-compat',
       files: [firstPartyShellEntryFile('Terminal')],
       handles: [],
       icon: '💬',
@@ -116,6 +118,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     }),
     installSeedAppPackage(repo, {
       entry: 'index.html',
+      entryKind: 'shell-compat',
       files: [firstPartyShellEntryFile('Viewer')],
       handles: [
         { accepts: ['*/*'], intent: 'preview', port: 'view' },
@@ -134,6 +137,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     }),
     installSeedAppPackage(repo, {
       entry: 'app.js',
+      entryKind: 'module',
       files: helloWorldAppFiles,
       handles: [],
       icon: '👋',
@@ -588,6 +592,7 @@ type SeedAppPackageFile = {
 
 type SeedAppPackageInput = {
   readonly entry: string;
+  readonly entryKind: AppManifestDoc['entryKind'];
   readonly files: readonly SeedAppPackageFile[];
   readonly handles: AppManifestHandler[];
   readonly icon: string;
@@ -630,6 +635,7 @@ function createAppManifest(
   repo: Repo,
   input: {
     entry: string;
+    entryKind: AppManifestDoc['entryKind'];
     handles: AppManifestHandler[];
     icon: string;
     id: string;
@@ -641,6 +647,7 @@ function createAppManifest(
   return repo.create<AppManifestDoc>({
     '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
     entry: input.entry,
+    entryKind: input.entryKind,
     extension: automergeExtension,
     handles: input.handles,
     icons: [{ emoji: input.icon }],
@@ -650,6 +657,7 @@ function createAppManifest(
     name: input.name,
     ...(input.schemas === undefined ? {} : { schemas: relationSchemaRegistry(...input.schemas) }),
     surfaces: input.surfaces,
+    version: '0.0.0',
   });
 }
 
@@ -694,24 +702,6 @@ function firstPartyShellEntryHtml(name: string): string {
 }
 
 const helloWorldAppFiles = [
-  {
-    content: `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Hello World</title>
-  <script type="module" src="./app.js"></script>
-</head>
-<body>
-  <main>
-    <h1>Hello World</h1>
-    <p>This sandbox example was loaded from /apps/hello-world.</p>
-  </main>
-</body>
-</html>
-`,
-    name: 'index.html',
-  },
   {
     content: `export default function activate(env) {
   const root = document.getElementById('patchpit-root') ?? document.body;

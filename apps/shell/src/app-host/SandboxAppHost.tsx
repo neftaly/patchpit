@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WindowContext } from '@patchpit/system';
+import { createSandboxPackageLoadPlan, type SandboxFilesystemAppEntry } from './sandbox-package-loader';
 import './sandbox-app-host.css';
 
 export const sandboxAppProtocol = 'patchpit.app@1' as const;
@@ -7,11 +8,6 @@ export const sandboxAppProtocol = 'patchpit.app@1' as const;
 export type SandboxAppProtocol = typeof sandboxAppProtocol;
 export type SandboxAppServiceName = 'act' | 'open' | 'view';
 export type SandboxAppSession = Pick<WindowContext, 'app' | 'id' | 'url'>;
-
-export type SandboxFilesystemAppEntry = {
-  readonly text: string;
-  readonly url: string;
-};
 
 export type SandboxAppServiceRequest = {
   readonly protocol: SandboxAppProtocol;
@@ -68,22 +64,24 @@ export function SandboxAppHost({
   title = `${appId} sandbox`,
 }: SandboxAppHostProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const entryText = entry?.text;
+  const loadPlan = useMemo(() => (
+    entry === undefined ? undefined : createSandboxPackageLoadPlan(entry)
+  ), [entry]);
   const srcDoc = useMemo(() => (
-    entryText === undefined
+    loadPlan === undefined || loadPlan.kind === 'error'
       ? undefined
       : sandboxSrcDoc({
           appId,
+          loadPlan,
           protocol: sandboxAppProtocol,
           session,
-          source: entryText,
         })
-  ), [appId, entryText, session.app, session.id, session.url]);
+  ), [appId, loadPlan, session.app, session.id, session.url]);
   const [status, setStatus] = useState<SandboxStatus>({ kind: 'starting' });
 
   useEffect(() => {
-    if (entryText !== undefined) setStatus({ kind: 'starting' });
-  }, [entryText, srcDoc]);
+    if (loadPlan !== undefined && loadPlan.kind !== 'error') setStatus({ kind: 'starting' });
+  }, [loadPlan, srcDoc]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent<unknown>) {
@@ -94,7 +92,7 @@ export function SandboxAppHost({
       if (message === undefined) return;
 
       if (message.type === 'running') {
-        setStatus({ kind: 'running' });
+        setStatus((current) => (current.kind === 'error' ? current : { kind: 'running' }));
       } else if (message.type === 'error') {
         setStatus({ kind: 'error', error: message.error });
       } else {
@@ -106,11 +104,31 @@ export function SandboxAppHost({
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  if (entryText === undefined || srcDoc === undefined) {
+  if (entry === undefined || loadPlan === undefined) {
     return (
       <SandboxNotice
         message="The app manifest points at an entry that is not available in the filesystem."
         title="App entry missing"
+      />
+    );
+  }
+
+  if (loadPlan.kind === 'error') {
+    return (
+      <SandboxNotice
+        message={loadPlan.error}
+        role="alert"
+        title="App entry unsupported"
+      />
+    );
+  }
+
+  if (srcDoc === undefined) {
+    return (
+      <SandboxNotice
+        message="The app manifest entry could not be prepared for the sandbox."
+        role="alert"
+        title="App entry failed"
       />
     );
   }
@@ -220,17 +238,20 @@ function reportedError(value: unknown): SandboxAppReportedError | undefined {
 
 function sandboxSrcDoc({
   appId,
+  loadPlan,
   protocol,
   session,
-  source,
 }: {
   readonly appId: string;
+  readonly loadPlan: Exclude<ReturnType<typeof createSandboxPackageLoadPlan>, { readonly kind: 'error' }>;
   readonly protocol: SandboxAppProtocol;
   readonly session: SandboxAppSession;
-  readonly source: string;
 }): string {
-  const config = scriptJson({ appId, protocol, session });
-  const appSource = scriptJson(source);
+  const bridgeScript = sandboxBridgeScript({ appId, protocol, session });
+
+  if (loadPlan.kind === 'html') {
+    return injectSandboxBridge(loadPlan.html, bridgeScript, htmlReadyScript());
+  }
 
   return `<!doctype html>
 <html>
@@ -253,12 +274,39 @@ function sandboxSrcDoc({
 </head>
 <body>
   <div id="patchpit-root"></div>
-  <script id="patchpit-config" type="application/json">${config}</script>
-  <script id="patchpit-source" type="application/json">${appSource}</script>
-  <script>
+  <script>${bridgeScript}</script>
+  <script type="module">
+    try {
+      const appModule = await import(${scriptJson(loadPlan.entryModuleUrl)});
+      const app = appModule.default ?? appModule.main ?? window.patchpitApp;
+      if (typeof app !== 'function') {
+        throw new Error('App entry must export a default function or main(env).');
+      }
+
+      Promise.resolve(app(window.patchpit)).catch(window.patchpitReportError);
+      window.patchpitMarkRunning();
+    } catch (error) {
+      window.patchpitReportError(error);
+    }
+  </script>
+</body>
+</html>`;
+}
+
+function sandboxBridgeScript({
+  appId,
+  protocol,
+  session,
+}: {
+  readonly appId: string;
+  readonly protocol: SandboxAppProtocol;
+  readonly session: SandboxAppSession;
+}): string {
+  const config = scriptJson({ appId, protocol, session });
+
+  return `
     (() => {
-      const config = JSON.parse(document.getElementById('patchpit-config').textContent);
-      const source = JSON.parse(document.getElementById('patchpit-source').textContent);
+      const config = ${config};
       const pending = new Map();
       let nextRequestId = 1;
 
@@ -315,6 +363,13 @@ function sandboxSrcDoc({
         protocol: config.protocol,
         appId: config.appId,
         session: Object.freeze(config.session),
+        capabilities: Object.freeze({
+          services: Object.freeze({
+            act: false,
+            open: false,
+            view: false,
+          }),
+        }),
         services: Object.freeze({
           act: (request) => requestService('act', request),
           open: (request) => requestService('open', request),
@@ -322,27 +377,34 @@ function sandboxSrcDoc({
         }),
       });
 
-      void (async () => {
-        const moduleUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
-        try {
-          const appModule = await import(moduleUrl);
-          const app = appModule.default ?? appModule.main ?? window.patchpitApp;
-          if (typeof app !== 'function') {
-            throw new Error('App entry must export a default function or main(env).');
-          }
-
-          Promise.resolve(app(env)).catch(reportError);
-          post({ type: 'running' });
-        } catch (error) {
-          reportError(error);
-        } finally {
-          URL.revokeObjectURL(moduleUrl);
-        }
-      })();
+      Object.defineProperty(window, 'patchpit', { value: env });
+      Object.defineProperty(window, 'patchpitEnv', { value: env });
+      Object.defineProperty(window, 'patchpitMarkRunning', { value: () => post({ type: 'running' }) });
+      Object.defineProperty(window, 'patchpitReportError', { value: reportError });
     })();
-  </script>
-</body>
-</html>`;
+  `;
+}
+
+function injectSandboxBridge(html: string, bridgeScript: string, readyScript: string): string {
+  const scripts = `<script>${bridgeScript}</script><script>${readyScript}</script>`;
+  if (/<head\b[^>]*>/i.test(html)) return html.replace(/<head\b[^>]*>/i, (tag) => `${tag}${scripts}`);
+  if (/<html\b[^>]*>/i.test(html)) return html.replace(/<html\b[^>]*>/i, (tag) => `${tag}${scripts}`);
+  return `${scripts}${html}`;
+}
+
+function htmlReadyScript(): string {
+  return `
+    (() => {
+      function markRunning() {
+        window.patchpitMarkRunning();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', markRunning, { once: true });
+      } else {
+        markRunning();
+      }
+    })();
+  `;
 }
 
 function scriptJson(value: unknown): string {

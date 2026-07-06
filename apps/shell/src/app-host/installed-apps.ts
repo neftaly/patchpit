@@ -1,9 +1,9 @@
 import {
-  PatchpitType,
   SurfaceRole,
   type AppManifestDoc,
   type FilesystemNode,
 } from '@patchpit/system';
+import { isPackageAppManifestDoc } from '../runtime/app-manifest-discovery';
 
 type FilesystemFolder = Extract<FilesystemNode, { readonly kind: 'folder' }>;
 
@@ -13,6 +13,7 @@ export type InstalledApp = {
   readonly manifest: AppManifestDoc;
   readonly manifestUrl: string;
   readonly packagePath: string;
+  readonly packageRoot: FilesystemFolder;
 };
 
 export function installedAppsFromFilesystem({
@@ -44,12 +45,12 @@ function installedAppFromNode(
 ): readonly InstalledApp[] {
   if (node.kind === 'file') return [];
 
-  const manifestNode = node.entries.find((entry) => isAppManifestDoc(getDocument(entry.url)));
+  const manifestNode = node.entries.find((entry) => isPackageAppManifestDoc(getDocument(entry.url)));
   if (manifestNode === undefined) return [];
 
   const manifest = getDocument(manifestNode.url);
-  return isAppManifestDoc(manifest)
-    ? [installedApp(manifest, manifestNode.url, resolveEntryNode(node, manifest.entry), path)]
+  return isPackageAppManifestDoc(manifest)
+    ? [installedApp(manifest, manifestNode.url, resolveEntryNode(node, manifest.entry), path, node)]
     : [];
 }
 
@@ -58,6 +59,7 @@ function installedApp(
   manifestUrl: string,
   entry: FilesystemNode | undefined,
   packagePath: string,
+  packageRoot: FilesystemFolder,
 ): InstalledApp {
   return {
     entry,
@@ -65,6 +67,7 @@ function installedApp(
     manifest,
     manifestUrl,
     packagePath,
+    packageRoot,
   };
 }
 
@@ -85,16 +88,4 @@ function childFolder(node: FilesystemNode, name: string): FilesystemFolder | und
 
 function childNode(node: FilesystemNode, name: string): FilesystemNode | undefined {
   return node.kind === 'folder' ? node.entries.find((entry) => entry.name === name) : undefined;
-}
-
-function isAppManifestDoc(value: unknown): value is AppManifestDoc {
-  return (
-    typeof value === 'object'
-    && value !== null
-    && !Array.isArray(value)
-    && (value as { '@patchpit'?: { type?: unknown } })['@patchpit']?.type === PatchpitType.AppManifest
-    && typeof (value as { id?: unknown }).id === 'string'
-    && typeof (value as { name?: unknown }).name === 'string'
-    && typeof (value as { entry?: unknown }).entry === 'string'
-  );
 }
