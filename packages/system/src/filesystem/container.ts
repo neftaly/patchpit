@@ -1,40 +1,9 @@
 import {
   ContainerMountKind,
-  RuntimeMountProvider,
   type AppContainer,
   type AutomergeContainerMount,
   type ContainerMount,
-  type RuntimeContainerMount,
 } from './types';
-
-export const terminalRuntimeMounts = [
-  {
-    kind: ContainerMountKind.Runtime,
-    path: '/bin',
-    provider: RuntimeMountProvider.ShellCommands,
-  },
-  {
-    kind: ContainerMountKind.Runtime,
-    path: '/usr/bin',
-    provider: RuntimeMountProvider.ShellCommands,
-  },
-  {
-    kind: ContainerMountKind.Runtime,
-    path: '/dev',
-    provider: RuntimeMountProvider.Device,
-  },
-  {
-    kind: ContainerMountKind.Runtime,
-    path: '/proc',
-    provider: RuntimeMountProvider.Proc,
-  },
-  {
-    kind: ContainerMountKind.Runtime,
-    path: '/tmp',
-    provider: RuntimeMountProvider.Memory,
-    writable: true,
-  },
-] as const satisfies readonly RuntimeContainerMount[];
 
 export function rootContainer(rootUrl: string): AppContainer {
   return {
@@ -44,15 +13,6 @@ export function rootContainer(rootUrl: string): AppContainer {
         path: '/',
         url: rootUrl,
       },
-    ],
-  };
-}
-
-export function terminalContainer(rootUrl: string): AppContainer {
-  return {
-    mounts: [
-      ...rootContainer(rootUrl).mounts,
-      ...terminalRuntimeMounts,
     ],
   };
 }

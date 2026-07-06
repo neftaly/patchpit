@@ -80,8 +80,8 @@ export const appManifestSchema = defineRelationSchema({
         entry: { type: 'string' },
         entryKind: {
           type: 'string',
-          description: 'How the current host interprets entry: JavaScript module, HTML document, or shell compatibility adapter.',
-          metadata: enumMetadata(['module', 'html', 'shell-compat']),
+          description: 'How the current host interprets entry: JavaScript module or HTML document.',
+          metadata: enumMetadata(['module', 'html']),
         },
         extension: { type: 'string' },
         id: idField('app'),
@@ -301,56 +301,6 @@ export const filePickerStateSchema = defineRelationSchema({
   },
 });
 
-export const terminalStateSchema = defineRelationSchema({
-  kind: 'tarstate.schema',
-  formatVersion: 1,
-  schemaId: 'patchpit.app.terminal.state@1',
-  description: 'Durable terminal state projected from the terminal app Automerge doc.',
-  metadata: schemaMetadata(PatchpitType.TerminalState),
-  relations: {
-    state: {
-      key: 'id',
-      fields: {
-        capabilities: {
-          type: 'json',
-          description: 'Terminal capability policy object for this state doc.',
-        },
-        cwd: { type: 'string' },
-        id: idField('terminalState'),
-      },
-    },
-    env: {
-      key: ['stateId', 'name'],
-      fields: {
-        name: { type: 'string' },
-        stateId: refField('state'),
-        value: { type: 'string' },
-      },
-    },
-    history: {
-      key: ['stateId', 'position'],
-      fields: {
-        command: { type: 'string' },
-        position: { type: 'number' },
-        stateId: refField('state'),
-      },
-    },
-    lines: {
-      key: ['stateId', 'position'],
-      fields: {
-        kind: {
-          type: 'string',
-          metadata: enumMetadata(['input', 'output', 'error']),
-        },
-        position: { type: 'number' },
-        prompt: { type: 'string', optional: true },
-        stateId: refField('state'),
-        text: { type: 'string' },
-      },
-    },
-  },
-});
-
 export const windowManagerStateSchema = defineRelationSchema({
   kind: 'tarstate.schema',
   formatVersion: 1,
@@ -436,16 +386,6 @@ export const runtimeStateSchema = defineRelationSchema({
         note: { type: 'string', optional: true },
         position: { type: 'number' },
         stateId: refField('state'),
-      },
-    },
-    appInstances: {
-      key: ['stateId', 'contextId'],
-      fields: {
-        app: { type: 'string' },
-        contextId: { type: 'string' },
-        stateId: refField('state'),
-        stateType: { type: 'string' },
-        stateUrl: { type: 'string' },
       },
     },
     workers: {
@@ -724,7 +664,6 @@ export const patchpitSystemSchemas = [
   fileTypesSchema,
   filePickerStateSchema,
   filesystemTreeSchema,
-  terminalStateSchema,
   windowManagerStateSchema,
   runtimeStateSchema,
   runtimeProjectionsSchema,
@@ -742,7 +681,6 @@ export const patchpitSystemSchemaCatalog = relationSchemaRegistry(...patchpitSys
 
 const patchpitSystemSchemaHashes = {
   'patchpit.app.filePicker.state@1': 'sha256:fd50dd18069cfe00eed87763f036b7afaeb97a15a82bd5ab8ce49d83b809de96',
-  'patchpit.app.terminal.state@1': 'sha256:e8fc3fc6cd9c219b3f9f8fff46e38806a2949f199c7d40a747b676fd44780aca',
   'patchpit.filesystem.fileResource@1': 'sha256:4bf45026d8d267a3b11ff4eabad62920e9dea3c9ffd377b4b0f9954a3f1dca45',
   'patchpit.filesystem.fileTypes@1': 'sha256:0815c5b29b35282153e5a1db2e97c1c6d0f07772c286076d940a0c03a464cf97',
   'patchpit.filesystem.folder@1': 'sha256:b66316f285cdf8772105be4f6ef9de97eba1f4faf9795c07d8915f5c6f84907d',
@@ -753,8 +691,8 @@ const patchpitSystemSchemaHashes = {
   'patchpit.intent.route@1': 'sha256:b788b4f922f50dc25d36141190ec1872e8d1ec24cc0cbc205235c6a88f2bbf85',
   'patchpit.intent.window@1': 'sha256:f6fc795ee96f61af948e486b88765757967171387ac641bbfb9ad25b69f205e0',
   'patchpit.runtime.projections@1': 'sha256:eec2da731e157cdfe2f02b9c3a3adb273e3454c9e73ab5fad015dd1cd6fa7903',
-  'patchpit.runtime.state@1': 'sha256:b277e00869d466d3523f1e166c9f229deae749ba6ec1a238a73dbe362e1a760a',
-  'patchpit.system.appManifest@1': 'sha256:9a4c3ad3bbb080b277330aecc82724243402da18a13b776b2c61b4615e0b6a5d',
+  'patchpit.runtime.state@1': 'sha256:af7929434c05cc236c47e6284362b775362ae198e8a7b2068251a5c015f636cf',
+  'patchpit.system.appManifest@1': 'sha256:d669fe4c41059f3897dc736a6c5265af06992ee80be805b980acfd75a91344ad',
   'patchpit.system.appearance@1': 'sha256:a3a297b433293a35d1380c666821e6883016adbaab760ed3b8e898f77dad46d4',
   'patchpit.system.theme@1': 'sha256:b7ccfb5659debca60a397102a96c5ae722434f14ffc4d19af085e39c8806ec4f',
   'patchpit.system.windowManager.state@1': 'sha256:ae080f3790d51376f411d32d3f9706193c5ed58ab77c374bb59d2d748b48db6f',
@@ -769,7 +707,6 @@ export const patchpitSystemSchemaByDocType = {
   [PatchpitType.FilesystemIndex]: filesystemIndexSchema,
   [PatchpitType.Folder]: folderSchema,
   [PatchpitType.RuntimeState]: runtimeStateSchema,
-  [PatchpitType.TerminalState]: terminalStateSchema,
   [PatchpitType.Theme]: themeSchema,
   [PatchpitType.WindowManagerState]: windowManagerStateSchema,
 } as const satisfies Readonly<Record<PatchpitType, PatchpitRelationSchemaDescriptor>>;

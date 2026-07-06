@@ -138,8 +138,8 @@ A durable `/system/schemas` location can be added later without changing refs.
 
 The descriptor describes the public relation view of a state surface, not
 necessarily the physical Automerge document layout. A file-picker state doc can
-store `openFolders` as a map while exposing an `openFolders` relation. A
-terminal state doc can store `lines` as an array while exposing a `lines`
+store `openFolders` as a map while exposing an `openFolders` relation. An
+editor state doc can store `buffers` as an array while exposing a `buffers`
 relation keyed by `(stateId, position)`.
 
 This keeps domain documents ergonomic without making the protocol opaque.

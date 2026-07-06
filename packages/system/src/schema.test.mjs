@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PatchpitFs } from '../../../apps/terminal/src/patchpit-fs.ts';
 import {
   PatchpitSchemaValidationError,
   canonicalRelationSchemaJson,
@@ -15,7 +14,6 @@ import {
 import {
   PatchpitType,
   createSeedFilesystem,
-  createTerminalStateResource,
   filePickerIntentSchema,
   filePickerStateSchema,
   filesystemIndexSchema,
@@ -24,7 +22,6 @@ import {
   patchpitSystemSchemaLocation,
   patchpitSystemSchemaRef,
   patchpitSystemSchemas,
-  terminalStateSchema,
 } from './filesystem/index.ts';
 
 const pizzaSchema = defineRelationSchema({
@@ -229,14 +226,6 @@ void test('seeded and dynamically created system docs carry schema refs', () => 
   );
   assert.deepEqual(filePickerApp.schemas[filePickerStateSchema.schemaId], filePickerStateSchema);
 
-  const terminalApp = appManifest(seed, 'terminal');
-  assert.equal(terminalApp.entryKind, 'shell-compat');
-  assert.deepEqual(
-    terminalApp.surfaces[0].state.schema,
-    patchpitDocSchemaRef(PatchpitType.TerminalState),
-  );
-  assert.deepEqual(terminalApp.schemas[terminalStateSchema.schemaId], terminalStateSchema);
-
   const viewerApp = appManifest(seed, 'viewer');
   assert.equal(viewerApp.entry, 'app.js');
   assert.equal(viewerApp.entryKind, 'module');
@@ -244,33 +233,6 @@ void test('seeded and dynamically created system docs carry schema refs', () => 
   const helloWorldApp = appManifest(seed, 'hello-world');
   assert.equal(helloWorldApp.entry, 'app.js');
   assert.equal(helloWorldApp.entryKind, 'module');
-
-  const dynamicTerminal = createTerminalStateResource(seed, 'terminal-test');
-  assert.deepEqual(
-    dynamicTerminal.doc()['@patchpit'].schema,
-    patchpitDocSchemaRef(PatchpitType.TerminalState),
-  );
-});
-
-void test('terminal-created file and folder docs carry schema refs', async () => {
-  const seed = createSeedFilesystem();
-  const fs = new PatchpitFs({
-    documentHandles: seed.documentHandles,
-    indexHandle: seed.indexHandle,
-    repo: seed.repo,
-    rootUrl: seed.rootUrl,
-  });
-
-  await fs.writeFile('/home/terminal-created.txt', 'hello');
-  await fs.mkdir('/home/terminal-created-folder');
-
-  const file = filesystemDoc(seed, PatchpitType.File, 'terminal-created.txt');
-  const folder = filesystemDoc(seed, PatchpitType.Folder, 'terminal-created-folder');
-
-  assert.deepEqual(file['@patchpit'].schema, patchpitDocSchemaRef(PatchpitType.File));
-  assert.equal(file['@patchpit'].schemas, undefined);
-  assert.deepEqual(folder['@patchpit'].schema, patchpitDocSchemaRef(PatchpitType.Folder));
-  assert.equal(folder['@patchpit'].schemas, undefined);
 });
 
 function schemaWithPizzaField(fieldName, field) {
@@ -300,13 +262,5 @@ function appManifest(seed, appId) {
     .map((handle) => handle.doc())
     .find((candidate) => candidate['@patchpit'].type === PatchpitType.AppManifest && candidate.id === appId);
   assert.ok(doc, `Missing app manifest: ${appId}`);
-  return doc;
-}
-
-function filesystemDoc(seed, type, name) {
-  const doc = Object.values(seed.documentHandles)
-    .map((handle) => handle.doc())
-    .find((candidate) => candidate['@patchpit'].type === type && candidate.name === name);
-  assert.ok(doc, `Missing filesystem ${type} doc: ${name}`);
   return doc;
 }

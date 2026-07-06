@@ -1,8 +1,8 @@
 # Patchpit Sandboxed App Host
 
 Patchpit apps should run behind the same runtime boundary whether they are
-first-party apps, installed apps, terminal command runners, or later third-party
-packages. This document defines the sandboxed app host shape and records the
+first-party apps, installed apps, command runners, or later third-party packages.
+This document defines the sandboxed app host shape and records the
 decomplection checks for state ownership, capabilities, process placement, and
 app rendering.
 
@@ -28,7 +28,7 @@ other way around.
 - Keep compositor/window-manager enforcement, focus, and placement host-owned.
   Apps such as Launcher may render chrome in reserved surfaces, but they do not
   become the trusted compositor.
-- Let Settings, Launcher, viewer, file picker, terminal, and future apps move to
+- Let Settings, Launcher, viewer, file picker, and future apps move to
   the same app-host boundary without a big-bang rewrite.
 
 ## Non-Goals
@@ -52,23 +52,17 @@ Current apps are installed as package folders under `/apps`. Each package
 contains a manifest doc plus package resources. The implemented manifest fields
 are `manifestVersion`, `id`, `name`, `version`, `entry`, `entryKind`, `handles`,
 `surfaces`, and `schemas`. The shell derives launcher items from those app
-package manifests, filtering out stateless `shell-compat` placeholders such as
-Viewer while keeping them route-openable through document handlers. Both
-`app.launch` and document routing resolve app package manifests before creating
-sessions.
+package manifests. Both `app.launch` and document routing resolve app package
+manifests before creating sessions.
 
 `WindowManagerAppHost.renderSurface` is now a manifest-driven host boundary:
-the host resolves `context.app` through `/apps`, renders first-party React apps
-through compatibility adapters when `entryKind` is `shell-compat`, and runs
-filesystem JavaScript module and HTML document entries through `SandboxAppHost`
-when `entryKind` is `module` or `html`. The seeded `hello-world` app is the
-canonical minimal real file-backed sandbox package: its manifest points at
-`app.js`, and the iframe runner uses `sandbox="allow-scripts"` with no
-same-origin authority. The seeded File Picker, Terminal, and Viewer
-packages show the current migration boundary: File Picker is a runnable
-filesystem module app whose manifest points at `app.js`, while Terminal and
-Viewer still use `index.html` compatibility placeholders rendered by host
-adapters.
+the host resolves `context.app` through `/apps` and runs filesystem JavaScript
+module and HTML document entries through `SandboxAppHost` when `entryKind` is
+`module` or `html`. The seeded `hello-world` app is the canonical minimal real
+file-backed sandbox package: its manifest points at `app.js`, and the iframe
+runner uses `sandbox="allow-scripts"` with no same-origin authority. The seeded
+File Picker and Viewer packages are runnable filesystem module apps whose
+manifests point at `app.js`.
 
 The SharedWorker is still the boot gate, not the owner of Automerge handles or
 runtime operations. The in-process bootstrap runtime still owns the first
@@ -171,7 +165,7 @@ The smaller runtime shape is:
   supervisor.
 
 Everything visible and product-shaped should be an app. Settings, Launcher,
-Files, Viewer, and Terminal are first-party apps, not shell widgets. They may
+Files, and Viewer are first-party apps, not shell widgets. They may
 receive stronger runtime grants in V0, but those grants should be attached to
 their app ids and contexts, not to separate rendering paths.
 
@@ -187,7 +181,7 @@ The trusted substrate should stay small and non-product:
   first userland apps or run an idempotent first-run setup script.
 
 The substrate should not contain Settings UI, Launcher UI, file browsing,
-document viewing, terminal UI, or package catalogs. A reserved launcher edge is a
+document viewing, command UI, or package catalogs. A reserved launcher edge is a
 placement rule; the Launcher rendering inside it is still an app.
 
 This removes code paths instead of adding them:
@@ -199,8 +193,9 @@ This removes code paths instead of adding them:
 - replace special Settings handling with a first-party app-management grant;
 - replace bundled/preinstalled app lists with a first-run script that calls the
   normal installer.
-- replace `/system/runtime.appInstances` as a source of truth with derived
-  diagnostics from workspace sessions, surfaces, and app-host runner state.
+- replace legacy runtime app-instance registries as sources of truth with
+  derived diagnostics from workspace sessions, surfaces, and app-host runner
+  state.
 
 The app-facing API should also stay smaller than the runtime implementation
 vocabulary. Apps should see:
@@ -307,9 +302,8 @@ type AppManifestRunner = {
 The first app-host slice should keep manifests close to today's shape:
 `manifestVersion`, `id`, `name`, `version`, `entry`, `entryKind`, `handles`,
 `surfaces`, and `schemas`, with optional runner metadata. `entryKind: 'module'`
-and `entryKind: 'html'` are current real sandbox paths. `entryKind:
-'shell-compat'` marks first-party packages still rendered by host adapters.
-Fine-grained permission declarations can be added later when Patchpit has the
+and `entryKind: 'html'` are current real sandbox paths. Fine-grained permission
+declarations can be added later when Patchpit has the
 capability model and UX to support them.
 
 ## Runner Placement
@@ -347,13 +341,12 @@ Default app-host policy:
 
 ### Command Runner
 
-`patchpit-command-runner` is short-lived and stricter. It is for terminal
-command execution, malicious JavaScript demos, import analysis, and similar
-untrusted jobs. It should use fresh temp dirs, tighter CPU/memory/output limits,
-and a wall-clock timeout. It should never share a runner with app UI contexts.
-
-Terminal command output is untrusted data. The trusted terminal surface decides
-how to sanitize, cap, display, and eventually commit output.
+`patchpit-command-runner` is short-lived and stricter. It is for malicious
+JavaScript demos, import analysis, and similar untrusted jobs. It should use
+fresh temp dirs, tighter CPU/memory/output limits, and a wall-clock timeout. It
+should never share a runner with app UI contexts. Command output is untrusted
+data; the trusted app surface decides how to sanitize, cap, display, and
+eventually commit output.
 
 ### Bubblewrap Shape
 
@@ -634,16 +627,16 @@ installed app manifests.
 
 The first-run setup path should be ordinary userland automation over the same
 installer API a user or developer would call manually. It can install Settings,
-Launcher, Files, Viewer, Terminal, or a minimal demo app from explicit package
-locations, but it must not introduce a bundled-app catalog, preinstalled app
-state, or a second registry.
+Launcher, Files, Viewer, or a minimal demo app from explicit package locations,
+but it must not introduce a bundled-app catalog, preinstalled app state, or a
+second registry.
 
 First-run flow:
 
 1. Patchpit boots to an empty workspace with only the bootstrap install
    affordance.
 2. The user, a dev command, or a first-run setup script installs a small app set,
-   such as Settings, Launcher, Files, Viewer, and Terminal.
+   such as Settings, Launcher, Files, and Viewer.
 3. The installed Launcher app occupies its reserved edge surface.
 4. Installed runnable apps appear in Launcher.
 5. Opening a document routes through installed handlers. If no handler is
@@ -652,9 +645,9 @@ First-run flow:
 
 Launcher should be derived from installed apps that are allowed to run, not from
 hard-coded React components. In the current V0 shell, direct launcher items are
-real sandbox entries or compatibility apps with declared launch state; stateless
-`shell-compat` document handlers such as Viewer stay available through routing
-and `Open With...` instead of appearing as blank launch targets.
+real sandbox entries with declared launch surfaces; document handlers such as
+Viewer stay available through routing and `Open With...` instead of appearing as
+blank launch targets.
 
 This keeps the larger app system simple: install apps, they appear as tools,
 they open documents or sessions, and Settings manages their lifecycle. A
@@ -794,32 +787,6 @@ Must not receive:
 - broad `/system` access;
 - app state docs for unrelated contexts.
 
-### Terminal
-
-Terminal is the last current-app migration target because it combines UI,
-streaming, durable state, and command execution.
-
-Needs:
-
-- terminal state view;
-- terminal state mutation actions or a scoped state writer port;
-- `terminal.filesystem` scoped to the context/container roots and verbs;
-- pty-like input/output/resize/close port;
-- explicit network grant only when policy allows it.
-
-Must not receive:
-
-- `seed.repo`, seed handles, `indexHandle`, or other terminal session docs;
-- unrestricted internet;
-- host OS process/env;
-- raw xterm instance;
-- direct `DocHandle` writes.
-
-Terminal command execution should use `patchpit-command-runner`. Terminal UI can
-use an `adapter` surface so xterm input and paint latency stay host-local.
-Output from the command runner is batched, capped, sanitized, and committed to
-durable terminal state only at command boundaries or coarse checkpoints.
-
 ## Performance Invariants
 
 The sandbox boundary must not enter the frame path.
@@ -837,17 +804,14 @@ Expensive paths:
 - cold process/WebView startup;
 - SES lockdown and module graph load;
 - full projection snapshots;
-- structured cloning large file/media bodies;
-- terminal output if every byte becomes durable state.
+- structured cloning large file/media bodies.
 
 Initial measurement targets:
 
 - warm viewer/file-picker launch to first interactive frame under 100 ms;
-- warm terminal prompt under 250 ms;
 - small port round trip p95 under 10 ms;
 - small view update to visible update under one frame;
 - no cross-boundary clone of file/media payloads over 256 KiB by default;
-- terminal input echo under 16 ms;
 - cold runner launch measured separately and hidden by prewarm where possible.
 
 Track payload bytes, row counts, clone time, runner RSS, process spawn time,
@@ -862,7 +826,7 @@ useful even without OS sandboxing or SES.
 1. Introduce a scoped app service facade. Current apps should depend on a small
    app-facing surface shaped like views, actions, and ports instead of
    shell-built props backed by raw documents. The host/runtime attaches scope.
-2. Move app state reads behind views. Viewer, file picker, and terminal should
+2. Move app state reads behind views. Viewer and file picker should
    read document or app state through schema-bound runtime views rather than
    direct `DocHandle` reads or shell-derived object graphs.
 3. Make `WindowManagerAppHost` manifest-driven. The compositor content slot
@@ -871,12 +835,10 @@ useful even without OS sandboxing or SES.
 4. Split content handles from tree metadata. File picker needs filesystem tree
    metadata; viewer needs content. Large text and media should not ride inside
    `filesystem.tree` rows.
-5. Define app state actions. File-picker selection/open-folder changes and
-   terminal state changes should be narrow runtime actions, not direct callbacks
-   or document writes.
-6. Normalize port adapters. `terminal.filesystem` is the precedent:
-   explicit grant, scoped endpoint, bounded request/response protocol,
-   close/revoke behavior, and deterministic errors.
+5. Define app state actions. File-picker selection/open-folder changes should be
+   narrow runtime actions, not direct callbacks or document writes.
+6. Normalize port adapters with explicit grants, scoped endpoints, bounded
+   request/response protocols, close/revoke behavior, and deterministic errors.
 7. Enforce runtime scope before sandbox placement. App code should never send
    trusted `workspaceId`, `surfaceId`, `contextId`, or `appId`; the host/runtime
    derives those from the launched context.
@@ -900,13 +862,11 @@ once.
    view/content boundaries without write authority.
 5. Migrate file picker after viewer because it adds app state views and route or
    file-picker actions.
-6. Migrate terminal last because it adds filesystem ports, streaming, command
-   execution, output limits, and performance-sensitive rendering.
-7. Add SES and OS runner placement after the app API works through the
+6. Add SES and OS runner placement after the app API works through the
    compatibility placement.
 
 The old path should disappear only after the manifest-hosted path can run
-Settings, Launcher, Files, Viewer, and Terminal through the same app API.
+Settings, Launcher, Files, and Viewer through the same app API.
 
 ## Migration Plan
 
@@ -921,11 +881,9 @@ Settings, Launcher, Files, Viewer, and Terminal through the same app API.
    projection plus manifest entry resolution.
 5. Migrate viewer through the sandbox host.
 6. Migrate file picker through views and actions.
-7. Migrate terminal state and filesystem access through views, actions, and
-   ports; keep command execution in `patchpit-command-runner`.
-8. Add local OS placement for command runners, then for app hosts where a local
+7. Add local OS placement for command runners, then for app hosts where a local
    supervisor exists.
-9. Move runtime ownership from the in-process bootstrap scaffold into the
+8. Move runtime ownership from the in-process bootstrap scaffold into the
    SharedWorker runtime. The app API should not change when this happens.
 
 ## Review Checks

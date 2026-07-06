@@ -3,7 +3,7 @@ import {
   type AppManifestDoc,
 } from '@patchpit/system';
 
-const appManifestEntryKinds = new Set<unknown>(['module', 'html', 'shell-compat']);
+const appManifestEntryKinds = new Set<unknown>(['module', 'html']);
 
 export function isPackageAppManifestDoc(value: unknown): value is AppManifestDoc {
   return (

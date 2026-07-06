@@ -13,10 +13,10 @@
     "dev": "vite --config vite.config.ts",
     "fixtures:check": "pnpm fixtures:seed && git diff --exit-code -- packages/system/src/fixtures/seed.ts",
     "fixtures:seed": "node scripts/generate-seed-fixture.mjs",
-    "lint": "oxlint . --deny-warnings --type-aware",
+    "lint": "oxlint . --ignore-pattern archive/** --deny-warnings --type-aware",
     "smoke": "pnpm build && node scripts/smoke.mjs",
     "smoke:pages": "pnpm build:pages && node scripts/smoke.mjs --base=/patchpit/",
-    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/system/src/schema.test.mjs apps/shell/src/window-manager/window-manager-state.test.mjs apps/shell/src/launcher/launcher-items.test.mjs apps/shell/src/app-host/installed-apps.test.mjs apps/shell/src/app-host/sandbox-package-loader.test.mjs apps/shell/src/runtime/route-intents.test.mjs apps/shell/src/runtime/bootstrap-runtime.test.mjs apps/file-picker/src/file-picker-state.test.mjs apps/terminal/src/patchpit-fs.test.mjs",
+    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/system/src/schema.test.mjs apps/shell/src/window-manager/window-manager-state.test.mjs apps/shell/src/launcher/launcher-items.test.mjs apps/shell/src/app-host/installed-apps.test.mjs apps/shell/src/app-host/sandbox-package-loader.test.mjs apps/shell/src/runtime/route-intents.test.mjs apps/shell/src/runtime/bootstrap-runtime.test.mjs apps/file-picker/src/file-picker-state.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

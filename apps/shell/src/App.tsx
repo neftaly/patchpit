@@ -1,17 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import {
-  TerminalAppSurface,
-  terminalAppContextLabel,
-  terminalFilesystemCapabilityProvider,
-  terminalAppInstanceStateHandler,
-  terminalAppSessions,
-  terminalAppStateHandles,
-  useTerminalAppRuntime,
-  type TerminalAppSession,
-} from '@patchpit/terminal';
-import {
   createSeedFilesystem,
-  createTerminalStateResource,
   nodePath,
   recordRuntimeBootGateAck,
   resolveTheme,
@@ -21,7 +10,6 @@ import {
   type FileTypesDoc,
   type FileType,
   type FilesystemNode,
-  type RuntimeStateDoc,
   type ThemeDoc,
 } from '@patchpit/system';
 import {
@@ -57,7 +45,7 @@ import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/laun
 import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from './runtime/route-intents';
 import { type RuntimeDiagnosticsIssueEntry } from './runtime-diagnostics/RuntimeDiagnostics';
 import { RuntimeDiagnosticsSurface } from './runtime-diagnostics/RuntimeDiagnosticsSurface';
-import { useAutomergeDocs, useRuntimeDocument } from './runtime/use-automerge-doc';
+import { useRuntimeDocument } from './runtime/use-automerge-doc';
 import { useFilesystemTreeProjection, useWorkspaceProjection } from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
 import {
@@ -106,18 +94,7 @@ function ShellApp({
   readonly runtimePlatform: RuntimePlatformReport;
 }) {
   const [seed] = useState(createSeedFilesystem);
-  const nextTerminalId = useRef(2);
   const [runtime] = useState(() => createBootstrapRuntimeClient({
-    appInstanceStateHandlers: [
-      terminalAppInstanceStateHandler(() => {
-        const handle = createTerminalStateResource(seed, `terminal-${nextTerminalId.current}`);
-        nextTerminalId.current += 1;
-        return handle;
-      }),
-    ],
-    capabilityProviders: [
-      terminalFilesystemCapabilityProvider(seed),
-    ],
     seed,
     workspaceId: 'default',
   }));
@@ -131,9 +108,6 @@ function ShellApp({
   const nextRuntimeIssueId = useRef(1);
   const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly RuntimeDiagnosticsIssueEntry[]>([]);
   const filePickerState = useRuntimeDocument<FilePickerStateDoc>(runtime.resources, documentUrls.filePickerState);
-  const runtimeState = useRuntimeDocument<RuntimeStateDoc>(runtime.resources, documentUrls.runtimeState);
-  const terminalHandles = useMemo(() => terminalAppStateHandles(seed, runtimeState), [seed, runtimeState]);
-  const terminalStates = useAutomergeDocs(terminalHandles);
   const prefersDark = usePrefersDark();
   const theme = resolveTheme(appearance, lightTheme, darkTheme, prefersDark);
 
@@ -180,12 +154,6 @@ function ShellApp({
     setRuntimeFault(failure);
     recordRuntimeIssue('runtime', failure);
   };
-  const terminalRuntime = useTerminalAppRuntime(runtime, (issue) => {
-    setRuntimeFault(issue);
-    recordRuntimeIssue('capability', issue);
-  }, {
-    enabled: terminalHandles.length > 0,
-  });
   const launchApp = (input: AppLaunchIntentInput) => {
     void submitAppLaunchIntent(runtime, input).then(reportIntentResult).catch(reportRuntimeError);
   };
@@ -214,11 +182,6 @@ function ShellApp({
         });
     },
   };
-  const terminalSessions = terminalAppSessions({
-    handles: terminalHandles,
-    runtime: terminalRuntime,
-    states: terminalStates,
-  });
   const launchers = launcherItems({
     focusedAppId: workspaceProjection.status === 'ready'
       ? focusedAppId(workspaceProjection.workspace)
@@ -264,8 +227,6 @@ function ShellApp({
               },
               filesystemRoot: filesystemProjection.root,
               installedApps,
-              terminalSessions,
-              theme,
             })}
             workspace={workspaceProjection.workspace}
           />
@@ -277,7 +238,6 @@ function ShellApp({
                 runtimeIssue={runtimeFault}
                 runtimeIssueHistory={runtimeIssueHistory}
                 runtimePlatform={runtimePlatform}
-                runtimeState={runtimeState}
               />
             </div>
           ) : null}
@@ -292,8 +252,6 @@ function shellAppHost({
   filePicker,
   filesystemRoot,
   installedApps,
-  terminalSessions,
-  theme,
 }: {
   readonly filePicker: {
     readonly fileTypes: SandboxFilePickerHostScope['fileTypes'];
@@ -303,8 +261,6 @@ function shellAppHost({
   };
   readonly filesystemRoot: FilesystemNode;
   readonly installedApps: readonly InstalledApp[];
-  readonly terminalSessions: Readonly<Record<string, TerminalAppSession>>;
-  readonly theme: ThemeDoc;
 }): WindowManagerAppHost {
   const appsById = new Map(installedApps.map((app) => [app.manifest.id, app]));
   return {
@@ -313,7 +269,6 @@ function shellAppHost({
     },
 
     contextLabel(context) {
-      if (context.app === 'terminal') return terminalAppContextLabel(terminalSessions[context.url]);
       return nodePath(filesystemRoot, context.url) ?? context.title ?? appsById.get(context.app)?.manifest.name;
     },
 
@@ -330,16 +285,6 @@ function shellAppHost({
             message={`No installed app manifest was found for ${context.app}.`}
             role="alert"
             title="App not installed"
-          />
-        );
-      }
-
-      if (context.app === 'terminal') {
-        return (
-          <TerminalAppSurface
-            context={context}
-            sessions={terminalSessions}
-            theme={theme}
           />
         );
       }

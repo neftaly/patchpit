@@ -18,7 +18,7 @@ export {
   syncFilesystemIndexResources,
   type FilesystemResourceHandle,
 } from './resources';
-export { containerOverlayMounts, containerRootUrl, rootContainer, terminalContainer } from './container';
+export { containerOverlayMounts, containerRootUrl, rootContainer } from './container';
 export {
   appManifestSchema,
   appLaunchIntentBoundary,
@@ -44,7 +44,6 @@ export {
   routeIntentSchema,
   runtimeStateSchema,
   runtimeProjectionsSchema,
-  terminalStateSchema,
   themeSchema,
   windowIntentBoundary,
   windowIntentSchema,
@@ -62,7 +61,6 @@ export {
 } from './project';
 export {
   createSeedFilesystem,
-  createTerminalStateResource,
   recordRuntimeBootGateAck,
   removeSystemAppResource,
 } from './seed';

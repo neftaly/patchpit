@@ -20,7 +20,6 @@ export function themeStyle(theme: ThemeDoc): ThemeStyle {
     '--font-code': theme.typography.codeFont,
     '--font-code-size': theme.typography.codeSize,
     '--line-code': theme.typography.codeLineHeight,
-    '--line-terminal': theme.typography.terminalLineHeight,
     '--preview-image-width': theme.metrics.previewImageWidth,
     '--tab-control-margin': theme.metrics.tabControlMargin,
     '--tab-pad': theme.metrics.tabPad,
@@ -35,9 +34,6 @@ export function themeStyle(theme: ThemeDoc): ThemeStyle {
     '--color-text': theme.palette.text,
     '--color-code': theme.palette.code,
     '--color-muted': theme.palette.muted,
-    '--color-terminal-cursor': theme.palette.terminalCursor,
-    '--color-terminal-selection': theme.palette.terminalSelection,
-    '--color-terminal-text': theme.palette.terminalText,
     '--tree-indent-guide': theme.palette.treeGuide,
   };
 }

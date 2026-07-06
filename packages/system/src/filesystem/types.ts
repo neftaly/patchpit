@@ -16,7 +16,6 @@ export enum PatchpitType {
   FilesystemIndex = 'filesystem-index',
   Folder = 'folder',
   RuntimeState = 'runtime-state',
-  TerminalState = 'terminal-state',
   Theme = 'theme',
   WindowManagerState = 'window-manager-state',
 }
@@ -40,12 +39,6 @@ export enum WindowManagerNodeKind {
 export enum SurfaceRole {
   DocumentSet = 'document-set',
   WorkspaceView = 'workspace-view',
-}
-
-export enum TerminalLineKind {
-  Error = 'error',
-  Input = 'input',
-  Output = 'output',
 }
 
 export enum ContainerMountKind {
@@ -105,7 +98,7 @@ export type AppManifestDoc = PatchpitDoc<PatchpitType.AppManifest> & {
   version: string;
 };
 
-export type AppManifestEntryKind = 'module' | 'html' | 'shell-compat';
+export type AppManifestEntryKind = 'module' | 'html';
 
 export type AppManifestHandler = {
   port: string;
@@ -182,9 +175,6 @@ export type ThemePalette = {
   code: string;
   muted: string;
   treeGuide: string;
-  terminalText: string;
-  terminalCursor: string;
-  terminalSelection: string;
 };
 
 export type ThemeMetrics = {
@@ -199,7 +189,6 @@ export type ThemeTypography = {
   codeFont: string;
   codeLineHeight: string;
   codeSize: string;
-  terminalLineHeight: string;
 };
 
 export type ThemeDoc = PatchpitDoc<PatchpitType.Theme> & {
@@ -221,39 +210,11 @@ export type AppearanceDoc = PatchpitDoc<PatchpitType.Appearance> & {
   mode: ThemeMode;
 };
 
-export type TerminalStateDoc = PatchpitDoc<PatchpitType.TerminalState> & {
-  name: string;
-  extension: string;
-  mimeType: string;
-  capabilities: TerminalCapabilities;
-  cwd: string;
-  env: Record<string, string>;
-  history: string[];
-  lines: TerminalLine[];
-};
-
-export type TerminalCapabilities = {
-  network: TerminalNetworkPolicy;
-};
-
-export type TerminalNetworkPolicy = {
-  allowAll: boolean;
-  allowedUrlPrefixes: string[];
-  enabled: boolean;
-};
-
-export type TerminalLine = {
-  kind: TerminalLineKind;
-  text: string;
-  prompt?: string;
-};
-
 export type RuntimeStateDoc = PatchpitDoc<PatchpitType.RuntimeState> & {
   name: string;
   extension: string;
   mimeType: string;
   title: string;
-  appInstances: RuntimeAppInstanceState[];
   protocol: RuntimeStateProtocol;
   boot: RuntimeStateBoot;
   features: RuntimeStateFeatures;
@@ -288,13 +249,6 @@ export type RuntimeStateOwnership = {
   canonicalState: 'automerge';
   currentAutomergeHandleOwner: string;
   note: string;
-};
-
-export type RuntimeAppInstanceState = {
-  app: string;
-  contextId: string;
-  stateType: string;
-  stateUrl: string;
 };
 
 export type RuntimeComponentState = {
@@ -377,7 +331,6 @@ export type FilesystemResource =
   | FileDoc
   | FolderDoc
   | RuntimeStateDoc
-  | TerminalStateDoc
   | ThemeDoc
   | WindowManagerStateDoc;
 

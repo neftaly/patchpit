@@ -19,10 +19,10 @@ Patchpit currently seeds three durable roots and exposes one live-service root:
 
 The bootloader creates only the initial filesystem, the minimal runtime state
 needed to boot, and the compositor/window-manager state needed to display
-surfaces. First-party apps such as Settings, Launcher, Files, Viewer, and
-Terminal are installed through the same installer path as other apps. A first-run
-script may automate those installs, but it must call the normal installer rather
-than seed a second app registry.
+surfaces. First-party apps such as Settings, Launcher, Files, and Viewer are
+installed through the same installer path as other apps. A first-run script may
+automate those installs, but it must call the normal installer rather than seed a
+second app registry.
 
 Apps are opened through one runtime admission path: route, launch, preview, and
 activation requests resolve an installed app package manifest, create or reuse a
@@ -99,7 +99,7 @@ type AppManifest = {
   id: string;
   name: string;
   entry: string;
-  entryKind: 'module' | 'html' | 'shell-compat';
+  entryKind: 'module' | 'html';
   version: string;
   scope?: string;
   icons?: Icon[];
@@ -130,9 +130,6 @@ that path is interpreted:
 - `html` is an implemented filesystem document path. The host injects the
   sandbox bridge into the package HTML document and rewrites package-relative
   module and asset references it can resolve.
-- `shell-compat` marks first-party placeholders whose UI is still rendered by
-  shell compatibility adapters. Their seeded `index.html` files are diagnostic
-  placeholders, not runnable installed app bundles.
 
 `manifestVersion` is the Patchpit manifest format version. `version` is the app
 package version. Shared libraries, import maps, content-hashed assets, and
@@ -203,7 +200,7 @@ Examples:
 
 - a viewer context for `automerge:...README.md`
 - a file picker context for a file-picker state doc
-- a terminal context for a terminal state doc
+- a sandbox app context for an installed package entry
 
 The runtime/router assigns the context's container, which defines the app's
 mount namespace. Tabs display a compositor context label: currently filesystem
@@ -328,8 +325,8 @@ runtime exposes relation-shaped `surfaces`, `contexts`, `layoutNodes`, or
 The first useful implementation should stay small:
 
 1. App packages live under `/apps`.
-2. Settings, Launcher, Files, Viewer, and Terminal are apps; runtime diagnostics
-   are shell/dev tooling, not an installed app.
+2. Settings, Launcher, Files, and Viewer are apps; runtime diagnostics are
+   shell/dev tooling, not an installed app.
 3. The window-manager doc owns surfaces, tabs, focus, reserved slots, and split
    layout.
 4. Route and launch requests share one admission path that resolves manifests

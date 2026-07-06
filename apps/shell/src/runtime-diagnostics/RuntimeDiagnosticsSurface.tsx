@@ -16,7 +16,6 @@ export function RuntimeDiagnosticsSurface({
   runtimeIssue,
   runtimeIssueHistory,
   runtimePlatform,
-  runtimeState,
 }: RuntimeDiagnosticsSurfaceProps) {
   const runtimeDiagnostics = useRuntimeDiagnostics(runtime);
 
@@ -28,7 +27,6 @@ export function RuntimeDiagnosticsSurface({
         runtimeIssue,
         runtimeIssueHistory,
         runtimePlatform,
-        runtimeState,
       })}
     />
   );

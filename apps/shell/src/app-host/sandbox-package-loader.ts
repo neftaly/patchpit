@@ -63,13 +63,6 @@ export function createSandboxPackageLoadPlan(entry: SandboxFilesystemAppEntry): 
     if (entryResource === undefined) {
       return { error: `Sandbox app entry "${entry.path}" is not available in the package.`, kind: 'error' };
     }
-    if (entry.entryKind === 'shell-compat') {
-      return {
-        error: `Sandbox app entry "${entry.path}" is shell compatibility content and must be rendered by a host adapter.`,
-        kind: 'error',
-      };
-    }
-
     const modules = moduleUrlFactory(resources);
     const resourceUrl = (fromPath: string, specifier: string): string | undefined => {
       const path = resolveRelativePackagePath(fromPath, specifier);

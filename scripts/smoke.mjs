@@ -13,7 +13,7 @@ if (!distIndexHtml.includes(`${smokeBasePath}assets/index-`)) {
   throw new Error(`dist/index.html is missing the root app bundle for base ${smokeBasePath}`);
 }
 
-async function smokeTerminalLauncher() {
+async function smokeHelloWorldLauncher() {
   const distRoot = resolve('dist');
   const staticServer = await startStaticServer(distRoot, smokeBasePath);
   const userDataDir = await mkdtemp(join(tmpdir(), 'patchpit-smoke-'));
@@ -40,11 +40,11 @@ async function smokeTerminalLauncher() {
       const ready = await waitForBrowserState(pageCdp, launcherReadyExpression, 10_000);
       if (ready.status !== 'passed') throw smokeError('Shell launcher did not become ready', ready);
 
-      const clicked = await evaluate(pageCdp, clickTerminalExpression);
-      if (clicked.status !== 'passed') throw smokeError('Terminal launcher could not be clicked', clicked);
+      const clicked = await evaluate(pageCdp, clickHelloWorldExpression);
+      if (clicked.status !== 'passed') throw smokeError('Hello World launcher could not be clicked', clicked);
 
-      const terminal = await waitForBrowserState(pageCdp, terminalVisibleExpression, 5_000);
-      if (terminal.status !== 'passed') throw smokeError('Terminal did not open cleanly', terminal);
+      const sandbox = await waitForBrowserState(pageCdp, helloWorldVisibleExpression, 5_000);
+      if (sandbox.status !== 'passed') throw smokeError('Hello World did not open cleanly', sandbox);
     } finally {
       await pageCdp?.close().catch(() => {});
       await browserCdp.close().catch(() => {});
@@ -60,48 +60,48 @@ async function smokeTerminalLauncher() {
 const launcherReadyExpression = `
 (() => {
   const alert = document.querySelector('[role="alert"]');
-  const terminalButton = document.querySelector('button[data-app-id="terminal"]');
+  const helloWorldButton = document.querySelector('button[data-app-id="hello-world"]');
   if (alert !== null) {
     return {
       status: 'failed',
-      reason: 'Runtime issue banner is visible before Terminal launch',
+      reason: 'Runtime issue banner is visible before Hello World launch',
       alert: alert.innerText,
       body: document.body.innerText,
     };
   }
-  if (terminalButton !== null) return { status: 'passed' };
+  if (helloWorldButton !== null) return { status: 'passed' };
   return {
     status: 'pending',
-    reason: 'Waiting for manifest-derived Terminal launcher button',
+    reason: 'Waiting for manifest-derived Hello World launcher button',
     body: document.body.innerText,
   };
 })()
 `;
 
-const clickTerminalExpression = `
+const clickHelloWorldExpression = `
 (() => {
-  const terminalButton = document.querySelector('button[data-app-id="terminal"]');
-  if (terminalButton === null) {
+  const helloWorldButton = document.querySelector('button[data-app-id="hello-world"]');
+  if (helloWorldButton === null) {
     return {
       status: 'failed',
-      reason: 'Manifest-derived Terminal launcher button is missing',
+      reason: 'Manifest-derived Hello World launcher button is missing',
       body: document.body.innerText,
     };
   }
-  if (typeof terminalButton.click !== 'function') {
+  if (typeof helloWorldButton.click !== 'function') {
     return {
       status: 'failed',
-      reason: 'Terminal launcher target is not clickable',
-      tag: terminalButton.tagName,
+      reason: 'Hello World launcher target is not clickable',
+      tag: helloWorldButton.tagName,
       body: document.body.innerText,
     };
   }
   try {
-    terminalButton.click();
+    helloWorldButton.click();
   } catch (error) {
     return {
       status: 'failed',
-      reason: 'Terminal launcher click threw',
+      reason: 'Hello World launcher click threw',
       error: error instanceof Error ? error.stack : String(error),
       body: document.body.innerText,
     };
@@ -110,31 +110,30 @@ const clickTerminalExpression = `
 })()
 `;
 
-const terminalVisibleExpression = `
+const helloWorldVisibleExpression = `
 (() => {
   const alert = document.querySelector('[role="alert"]');
-  const terminal = document.querySelector('section.terminal[aria-label="terminal"]');
-  const xterm = terminal === null ? null : terminal.querySelector('.xterm');
-  const textarea = terminal === null ? null : terminal.querySelector('.xterm-helper-textarea');
-  const hasTerminal = terminal !== null;
-  const hasXterm = xterm !== null;
-  const hasTextarea = textarea !== null;
+  const host = document.querySelector('section.sandbox-app-host[aria-label="Hello World"]');
+  const frame = host === null ? null : host.querySelector('iframe[title="Hello World"]');
+  const hasHost = host !== null;
+  const hasFrame = frame !== null;
   const selectedTabs = [...document.querySelectorAll('[role="tab"][aria-selected="true"], [role="tab"][data-selected]')]
     .map((tab) => tab.textContent.trim());
 
   if (alert !== null) {
     return {
       status: 'failed',
-      reason: 'Runtime issue banner is visible after Terminal launch',
+      reason: 'Runtime issue banner is visible after Hello World launch',
       alert: alert.innerText,
-      hasTerminal,
-      hasXterm,
-      hasTextarea,
+      hasHost,
+      hasFrame,
       selectedTabs,
       body: document.body.innerText,
     };
   }
-  if (hasTerminal && hasXterm && hasTextarea) {
+  if (hasHost && hasFrame && selectedTabs.some((tab) => (
+    tab.includes('Hello World') || tab.includes('/apps/hello-world/app.js')
+  ))) {
     return {
       status: 'passed',
       selectedTabs,
@@ -142,10 +141,9 @@ const terminalVisibleExpression = `
   }
   return {
     status: 'pending',
-    reason: 'Waiting for terminal surface and xterm input',
-    hasTerminal,
-    hasXterm,
-    hasTextarea,
+    reason: 'Waiting for Hello World sandbox host',
+    hasHost,
+    hasFrame,
     selectedTabs,
     body: document.body.innerText,
   };
@@ -379,7 +377,7 @@ function smokeError(message, state) {
     state.elapsedMs === undefined ? undefined : `Elapsed: ${state.elapsedMs}ms of ${state.timeoutMs}ms`,
     state.alert === undefined ? undefined : `Runtime issue banner:\n${truncate(state.alert, 1_000)}`,
     state.selectedTabs === undefined ? undefined : `Selected tabs: ${state.selectedTabs.join(', ')}`,
-    state.hasTerminal === undefined ? undefined : `Terminal DOM: terminal=${state.hasTerminal}, xterm=${state.hasXterm}, textarea=${state.hasTextarea}`,
+    state.hasHost === undefined ? undefined : `Hello World DOM: host=${state.hasHost}, frame=${state.hasFrame}`,
     state.body === undefined ? undefined : `Visible text:\n${truncate(state.body, 1_500)}`,
   ].filter((line) => line !== undefined && line !== '').join('\n\n'));
 }
@@ -542,4 +540,4 @@ function messageDataText(data) {
   return String(data);
 }
 
-await smokeTerminalLauncher();
+await smokeHelloWorldLauncher();

@@ -81,21 +81,6 @@ void test('sandbox package loader rejects unsupported entries explicitly', () =>
   });
 });
 
-void test('sandbox package loader rejects shell compatibility entries', () => {
-  const entry = appEntry({
-    entryKind: 'shell-compat',
-    entryPath: 'index.html',
-    files: [file('index.html', 'text/html', '<main>compat placeholder</main>')],
-  });
-
-  const plan = createSandboxPackageLoadPlan(entry);
-
-  assert.deepEqual(plan, {
-    error: 'Sandbox app entry "index.html" is shell compatibility content and must be rendered by a host adapter.',
-    kind: 'error',
-  });
-});
-
 void test('seeded file picker is a sandbox-loadable module app', async () => {
   const seed = createSeedFilesystem();
   const filesystem = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
@@ -475,7 +460,7 @@ void test('sandbox service bridge rejects unsupported act and open services', ()
   });
 
   assert.deepEqual(bridge.respond(serviceRequest('open', {
-    capability: 'terminal.filesystem',
+    capability: 'app.private',
     scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
   })), {
     error: {

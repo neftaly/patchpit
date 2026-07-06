@@ -13,11 +13,9 @@ import {
   filePickerStateSchema,
   patchpitDocMetadata,
   patchpitDocSchemaRef,
-  terminalStateSchema,
 } from './schemas';
 import {
   appendFolderEntries,
-  appendFolderEntry,
   createFilesystemIndexDoc,
   createPatchpitFileDoc,
   createPatchpitFolderDoc,
@@ -25,7 +23,6 @@ import {
   removeFilesystemIndexResources,
   replaceFolderEntries,
   syncFilesystemIndexResource,
-  syncFilesystemIndexResources,
 } from './resources';
 import {
   automergeMimeType,
@@ -40,7 +37,6 @@ import {
   type FileDoc,
   type FilePickerStateDoc,
   type FilesystemIndexDoc,
-  type FilesystemResource,
   type FileTypesDoc,
   type FolderDoc,
   type FolderEntry,
@@ -54,7 +50,6 @@ import {
   type ThemeMetrics,
   type ThemePalette,
   type ThemeTypography,
-  type TerminalStateDoc,
   ThemeMode,
   type WindowManagerStateDoc,
 } from './types';
@@ -104,17 +99,6 @@ export function createSeedFilesystem(): SeedFilesystem {
       name: 'File Picker',
       surfaces: [stateSurface(SurfaceRole.WorkspaceView, PatchpitType.FilePickerState)],
       schemas: [filePickerStateSchema],
-    }),
-    installSeedAppPackage(repo, {
-      entry: 'index.html',
-      entryKind: 'shell-compat',
-      files: [firstPartyShellEntryFile('Terminal')],
-      handles: [],
-      icon: '💬',
-      id: 'terminal',
-      name: 'Terminal',
-      surfaces: [stateSurface(SurfaceRole.DocumentSet, PatchpitType.TerminalState)],
-      schemas: [terminalStateSchema],
     }),
     installSeedAppPackage(repo, {
       entry: 'app.js',
@@ -261,22 +245,6 @@ export function createSeedFilesystem(): SeedFilesystem {
   };
 }
 
-export function createTerminalStateResource(
-  filesystem: SeedFilesystem,
-  stateId: string,
-): DocHandle<TerminalStateDoc> {
-  const handle = createTerminalStateHandle(filesystem.repo, stateId);
-  filesystem.documentHandles[handle.url] = handle as unknown as DocHandle<FilesystemResource>;
-  registerFilesystemResource({
-    folderHandle: filesystem.systemAppsHandle,
-    handle,
-    indexHandle: filesystem.indexHandle,
-    name: handle.doc().name,
-    type: PatchpitType.TerminalState,
-  });
-  return handle;
-}
-
 export function removeSystemAppResource(
   filesystem: SeedFilesystem,
   url: string,
@@ -335,58 +303,12 @@ export function recordRuntimeBootGateAck(
   syncFilesystemIndexResource(filesystem.indexHandle, filesystem.runtimeStateHandle);
 }
 
-function registerFilesystemResource<T extends FilesystemResource>({
-  folderHandle,
-  handle,
-  indexHandle,
-  name,
-  type,
-}: {
-  readonly folderHandle: DocHandle<FolderDoc>;
-  readonly handle: DocHandle<T>;
-  readonly indexHandle: DocHandle<FilesystemIndexDoc>;
-  readonly name: string;
-  readonly type: PatchpitType | string;
-}): void {
-  const newFolderEntry = folderEntry(name, type, handle.url);
-
-  folderHandle.change((doc) => {
-    appendFolderEntry(doc, newFolderEntry);
-  });
-
-  syncFilesystemIndexResources(indexHandle, [folderHandle, handle]);
-}
-
-function createTerminalStateHandle(
-  repo: Repo,
-  stateId: string,
-): DocHandle<TerminalStateDoc> {
-  return repo.create<TerminalStateDoc>({
-    '@patchpit': patchpitDocMetadata(PatchpitType.TerminalState),
-    capabilities: {
-      network: {
-        allowAll: true,
-        allowedUrlPrefixes: [],
-        enabled: true,
-      },
-    },
-    cwd: '/home',
-    env: {},
-    extension: automergeExtension,
-    history: [],
-    lines: [],
-    mimeType: automergeMimeType,
-    name: automergeFileName(stateId),
-  });
-}
-
 function createRuntimeStateHandle(
   repo: Repo,
   stateId: string,
 ): DocHandle<RuntimeStateDoc> {
   return repo.create<RuntimeStateDoc>({
     '@patchpit': patchpitDocMetadata(PatchpitType.RuntimeState),
-    appInstances: [],
     boot: {
       status: 'waiting-for-boot-gate-helloAck',
     },
@@ -506,7 +428,6 @@ const sharedTypography = {
   codeFont: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
   codeLineHeight: '1.55',
   codeSize: '0.8125rem',
-  terminalLineHeight: '1.2',
 } as const satisfies ThemeTypography;
 
 const lightPalette = {
@@ -520,9 +441,6 @@ const lightPalette = {
   sidebar: '#ebebecff',
   surface: '#fafafaff',
   tabs: '#ebebecff',
-  terminalCursor: '#242529ff',
-  terminalSelection: '#cacacaff',
-  terminalText: '#242529ff',
   text: '#242529ff',
   treeGuide: '#dfdfe0ff',
 } as const satisfies ThemePalette;
@@ -538,9 +456,6 @@ const darkPalette = {
   sidebar: '#2f343eff',
   surface: '#282c33ff',
   tabs: '#2f343eff',
-  terminalCursor: '#dce0e5ff',
-  terminalSelection: '#454a56ff',
-  terminalText: '#dce0e5ff',
   text: '#dce0e5ff',
   treeGuide: '#363c46ff',
 } as const satisfies ThemePalette;
@@ -675,30 +590,6 @@ function createFile(
   content: string,
 ): DocHandle<FileDoc> {
   return repo.create<FileDoc>(createPatchpitFileDoc(name, content));
-}
-
-function firstPartyShellEntryFile(name: string): SeedAppPackageFile {
-  return {
-    content: firstPartyShellEntryHtml(name),
-    name: 'index.html',
-  };
-}
-
-function firstPartyShellEntryHtml(name: string): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>${name}</title>
-</head>
-<body>
-  <main>
-    <h1>${name}</h1>
-    <p>This first-party app is served by the Patchpit shell compatibility host.</p>
-  </main>
-</body>
-</html>
-`;
 }
 
 const helloWorldAppFiles = [

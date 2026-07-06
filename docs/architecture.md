@@ -15,7 +15,7 @@ manifest plus entry resources"]
   Sandbox["Sandbox runner
 opaque iframe, scoped services"]
   Adapters["First-party adapters
-Files, Viewer, Terminal"]
+Files and Viewer"]
   External["Outside world
 network, peers, local runners"]
 

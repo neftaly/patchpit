@@ -16,11 +16,6 @@ export default defineConfig({
   },
   root: repoRoot,
   plugins: [wasm(), topLevelAwait(), react()],
-  resolve: {
-    alias: {
-      'node:zlib': resolve(repoRoot, 'apps/terminal/src/node-zlib.browser.ts'),
-    },
-  },
   build: {
     chunkSizeWarningLimit: 1200,
     cssCodeSplit: true,
@@ -32,8 +27,6 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('@automerge')) return 'automerge';
-          if (id.includes('just-bash')) return 'just-bash';
-          if (id.includes('@xterm')) return 'xterm';
         },
       },
     },

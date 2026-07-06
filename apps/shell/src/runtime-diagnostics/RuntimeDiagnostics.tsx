@@ -1,4 +1,3 @@
-import { type RuntimeStateDoc } from '@patchpit/system';
 import {
   runtimePlatformFeatureLabel,
   type RuntimeHelloAck,
@@ -27,7 +26,6 @@ export type RuntimeDiagnosticsSnapshotInput = {
   readonly runtimeIssue: RuntimeDiagnosticsIssue | undefined;
   readonly runtimeIssueHistory: readonly RuntimeDiagnosticsIssueEntry[];
   readonly runtimePlatform: RuntimePlatformReport;
-  readonly runtimeState: RuntimeStateDoc;
 };
 
 export type RuntimeDiagnosticsSnapshot = {
@@ -98,7 +96,7 @@ export function createRuntimeDiagnosticsSnapshot(
 
 function runtimeSummary(input: RuntimeDiagnosticsSnapshotInput): string {
   return [
-    `boot ${input.runtimeState.boot.status}`,
+    'runtime ready',
     input.runtimePlatform.ok ? 'platform ok' : 'platform missing APIs',
   ].join(', ');
 }
@@ -109,14 +107,6 @@ function runtimeDiagnosticsData(input: RuntimeDiagnosticsSnapshotInput) {
       stateKind: 'live',
       status: 'ready',
       ack: input.runtimeAck,
-    },
-    runtimeState: {
-      stateKind: 'canonical',
-      boot: input.runtimeState.boot,
-      features: input.runtimeState.features,
-      protocol: input.runtimeState.protocol,
-      title: input.runtimeState.title,
-      workers: input.runtimeState.workers,
     },
     platform: platformFeatureData(input.runtimePlatform),
   };

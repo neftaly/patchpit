@@ -5,7 +5,6 @@
   --font-code: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-code-size: 0.8125rem;
   --line-code: 1.55;
-  --line-terminal: 1.2;
   --preview-image-width: 28rem;
   --tab-control-margin: 2px;
   --tab-pad: 0.375rem;
@@ -22,9 +21,6 @@
   --color-text: #242529ff;
   --color-code: var(--color-text);
   --color-muted: #58585aff;
-  --color-terminal-cursor: var(--color-text);
-  --color-terminal-selection: var(--color-selected-bg);
-  --color-terminal-text: var(--color-text);
   --tree-indent-guide: #dfdfe0ff;
 
   color: var(--color-text);

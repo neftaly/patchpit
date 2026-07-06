@@ -14,10 +14,6 @@ Architecture notes:
 - [`architecture.md`](architecture.md)
 - [`sandboxed-app-host.md`](sandboxed-app-host.md)
 
-Capability notes:
-
-- [`terminal-filesystem-capability.md`](terminal-filesystem-capability.md)
-
 State/debug notes:
 
 - [`state-visibility-todo.md`](state-visibility-todo.md)

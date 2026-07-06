@@ -77,8 +77,8 @@ V0 should expose less than the full target protocol:
   ticket delivery is deferred;
 - one workspace projection containing state, contexts, and surfaces; separate
   workspace viewports and presence are deferred;
-- the terminal filesystem capability as the first port precedent; broad
-  capability catalogs and realtime queues are deferred;
+- app-specific capability providers are allowed; broad capability catalogs and
+  realtime queues are deferred;
 - no app-supplied full `WindowContext` or container payloads in launcher-facing
   actions.
 
@@ -762,8 +762,7 @@ If the app needs durable state, the runtime creates an app state document under
 Tarstate projections and write lenses sit over the app state doc shape; state
 docs are not flattened just to make launch admission convenient.
 
-V0 may keep narrow compatibility handlers for apps such as Terminal, but the
-target is generic runtime-owned state creation from manifest-declared state
+The target is generic runtime-owned state creation from manifest-declared state
 schemas or an app-scoped init action, not a trusted runtime registry of per-app
 state factories.
 
@@ -901,12 +900,11 @@ export.request
 
 The active protocol type accepts capability names as provider-registered
 strings. The bootstrap runtime does not implement the target core capability
-catalog above; it only opens capabilities for registered providers such as
-`terminal.filesystem`, and rejects unknown names with `unknown_capability`.
+catalog above; it only opens capabilities for registered providers and rejects
+unknown names with `unknown_capability`.
 
-Apps can register narrower app-specific capabilities such as
-`terminal.filesystem`. Their subprotocols live with the app package, not in the
-core runtime protocol.
+Apps can register narrower app-specific capabilities. Their subprotocols live
+with the app package, not in the core runtime protocol.
 
 Sandboxed apps must not receive raw `Repo`, unrestricted `DocHandle`, or broad
 storage access. They receive capabilities bound to subject, app, workspace,
@@ -1224,9 +1222,8 @@ landed the handshake gate and the first shell extraction scaffold:
   construction in the UI.
 - Normal window controls now go through window intents for focus, close,
   preview pinning, tab drops, and split resize.
-- Terminal registers its filesystem as an app-specific capability provider. The
-  shell UI consumes the scoped port-backed adapter instead of constructing the
-  raw filesystem from `Repo`/`DocHandle` authority.
+- App-specific capabilities use scoped port-backed adapters instead of exposing
+  raw `Repo`/`DocHandle` authority.
 
 Next work:
 

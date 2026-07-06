@@ -6,10 +6,9 @@ import { launcherItems } from './launch-router.ts';
 void test('launcher items are derived from installed app manifests', () => {
   const launches = [];
   const items = launcherItems({
-    focusedAppId: 'terminal',
+    focusedAppId: 'hello-world',
     installedApps: [
       app('file-picker', 'File Picker', '📁', SurfaceRole.WorkspaceView, { stateType: 'file-picker-state' }),
-      app('terminal', 'Terminal', '💬', SurfaceRole.DocumentSet, { stateType: 'terminal-state' }),
       app('viewer', 'Viewer', '📄', SurfaceRole.DocumentSet, { handles: [{ accepts: ['*/*'], intent: 'open', port: 'view' }] }),
       app('hello-world', 'Hello World', '👋', SurfaceRole.DocumentSet, { entryUrl: 'automerge:hello-main' }),
     ],
@@ -18,23 +17,19 @@ void test('launcher items are derived from installed app manifests', () => {
 
   assert.deepEqual(items.map((item) => [item.app, item.label, item.emoji, item.active]), [
     ['file-picker', 'Files', '📁', false],
-    ['terminal', 'Terminal', '💬', true],
-    ['hello-world', 'Hello World', '👋', false],
+    ['hello-world', 'Hello World', '👋', true],
   ]);
 
   items[0].launch();
   items[1].launch();
-  items[2].launch();
 
   assert.equal(launches[0].app, 'file-picker');
   assert.equal(launches[0].role, SurfaceRole.WorkspaceView);
   assert.equal(launches[0].behavior, 'toggle-surface');
   assert.equal(launches[0].context, undefined);
-  assert.equal(launches[1].app, 'terminal');
+  assert.equal(launches[1].app, 'hello-world');
   assert.equal(launches[1].role, SurfaceRole.DocumentSet);
   assert.equal(launches[1].context, undefined);
-  assert.equal(launches[2].app, 'hello-world');
-  assert.equal(launches[2].context, undefined);
 });
 
 function app(id, name, icon, role, options = {}) {

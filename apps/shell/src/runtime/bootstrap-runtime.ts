@@ -3,17 +3,14 @@ import {
   appLaunchIntentBoundary,
   ContainerMountKind,
   PatchpitType,
-  removeSystemAppResource,
   RuntimeMountProvider,
   rootContainer,
   SurfaceRole,
-  windowIntentBoundary,
   type AppManifestDoc,
   type AppContainer,
   type ContainerMount,
   type FilesystemResource,
   type FolderDoc,
-  type RuntimeAppInstanceState,
   type SeedFilesystem,
   type WindowContext,
   type WindowManagerStateDoc,
@@ -22,7 +19,6 @@ import {
   appLaunchIntent,
   runtimeError,
   runtimeIntentRequestRow,
-  windowCloseContextIntent,
   type AppLaunchIntentRow,
   type CapabilityRequest,
   type CapabilityPort,
@@ -37,7 +33,6 @@ import {
   type ProjectionSubscriptionRequest,
   type RuntimeClient,
   type RuntimeError,
-  type WindowIntentRow,
 } from '@patchpit/system/runtime';
 import {
   relationRowCounts,
@@ -69,13 +64,11 @@ import {
   targetLaunchSurface,
 } from './bootstrap-window-topology';
 import { installedAppManifests } from './manifest-routing';
-import type { AppInstanceStateHandler } from './app-instance-state';
 import { automergeHeadSetForHandle } from './automerge-heads';
 import { allowAllRuntimePolicy, type RuntimePolicy } from './policy';
 import { isPackageAppManifestDoc } from './app-manifest-discovery';
 
 export type BootstrapRuntimeOptions = {
-  readonly appInstanceStateHandlers?: readonly AppInstanceStateHandler[];
   readonly capabilityProviders?: readonly BootstrapCapabilityProvider[];
   readonly policy?: RuntimePolicy;
   readonly seed: SeedFilesystem;
@@ -169,22 +162,14 @@ type AppLaunchRequest = {
 
 type AppLaunchCommit = {
   readonly context: WindowContext;
-  readonly appInstanceStateHandle?: DocHandle<FilesystemResource>;
 };
-
-type AppLaunchSurface = NonNullable<AppManifestDoc['surfaces']>[number];
 
 export type BootstrapCapabilityProvider = {
   readonly capability: CapabilityName;
   open(request: CapabilityRequest): CapabilityPort;
 };
 
-type AppInstanceStateFreshness = {
-  readonly preexistingUrls: ReadonlySet<string>;
-};
-
 export function createBootstrapRuntimeClient({
-  appInstanceStateHandlers = [],
   capabilityProviders = [],
   policy = allowAllRuntimePolicy,
   seed,
@@ -193,7 +178,6 @@ export function createBootstrapRuntimeClient({
   const diagnostics = createBootstrapRuntimeDiagnosticsStore();
   const resources = createBootstrapRuntimeResourceStore(seed);
   const subscribeProjection = createBootstrapProjectionSubscriber({ diagnostics, seed, workspaceId });
-  const appInstanceStateHandlersByType = appInstanceStateHandlerMap(appInstanceStateHandlers);
   const capabilityProvidersByName = capabilityProviderMap(capabilityProviders);
 
   return {
@@ -212,7 +196,6 @@ export function createBootstrapRuntimeClient({
         }
 
         const appLaunchResult = submitBootstrapAppLaunchIntent(request, {
-          appInstanceStateHandlers: appInstanceStateHandlersByType,
           seed,
         });
         if (appLaunchResult !== undefined) return appLaunchResult;
@@ -223,11 +206,8 @@ export function createBootstrapRuntimeClient({
         const filePickerResult = submitBootstrapFilePickerIntent(seed, request);
         if (filePickerResult !== undefined) return filePickerResult;
 
-        const instanceCloseTarget = appInstanceStateCloseTarget(seed, request);
         const windowResult = submitBootstrapWindowIntent(seed, request);
-        if (windowResult !== undefined) {
-          return closeAppInstanceState(seed, instanceCloseTarget, windowResult);
-        }
+        if (windowResult !== undefined) return windowResult;
 
         return rejected(runtimeError('unknown_intent', `Unknown intent: ${request.intent}`));
       });
@@ -284,7 +264,6 @@ function openBootstrapCapability(
 }
 
 type BootstrapAppLaunchIntentOptions = {
-  readonly appInstanceStateHandlers: ReadonlyMap<string, AppInstanceStateHandler>;
   readonly seed: SeedFilesystem;
 };
 
@@ -300,17 +279,16 @@ function submitBootstrapAppLaunchIntent(
   const resolvedLaunch = resolveAppLaunchContext(options.seed, launch);
   if (isRuntimeError(resolvedLaunch)) return rejected(resolvedLaunch);
 
-  const appInstanceStateHandler = prepareAppLaunchIntent(
+  const admissionError = prepareAppLaunchIntent(
     options.seed,
     request,
     resolvedLaunch,
-    options.appInstanceStateHandlers,
   );
-  if (isRuntimeError(appInstanceStateHandler)) {
-    return appLaunchAdmissionFailure(options.seed, appInstanceStateHandler);
+  if (admissionError !== undefined) {
+    return appLaunchAdmissionFailure(options.seed, admissionError);
   }
 
-  const commit = appLaunchCommit(options.seed, resolvedLaunch, appInstanceStateHandler);
+  const commit = appLaunchCommit(resolvedLaunch);
   if ('code' in commit) return rejected(commit);
 
   try {
@@ -322,21 +300,15 @@ function submitBootstrapAppLaunchIntent(
       });
     });
   } catch (error) {
-    rollbackAppInstanceState(options.seed, commit.appInstanceStateHandle);
     return rejected(appLaunchCommitError(resolvedLaunch, error));
   }
 
   const committedError = validateAppLaunchCommitted(options.seed.windowManagerHandle.doc(), commit.context);
-  if (committedError !== undefined) {
-    rollbackAppInstanceState(options.seed, commit.appInstanceStateHandle);
-    return rejected(committedError);
-  }
-
-  registerAppInstanceState(options.seed, commit);
+  if (committedError !== undefined) return rejected(committedError);
 
   return {
     status: 'committed',
-    heads: appLaunchCommitHeads(options.seed, commit),
+    heads: appLaunchCommitHeads(options.seed),
   };
 }
 
@@ -573,51 +545,13 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function appLaunchCommit(
-  seed: SeedFilesystem,
-  launch: AppLaunchRequest,
-  appInstanceStateHandler: AppInstanceStateHandler | undefined,
-): AppLaunchCommit | RuntimeError {
+function appLaunchCommit(launch: AppLaunchRequest): AppLaunchCommit | RuntimeError {
   if (launch.context !== undefined) return { context: launch.context };
 
-  const handler = appInstanceStateHandler ?? runtimeError(
+  return runtimeError(
     'missing_handler',
     `No app instance state handler is registered for ${launch.app} ${launch.role}.`,
   );
-  if (isRuntimeError(handler)) return handler;
-
-  const freshness = appInstanceStateFreshness(seed);
-  let stateHandle: DocHandle<FilesystemResource> | undefined;
-
-  try {
-    stateHandle = handler.createState();
-    const stateError = validateCreatedAppInstanceState(seed, launch, handler, freshness, stateHandle);
-    if (stateError !== undefined) {
-      rollbackNewAppInstanceStateResources(seed, handler, freshness);
-      return stateError;
-    }
-
-    const context = handler.createContext({
-      app: launch.app,
-      rootUrl: seed.rootUrl,
-      stateHandle,
-    });
-    const contextError = validateCreatedAppInstanceContext(launch, stateHandle, context);
-    if (contextError !== undefined) {
-      rollbackAppInstanceState(seed, stateHandle, freshness);
-      rollbackNewAppInstanceStateResources(seed, handler, freshness);
-      return contextError;
-    }
-
-    return {
-      context,
-      appInstanceStateHandle: stateHandle,
-    };
-  } catch (error) {
-    rollbackAppInstanceState(seed, stateHandle, freshness);
-    rollbackNewAppInstanceStateResources(seed, handler, freshness);
-    return appLaunchCommitError(launch, error);
-  }
 }
 
 function resolveAppLaunchContext(seed: SeedFilesystem, launch: AppLaunchRequest): AppLaunchRequest | RuntimeError {
@@ -638,14 +572,6 @@ function resolveAppLaunchContext(seed: SeedFilesystem, launch: AppLaunchRequest)
       ? existingStatefulLaunchContext(seed, launch.app, surface.state.type)
       : undefined;
     return existing === undefined ? launch : { ...launch, context: existing };
-  }
-
-  if (manifest.entryKind === 'shell-compat') {
-    return runtimeError(
-      'missing_handler',
-      `App ${launch.app} cannot be launched without a routed target yet.`,
-      'shell-compat stateless app.launch requires a host adapter migration',
-    );
   }
 
   const entryUrl = installedAppEntryUrl(seed, manifest);
@@ -722,287 +648,12 @@ function isFolderDoc(doc: FilesystemResource | undefined): doc is FolderDoc {
   return doc?.['@patchpit'].type === PatchpitType.Folder;
 }
 
-function validateCreatedAppInstanceState(
-  seed: SeedFilesystem,
-  launch: AppLaunchRequest,
-  handler: AppInstanceStateHandler,
-  freshness: AppInstanceStateFreshness,
-  handle: DocHandle<FilesystemResource>,
-): RuntimeError | undefined {
-  const handleUrl = appInstanceStateHandleUrl(handle);
-  if (handleUrl === undefined || !isDocHandle(handle)) {
-    rollbackAppInstanceState(seed, handle, freshness);
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} returned an invalid state doc.`,
-    );
-  }
-
-  if (freshness.preexistingUrls.has(handleUrl)) {
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} returned a preexisting state doc.`,
-      handleUrl,
-    );
-  }
-
-  const doc = handle.doc();
-  const actualType = doc['@patchpit']?.type;
-  if (actualType !== handler.stateType) {
-    rollbackAppInstanceState(seed, handle, freshness);
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} returned ${String(actualType)}.`,
-      `expected ${handler.stateType}`,
-    );
-  }
-
-  if (seed.documentHandles[handle.url] !== handle) {
-    rollbackAppInstanceState(seed, handle, freshness);
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} returned an unregistered state doc.`,
-      handle.url,
-    );
-  }
-
-  const systemAppEntries = seed.systemAppsHandle.doc().docs.filter((entry) => entry.url === handle.url);
-  if (systemAppEntries.length !== 1 || systemAppEntries[0]?.type !== handler.stateType) {
-    rollbackAppInstanceState(seed, handle, freshness);
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} did not register ${handle.url} under /system/apps.`,
-      `expected ${handler.stateType}`,
-    );
-  }
-
-  if (seed.runtimeStateHandle.doc().appInstances.some((entry) => entry.stateUrl === handle.url)) {
-    rollbackAppInstanceState(seed, handle, freshness);
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} returned an active state doc.`,
-      handle.url,
-    );
-  }
-
-  return undefined;
-}
-
-function validateCreatedAppInstanceContext(
-  launch: AppLaunchRequest,
-  stateHandle: DocHandle<FilesystemResource>,
-  context: WindowContext,
-): RuntimeError | undefined {
-  if (
-    !isRecord(context)
-    || typeof context.id !== 'string'
-    || typeof context.app !== 'string'
-    || typeof context.url !== 'string'
-  ) {
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} returned an invalid context.`,
-    );
-  }
-
-  if (context.app !== launch.app) {
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} returned context app ${context.app}.`,
-    );
-  }
-  if (context.url !== stateHandle.url) {
-    return runtimeError(
-      'commit_error',
-      `App instance state handler for ${launch.app} returned context url ${context.url}.`,
-      `expected ${stateHandle.url}`,
-    );
-  }
-  return undefined;
-}
-
-function registerAppInstanceState(seed: SeedFilesystem, commit: AppLaunchCommit): void {
-  const stateHandle = commit.appInstanceStateHandle;
-  if (stateHandle === undefined) return;
-  const stateType = String(stateHandle.doc()['@patchpit'].type);
-  const entry: RuntimeAppInstanceState = {
-    app: commit.context.app,
-    contextId: commit.context.id,
-    stateType,
-    stateUrl: stateHandle.url,
-  };
-
-  seed.runtimeStateHandle.change((doc) => {
-    const existingIndex = doc.appInstances.findIndex((candidate) => (
-      candidate.contextId === entry.contextId || candidate.stateUrl === entry.stateUrl
-    ));
-    if (existingIndex === -1) doc.appInstances.push(entry);
-    else doc.appInstances[existingIndex] = entry;
-  });
-}
-
-function appInstanceStateCloseTarget(
-  seed: SeedFilesystem,
-  request: IntentRequest,
-): RuntimeAppInstanceState | undefined {
-  if (request.intent !== windowCloseContextIntent) return undefined;
-
-  const row = runtimeIntentRequestRow<WindowIntentRow>(request, windowIntentBoundary);
-  if (isRuntimeError(row) || typeof row.contextId !== 'string') return undefined;
-
-  const context = seed.windowManagerHandle.doc().contexts[row.contextId];
-  if (context === undefined) return undefined;
-  return appInstanceStateForContext(seed, context);
-}
-
-function appInstanceStateForContext(
-  seed: SeedFilesystem,
-  context: WindowContext,
-): RuntimeAppInstanceState | undefined {
-  return seed.runtimeStateHandle.doc().appInstances.find((entry) => (
-    entry.contextId === context.id && entry.stateUrl === context.url
-  ));
-}
-
-function closeAppInstanceState(
-  seed: SeedFilesystem,
-  target: RuntimeAppInstanceState | undefined,
-  result: IntentResult,
-): IntentResult {
-  if (target === undefined || result.status !== 'committed') return result;
-  if (seed.windowManagerHandle.doc().contexts[target.contextId] !== undefined) return result;
-
-  const removedAppInstance = removeRuntimeAppInstanceState(seed, target);
-  const removedSystemResource = removeMatchingSystemAppResource(seed, target);
-  if (!removedAppInstance && !removedSystemResource) return result;
-
-  return {
-    ...result,
-    heads: mergeHeadSets(
-      result.heads,
-      ...(removedAppInstance ? [automergeHeadSetForHandle(seed.runtimeStateHandle)] : []),
-      ...(removedSystemResource
-        ? [
-            automergeHeadSetForHandle(seed.systemAppsHandle),
-            automergeHeadSetForHandle(seed.indexHandle),
-          ]
-        : []),
-    ),
-  };
-}
-
-function rollbackAppInstanceState(
-  seed: SeedFilesystem,
-  handle: unknown,
-  freshness?: AppInstanceStateFreshness,
-): void {
-  const url = appInstanceStateHandleUrl(handle);
-  if (url === undefined) return;
-  if (freshness?.preexistingUrls.has(url)) return;
-  removeSystemAppResource(seed, url);
-}
-
-function rollbackNewAppInstanceStateResources(
-  seed: SeedFilesystem,
-  handler: AppInstanceStateHandler,
-  freshness: AppInstanceStateFreshness,
-): void {
-  const urls = seed.systemAppsHandle.doc().docs
-    .filter((entry) => entry.type === handler.stateType && !freshness.preexistingUrls.has(entry.url))
-    .map((entry) => entry.url);
-  for (const url of urls) {
-    removeSystemAppResource(seed, url);
-  }
-}
-
-function appInstanceStateFreshness(seed: SeedFilesystem): AppInstanceStateFreshness {
-  return {
-    preexistingUrls: new Set([
-      ...Object.keys(seed.documentHandles),
-      ...seed.runtimeStateHandle.doc().appInstances.map((entry) => entry.stateUrl),
-      ...seed.systemAppsHandle.doc().docs.map((entry) => entry.url),
-    ]),
-  };
-}
-
-function appInstanceStateHandleUrl(handle: unknown): string | undefined {
-  const candidate = handle as { readonly url?: unknown };
-  return isRecord(handle) && typeof candidate.url === 'string' ? candidate.url : undefined;
-}
-
-function isDocHandle(handle: unknown): handle is DocHandle<FilesystemResource> {
-  const candidate = handle as { readonly doc?: unknown };
-  return appInstanceStateHandleUrl(handle) !== undefined && typeof candidate.doc === 'function';
-}
-
-function removeMatchingSystemAppResource(
-  seed: SeedFilesystem,
-  target: RuntimeAppInstanceState,
-): boolean {
-  const systemAppEntry = seed.systemAppsHandle.doc().docs.find((entry) => (
-    entry.url === target.stateUrl && entry.type === target.stateType
-  ));
-  if (systemAppEntry === undefined) return false;
-
-  const handle = seed.documentHandles[target.stateUrl];
-  if (handle !== undefined && handle.doc()['@patchpit'].type !== target.stateType) return false;
-
-  return removeSystemAppResource(seed, target.stateUrl);
-}
-
-function removeRuntimeAppInstanceState(
-  seed: SeedFilesystem,
-  target: RuntimeAppInstanceState,
-): boolean {
-  let removed = false;
-  seed.runtimeStateHandle.change((doc) => {
-    const index = doc.appInstances.findIndex((entry) => (
-      entry.contextId === target.contextId && entry.stateUrl === target.stateUrl
-    ));
-    removed = index !== -1;
-    if (removed) doc.appInstances.splice(index, 1);
-  });
-  return removed;
-}
-
-function appLaunchCommitHeads(seed: SeedFilesystem, commit: AppLaunchCommit): AutomergeHeadSet {
-  return mergeHeadSets(
-    automergeHeadSetForHandle(seed.windowManagerHandle),
-    ...(commit.appInstanceStateHandle === undefined
-      ? []
-      : [
-          automergeHeadSetForHandle(commit.appInstanceStateHandle),
-          automergeHeadSetForHandle(seed.runtimeStateHandle),
-          automergeHeadSetForHandle(seed.systemAppsHandle),
-          automergeHeadSetForHandle(seed.indexHandle),
-        ]),
-  );
+function appLaunchCommitHeads(seed: SeedFilesystem): AutomergeHeadSet {
+  return mergeHeadSets(automergeHeadSetForHandle(seed.windowManagerHandle));
 }
 
 function mergeHeadSets(...headSets: readonly AutomergeHeadSet[]): AutomergeHeadSet {
   return Object.assign({}, ...headSets);
-}
-
-function appInstanceStateHandlerMap(
-  handlers: readonly AppInstanceStateHandler[],
-): ReadonlyMap<string, AppInstanceStateHandler> {
-  const handlerMap = new Map<string, AppInstanceStateHandler>();
-  for (const handler of handlers) {
-    const key = appInstanceStateHandlerKey(handler.app, handler.stateType);
-    if (handlerMap.has(key)) {
-      throw runtimeError(
-        'bad_request',
-        `Duplicate app instance state handler for ${handler.app}.`,
-        `state type ${handler.stateType}`,
-      );
-    }
-    handlerMap.set(key, handler);
-  }
-  return handlerMap;
-}
-
-function appInstanceStateHandlerKey(app: string, stateType: string): string {
-  return `${app}\u0000${stateType}`;
 }
 
 function capabilityProviderMap(
@@ -1056,11 +707,7 @@ function prepareAppLaunchIntent(
   seed: SeedFilesystem,
   request: IntentRequest,
   launch: AppLaunchRequest,
-  appInstanceStateHandlers: ReadonlyMap<string, AppInstanceStateHandler>,
-): AppInstanceStateHandler | RuntimeError | undefined {
-  const appInstanceStateHandler = appLaunchStateHandler(seed, launch, appInstanceStateHandlers);
-  if (isRuntimeError(appInstanceStateHandler)) return appInstanceStateHandler;
-
+): RuntimeError | undefined {
   const staleBaseError = validateAppLaunchBaseHeads(seed, request);
   if (staleBaseError !== undefined) return staleBaseError;
 
@@ -1073,41 +720,7 @@ function prepareAppLaunchIntent(
     || targetLaunchSurface(state, launch.role) !== undefined
     || launch.role === SurfaceRole.DocumentSet
   );
-  return canLaunch ? appInstanceStateHandler : runtimeError('conflict', `No ${launch.role} surface can accept app.launch.`);
-}
-
-function appLaunchStateHandler(
-  seed: SeedFilesystem,
-  launch: AppLaunchRequest,
-  appInstanceStateHandlers: ReadonlyMap<string, AppInstanceStateHandler>,
-): AppInstanceStateHandler | RuntimeError | undefined {
-  const surface = appLaunchSurface(seed, launch);
-  if (isRuntimeError(surface)) return surface;
-  if (launch.context !== undefined) return undefined;
-  if (surface.state === undefined) {
-    return runtimeError('missing_handler', `App ${launch.app} has no persisted launch state for ${launch.role}.`);
-  }
-
-  const handler = appInstanceStateHandlers.get(appInstanceStateHandlerKey(launch.app, surface.state.type));
-  return handler ?? runtimeError(
-    'missing_handler',
-    `No app instance state handler is registered for ${launch.app} ${launch.role}.`,
-    `state type ${surface.state.type}`,
-  );
-}
-
-function appLaunchSurface(seed: SeedFilesystem, launch: AppLaunchRequest): AppLaunchSurface | RuntimeError {
-  const manifest = appManifestForApp(seed, launch.app);
-  if (manifest === undefined) {
-    return runtimeError('missing_handler', `No installed app.launch handler was found for ${launch.app}.`);
-  }
-
-  const surface = manifest.surfaces?.find((spec) => spec.role === launch.role);
-  if (surface === undefined) {
-    return runtimeError('missing_handler', `App ${launch.app} has no ${launch.role} launch surface.`);
-  }
-
-  return surface;
+  return canLaunch ? undefined : runtimeError('conflict', `No ${launch.role} surface can accept app.launch.`);
 }
 
 function validateAppLaunchBaseHeads(

@@ -49,6 +49,5 @@ function launcherLaunchInput(app: InstalledApp): AppLaunchIntentInput {
 
 function isDirectLauncherApp(app: InstalledApp): boolean {
   if (installedAppHasStatefulLaunch(app)) return true;
-  if (app.manifest.entryKind === 'shell-compat') return false;
   return (app.manifest.handles?.length ?? 0) === 0;
 }
