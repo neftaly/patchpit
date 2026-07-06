@@ -162,7 +162,7 @@ void test('sandbox package loader rejects unsupported entries explicitly', () =>
   });
 });
 
-void test('seeded file picker is a sandbox-loadable html app', () => {
+void test('seeded file picker is a sandbox-loadable module app', async () => {
   const seed = createSeedFilesystem();
   const filesystem = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
   assert.deepEqual(filesystem.diagnostics, []);
@@ -173,8 +173,8 @@ void test('seeded file picker is a sandbox-loadable html app', () => {
   }).find((app) => app.manifest.id === 'file-picker');
 
   assert.ok(filePicker);
-  assert.equal(filePicker.manifest.entry, 'index.html');
-  assert.equal(filePicker.manifest.entryKind, 'html');
+  assert.equal(filePicker.manifest.entry, 'app.js');
+  assert.equal(filePicker.manifest.entryKind, 'module');
   assert.equal(filePicker.entry?.kind, 'file');
 
   const plan = createSandboxPackageLoadPlan(sandboxFilesystemAppEntry({
@@ -184,11 +184,10 @@ void test('seeded file picker is a sandbox-loadable html app', () => {
     packageRoot: filePicker.packageRoot,
   }));
 
-  assert.equal(plan.kind, 'html');
-  if (plan.kind !== 'html') return;
-  assert.match(plan.html, /<script type="module">/);
-  assert.match(plan.html, /await import\("data:text\/javascript;charset=utf-8,/);
-  assert.match(plan.html, /href="data:text\/css;charset=utf-8,/);
+  assert.equal(plan.kind, 'module');
+  if (plan.kind !== 'module') return;
+  const module = await import(plan.entryModuleUrl);
+  assert.equal(typeof module.default, 'function');
 });
 
 void test('sandbox service bridge reports host-decided capabilities', () => {

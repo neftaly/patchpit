@@ -91,8 +91,8 @@ export function createSeedFilesystem(): SeedFilesystem {
   });
   const appPackages = [
     installSeedAppPackage(repo, {
-      entry: 'index.html',
-      entryKind: 'html',
+      entry: 'app.js',
+      entryKind: 'module',
       files: filePickerAppFiles,
       handles: [],
       icon: '📁',
@@ -102,8 +102,8 @@ export function createSeedFilesystem(): SeedFilesystem {
       schemas: [filePickerStateSchema],
     }),
     installSeedAppPackage(repo, {
-      entry: 'index.html',
-      entryKind: 'html',
+      entry: 'app.js',
+      entryKind: 'module',
       files: viewerAppFiles,
       handles: [
         { accepts: ['*/*'], intent: 'preview', port: 'view' },
@@ -121,8 +121,8 @@ export function createSeedFilesystem(): SeedFilesystem {
       ],
     }),
     installSeedAppPackage(repo, {
-      entry: 'index.html',
-      entryKind: 'html',
+      entry: 'app.js',
+      entryKind: 'module',
       files: helloWorldAppFiles,
       handles: [],
       icon: '👋',
@@ -614,23 +614,6 @@ function createFile(
 
 const helloWorldAppFiles = [
   {
-    content: `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Hello World</title>
-    <link rel="stylesheet" href="./style.css">
-    <script type="module" src="./app.js"></script>
-  </head>
-  <body>
-    <div id="patchpit-root"></div>
-  </body>
-</html>
-`,
-    name: 'index.html',
-  },
-  {
     content: `export default async function activate(env) {
   const root = document.getElementById('patchpit-root') ?? document.body;
   root.innerHTML = '';
@@ -660,40 +643,9 @@ const helloWorldAppFiles = [
 `,
     name: 'app.js',
   },
-  {
-    content: `html,
-body,
-#patchpit-root {
-  height: 100%;
-  margin: 0;
-}
-
-body {
-  background: transparent;
-}
-`,
-    name: 'style.css',
-  },
 ] as const satisfies readonly SeedAppPackageFile[];
 
 const filePickerAppFiles = [
-  {
-    content: `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>File Picker</title>
-    <link rel="stylesheet" href="./style.css">
-    <script type="module" src="./app.js"></script>
-  </head>
-  <body>
-    <div id="patchpit-root"></div>
-  </body>
-</html>
-`,
-    name: 'index.html',
-  },
   {
     content: `const filePickerDragType = 'application/x.patchpit-file';
 const selectAction = 'filePicker.selectUrl';
@@ -708,6 +660,10 @@ export default async function activate(env) {
   hostEnv = env;
   const root = document.getElementById('patchpit-root') ?? document.body;
   root.innerHTML = '';
+
+  const style = document.createElement('style');
+  style.textContent = css();
+  document.head.append(style);
 
   const main = document.createElement('main');
   main.className = 'file-picker-app';
@@ -919,121 +875,28 @@ function notice(title, message) {
   section.append(heading, detail);
   return section;
 }
+
+function css() {
+  return 'html,body,#patchpit-root{height:100%;margin:0;}' +
+    'body{overflow:hidden;background:transparent;color:#242529;font:13px system-ui,sans-serif;}' +
+    '.file-picker-app{box-sizing:border-box;height:100%;overflow:auto;background:transparent;color:#242529;}' +
+    '.tree-pane{height:100%;overflow:auto;padding:0.375rem 0;}' +
+    '.tree,.tree ul{list-style:none;margin:0;padding:0;}' +
+    '.tree-item{box-sizing:border-box;display:grid;grid-template-columns:1.25rem minmax(0,1fr);align-items:center;gap:0.25rem;width:100%;min-height:1.75rem;border:0;background:transparent;color:inherit;text-align:left;font:inherit;padding:0.25rem 0.5rem 0.25rem calc(0.5rem + var(--tree-depth-size));}' +
+    '.tree-item:hover{background:#dfdfe0;}' +
+    '[aria-selected=true]>.tree-item{background:#cacaca;color:#242529;}' +
+    '[data-active]>.tree-item{font-weight:600;}' +
+    '.tree-icon{width:1.25rem;text-align:center;}' +
+    '.tree-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
+    '.notice{display:grid;gap:0.35rem;margin:0.5rem;padding:0.75rem;border:1px solid #c9c9ca;background:#fafafa;color:#58585a;}' +
+    '.notice strong{color:#242529;}';
+}
 `,
     name: 'app.js',
-  },
-  {
-    content: `html,
-body,
-#patchpit-root {
-  height: 100%;
-  margin: 0;
-}
-
-body {
-  overflow: hidden;
-  background: transparent;
-  color: #242529;
-  font: 13px system-ui, sans-serif;
-}
-
-.file-picker-app {
-  box-sizing: border-box;
-  height: 100%;
-  overflow: auto;
-  background: transparent;
-  color: #242529;
-}
-
-.tree-pane {
-  height: 100%;
-  overflow: auto;
-  padding: 0.375rem 0;
-}
-
-.tree,
-.tree ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.tree-item {
-  box-sizing: border-box;
-  display: grid;
-  grid-template-columns: 1.25rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.25rem;
-  width: 100%;
-  min-height: 1.75rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  padding: 0.25rem 0.5rem 0.25rem calc(0.5rem + var(--tree-depth-size));
-}
-
-.tree-item:hover {
-  background: #dfdfe0;
-}
-
-[aria-selected=true] > .tree-item {
-  background: #cacaca;
-  color: #242529;
-}
-
-[data-active] > .tree-item {
-  font-weight: 600;
-}
-
-.tree-icon {
-  width: 1.25rem;
-  text-align: center;
-}
-
-.tree-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.notice {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0.5rem;
-  padding: 0.75rem;
-  border: 1px solid #c9c9ca;
-  background: #fafafa;
-  color: #58585a;
-}
-
-.notice strong {
-  color: #242529;
-}
-`,
-    name: 'style.css',
   },
 ] as const satisfies readonly SeedAppPackageFile[];
 
 const viewerAppFiles = [
-  {
-    content: `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Viewer</title>
-    <link rel="stylesheet" href="./style.css">
-    <script type="module" src="./app.js"></script>
-  </head>
-  <body>
-    <div id="patchpit-root"></div>
-  </body>
-</html>
-`,
-    name: 'index.html',
-  },
   {
     content: `export default async function activate(env) {
   const root = document.getElementById('patchpit-root') ?? document.body;
@@ -1112,19 +975,5 @@ const viewerAppFiles = [
 }
 `,
     name: 'app.js',
-  },
-  {
-    content: `html,
-body,
-#patchpit-root {
-  height: 100%;
-  margin: 0;
-}
-
-body {
-  background: transparent;
-}
-`,
-    name: 'style.css',
   },
 ] as const satisfies readonly SeedAppPackageFile[];

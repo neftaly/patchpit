@@ -14,7 +14,6 @@ import {
   type RuntimeError,
 } from '@patchpit/system/runtime';
 import { isPackageAppManifestDoc } from './app-manifest-discovery';
-import { resolvePackageEntry } from './package-entry';
 
 type RouteIntentName = typeof routeOpenIntent | typeof routePreviewIntent;
 type RouteHandlerIntent = Extract<AppManifestHandler['intent'], 'open' | 'preview'>;
@@ -36,11 +35,7 @@ export function manifestRouteHandler(
 ): ManifestRouteHandler | RuntimeError {
   const targetTypes = routeTargetTypes(seed, url);
   if ('code' in targetTypes) return targetTypes;
-  const routeIntent = routeHandlerIntent(intent);
-  const directEntry = installedAppEntryRouteHandler(seed, routeIntent, url, targetTypes);
-  if (directEntry !== undefined) return directEntry;
-
-  const match = bestManifestRouteHandler(seed, routeIntent, targetTypes);
+  const match = bestManifestRouteHandler(seed, routeHandlerIntent(intent), targetTypes);
   if (match === undefined) {
     return runtimeError(
       'missing_handler',
@@ -82,38 +77,6 @@ function routeHandlerIntent(intent: RouteIntentName): RouteHandlerIntent {
 }
 
 export function installedAppManifests(seed: SeedFilesystem): AppManifestDoc[] {
-  return installedAppManifestEntries(seed).map((entry) => entry.manifest);
-}
-
-type InstalledAppManifestEntry = {
-  readonly manifest: AppManifestDoc;
-  readonly packageFolder: FolderDoc;
-};
-
-function installedAppEntryRouteHandler(
-  seed: SeedFilesystem,
-  intent: RouteHandlerIntent,
-  url: string,
-  targetTypes: readonly string[],
-): ManifestRouteHandler | undefined {
-  for (const installedApp of installedAppManifestEntries(seed)) {
-    if (installedApp.manifest.entryKind !== 'html') continue;
-    if (folderEntryUrl(seed, installedApp.packageFolder, installedApp.manifest.entry) !== url) continue;
-    return {
-      app: installedApp.manifest.id,
-      handler: {
-        accepts: [...targetTypes],
-        intent,
-        port: 'launch',
-      },
-      targetTypes,
-    };
-  }
-
-  return undefined;
-}
-
-function installedAppManifestEntries(seed: SeedFilesystem): InstalledAppManifestEntry[] {
   const root = seed.documentHandles[seed.rootUrl]?.doc();
   if (!isFolderDoc(root)) return [];
 
@@ -127,42 +90,14 @@ function installedAppManifestEntries(seed: SeedFilesystem): InstalledAppManifest
   return appsFolderDoc.docs.flatMap((entry) => installedAppManifestFromEntry(seed, entry.url));
 }
 
-function installedAppManifestFromEntry(seed: SeedFilesystem, url: string): readonly InstalledAppManifestEntry[] {
+function installedAppManifestFromEntry(seed: SeedFilesystem, url: string): readonly AppManifestDoc[] {
   const doc = seed.documentHandles[url]?.doc();
   if (!isFolderDoc(doc)) return [];
 
   return doc.docs.flatMap((entry) => {
     const child = seed.documentHandles[entry.url]?.doc();
-    return isPackageAppManifestDoc(child) ? [{ manifest: child, packageFolder: doc }] : [];
+    return isPackageAppManifestDoc(child) ? [child] : [];
   });
-}
-
-type PackageEntryUrlNode = {
-  readonly folder: FolderDoc | undefined;
-  readonly url: string | undefined;
-};
-
-function folderEntryUrl(seed: SeedFilesystem, folder: FolderDoc, path: string): string | undefined {
-  const packageRoot: PackageEntryUrlNode = { folder, url: undefined };
-  return resolvePackageEntry(
-    packageRoot,
-    path,
-    (node, name) => folderEntryNode(seed, node, name),
-  )?.url;
-}
-
-function folderEntryNode(
-  seed: SeedFilesystem,
-  node: PackageEntryUrlNode,
-  name: string,
-): PackageEntryUrlNode | undefined {
-  const entry = node.folder?.docs.find((candidate) => candidate.name === name);
-  if (entry === undefined) return undefined;
-  const doc: FilesystemResource | undefined = seed.documentHandles[entry.url]?.doc();
-  return {
-    folder: isFolderDoc(doc) ? doc : undefined,
-    url: entry.url,
-  };
 }
 
 function isFolderDoc(doc: FilesystemResource | undefined): doc is FolderDoc {
