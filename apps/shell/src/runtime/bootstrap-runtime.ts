@@ -67,6 +67,7 @@ import { installedAppManifests } from './manifest-routing';
 import { automergeHeadSetForHandle } from './automerge-heads';
 import { allowAllRuntimePolicy, type RuntimePolicy } from './policy';
 import { isPackageAppManifestDoc } from './app-manifest-discovery';
+import { resolvePackageEntry } from '../app-host/installed-apps';
 
 export type BootstrapRuntimeOptions = {
   readonly capabilityProviders?: readonly BootstrapCapabilityProvider[];
@@ -696,20 +697,32 @@ function packageContainsManifest(seed: SeedFilesystem, folder: FolderDoc, app: s
   });
 }
 
+type PackageEntryUrlNode = {
+  readonly folder: FolderDoc | undefined;
+  readonly url: string | undefined;
+};
+
 function folderEntryUrl(seed: SeedFilesystem, folder: FolderDoc, path: string): string | undefined {
-  const parts = path.split('/').filter((part) => part !== '' && part !== '.');
-  let current: FolderDoc | undefined = folder;
-  let url: string | undefined;
+  const packageRoot: PackageEntryUrlNode = { folder, url: undefined };
+  return resolvePackageEntry(
+    packageRoot,
+    path,
+    (node, name) => folderEntryNode(seed, node, name),
+  )?.url;
+}
 
-  for (const part of parts) {
-    const entry: FolderDoc['docs'][number] | undefined = current?.docs.find((candidate) => candidate.name === part);
-    if (entry === undefined) return undefined;
-    url = entry.url;
-    const doc: FilesystemResource | undefined = seed.documentHandles[entry.url]?.doc();
-    current = isFolderDoc(doc) ? doc : undefined;
-  }
-
-  return url;
+function folderEntryNode(
+  seed: SeedFilesystem,
+  node: PackageEntryUrlNode,
+  name: string,
+): PackageEntryUrlNode | undefined {
+  const entry = node.folder?.docs.find((candidate) => candidate.name === name);
+  if (entry === undefined) return undefined;
+  const doc: FilesystemResource | undefined = seed.documentHandles[entry.url]?.doc();
+  return {
+    folder: isFolderDoc(doc) ? doc : undefined,
+    url: entry.url,
+  };
 }
 
 function isFolderDoc(doc: FilesystemResource | undefined): doc is FolderDoc {

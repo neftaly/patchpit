@@ -50,7 +50,7 @@ function installedAppFromNode(
 
   const manifest = getDocument(manifestNode.url);
   return isPackageAppManifestDoc(manifest)
-    ? [installedApp(manifest, manifestNode.url, resolveEntryNode(node, manifest.entry), path, node)]
+    ? [installedApp(manifest, manifestNode.url, resolvePackageEntry(node, manifest.entry, childEntryNode), path, node)]
     : [];
 }
 
@@ -71,14 +71,22 @@ function installedApp(
   };
 }
 
-function resolveEntryNode(packageFolder: FilesystemNode, entry: string): FilesystemNode | undefined {
+export function resolvePackageEntry<T>(
+  packageRoot: T,
+  entry: string,
+  child: (node: T, name: string) => T | undefined,
+): T | undefined {
   const parts = entry.split('/').filter((part) => part !== '' && part !== '.');
-  let node: FilesystemNode | undefined = packageFolder;
+  let node: T | undefined = packageRoot;
   for (const part of parts) {
-    if (node?.kind !== 'folder') return undefined;
-    node = childNode(node, part);
+    if (node === undefined) return undefined;
+    node = child(node, part);
   }
   return node;
+}
+
+function childEntryNode(node: FilesystemNode, name: string): FilesystemNode | undefined {
+  return node.kind === 'folder' ? childNode(node, name) : undefined;
 }
 
 function childFolder(node: FilesystemNode, name: string): FilesystemFolder | undefined {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PatchpitType } from '@patchpit/system';
-import { installedAppsFromFilesystem } from './installed-apps.ts';
+import { installedAppsFromFilesystem, resolvePackageEntry } from './installed-apps.ts';
 import { installedAppManifests } from '../runtime/manifest-routing.ts';
 
 void test('installed app discovery paths use package manifests in filesystem order', () => {
@@ -33,6 +33,25 @@ void test('installed app discovery paths use package manifests in filesystem ord
   assert.deepEqual(apps.map((app) => app.manifest.id), ['zeta', 'alpha']);
   assert.deepEqual(apps.map((app) => app.packagePath), ['/apps/zeta', '/apps/alpha']);
   assert.deepEqual(routedManifests.map((manifest) => manifest.id), ['zeta', 'alpha']);
+});
+
+void test('package entry resolution ignores empty and dot segments without traversing parents', () => {
+  const tree = {
+    children: {
+      lib: {
+        children: {
+          'main.js': { children: {}, id: 'main' },
+        },
+        id: 'lib',
+      },
+      'outside.js': { children: {}, id: 'outside' },
+    },
+    id: 'root',
+  };
+  const child = (node, name) => node.children[name];
+
+  assert.equal(resolvePackageEntry(tree, 'lib//./main.js', child)?.id, 'main');
+  assert.equal(resolvePackageEntry(tree, 'lib/../outside.js', child), undefined);
 });
 
 function appManifest(id, name, overrides = {}) {
