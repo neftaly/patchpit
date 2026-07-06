@@ -16,7 +16,9 @@ for (const app of seedApps) {
   const sourceRoot = app.source === 'vite'
     ? resolve(repoRoot, app.root)
     : resolve(buildRoot, '__sources', app.id);
-  const outDir = resolve(buildRoot, app.id, 'dist');
+  const outDir = app.source === 'vite'
+    ? resolve(sourceRoot, 'dist')
+    : resolve(buildRoot, app.id, 'dist');
   if (app.source !== 'vite') {
     await mkdir(sourceRoot, { recursive: true });
     await writeFile(resolve(sourceRoot, 'index.html'), seedAppHtml(app));
@@ -155,7 +157,7 @@ function helloWorldSeedAppPackage() {
       surfaces: [{ role: 'document-set' }],
       version: '0.0.0',
     },
-    root: 'seed-apps/hello-world',
+    root: 'apps/hello-world',
     source: 'vite',
   };
 }
