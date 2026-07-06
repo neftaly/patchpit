@@ -375,7 +375,7 @@ const helloWorldExpression = `
 (() => {
   const body = document.body?.innerText ?? '';
   const title = document.title;
-  if (title === 'Hello World' && body.includes('Hello from /home/apps/hello-world')) {
+  if (title === 'Hello World' && body.includes('Hello World') && body.includes('Hello from about:srcdoc')) {
     return {
       status: 'passed',
       title,

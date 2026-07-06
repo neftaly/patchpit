@@ -47,8 +47,9 @@ for (const app of seedApps) {
   });
 
   packages.push({
+    entry: app.entry,
     files: await bundleFiles(outDir),
-    manifest: app.manifest,
+    id: app.id,
   });
 }
 
@@ -57,35 +58,10 @@ const fixtureSource = `export type SeedAppPackageFile = {
   readonly name: string;
 };
 
-export type SeedAppPackageHandler = {
-  readonly accepts: readonly string[];
-  readonly intent: 'activate' | 'open' | 'preview' | 'reveal';
-  readonly port: string;
-};
-
-export type SeedAppPackageSurface = {
-  readonly role: 'document-set' | 'workspace-view';
-  readonly state?: {
-    readonly schemaId?: string;
-    readonly type: string;
-  };
-};
-
-export type SeedAppPackageManifest = {
-  readonly entry: string;
-  readonly entryKind: 'html';
-  readonly handles: readonly SeedAppPackageHandler[];
-  readonly icon: string;
-  readonly id: string;
-  readonly name: string;
-  readonly schemaIds?: readonly string[];
-  readonly surfaces: readonly SeedAppPackageSurface[];
-  readonly version: string;
-};
-
 export type SeedAppPackageDefinition = {
+  readonly entry: string;
   readonly files: readonly SeedAppPackageFile[];
-  readonly manifest: SeedAppPackageManifest;
+  readonly id: string;
 };
 
 export const seedAppPackages = ${JSON.stringify(packages, null, 2)} as const satisfies readonly SeedAppPackageDefinition[];
@@ -125,15 +101,10 @@ async function seedAppPackages() {
     }
 
     packages.push({
+      entry: 'index.html',
       id: metadata.id,
       main: appEntry,
-      manifest: {
-        ...metadata,
-        entry: 'index.html',
-        entryKind: 'html',
-        handles: metadata.handles ?? [],
-        version: metadata.version ?? '0.0.0',
-      },
+      name: metadata.name,
       root,
       source: 'patchpit-module',
     });
@@ -145,16 +116,8 @@ async function seedAppPackages() {
 function helloWorldSeedAppPackage() {
   return {
     id: 'hello-world',
-    manifest: {
-      entry: 'index.html',
-      entryKind: 'html',
-      handles: [],
-      icon: '👋',
-      id: 'hello-world',
-      name: 'Hello World',
-      surfaces: [{ role: 'document-set' }],
-      version: '0.0.0',
-    },
+    entry: 'index.html',
+    name: 'Hello World',
     root: 'apps/hello-world',
     source: 'vite',
   };
@@ -168,7 +131,7 @@ function seedAppHtml(app) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${escapeHtml(app.manifest.name)}</title>
+    <title>${escapeHtml(app.name)}</title>
   </head>
   <body>
     <div id="patchpit-root"></div>

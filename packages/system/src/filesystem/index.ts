@@ -61,6 +61,5 @@ export {
 export {
   createSeedFilesystem,
   recordRuntimeBootGateAck,
-  removeSystemAppResource,
 } from './seed';
 export * from './types';

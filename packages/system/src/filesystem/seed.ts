@@ -1,9 +1,7 @@
 import { Repo, type DocHandle } from '@automerge/automerge-repo';
 import {
   seedAppPackages,
-  type SeedAppPackageDefinition,
   type SeedAppPackageFile,
-  type SeedAppPackageSurface,
 } from '../fixtures/seed-app-packages';
 import { seedFileTypes, seedTree, type SeedNode } from '../fixtures/seed';
 import {
@@ -13,21 +11,14 @@ import {
   type RuntimePlatformReport,
 } from '../runtime/platform';
 import { runtimeProtocol, type RuntimeHelloAck } from '../runtime/protocol';
-import type { PatchpitRelationSchemaDescriptor } from '../schema';
 import { rootContainer } from './container';
-import {
-  patchpitDocMetadata,
-  patchpitSystemSchemaCatalog,
-  patchpitSystemSchemaRef,
-} from './schemas';
+import { patchpitDocMetadata } from './schemas';
 import {
   appendFolderEntries,
   createFilesystemIndexDoc,
   createPatchpitFileDoc,
   createPatchpitFolderDoc,
   folderEntry,
-  removeFilesystemIndexResources,
-  replaceFolderEntries,
   syncFilesystemIndexResource,
 } from './resources';
 import {
@@ -37,8 +28,6 @@ import {
   PatchpitType,
   SurfaceRole,
   WindowManagerNodeKind,
-  type AppManifestDoc,
-  type AppManifestHandler,
   type AppearanceDoc,
   type FileDoc,
   type FilePickerStateDoc,
@@ -51,7 +40,6 @@ import {
   type RuntimeStateDoc,
   type RuntimeStateFeatures,
   type SeedFilesystem,
-  type SurfaceSpec,
   type ThemeDoc,
   type ThemeMetrics,
   type ThemePalette,
@@ -94,7 +82,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     mode: ThemeMode.System,
     name: automergeFileName('appearance'),
   });
-  const appPackages = seedAppPackages.map((appPackage) => installSeedAppPackage(repo, seedAppPackageInput(appPackage)));
+  const appPackages = seedAppPackages.map((appPackage) => installSeedAppPackage(repo, appPackage));
   const fileTypesHandle = repo.create<FileTypesDoc>({
     '@patchpit': patchpitDocMetadata(PatchpitType.FileTypes),
     extension: automergeExtension,
@@ -208,35 +196,6 @@ export function createSeedFilesystem(): SeedFilesystem {
     systemRuntimeHandle: systemRuntime,
     windowManagerHandle,
   };
-}
-
-export function removeSystemAppResource(
-  filesystem: SeedFilesystem,
-  url: string,
-): boolean {
-  const hasFolderEntry = filesystem.systemAppsHandle.doc().docs.some((entry) => entry.url === url);
-  const hasIndexRow = filesystem.indexHandle.doc().filesystemIndex.documents.some((row) => row.url === url);
-  const hasDocumentHandle = Object.hasOwn(filesystem.documentHandles, url);
-  if (!hasFolderEntry && !hasIndexRow && !hasDocumentHandle) return false;
-
-  if (hasFolderEntry) {
-    filesystem.systemAppsHandle.change((doc) => {
-      replaceFolderEntries(
-        doc.docs,
-        doc.docs.filter((entry) => entry.url !== url),
-      );
-    });
-  }
-
-  delete filesystem.documentHandles[url];
-
-  if (hasFolderEntry || hasIndexRow) {
-    removeFilesystemIndexResources(filesystem.indexHandle, [url], {
-      syncHandles: hasFolderEntry ? [filesystem.systemAppsHandle] : [],
-    });
-  }
-
-  return true;
 }
 
 export function recordRuntimeBootGateAck(
@@ -469,15 +428,8 @@ function createFixtureNode(repo: Repo, node: SeedNode): {
 
 type SeedAppPackageInput = {
   readonly entry: string;
-  readonly entryKind: AppManifestDoc['entryKind'];
   readonly files: readonly SeedAppPackageFile[];
-  readonly handles: readonly AppManifestHandler[];
-  readonly icon: string;
   readonly id: string;
-  readonly name: string;
-  readonly schemas?: readonly PatchpitRelationSchemaDescriptor[];
-  readonly surfaces: readonly SurfaceSpec[];
-  readonly version: string;
 };
 
 type InstalledSeedAppPackage = {
@@ -560,52 +512,4 @@ function createFile(
   content: string,
 ): DocHandle<FileDoc> {
   return repo.create<FileDoc>(createPatchpitFileDoc(name, content));
-}
-
-function seedAppPackageInput(appPackage: SeedAppPackageDefinition): SeedAppPackageInput {
-  const manifest = appPackage.manifest;
-  const schemas = manifest.schemaIds?.map(seedAppPackageSchema);
-  return {
-    entry: manifest.entry,
-    entryKind: manifest.entryKind,
-    files: appPackage.files,
-    handles: manifest.handles.map((handle) => ({ accepts: [...handle.accepts], intent: handle.intent, port: handle.port })),
-    icon: manifest.icon,
-    id: manifest.id,
-    name: manifest.name,
-    ...(schemas === undefined ? {} : { schemas }),
-    surfaces: manifest.surfaces.map(seedAppPackageSurface),
-    version: manifest.version,
-  };
-}
-
-function seedAppPackageSurface(surface: SeedAppPackageSurface): SurfaceSpec {
-  return {
-    role: seedAppPackageSurfaceRole(surface.role),
-    ...(surface.state === undefined
-      ? {}
-      : {
-          state: {
-            type: surface.state.type,
-            ...(surface.state.schemaId === undefined
-              ? {}
-              : { schema: patchpitSystemSchemaRef(seedAppPackageSchema(surface.state.schemaId)) }),
-          },
-        }),
-  };
-}
-
-function seedAppPackageSurfaceRole(role: SeedAppPackageSurface['role']): SurfaceRole {
-  switch (role) {
-    case 'document-set':
-      return SurfaceRole.DocumentSet;
-    case 'workspace-view':
-      return SurfaceRole.WorkspaceView;
-  }
-}
-
-function seedAppPackageSchema(schemaId: string): PatchpitRelationSchemaDescriptor {
-  const schema = patchpitSystemSchemaCatalog[schemaId];
-  if (schema === undefined) throw new Error(`Seed app package referenced unknown schema "${schemaId}".`);
-  return schema;
 }

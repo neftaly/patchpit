@@ -12,9 +12,7 @@ import {
   workspaceProjectionFromRelationSet,
   workspaceProjectionSchemaId,
   type ProjectionEvent,
-  type ProjectionSnapshot,
   type ProjectionSubscription,
-  type ProjectionSubscriptionRequest,
   type RelationSet,
   type RuntimeClient,
   type WorkspaceProjection,
@@ -30,11 +28,6 @@ import {
 export type { RuntimeProjectionFailure } from './runtime-projection-failure';
 export type { WorkspaceProjection, WorkspaceProjectionState };
 
-export type RuntimeProjectionSnapshotState =
-  | { readonly status: 'initializing' }
-  | { readonly status: 'ready'; readonly snapshot: ProjectionSnapshot }
-  | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
-
 export type FilesystemTreeProjectionState =
   | { readonly status: 'initializing' }
   | {
@@ -43,39 +36,6 @@ export type FilesystemTreeProjectionState =
       readonly root: FilesystemNode;
     }
   | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
-
-export function useRuntimeProjectionSnapshot(
-  runtime: RuntimeClient,
-  request: Pick<ProjectionSubscriptionRequest, 'projection' | 'schemaId'> | undefined,
-): RuntimeProjectionSnapshotState {
-  const [projection, setProjection] = useState<RuntimeProjectionSnapshotState>({ status: 'initializing' });
-
-  useEffect(() => {
-    if (request === undefined) {
-      setProjection({ status: 'initializing' });
-      return undefined;
-    }
-    setProjection({ status: 'initializing' });
-    let subscription: ProjectionSubscription | undefined;
-    try {
-      subscription = runtime.subscribeProjection(
-        {
-          projection: request.projection,
-          schemaId: request.schemaId,
-          basis: { kind: 'live' },
-        },
-        (event) => {
-          if (event.type !== 'patch') setProjection(snapshotFromProjectionEvent(event));
-        },
-      );
-    } catch (error) {
-      setProjection({ status: 'failed', failure: runtimeProjectionFailureFromUnknownError(error) });
-    }
-    return () => subscription?.close();
-  }, [request?.projection, request?.schemaId, runtime]);
-
-  return projection;
-}
 
 export function useFilesystemTreeProjection(
   runtime: RuntimeClient,
@@ -136,14 +96,6 @@ export function useWorkspaceProjection(runtime: RuntimeClient): WorkspaceProject
   }, [runtime]);
 
   return projection;
-}
-
-function snapshotFromProjectionEvent(event: ProjectionEvent): RuntimeProjectionSnapshotState {
-  if (event.type === 'error') {
-    return { status: 'failed', failure: runtimeProjectionFailureFromRuntimeError(event.error) };
-  }
-  if (event.type === 'patch') return { status: 'initializing' };
-  return { status: 'ready', snapshot: event.snapshot };
 }
 
 function filesystemFromProjectionEvent(

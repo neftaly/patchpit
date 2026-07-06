@@ -1,11 +1,10 @@
-import './style.css';
+import "./style.css";
 
-const app = document.querySelector('#app');
+const app = document.querySelector("#app");
 
 app.innerHTML = `
-  <section class="hello-world">
-    <p class="eyebrow">Patchpit app bundle</p>
+  <section>
     <h1>Hello World</h1>
-    <p>Hello from /home/apps/hello-world</p>
+    <p>Hello from ${document.location.href}</p>
   </section>
 `;
