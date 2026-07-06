@@ -238,7 +238,8 @@ void test('seeded and dynamically created system docs carry schema refs', () => 
   assert.deepEqual(terminalApp.schemas[terminalStateSchema.schemaId], terminalStateSchema);
 
   const viewerApp = appManifest(seed, 'viewer');
-  assert.equal(viewerApp.entryKind, 'shell-compat');
+  assert.equal(viewerApp.entry, 'app.js');
+  assert.equal(viewerApp.entryKind, 'module');
 
   const helloWorldApp = appManifest(seed, 'hello-world');
   assert.equal(helloWorldApp.entry, 'app.js');

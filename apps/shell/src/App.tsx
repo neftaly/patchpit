@@ -17,7 +17,6 @@ import {
   useTerminalAppRuntime,
   type TerminalAppSession,
 } from '@patchpit/terminal';
-import { Viewer } from '@patchpit/viewer';
 import {
   containerRootUrl,
   createSeedFilesystem,
@@ -410,9 +409,14 @@ function shellAppHost({
         );
       }
 
-      if (context.app === 'viewer') return <Viewer filesystemRoot={filesystemRoot} url={context.url} />;
-
-      return <SandboxedFilesystemApp app={installedApp} context={context} surfaceId={surfaceId} />;
+      return (
+        <SandboxedFilesystemApp
+          app={installedApp}
+          context={context}
+          filesystemRoot={filesystemRoot}
+          surfaceId={surfaceId}
+        />
+      );
     },
   };
 }

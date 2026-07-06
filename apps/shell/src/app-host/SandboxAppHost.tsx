@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FilesystemNode } from '@patchpit/system';
 import { createSandboxPackageLoadPlan, type SandboxFilesystemAppEntry } from './sandbox-package-loader';
 import {
   createSandboxAppServiceBridge,
@@ -17,6 +18,7 @@ export type { SandboxAppProtocol, SandboxAppReportedError, SandboxAppSession };
 export type SandboxAppHostProps = {
   readonly appId: string;
   readonly entry: SandboxFilesystemAppEntry | undefined;
+  readonly resourceRoot?: FilesystemNode | undefined;
   readonly session: SandboxAppSession;
   readonly title?: string;
 };
@@ -29,6 +31,7 @@ type SandboxStatus =
 export function SandboxAppHost({
   appId,
   entry,
+  resourceRoot,
   session,
   title = `${appId} sandbox`,
 }: SandboxAppHostProps) {
@@ -37,8 +40,8 @@ export function SandboxAppHost({
     entry === undefined ? undefined : createSandboxPackageLoadPlan(entry)
   ), [entry]);
   const serviceBridge = useMemo(() => (
-    createSandboxAppServiceBridge({ appId, session })
-  ), [appId, session.app, session.id, session.url]);
+    createSandboxAppServiceBridge({ appId, resourceRoot, session })
+  ), [appId, resourceRoot, session.app, session.id, session.url]);
   const srcDoc = useMemo(() => (
     loadPlan === undefined || loadPlan.kind === 'error'
       ? undefined

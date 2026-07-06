@@ -10,7 +10,7 @@ void test('launcher items are derived from installed app manifests', () => {
     installedApps: [
       app('file-picker', 'File Picker', '📁', SurfaceRole.WorkspaceView, { stateType: 'file-picker-state' }),
       app('terminal', 'Terminal', '💬', SurfaceRole.DocumentSet, { stateType: 'terminal-state' }),
-      app('viewer', 'Viewer', '📄', SurfaceRole.DocumentSet, { entryKind: 'shell-compat' }),
+      app('viewer', 'Viewer', '📄', SurfaceRole.DocumentSet, { handles: [{ accepts: ['*/*'], intent: 'open', port: 'view' }] }),
       app('hello-world', 'Hello World', '👋', SurfaceRole.DocumentSet, { entryUrl: 'automerge:hello-main' }),
     ],
     launchApp: (input) => launches.push(input),
@@ -19,14 +19,12 @@ void test('launcher items are derived from installed app manifests', () => {
   assert.deepEqual(items.map((item) => [item.app, item.label, item.emoji, item.active]), [
     ['file-picker', 'Files', '📁', false],
     ['terminal', 'Terminal', '💬', true],
-    ['viewer', 'Viewer', '📄', false],
     ['hello-world', 'Hello World', '👋', false],
   ]);
 
   items[0].launch();
   items[1].launch();
   items[2].launch();
-  items[3].launch();
 
   assert.equal(launches[0].app, 'file-picker');
   assert.equal(launches[0].role, SurfaceRole.WorkspaceView);
@@ -35,10 +33,8 @@ void test('launcher items are derived from installed app manifests', () => {
   assert.equal(launches[1].app, 'terminal');
   assert.equal(launches[1].role, SurfaceRole.DocumentSet);
   assert.equal(launches[1].context, undefined);
-  assert.equal(launches[2].app, 'viewer');
+  assert.equal(launches[2].app, 'hello-world');
   assert.equal(launches[2].context, undefined);
-  assert.equal(launches[3].app, 'hello-world');
-  assert.equal(launches[3].context, undefined);
 });
 
 function app(id, name, icon, role, options = {}) {
@@ -57,8 +53,9 @@ function app(id, name, icon, role, options = {}) {
     manifest: {
       '@patchpit': { type: 'app-manifest' },
       entry: 'main.js',
-      entryKind: options.entryKind ?? 'module',
+      entryKind: 'module',
       extension: 'am',
+      handles: options.handles ?? [],
       icons: [{ emoji: icon }],
       id,
       manifestVersion: 1,

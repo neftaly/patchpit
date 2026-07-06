@@ -705,7 +705,7 @@ void test('bootstrap runtime creates stateless package context for contextless m
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 
-void test('bootstrap runtime rejects contextless stateless shell-compat app launch', async () => {
+void test('bootstrap runtime creates stateless package context for contextless viewer app launch', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
   const initialSystemAppUrls = systemAppUrls(seed);
@@ -717,9 +717,14 @@ void test('bootstrap runtime rejects contextless stateless shell-compat app laun
     role: SurfaceRole.DocumentSet,
   });
 
-  assert.equal(result.status, 'rejected');
-  assert.equal(result.error.code, 'missing_handler');
-  assert.match(result.error.reason, /shell-compat stateless app\.launch/);
+  assert.equal(result.status, 'committed');
+  const context = Object.values(seed.windowManagerHandle.doc().contexts).find((candidate) => (
+    candidate.app === 'viewer'
+  ));
+  assert.ok(context);
+  assert.equal(context.title, 'Viewer');
+  assert.match(context.id, /^viewer:automerge:/);
+  assert.equal(seed.documentHandles[context.url]?.doc().name, 'app.js');
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 

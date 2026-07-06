@@ -52,8 +52,10 @@ Current apps are installed as package folders under `/apps`. Each package
 contains a manifest doc plus package resources. The implemented manifest fields
 are `manifestVersion`, `id`, `name`, `version`, `entry`, `entryKind`, `handles`,
 `surfaces`, and `schemas`. The shell derives launcher items from those app
-package manifests, and both `app.launch` and document routing resolve app
-package manifests before creating sessions.
+package manifests, filtering out stateless `shell-compat` placeholders such as
+Viewer while keeping them route-openable through document handlers. Both
+`app.launch` and document routing resolve app package manifests before creating
+sessions.
 
 `WindowManagerAppHost.renderSurface` is now a manifest-driven host boundary:
 the host resolves `context.app` through `/apps`, renders first-party React apps
@@ -70,10 +72,14 @@ The SharedWorker is still the boot gate, not the owner of Automerge handles or
 runtime operations. The in-process bootstrap runtime still owns the first
 runtime slice.
 
-The sandbox service bridge currently exposes only the host-scoped launch view:
-`window.patchpit.services.view({ name: 'launch' })` returns launch-session metadata
-chosen by the host, and app-supplied authority fields are rejected. `act` and
-`open` are reserved for later slices and return unsupported-service errors.
+The sandbox service bridge currently exposes host-scoped read-only views:
+`window.patchpit.services.view({ name: 'launch' })` returns launch-session
+metadata chosen by the host, and
+`window.patchpit.services.view({ name: 'resource' })` returns a narrow
+serializable view of the current session URL resolved from the host's filesystem
+projection. Apps cannot supply `url`, `rootUrl`, `contextId`, `surfaceId`, or
+other authority scope fields. `act` and `open` are reserved for later slices and
+return unsupported-service errors.
 
 Remaining app-host work:
 
@@ -636,10 +642,10 @@ First-run flow:
    affordance.
 
 Launcher should be derived from installed apps that are allowed to run, not from
-hard-coded React components. Apps can choose whether they are visible as
-launchable tools. For example, Files and Terminal should appear as direct
-launcher items, while Viewer may appear either as a launchable app or primarily
-through `Open With...` depending on product choice.
+hard-coded React components. In the current V0 shell, direct launcher items are
+real sandbox entries or compatibility apps with declared launch state; stateless
+`shell-compat` document handlers such as Viewer stay available through routing
+and `Open With...` instead of appearing as blank launch targets.
 
 This keeps the larger app system simple: install apps, they appear as tools,
 they open documents or sessions, and Settings manages their lifecycle. A

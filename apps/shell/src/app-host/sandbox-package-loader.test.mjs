@@ -120,6 +120,92 @@ void test('sandbox service bridge serves host-scoped launch view data', () => {
   });
 });
 
+void test('sandbox service bridge serves current session resource view data', () => {
+  const resourceRoot = folder('root', [
+    file('readme.md', 'text/markdown', '# Scoped document'),
+    file('secret.md', 'text/markdown', '# Different document'),
+  ]);
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'trusted-viewer',
+    resourceRoot,
+    session: { app: 'trusted-viewer', id: 'trusted-session', url: 'automerge:readme.md' },
+  });
+
+  const response = bridge.respond(serviceRequest('view', {
+    name: 'resource',
+  }));
+
+  assert.deepEqual(response, {
+    id: 'request-1',
+    ok: true,
+    protocol: sandboxAppProtocol,
+    result: {
+      resource: {
+        kind: 'file',
+        mediaType: 'text/markdown',
+        name: 'readme.md',
+        sourceUrl: null,
+        text: '# Scoped document',
+        title: 'readme.md',
+        url: 'automerge:readme.md',
+      },
+      view: 'resource',
+    },
+    type: 'serviceResponse',
+  });
+});
+
+void test('sandbox service bridge serves scoped folder resource summaries', () => {
+  const resourceRoot = folder('root', [
+    folder('docs', [
+      file('guide.md', 'text/markdown', '# Guide'),
+      file('photo.png', 'image/png', '<binary-placeholder>'),
+    ]),
+  ]);
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'trusted-viewer',
+    resourceRoot,
+    session: { app: 'trusted-viewer', id: 'trusted-session', url: 'automerge:docs' },
+  });
+
+  const response = bridge.respond(serviceRequest('view', {
+    name: 'resource',
+  }));
+
+  assert.deepEqual(response, {
+    id: 'request-1',
+    ok: true,
+    protocol: sandboxAppProtocol,
+    result: {
+      resource: {
+        children: [
+          {
+            kind: 'file',
+            mediaType: 'text/markdown',
+            name: 'guide.md',
+            title: 'guide.md',
+            url: 'automerge:guide.md',
+          },
+          {
+            kind: 'file',
+            mediaType: 'image/png',
+            name: 'photo.png',
+            title: 'photo.png',
+            url: 'automerge:photo.png',
+          },
+        ],
+        kind: 'folder',
+        mediaType: null,
+        name: 'docs',
+        title: 'docs',
+        url: 'automerge:docs',
+      },
+      view: 'resource',
+    },
+    type: 'serviceResponse',
+  });
+});
+
 void test('sandbox service bridge rejects app-supplied authority scope', () => {
   const bridge = createSandboxAppServiceBridge({
     appId: 'trusted-viewer',
@@ -131,6 +217,33 @@ void test('sandbox service bridge rejects app-supplied authority scope', () => {
     name: 'launch',
     scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
     session: { app: 'forged-app', id: 'forged-session', url: 'automerge:forged' },
+  }));
+
+  assert.deepEqual(response, {
+    error: {
+      code: 'missing_scope',
+      message: 'Sandbox service requests cannot carry app-supplied authority scope.',
+    },
+    id: 'request-1',
+    ok: false,
+    protocol: sandboxAppProtocol,
+    type: 'serviceResponse',
+  });
+});
+
+void test('sandbox service bridge rejects app-supplied resource targets', () => {
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'trusted-viewer',
+    resourceRoot: folder('root', [
+      file('readme.md', 'text/markdown', '# Scoped document'),
+      file('secret.md', 'text/markdown', '# Different document'),
+    ]),
+    session: { app: 'trusted-viewer', id: 'trusted-session', url: 'automerge:readme.md' },
+  });
+
+  const response = bridge.respond(serviceRequest('view', {
+    name: 'resource',
+    url: 'automerge:secret.md',
   }));
 
   assert.deepEqual(response, {

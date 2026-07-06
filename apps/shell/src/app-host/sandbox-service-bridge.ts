@@ -1,14 +1,43 @@
-import type { WindowContext } from '@patchpit/system';
+import { findNode, type FilesystemNode, type WindowContext } from '@patchpit/system';
 
 export const sandboxAppProtocol = 'patchpit.app@1' as const;
 export const sandboxLaunchView = 'launch' as const;
+export const sandboxResourceView = 'resource' as const;
 
 export type SandboxAppProtocol = typeof sandboxAppProtocol;
 export type SandboxAppServiceName = 'act' | 'open' | 'view';
 export type SandboxAppSession = Pick<WindowContext, 'app' | 'id' | 'url'>;
-export type SandboxAppServiceErrorCode = 'missing_scope' | 'unsupported_service';
+export type SandboxAppServiceErrorCode = 'missing_scope' | 'not_found' | 'unsupported_service';
 
 export type SandboxAppServiceCapabilities = Readonly<Record<SandboxAppServiceName, boolean>>;
+
+export type SandboxAppResourceView =
+  | {
+      readonly kind: 'file';
+      readonly mediaType: string;
+      readonly name: string;
+      readonly sourceUrl: string | null;
+      readonly text?: string;
+      readonly title: string;
+      readonly url: string;
+    }
+  | {
+      readonly children: readonly SandboxAppResourceChild[];
+      readonly kind: 'folder';
+      readonly mediaType: null;
+      readonly name: string;
+      readonly text?: string;
+      readonly title: string;
+      readonly url: string;
+    };
+
+export type SandboxAppResourceChild = {
+  readonly kind: FilesystemNode['kind'];
+  readonly mediaType: string | null;
+  readonly name: string;
+  readonly title: string;
+  readonly url: string;
+};
 
 export type SandboxAppServiceRequest = {
   readonly protocol: SandboxAppProtocol;
@@ -60,9 +89,11 @@ export type SandboxAppServiceBridge = {
 
 export function createSandboxAppServiceBridge({
   appId,
+  resourceRoot,
   session,
 }: {
   readonly appId: string;
+  readonly resourceRoot?: FilesystemNode | undefined;
   readonly session: SandboxAppSession;
 }): SandboxAppServiceBridge {
   return {
@@ -88,25 +119,49 @@ export function createSandboxAppServiceBridge({
           'Sandbox service requests cannot carry app-supplied authority scope.',
         );
       }
-      if (viewRequest.view !== sandboxLaunchView) {
-        return serviceErrorResponse(
-          request,
-          'missing_scope',
-          viewRequest.view === undefined
-            ? 'Sandbox view request is not available in this host scope.'
-            : `Sandbox view ${viewRequest.view} is not available in this host scope.`,
-        );
+      if (viewRequest.view === sandboxLaunchView) {
+        return serviceSuccessResponse(request, {
+          appId,
+          session: {
+            app: session.app,
+            id: session.id,
+            url: session.url,
+          },
+          view: sandboxLaunchView,
+        });
       }
 
-      return serviceSuccessResponse(request, {
-        appId,
-        session: {
-          app: session.app,
-          id: session.id,
-          url: session.url,
-        },
-        view: sandboxLaunchView,
-      });
+      if (viewRequest.view === sandboxResourceView) {
+        if (resourceRoot === undefined) {
+          return serviceErrorResponse(
+            request,
+            'missing_scope',
+            'Sandbox resource view is not available in this host scope.',
+          );
+        }
+
+        const node = findNode(resourceRoot, session.url);
+        if (node === null) {
+          return serviceErrorResponse(
+            request,
+            'not_found',
+            'Sandbox resource target is no longer available in this host scope.',
+          );
+        }
+
+        return serviceSuccessResponse(request, {
+          resource: sandboxResourceViewData(node),
+          view: sandboxResourceView,
+        });
+      }
+
+      return serviceErrorResponse(
+        request,
+        'missing_scope',
+        viewRequest.view === undefined
+          ? 'Sandbox view request is not available in this host scope.'
+          : `Sandbox view ${viewRequest.view} is not available in this host scope.`,
+      );
     },
   };
 }
@@ -181,6 +236,53 @@ function hasAppSuppliedAuthority(payload: Readonly<Record<string, unknown>>): bo
   return appSuppliedAuthorityFields.some((field) => Object.hasOwn(payload, field));
 }
 
+function sandboxResourceViewData(node: FilesystemNode): SandboxAppResourceView {
+  const base = {
+    name: node.name,
+    title: node.name,
+    url: node.url,
+  };
+
+  if (node.kind === 'folder') {
+    return {
+      ...base,
+      children: node.entries.map(sandboxResourceChild),
+      kind: 'folder',
+      mediaType: null,
+      ...(node.text === '' ? {} : { text: node.text }),
+    };
+  }
+
+  return {
+    ...base,
+    kind: 'file',
+    mediaType: node.mediaType,
+    sourceUrl: node.sourceUrl,
+    ...(isTextMediaType(node.mediaType) ? { text: node.text } : {}),
+  };
+}
+
+function sandboxResourceChild(node: FilesystemNode): SandboxAppResourceChild {
+  return {
+    kind: node.kind,
+    mediaType: node.kind === 'file' ? node.mediaType : null,
+    name: node.name,
+    title: node.name,
+    url: node.url,
+  };
+}
+
+function isTextMediaType(mediaType: string): boolean {
+  const normalized = mediaType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  return normalized.startsWith('text/')
+    || normalized === 'application/json'
+    || normalized === 'application/javascript'
+    || normalized === 'application/ecmascript'
+    || normalized === 'application/xml'
+    || normalized.endsWith('+json')
+    || normalized.endsWith('+xml');
+}
+
 function isSandboxAppServiceName(value: unknown): value is SandboxAppServiceName {
   return value === 'act' || value === 'open' || value === 'view';
 }
@@ -202,5 +304,7 @@ const appSuppliedAuthorityFields = [
   'scope',
   'session',
   'surfaceId',
+  'targetUrl',
+  'url',
   'workspaceId',
 ] as const;

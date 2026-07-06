@@ -1,4 +1,5 @@
 import {
+  installedAppHasStatefulLaunch,
   installedAppRole,
   type InstalledApp,
 } from '../app-host/installed-apps';
@@ -22,15 +23,17 @@ export function launcherItems({
   readonly installedApps: readonly InstalledApp[];
   readonly launchApp: (input: AppLaunchIntentInput) => void;
 }): readonly LauncherItem[] {
-  return installedApps.map((app) => ({
-    active: focusedAppId === app.manifest.id,
-    app: app.manifest.id,
-    emoji: app.icon,
-    label: app.manifest.id === 'file-picker' ? 'Files' : app.manifest.name,
-    launch: () => {
-      launchApp(launcherLaunchInput(app));
-    },
-  }));
+  return installedApps
+    .filter(isDirectLauncherApp)
+    .map((app) => ({
+      active: focusedAppId === app.manifest.id,
+      app: app.manifest.id,
+      emoji: app.icon,
+      label: app.manifest.id === 'file-picker' ? 'Files' : app.manifest.name,
+      launch: () => {
+        launchApp(launcherLaunchInput(app));
+      },
+    }));
 }
 
 function launcherLaunchInput(app: InstalledApp): AppLaunchIntentInput {
@@ -42,4 +45,10 @@ function launcherLaunchInput(app: InstalledApp): AppLaunchIntentInput {
       : ContextLaunchBehavior.OpenContext,
     role,
   };
+}
+
+function isDirectLauncherApp(app: InstalledApp): boolean {
+  if (installedAppHasStatefulLaunch(app)) return true;
+  if (app.manifest.entryKind === 'shell-compat') return false;
+  return (app.manifest.handles?.length ?? 0) === 0;
 }
