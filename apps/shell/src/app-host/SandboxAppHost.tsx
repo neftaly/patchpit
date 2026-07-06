@@ -6,6 +6,7 @@ import {
   sandboxAppProtocol,
   sandboxFrameMessage,
   type SandboxAppProtocol,
+  type SandboxFilePickerServiceScope,
   type SandboxAppReportedError,
   type SandboxAppServiceCapabilities,
   type SandboxAppSession,
@@ -18,6 +19,7 @@ export type { SandboxAppProtocol, SandboxAppReportedError, SandboxAppSession };
 export type SandboxAppHostProps = {
   readonly appId: string;
   readonly entry: SandboxFilesystemAppEntry | undefined;
+  readonly filePicker?: SandboxFilePickerServiceScope | undefined;
   readonly resourceRoot?: FilesystemNode | undefined;
   readonly session: SandboxAppSession;
   readonly title?: string;
@@ -31,6 +33,7 @@ type SandboxStatus =
 export function SandboxAppHost({
   appId,
   entry,
+  filePicker,
   resourceRoot,
   session,
   title = `${appId} sandbox`,
@@ -40,8 +43,8 @@ export function SandboxAppHost({
     entry === undefined ? undefined : createSandboxPackageLoadPlan(entry)
   ), [entry]);
   const serviceBridge = useMemo(() => (
-    createSandboxAppServiceBridge({ appId, resourceRoot, session })
-  ), [appId, resourceRoot, session.app, session.id, session.url]);
+    createSandboxAppServiceBridge({ appId, filePicker, resourceRoot, session })
+  ), [appId, filePicker, resourceRoot, session.app, session.id, session.url]);
   const srcDoc = useMemo(() => (
     loadPlan === undefined || loadPlan.kind === 'error'
       ? undefined
@@ -72,7 +75,9 @@ export function SandboxAppHost({
       } else if (message.type === 'error') {
         setStatus({ kind: 'error', error: message.error });
       } else {
-        frameWindow.postMessage(serviceBridge.respond(message), '*');
+        void Promise.resolve(serviceBridge.respond(message)).then((response) => {
+          frameWindow.postMessage(response, '*');
+        });
       }
     }
 

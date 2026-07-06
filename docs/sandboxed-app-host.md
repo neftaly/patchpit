@@ -72,21 +72,26 @@ The SharedWorker is still the boot gate, not the owner of Automerge handles or
 runtime operations. The in-process bootstrap runtime still owns the first
 runtime slice.
 
-The sandbox service bridge currently exposes host-scoped read-only views:
+The sandbox service bridge currently exposes host-scoped views:
 `window.patchpit.services.view({ name: 'launch' })` returns launch-session
 metadata chosen by the host, and
 `window.patchpit.services.view({ name: 'resource' })` returns a narrow
 serializable view of the current session URL resolved from the host's filesystem
-projection. Apps cannot supply `url`, `rootUrl`, `contextId`, `surfaceId`, or
-other authority scope fields. `act` and `open` are reserved for later slices and
-return unsupported-service errors.
+projection. In the File Picker app/session scope,
+`window.patchpit.services.view({ name: 'file-picker' })` returns the mounted
+tree, file type rules, and picker state, and `window.patchpit.services.act(...)`
+admits only host-scoped `filePicker.selectUrl`, `filePicker.toggleFolder`,
+`route.preview`, and `route.open` requests. Apps cannot supply `url`, `rootUrl`,
+`contextId`, `surfaceId`, or other authority scope fields. `open` remains
+reserved for a later slice and returns unsupported-service errors.
 
 Remaining app-host work:
 
 - move first-party app UI from compatibility adapters into sandboxed app
   entries;
 - define shared library and import-map handling for installed app packages;
-- expand scoped `view`, `act`, and `open` services behind the sandbox bridge;
+- expand remaining scoped `view`, `act`, and `open` services behind the sandbox
+  bridge;
 - move runtime ownership from the in-process bootstrap client into the worker;
 - add local OS runner placement for command runners and later app hosts.
 

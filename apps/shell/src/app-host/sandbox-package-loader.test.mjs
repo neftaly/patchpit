@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  filePickerIntentBoundary,
+  routeIntentBoundary,
+} from '@patchpit/system';
+import {
+  filePickerSelectUrlIntent,
+  routeOpenIntent,
+  runtimeIntentRequestRow,
+} from '@patchpit/system/runtime';
+import {
   createSandboxPackageLoadPlan,
   sandboxFilesystemAppEntry,
 } from './sandbox-package-loader.ts';
@@ -231,6 +240,71 @@ void test('sandbox service bridge rejects app-supplied authority scope', () => {
   });
 });
 
+void test('sandbox service bridge serves scoped file-picker view data', () => {
+  const resourceRoot = folder('root', [
+    folder('docs', [
+      file('readme.md', 'text/markdown', '# Scoped document'),
+    ]),
+  ]);
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'file-picker',
+    filePicker: filePickerScope({ root: resourceRoot }),
+    session: { app: 'file-picker', id: 'file-picker-session', url: 'automerge:file-picker-state' },
+  });
+
+  const response = bridge.respond(serviceRequest('view', {
+    name: 'file-picker',
+  }));
+
+  assert.deepEqual(response, {
+    id: 'request-1',
+    ok: true,
+    protocol: sandboxAppProtocol,
+    result: {
+      fileTypes: [
+        { emoji: 'text', match: 'text/*' },
+      ],
+      root: {
+        children: [
+          {
+            children: [
+              {
+                kind: 'file',
+                mediaType: 'text/markdown',
+                name: 'readme.md',
+                title: 'readme.md',
+                url: 'automerge:readme.md',
+              },
+            ],
+            kind: 'folder',
+            mediaType: null,
+            name: 'docs',
+            title: 'docs',
+            url: 'automerge:docs',
+          },
+        ],
+        kind: 'folder',
+        mediaType: null,
+        name: 'root',
+        title: 'root',
+        url: 'automerge:root',
+      },
+      session: { app: 'file-picker', id: 'file-picker-session', url: 'automerge:file-picker-state' },
+      state: {
+        activeUrl: 'automerge:readme.md',
+        fileTypesUrl: 'automerge:file-types',
+        openFolders: {
+          'automerge:root': true,
+        },
+        rootUrl: 'automerge:root',
+        selectedUrls: ['automerge:readme.md'],
+      },
+      view: 'file-picker',
+    },
+    type: 'serviceResponse',
+  });
+});
+
 void test('sandbox service bridge rejects app-supplied resource targets', () => {
   const bridge = createSandboxAppServiceBridge({
     appId: 'trusted-viewer',
@@ -255,6 +329,75 @@ void test('sandbox service bridge rejects app-supplied resource targets', () => 
     ok: false,
     protocol: sandboxAppProtocol,
     type: 'serviceResponse',
+  });
+});
+
+void test('sandbox service bridge rejects app-supplied file-picker action authority', async () => {
+  const submitted = [];
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'file-picker',
+    filePicker: filePickerScope({ runtime: recordingRuntime(submitted) }),
+    session: { app: 'file-picker', id: 'file-picker-session', url: 'automerge:file-picker-state' },
+  });
+
+  const response = await bridge.respond(serviceRequest('act', {
+    name: 'route.open',
+    rootUrl: 'automerge:forged-root',
+    sourceSurfaceId: 'forged-surface',
+    url: 'automerge:readme.md',
+  }));
+
+  assert.deepEqual(response, {
+    error: {
+      code: 'missing_scope',
+      message: 'Sandbox service requests cannot carry app-supplied authority scope.',
+    },
+    id: 'request-1',
+    ok: false,
+    protocol: sandboxAppProtocol,
+    type: 'serviceResponse',
+  });
+  assert.deepEqual(submitted, []);
+});
+
+void test('sandbox service bridge maps allowed file-picker actions through scoped runtime intents', async () => {
+  const submitted = [];
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'file-picker',
+    filePicker: filePickerScope({ runtime: recordingRuntime(submitted) }),
+    session: { app: 'file-picker', id: 'file-picker-session', url: 'automerge:file-picker-state' },
+  });
+
+  const routeResponse = await bridge.respond(serviceRequest('act', {
+    name: routeOpenIntent,
+    title: 'Readme',
+    url: 'automerge:readme.md',
+  }));
+  const selectResponse = await bridge.respond(serviceRequest('act', {
+    name: filePickerSelectUrlIntent,
+    options: {
+      selectedUrls: ['automerge:readme.md'],
+    },
+    url: 'automerge:readme.md',
+  }));
+
+  assert.equal(routeResponse.ok, true);
+  assert.equal(selectResponse.ok, true);
+  assert.equal(submitted.length, 2);
+  assert.equal(submitted[0].intent, routeOpenIntent);
+  assert.equal(submitted[1].intent, filePickerSelectUrlIntent);
+
+  assert.deepEqual(runtimeIntentRequestRow(submitted[0], routeIntentBoundary), {
+    id: 'route:1',
+    rootUrl: 'automerge:runtime-root',
+    sourceSurfaceId: 'files-surface',
+    title: 'Readme',
+    url: 'automerge:readme.md',
+  });
+  assert.deepEqual(runtimeIntentRequestRow(submitted[1], filePickerIntentBoundary), {
+    id: 'file-picker:1',
+    selectedUrls: ['automerge:readme.md'],
+    url: 'automerge:readme.md',
   });
 });
 
@@ -360,6 +503,47 @@ function findFile(node, path) {
   if (child === undefined) return null;
   if (rest.length === 0) return child.kind === 'file' ? child : null;
   return findFile(child, rest.join('/'));
+}
+
+function filePickerScope({
+  root = folder('root', [
+    file('readme.md', 'text/markdown', '# Scoped document'),
+  ]),
+  runtime = recordingRuntime([]),
+} = {}) {
+  return {
+    fileTypes: [
+      { emoji: 'text', match: 'text/*' },
+    ],
+    root,
+    rootUrl: 'automerge:runtime-root',
+    runtime,
+    sourceSurfaceId: 'files-surface',
+    state: {
+      activeUrl: 'automerge:readme.md',
+      fileTypesUrl: 'automerge:file-types',
+      openFolders: {
+        'automerge:root': true,
+      },
+      rootUrl: 'automerge:root',
+      selectedUrls: ['automerge:readme.md'],
+    },
+  };
+}
+
+function recordingRuntime(submitted) {
+  return {
+    openCapability() {
+      throw new Error('unexpected openCapability');
+    },
+    submitIntent(request) {
+      submitted.push(request);
+      return Promise.resolve({ heads: {}, status: 'committed' });
+    },
+    subscribeProjection() {
+      throw new Error('unexpected subscribeProjection');
+    },
+  };
 }
 
 function serviceRequest(service, payload) {

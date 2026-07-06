@@ -60,7 +60,7 @@ import {
   installedAppsFromFilesystem,
   type InstalledApp,
 } from './app-host/installed-apps';
-import { SandboxedFilesystemApp } from './app-host/SandboxedFilesystemApp';
+import { SandboxedFilesystemApp, type SandboxFilePickerHostScope } from './app-host/SandboxedFilesystemApp';
 import { createBootstrapRuntimeClient } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
 import { detailFromUnknown, metadataDetails } from './runtime/runtime-error-details';
@@ -294,6 +294,8 @@ function ShellApp({
               filePicker: {
                 actions: filePickerActions,
                 fileIcons: iconRules,
+                rootUrl,
+                runtime,
                 state: filePickerState,
                 url: documentUrls.filePickerState,
               },
@@ -333,6 +335,8 @@ function shellAppHost({
   readonly filePicker: {
     readonly actions: (surfaceId: string) => FilePickerActions;
     readonly fileIcons: FileIcons;
+    readonly rootUrl: string;
+    readonly runtime: SandboxFilePickerHostScope['runtime'];
     readonly state: FilePickerStateDoc;
     readonly url: string;
   };
@@ -413,6 +417,12 @@ function shellAppHost({
         <SandboxedFilesystemApp
           app={installedApp}
           context={context}
+          filePicker={{
+            fileTypes: filePicker.fileIcons,
+            rootUrl: filePicker.rootUrl,
+            runtime: filePicker.runtime,
+            state: filePicker.state,
+          }}
           filesystemRoot={filesystemRoot}
           surfaceId={surfaceId}
         />
