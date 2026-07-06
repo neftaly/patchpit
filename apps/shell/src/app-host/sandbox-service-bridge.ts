@@ -181,6 +181,14 @@ export function createSandboxAppServiceBridge({
       view: grants.some((grant) => grant.service === 'view'),
     }),
     respond(request) {
+      if (sandboxServiceRequestCarriesAuthority(request)) {
+        return serviceErrorResponse(
+          request,
+          'missing_scope',
+          'Sandbox service requests cannot carry app-supplied authority scope.',
+        );
+      }
+
       if (request.service === 'act') {
         return sandboxActResponse(request, grants);
       }
@@ -196,6 +204,13 @@ export function createSandboxAppServiceBridge({
       return sandboxViewResponse(request, grants);
     },
   };
+}
+
+function sandboxServiceRequestCarriesAuthority(request: SandboxAppServiceRequest): boolean {
+  if (!isRecord(request.payload)) return false;
+  return request.service === 'act'
+    ? hasAppSuppliedActionAuthority(request.payload)
+    : hasAppSuppliedAuthority(request.payload);
 }
 
 function sandboxAppServiceGrants({

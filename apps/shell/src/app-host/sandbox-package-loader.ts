@@ -61,11 +61,20 @@ export function createSandboxPackageLoadPlan(entry: SandboxFilesystemAppEntry): 
     const entryResource = { ...entry, path: entryPath };
     resources.set(entryPath, entryResource);
     const modules = moduleUrlFactory(resources);
-    const resourceUrl = (fromPath: string, specifier: string): string | undefined => {
+    const resourceUrl = (fromPath: string, specifier: string, options?: {
+      readonly javaScriptOnly?: boolean;
+    }): string => {
       const path = resolveRelativePackagePath(fromPath, specifier);
-      if (path === undefined) return undefined;
+      if (path === undefined) {
+        throw new Error(`Sandbox package-relative resource "${specifier}" from "${fromPath}" is not a resolvable package path.`);
+      }
       const resource = resources.get(path);
-      if (resource === undefined) return undefined;
+      if (resource === undefined) {
+        throw new Error(`Sandbox package-relative resource "${specifier}" from "${fromPath}" is not available in the package.`);
+      }
+      if (options?.javaScriptOnly === true && !isJavaScriptResource(resource)) {
+        throw new Error(`Sandbox package-relative module "${specifier}" from "${fromPath}" is not a JavaScript resource.`);
+      }
       return isJavaScriptResource(resource) ? modules.moduleUrl(path) : textDataUrl(resource.mediaType, resource.text);
     };
 
@@ -101,8 +110,10 @@ export function rewriteRelativeModuleSpecifiers(
   fromPath: string,
   resolve: (specifier: string) => string,
 ): string {
-  return source.replaceAll(moduleSpecifierPattern, (match, prefix: string, quote: string, specifier: string) => {
-    if (resolveRelativePackagePath(fromPath, specifier) === undefined) return match;
+  return source.replaceAll(moduleSpecifierPattern, (_match, prefix: string, quote: string, specifier: string) => {
+    if (resolveRelativePackagePath(fromPath, specifier) === undefined) {
+      throw new Error(`Sandbox package-relative module "${specifier}" from "${fromPath}" is not a resolvable package path.`);
+    }
     return `${prefix}${quote}${resolve(specifier)}${quote}`;
   });
 }
@@ -171,15 +182,17 @@ function rewriteSandboxHtmlEntry({
 }: {
   readonly entryPath: string;
   readonly html: string;
-  readonly resourceUrl: (fromPath: string, specifier: string) => string | undefined;
+  readonly resourceUrl: (fromPath: string, specifier: string, options?: {
+    readonly javaScriptOnly?: boolean;
+  }) => string;
 }): string {
   return html
     .replaceAll(scriptSrcPattern, (tag: string, beforeSrc: string, quote: string, specifier: string, afterSrc: string) => {
-      const url = resourceUrl(entryPath, specifier);
-      if (url === undefined) return tag;
       if (!isModuleScript(`${beforeSrc} ${afterSrc}`)) {
+        const url = resourceUrl(entryPath, specifier);
         return tag.replace(`${quote}${specifier}${quote}`, `${quote}${url}${quote}`);
       }
+      const url = resourceUrl(entryPath, specifier, { javaScriptOnly: true });
       return `<script type="module">
 try {
   const appModule = await import(${JSON.stringify(url)});
@@ -191,9 +204,9 @@ try {
 }
 </script>`;
     })
-    .replaceAll(assetAttributePattern, (match: string, prefix: string, quote: string, specifier: string) => {
+    .replaceAll(assetAttributePattern, (_match: string, prefix: string, quote: string, specifier: string) => {
       const url = resourceUrl(entryPath, specifier);
-      return url === undefined ? match : `${prefix}${quote}${url}${quote}`;
+      return `${prefix}${quote}${url}${quote}`;
     });
 }
 

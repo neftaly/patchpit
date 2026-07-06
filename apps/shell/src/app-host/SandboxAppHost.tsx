@@ -369,13 +369,18 @@ function sandboxSrcDoc({
   const bridgeScript = sandboxBridgeScript({ appId, capabilities, protocol, session });
 
   if (loadPlan.kind === 'html') {
-    return injectSandboxBridge(loadPlan.html, bridgeScript, htmlReadyScript());
+    return injectSandboxHead(loadPlan.html, [
+      sandboxCspMeta(),
+      `<script>${bridgeScript}</script>`,
+      `<script>${htmlReadyScript()}</script>`,
+    ]);
   }
 
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
+  ${sandboxCspMeta()}
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     html,
@@ -462,6 +467,27 @@ function sandboxBridgeScript({
         });
       }
 
+      function blockedNetworkApi(name) {
+        return () => Promise.reject(new TypeError(name + ' is blocked in Patchpit sandbox apps. Use host services instead.'));
+      }
+
+      Object.defineProperty(window, 'fetch', { value: blockedNetworkApi('fetch') });
+      Object.defineProperty(window, 'XMLHttpRequest', {
+        value: function XMLHttpRequest() {
+          throw new TypeError('XMLHttpRequest is blocked in Patchpit sandbox apps. Use host services instead.');
+        },
+      });
+      Object.defineProperty(window, 'EventSource', {
+        value: function EventSource() {
+          throw new TypeError('EventSource is blocked in Patchpit sandbox apps. Use host services instead.');
+        },
+      });
+      Object.defineProperty(window, 'WebSocket', {
+        value: function WebSocket() {
+          throw new TypeError('WebSocket is blocked in Patchpit sandbox apps. Use host services instead.');
+        },
+      });
+
       window.addEventListener('message', (event) => {
         const message = event.data;
         if (message?.protocol !== config.protocol || message.type !== 'serviceResponse') return;
@@ -510,11 +536,22 @@ function sandboxBridgeScript({
   `;
 }
 
-function injectSandboxBridge(html: string, bridgeScript: string, readyScript: string): string {
-  const scripts = `<script>${bridgeScript}</script><script>${readyScript}</script>`;
-  if (/<head\b[^>]*>/i.test(html)) return html.replace(/<head\b[^>]*>/i, (tag) => `${tag}${scripts}`);
-  if (/<html\b[^>]*>/i.test(html)) return html.replace(/<html\b[^>]*>/i, (tag) => `${tag}${scripts}`);
-  return `${scripts}${html}`;
+function sandboxCspMeta(): string {
+  return `<meta http-equiv="Content-Security-Policy" content="${sandboxCspContent}">`;
+}
+
+function injectSandboxHead(html: string, headEntries: readonly string[]): string {
+  const injected = headEntries.join('');
+  const htmlWithoutExistingCsp = html.replaceAll(cspMetaPattern, '');
+  if (/<head\b[^>]*>/i.test(htmlWithoutExistingCsp)) {
+    return htmlWithoutExistingCsp.replace(/<head\b[^>]*>/i, (tag) => `${tag}${injected}`);
+  }
+  if (/<html\b[^>]*>/i.test(htmlWithoutExistingCsp)) {
+    return htmlWithoutExistingCsp.replace(/<html\b[^>]*>/i, (tag) => `${tag}<head>${injected}</head>`);
+  }
+  const doctype = htmlWithoutExistingCsp.match(/^\s*<!doctype[^>]*>/i)?.[0] ?? '';
+  const body = htmlWithoutExistingCsp.slice(doctype.length);
+  return `${doctype}<html><head>${injected}</head><body>${body}</body></html>`;
 }
 
 function htmlReadyScript(): string {
@@ -535,3 +572,20 @@ function htmlReadyScript(): string {
 function scriptJson(value: unknown): string {
   return JSON.stringify(value).replaceAll('<', '\\u003C');
 }
+
+const sandboxCspContent = [
+  "default-src 'none'",
+  "base-uri 'none'",
+  "connect-src 'none'",
+  "font-src data:",
+  "form-action 'none'",
+  "frame-src 'none'",
+  "img-src data:",
+  "media-src data:",
+  "object-src 'none'",
+  "script-src 'unsafe-inline' data:",
+  "style-src 'unsafe-inline' data:",
+  "worker-src 'none'",
+].join('; ');
+
+const cspMetaPattern = /<meta\b(?=[^>]*\bhttp-equiv\s*=\s*(?:"content-security-policy"|'content-security-policy'|content-security-policy\b))[^>]*>/gi;

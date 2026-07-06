@@ -66,6 +66,87 @@ void test('sandbox html entries rewrite package-relative modules and assets', ()
   assert.doesNotMatch(plan.html, /src="\.\/app\.js"/);
 });
 
+void test('sandbox html entries reject missing package-relative assets', () => {
+  const entry = appEntry({
+    entryKind: 'html',
+    entryPath: 'index.html',
+    files: [
+      file(
+        'index.html',
+        'text/html',
+        '<!doctype html><html><head><link rel="stylesheet" href="./missing.css"></head><body></body></html>',
+      ),
+    ],
+  });
+
+  const plan = createSandboxPackageLoadPlan(entry);
+
+  assert.equal(plan.kind, 'error');
+  if (plan.kind !== 'error') return;
+  assert.equal(plan.error, 'Sandbox package-relative resource "./missing.css" from "index.html" is not available in the package.');
+});
+
+void test('sandbox html entries reject unresolvable package-relative module paths', () => {
+  const entry = appEntry({
+    entryKind: 'html',
+    entryPath: 'index.html',
+    files: [
+      file(
+        'index.html',
+        'text/html',
+        '<!doctype html><html><head><script type="module" src="./app.js?raw"></script></head><body></body></html>',
+      ),
+      file('app.js', 'text/javascript', 'export default () => undefined;'),
+    ],
+  });
+
+  const plan = createSandboxPackageLoadPlan(entry);
+
+  assert.equal(plan.kind, 'error');
+  if (plan.kind !== 'error') return;
+  assert.equal(plan.error, 'Sandbox package-relative resource "./app.js?raw" from "index.html" is not a resolvable package path.');
+});
+
+void test('sandbox html entries reject non-javascript package-relative module scripts', () => {
+  const entry = appEntry({
+    entryKind: 'html',
+    entryPath: 'index.html',
+    files: [
+      file(
+        'index.html',
+        'text/html',
+        '<!doctype html><html><head><script type="module" src="./style.css"></script></head><body></body></html>',
+      ),
+      file('style.css', 'text/css', 'body { color: red; }'),
+    ],
+  });
+
+  const plan = createSandboxPackageLoadPlan(entry);
+
+  assert.equal(plan.kind, 'error');
+  if (plan.kind !== 'error') return;
+  assert.equal(plan.error, 'Sandbox package-relative module "./style.css" from "index.html" is not a JavaScript resource.');
+});
+
+void test('sandbox module entries reject unresolvable package-relative imports', () => {
+  const entry = appEntry({
+    entryKind: 'module',
+    entryPath: 'app.js',
+    files: [
+      file('app.js', 'text/javascript', "import { message } from './lib/message.js?raw'; export default () => message;"),
+      folder('lib', [
+        file('message.js', 'text/javascript', "export const message = 'hello';"),
+      ]),
+    ],
+  });
+
+  const plan = createSandboxPackageLoadPlan(entry);
+
+  assert.equal(plan.kind, 'error');
+  if (plan.kind !== 'error') return;
+  assert.equal(plan.error, 'Sandbox package-relative module "./lib/message.js?raw" from "app.js" is not a resolvable package path.');
+});
+
 void test('sandbox package loader rejects unsupported entries explicitly', () => {
   const entry = appEntry({
     entryKind: 'module',
@@ -278,16 +359,7 @@ void test('sandbox service bridge rejects app-supplied authority scope', () => {
     session: { app: 'forged-app', id: 'forged-session', url: 'automerge:forged' },
   }));
 
-  assert.deepEqual(response, {
-    error: {
-      code: 'missing_scope',
-      message: 'Sandbox service requests cannot carry app-supplied authority scope.',
-    },
-    id: 'request-1',
-    ok: false,
-    protocol: sandboxAppProtocol,
-    type: 'serviceResponse',
-  });
+  assert.deepEqual(response, authorityScopeErrorResponse());
 });
 
 void test('sandbox service bridge serves scoped file-picker view data', () => {
@@ -370,16 +442,7 @@ void test('sandbox service bridge rejects app-supplied resource targets', () => 
     url: 'automerge:secret.md',
   }));
 
-  assert.deepEqual(response, {
-    error: {
-      code: 'missing_scope',
-      message: 'Sandbox service requests cannot carry app-supplied authority scope.',
-    },
-    id: 'request-1',
-    ok: false,
-    protocol: sandboxAppProtocol,
-    type: 'serviceResponse',
-  });
+  assert.deepEqual(response, authorityScopeErrorResponse());
 });
 
 void test('sandbox service bridge rejects app-supplied file-picker action authority', async () => {
@@ -397,16 +460,7 @@ void test('sandbox service bridge rejects app-supplied file-picker action author
     url: 'automerge:readme.md',
   }));
 
-  assert.deepEqual(response, {
-    error: {
-      code: 'missing_scope',
-      message: 'Sandbox service requests cannot carry app-supplied authority scope.',
-    },
-    id: 'request-1',
-    ok: false,
-    protocol: sandboxAppProtocol,
-    type: 'serviceResponse',
-  });
+  assert.deepEqual(response, authorityScopeErrorResponse());
   assert.deepEqual(submitted, []);
 });
 
@@ -473,7 +527,29 @@ void test('sandbox service bridge rejects views outside the host scope', () => {
   });
 });
 
-void test('sandbox service bridge rejects unsupported act and open services', () => {
+void test('sandbox service bridge rejects app-supplied authority before service availability checks', () => {
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'viewer',
+    session: { app: 'viewer', id: 'viewer:doc', url: 'automerge:doc' },
+  });
+
+  assert.deepEqual(bridge.respond(serviceRequest('view', {
+    name: 'filesystem.tree',
+    scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
+  })), authorityScopeErrorResponse());
+
+  assert.deepEqual(bridge.respond(serviceRequest('act', {
+    intent: 'route.open',
+    scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
+  })), authorityScopeErrorResponse());
+
+  assert.deepEqual(bridge.respond(serviceRequest('open', {
+    capability: 'app.private',
+    scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
+  })), authorityScopeErrorResponse());
+});
+
+void test('sandbox service bridge rejects unsupported act and open services without authority fields', () => {
   const bridge = createSandboxAppServiceBridge({
     appId: 'viewer',
     session: { app: 'viewer', id: 'viewer:doc', url: 'automerge:doc' },
@@ -481,7 +557,6 @@ void test('sandbox service bridge rejects unsupported act and open services', ()
 
   assert.deepEqual(bridge.respond(serviceRequest('act', {
     intent: 'route.open',
-    scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
   })), {
     error: {
       code: 'unsupported_service',
@@ -495,7 +570,6 @@ void test('sandbox service bridge rejects unsupported act and open services', ()
 
   assert.deepEqual(bridge.respond(serviceRequest('open', {
     capability: 'app.private',
-    scope: { contextId: 'forged-context', workspaceId: 'forged-workspace' },
   })), {
     error: {
       code: 'unsupported_service',
@@ -603,5 +677,18 @@ function serviceRequest(service, payload) {
     protocol: sandboxAppProtocol,
     service,
     type: 'serviceRequest',
+  };
+}
+
+function authorityScopeErrorResponse() {
+  return {
+    error: {
+      code: 'missing_scope',
+      message: 'Sandbox service requests cannot carry app-supplied authority scope.',
+    },
+    id: 'request-1',
+    ok: false,
+    protocol: sandboxAppProtocol,
+    type: 'serviceResponse',
   };
 }
