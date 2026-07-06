@@ -58,11 +58,8 @@ export function createSandboxPackageLoadPlan(entry: SandboxFilesystemAppEntry): 
     }
 
     const resources = new Map(entry.resources.map((resource) => [resource.path, resource]));
-    resources.set(entryPath, { ...entry, path: entryPath });
-    const entryResource = resources.get(entryPath);
-    if (entryResource === undefined) {
-      return { error: `Sandbox app entry "${entry.path}" is not available in the package.`, kind: 'error' };
-    }
+    const entryResource = { ...entry, path: entryPath };
+    resources.set(entryPath, entryResource);
     const modules = moduleUrlFactory(resources);
     const resourceUrl = (fromPath: string, specifier: string): string | undefined => {
       const path = resolveRelativePackagePath(fromPath, specifier);
