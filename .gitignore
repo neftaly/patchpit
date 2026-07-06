@@ -5,6 +5,7 @@ dist/
 **/dist/
 .bench/
 **/.bench/
+.seed-app-packages/
 dist-ssr/
 .vite/
 *.tsbuildinfo

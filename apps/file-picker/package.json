@@ -3,10 +3,27 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "./src/patchpit-app.js",
   "exports": {
     ".": "./src/index.ts",
     "./model": "./src/file-picker-model.ts",
     "./state": "./src/file-picker-state.ts"
+  },
+  "patchpit": {
+    "displayName": "File Picker",
+    "entryKind": "module",
+    "handles": [],
+    "icon": "📁",
+    "schemaIds": ["patchpit.app.filePicker.state@1"],
+    "surfaces": [
+      {
+        "role": "workspace-view",
+        "state": {
+          "schemaId": "patchpit.app.filePicker.state@1",
+          "type": "file-picker-state"
+        }
+      }
+    ]
   },
   "dependencies": {
     "@automerge/automerge-repo": "^2.5.6",

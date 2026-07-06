@@ -6,6 +6,7 @@ import {
   projectFilesystem,
   routeIntentBoundary,
 } from '@patchpit/system';
+import { seedAppPackages } from '../../../../packages/system/src/fixtures/seed-app-packages.ts';
 import {
   filePickerSelectUrlIntent,
   routeOpenIntent,
@@ -188,6 +189,51 @@ void test('seeded file picker is a sandbox-loadable module app', async () => {
   if (plan.kind !== 'module') return;
   const module = await import(plan.entryModuleUrl);
   assert.equal(typeof module.default, 'function');
+});
+
+void test('seeded app package entries match generated Vite package metadata', async () => {
+  const seed = createSeedFilesystem();
+  const filesystem = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
+  assert.deepEqual(filesystem.diagnostics, []);
+  assert.ok(filesystem.root);
+  const installedApps = installedAppsFromFilesystem({
+    getDocument: (url) => seed.documentHandles[url]?.doc(),
+    root: filesystem.root,
+  });
+  const expectedIds = seedAppPackages.map((appPackage) => appPackage.manifest.id).sort();
+
+  assert.deepEqual(
+    installedApps.map((app) => app.manifest.id).sort(),
+    expectedIds,
+  );
+
+  for (const appId of expectedIds) {
+    const app = installedApps.find((candidate) => candidate.manifest.id === appId);
+    const appPackage = seedAppPackages.find((candidate) => candidate.manifest.id === appId);
+    const appJs = appPackage?.files.find((file) => file.name === appPackage.manifest.entry);
+
+    assert.ok(app, `expected installed app ${appId}`);
+    assert.ok(appPackage, `expected generated app package ${appId}`);
+    assert.ok(appJs, `expected generated app.js for ${appId}`);
+    assert.equal(app.manifest.entry, appPackage.manifest.entry);
+    assert.equal(app.manifest.entryKind, appPackage.manifest.entryKind);
+    assert.equal(app.manifest.name, appPackage.manifest.name);
+    assert.equal(app.manifest.version, appPackage.manifest.version);
+    assert.equal(app.entry?.kind, 'file');
+    assert.equal(app.entry.text, appJs.content);
+
+    const plan = createSandboxPackageLoadPlan(sandboxFilesystemAppEntry({
+      entry: app.entry,
+      entryKind: app.manifest.entryKind,
+      entryPath: app.manifest.entry,
+      packageRoot: app.packageRoot,
+    }));
+
+    assert.equal(plan.kind, 'module');
+    if (plan.kind !== 'module') return;
+    const module = await import(plan.entryModuleUrl);
+    assert.equal(typeof module.default, 'function');
+  }
 });
 
 void test('sandbox service bridge reports host-decided capabilities', () => {
