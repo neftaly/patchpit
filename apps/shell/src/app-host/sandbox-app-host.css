@@ -43,6 +43,10 @@
   color: var(--color-text);
 }
 
+.sandbox-app-notice small {
+  color: var(--color-muted);
+}
+
 .sandbox-app-notice code {
   overflow: auto;
   max-height: 12rem;

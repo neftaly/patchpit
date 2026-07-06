@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FilesystemNode } from '@patchpit/system';
 import { createSandboxPackageLoadPlan, type SandboxFilesystemAppEntry } from './sandbox-package-loader';
 import {
@@ -43,7 +43,11 @@ export type SandboxAppHostSessionEvent = {
 type SandboxStatus =
   | { readonly kind: 'starting' }
   | { readonly kind: 'running' }
-  | { readonly kind: 'error'; readonly error: SandboxAppReportedError };
+  | {
+      readonly kind: 'error';
+      readonly diagnosticsRecorded: boolean;
+      readonly error: SandboxAppReportedError;
+    };
 
 export function SandboxAppHost({
   appId,
@@ -84,10 +88,17 @@ export function SandboxAppHost({
     onSessionEventRef.current = onSessionEvent;
   }, [onSessionEvent]);
 
+  const recordSessionEvent = useCallback((event: SandboxAppHostSessionEvent): boolean => {
+    const recorder = onSessionEventRef.current;
+    if (recorder === undefined) return false;
+    recorder(event);
+    return true;
+  }, []);
+
   useEffect(() => {
     if (loadPlan !== undefined && loadPlan.kind !== 'error') {
       setStatus({ kind: 'starting' });
-      onSessionEventRef.current?.({
+      recordSessionEvent({
         appId,
         contextId: session.id,
         data: { entryKind: loadPlan.kind },
@@ -96,7 +107,7 @@ export function SandboxAppHost({
         status: 'starting',
       });
     }
-  }, [appId, loadPlan, session.id, session.url, srcDoc]);
+  }, [appId, loadPlan, recordSessionEvent, session.id, session.url, srcDoc]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent<unknown>) {
@@ -108,7 +119,7 @@ export function SandboxAppHost({
 
       if (message.type === 'running') {
         setStatus((current) => (current.kind === 'error' ? current : { kind: 'running' }));
-        onSessionEventRef.current?.({
+        recordSessionEvent({
           appId,
           contextId: session.id,
           kind: 'sandbox.frame.running',
@@ -116,8 +127,7 @@ export function SandboxAppHost({
           status: 'running',
         });
       } else if (message.type === 'error') {
-        setStatus({ kind: 'error', error: message.error });
-        onSessionEventRef.current?.({
+        const diagnosticsRecorded = recordSessionEvent({
           appId,
           contextId: session.id,
           data: message.error.stack === undefined ? undefined : { hasStack: true },
@@ -126,8 +136,9 @@ export function SandboxAppHost({
           sessionUrl: session.url,
           status: 'error',
         });
+        setStatus({ kind: 'error', diagnosticsRecorded, error: message.error });
       } else {
-        onSessionEventRef.current?.({
+        recordSessionEvent({
           appId,
           contextId: session.id,
           data: sandboxServiceRequestDiagnostics(message),
@@ -138,7 +149,7 @@ export function SandboxAppHost({
         });
         void Promise.resolve(serviceBridge.respond(message)).then((response) => {
           frameWindow.postMessage(response, '*');
-          onSessionEventRef.current?.({
+          recordSessionEvent({
             appId,
             contextId: session.id,
             data: sandboxServiceResponseDiagnostics(response),
@@ -155,7 +166,7 @@ export function SandboxAppHost({
           } catch {
             // The frame may have navigated before the failure response could be delivered.
           }
-          onSessionEventRef.current?.({
+          const diagnosticsRecorded = recordSessionEvent({
             appId,
             contextId: session.id,
             data: sandboxServiceRequestDiagnostics(message),
@@ -166,14 +177,14 @@ export function SandboxAppHost({
             sessionUrl: session.url,
             status: 'thrown',
           });
-          setStatus({ kind: 'error', error: reportedError });
+          setStatus({ kind: 'error', diagnosticsRecorded, error: reportedError });
         });
       }
     }
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [appId, serviceBridge, session.id, session.url]);
+  }, [appId, recordSessionEvent, serviceBridge, session.id, session.url]);
 
   if (entry === undefined || loadPlan === undefined) {
     return (
@@ -285,6 +296,9 @@ function SandboxStatusOverlay({ status }: { readonly status: Exclude<SandboxStat
 
   return (
     <SandboxNotice
+      annotation={status.diagnosticsRecorded
+        ? 'Recorded in session diagnostics.'
+        : undefined}
       details={status.error.stack}
       message={status.error.message}
       role="alert"
@@ -294,11 +308,13 @@ function SandboxStatusOverlay({ status }: { readonly status: Exclude<SandboxStat
 }
 
 function SandboxNotice({
+  annotation,
   details,
   message,
   role = 'status',
   title,
 }: {
+  readonly annotation?: string | undefined;
   readonly details?: string | undefined;
   readonly message: string;
   readonly role?: 'alert' | 'status';
@@ -308,6 +324,7 @@ function SandboxNotice({
     <section className="sandbox-app-notice" role={role}>
       <strong>{title}</strong>
       <span>{message}</span>
+      {annotation === undefined ? null : <small>{annotation}</small>}
       {details === undefined ? null : <code>{details}</code>}
     </section>
   );

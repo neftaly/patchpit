@@ -65,17 +65,23 @@ async function smokeSandboxApps() {
         throw smokeError('File Picker sandbox could not be marked before preview clicks', filePickerMarked);
       }
 
-      const homeClickTarget = await waitForBrowserState(pageCdp, filePickerHomeClickTargetExpression, 5_000);
-      if (homeClickTarget.status !== 'passed') {
-        throw smokeError('File Picker home folder click target could not be located', homeClickTarget);
-      }
-      await clickPoint(pageCdp, homeClickTarget.x, homeClickTarget.y);
+      const homeClicked = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        clickFilePickerTreeItemExpression({ name: 'home' }),
+        5_000,
+      );
+      if (homeClicked.status !== 'passed') throw smokeError('File Picker home folder could not be clicked', homeClicked);
 
-      const docsClickTarget = await waitForBrowserState(pageCdp, filePickerDocsClickTargetExpression, 5_000);
-      if (docsClickTarget.status !== 'passed') {
-        throw smokeError('File Picker docs folder click target could not be located', docsClickTarget);
-      }
-      await clickPoint(pageCdp, docsClickTarget.x, docsClickTarget.y);
+      const docsClicked = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        clickFilePickerTreeItemExpression({ name: 'docs' }),
+        5_000,
+      );
+      if (docsClicked.status !== 'passed') throw smokeError('File Picker docs folder could not be clicked', docsClicked);
 
       const viewerFolder = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerFolderExpression, 5_000);
       if (viewerFolder.status !== 'passed') throw smokeError('Viewer did not render the docs folder preview', viewerFolder);
@@ -91,12 +97,14 @@ async function smokeSandboxApps() {
         throw smokeError('File Picker sandbox did not stay alive after folder preview', filePickerAfterFolderPreview);
       }
 
-      await sleep(1_500);
-      const readmeClickTarget = await waitForBrowserState(pageCdp, filePickerReadmeClickTargetExpression, 5_000);
-      if (readmeClickTarget.status !== 'passed') {
-        throw smokeError('File Picker README.md click target could not be located', readmeClickTarget);
-      }
-      await clickPoint(pageCdp, readmeClickTarget.x, readmeClickTarget.y);
+      const readmeClicked = await waitForSandboxState(
+        pageCdp,
+        targets,
+        mainFrameId,
+        clickFilePickerTreeItemExpression({ name: 'README.md' }),
+        5_000,
+      );
+      if (readmeClicked.status !== 'passed') throw smokeError('File Picker README.md could not be clicked', readmeClicked);
 
       const viewerReadme = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerReadmeExpression, 5_000);
       if (viewerReadme.status !== 'passed') throw smokeError('Viewer did not render the seeded README.md text', viewerReadme);
@@ -462,59 +470,41 @@ const filePickerAliveAfterPreviewExpression = `
 })()
 `;
 
-const filePickerHomeClickTargetExpression = filePickerClickTargetExpression({
-  minHeight: 110,
-  reason: 'home folder',
-  rowCenterY: 76,
-  xOffset: 56,
-});
-
-const filePickerDocsClickTargetExpression = filePickerClickTargetExpression({
-  minHeight: 145,
-  reason: 'docs folder',
-  rowCenterY: 104,
-  xOffset: 72,
-});
-
-const filePickerReadmeClickTargetExpression = filePickerClickTargetExpression({
-  minHeight: 200,
-  reason: 'README.md',
-  rowCenterY: 160,
-  xOffset: 112,
-});
-
-function filePickerClickTargetExpression({
-  minHeight,
-  reason,
-  rowCenterY,
-  xOffset,
-}) {
+function clickFilePickerTreeItemExpression({ name, occurrence = 0 }) {
   return `
 (() => {
-  const frame = document.querySelector('section.sandbox-app-host[aria-label="File Picker"] iframe[title="File Picker"]');
-  if (frame === null) {
+  const tree = document.querySelector('[role="tree"][aria-label="project files"]');
+  const buttons = [...document.querySelectorAll('button.tree-item')];
+  const names = buttons.map((button) => button.querySelector('.tree-name')?.textContent?.trim() ?? '');
+
+  if (tree === null) {
     return {
       status: 'pending',
-      reason: ${JSON.stringify(`Waiting for File Picker iframe before ${reason} coordinate click`)},
+      reason: 'Waiting for File Picker tree before clicking ${name}',
+      names,
       body: document.body.innerText,
     };
   }
 
-  const rect = frame.getBoundingClientRect();
-  if (rect.width < 120 || rect.height < ${minHeight}) {
+  const matches = buttons.filter((button) => (
+    button.querySelector('.tree-name')?.textContent?.trim() === ${JSON.stringify(name)}
+  ));
+  const button = matches[${occurrence}];
+  if (button === undefined) {
     return {
       status: 'pending',
-      reason: ${JSON.stringify(`Waiting for File Picker iframe to be large enough for ${reason} coordinate click`)},
-      rect: { height: rect.height, width: rect.width, x: rect.x, y: rect.y },
+      reason: ${JSON.stringify(`Waiting for File Picker item ${name}`)},
+      names,
       body: document.body.innerText,
     };
   }
 
+  button.click();
   return {
     status: 'passed',
-    rect: { height: rect.height, width: rect.width, x: rect.x, y: rect.y },
-    x: Math.round(rect.left + Math.min(${xOffset}, rect.width - 16)),
-    y: Math.round(rect.top + ${rowCenterY}),
+    clicked: ${JSON.stringify(name)},
+    names,
+    occurrence: ${occurrence},
   };
 })()
 `;
@@ -523,11 +513,13 @@ function filePickerClickTargetExpression({
 const viewerFolderExpression = `
 (() => {
   const body = document.body.innerText;
+  const title = document.title;
   const items = [...document.querySelectorAll('li')].map((item) => item.textContent.trim());
-  if (items.includes('File: README.md') && items.includes('File: architecture.md')) {
+  if (title === 'docs' && items.includes('File: README.md') && items.includes('File: architecture.md')) {
     return {
       status: 'passed',
       items,
+      title,
       body,
     };
   }
@@ -536,6 +528,7 @@ const viewerFolderExpression = `
     status: 'pending',
     reason: 'Waiting for Viewer folder resource output',
     items,
+    title,
     body,
   };
 })()
@@ -544,13 +537,16 @@ const viewerFolderExpression = `
 const viewerReadmeExpression = `
 (() => {
   const body = document.body.innerText;
+  const title = document.title;
   if (
-    body.includes('# Patchpit Docs')
+    title === 'README.md'
+    && body.includes('# Patchpit Docs')
     && body.includes('Current specs:')
     && body.includes('surface-protocol.md')
   ) {
     return {
       status: 'passed',
+      title,
       body,
     };
   }
@@ -558,6 +554,7 @@ const viewerReadmeExpression = `
   return {
     status: 'pending',
     reason: 'Waiting for Viewer README.md resource text',
+    title,
     body,
   };
 })()
@@ -722,31 +719,6 @@ async function pageMainFrameId(cdp) {
   const mainFrameId = frameTree.frameTree?.frame?.id;
   if (typeof mainFrameId !== 'string') throw new Error('CDP did not return a main frame id');
   return mainFrameId;
-}
-
-async function clickPoint(cdp, x, y) {
-  await cdp.send('Input.dispatchMouseEvent', {
-    button: 'none',
-    type: 'mouseMoved',
-    x,
-    y,
-  });
-  await cdp.send('Input.dispatchMouseEvent', {
-    button: 'left',
-    buttons: 1,
-    clickCount: 1,
-    type: 'mousePressed',
-    x,
-    y,
-  });
-  await cdp.send('Input.dispatchMouseEvent', {
-    button: 'left',
-    buttons: 0,
-    clickCount: 1,
-    type: 'mouseReleased',
-    x,
-    y,
-  });
 }
 
 async function waitForSandboxState(cdp, targets, mainFrameId, expression, timeoutMs) {
