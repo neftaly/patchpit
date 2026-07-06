@@ -53,8 +53,6 @@ async function refresh(main) {
 }
 
 function render(main, view) {
-  const previousTreeScrollTop = main.querySelector('.tree-pane')?.scrollTop ?? 0;
-  const previousListScrollTop = main.querySelector('.tree')?.scrollTop ?? 0;
   const tree = document.createElement('nav');
   tree.className = 'tree-pane';
   tree.setAttribute('aria-label', 'project explorer');
@@ -66,8 +64,6 @@ function render(main, view) {
   list.append(treeItem(view.root, view, 0));
   tree.append(list);
   main.replaceChildren(tree);
-  tree.scrollTop = previousTreeScrollTop;
-  list.scrollTop = previousListScrollTop;
 }
 
 function treeItem(node, view, depth) {
@@ -79,6 +75,7 @@ function treeItem(node, view, depth) {
   const displayName = node.name || '/';
 
   const item = document.createElement('li');
+  item.dataset.url = node.url;
   item.setAttribute('role', 'treeitem');
   item.setAttribute('aria-selected', String(isSelected));
   if (isFolder) item.setAttribute('aria-expanded', String(isOpen));
@@ -120,20 +117,19 @@ function treeItem(node, view, depth) {
 
 async function selectFromPointer(event, node, view, title, activationCount) {
   if (activationCount === 0) return;
-  const visibleUrls = visibleFilePickerUrls(view.root, view.state);
+  const liveView = currentView ?? view;
+  const visibleUrls = visibleFilePickerUrls(liveView.root, liveView.state);
   const options = event.shiftKey
-    ? { selectedUrls: selectionRange(view.state.activeUrl, node.url, visibleUrls) }
+    ? { selectedUrls: selectionRange(liveView.state.activeUrl, node.url, visibleUrls) }
     : event.metaKey || event.ctrlKey
       ? { toggle: true }
       : undefined;
 
-  optimisticSelect(node.url, options);
+  selectInPlace(node.url, options);
   await act(options === undefined ? { name: selectAction, url: node.url } : { name: selectAction, options, url: node.url });
 
   if (activationCount >= 2 && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
     await act({ name: openAction, title, url: node.url });
-    const main = document.querySelector('.file-picker-app');
-    if (main !== null) await refresh(main);
     return;
   }
 
@@ -144,9 +140,6 @@ async function selectFromPointer(event, node, view, title, activationCount) {
     }
     await act({ name: previewAction, title, url: node.url });
   }
-
-  const main = document.querySelector('.file-picker-app');
-  if (main !== null) await refresh(main);
 }
 
 function primaryPointerActivationCount(event, url) {
@@ -171,7 +164,7 @@ async function act(request) {
   }
 }
 
-function optimisticSelect(url, options) {
+function selectInPlace(url, options) {
   if (currentView === undefined) return;
   const selectedUrls = options?.selectedUrls ?? (
     options?.toggle === true
@@ -186,8 +179,21 @@ function optimisticSelect(url, options) {
       selectedUrls,
     },
   };
-  const main = document.querySelector('.file-picker-app');
-  if (main !== null) render(main, currentView);
+  updateSelectionRows(url, selectedUrls);
+}
+
+function updateSelectionRows(activeUrl, selectedUrls) {
+  const selected = new Set(selectedUrls);
+  for (const item of document.querySelectorAll('.tree [role="treeitem"]')) {
+    const itemUrl = item.dataset.url;
+    if (itemUrl === undefined) continue;
+    const isSelected = selected.has(itemUrl);
+    item.setAttribute('aria-selected', String(isSelected));
+    if (itemUrl === activeUrl) item.dataset.active = '';
+    else delete item.dataset.active;
+    const button = item.querySelector(':scope > .tree-item');
+    button?.setAttribute('aria-pressed', String(isSelected));
+  }
 }
 
 function optimisticToggleFolder(url) {
