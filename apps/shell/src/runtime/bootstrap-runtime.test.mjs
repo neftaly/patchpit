@@ -11,6 +11,7 @@ import {
   createSeedFilesystem,
   patchpitDocMetadata,
   PatchpitType,
+  projectFilesystem,
   rootContainer,
   routeIntentBoundary,
   SplitDirection,
@@ -49,6 +50,15 @@ import {
   relationRows,
   relationSetNames,
 } from '@patchpit/system/runtime/relations';
+import { installedAppsFromFilesystem } from '../app-host/installed-apps.ts';
+import {
+  createSandboxPackageLoadPlan,
+  sandboxFilesystemAppEntry,
+} from '../app-host/sandbox-package-loader.ts';
+import {
+  createSandboxAppServiceBridge,
+  sandboxAppProtocol,
+} from '../app-host/sandbox-service-bridge.ts';
 import { createBootstrapRuntimeClient } from './bootstrap-runtime.ts';
 
 const fakeApp = 'fake-app';
@@ -389,6 +399,54 @@ void test('bootstrap runtime routes projection virtual JSON files without Autome
   assert.equal(seed.windowManagerHandle.doc().surfaces.main.activeContext, contextId);
   assert.equal(seed.windowManagerHandle.doc().contexts[contextId].app, 'viewer');
   assert.equal(seed.windowManagerHandle.doc().contexts[contextId].url, url);
+});
+
+void test('bootstrap runtime route-opened Viewer resolves sandbox resource views for files and folders', async () => {
+  const seed = createSeedFilesystem();
+  const root = seededFilesystemRoot(seed);
+  const readme = nodeAtPath(root, '/docs/README.md');
+  const docs = nodeAtPath(root, '/docs');
+  assert.equal(readme?.kind, 'file');
+  assert.equal(docs?.kind, 'folder');
+
+  const file = await routeViewerResourceThroughSandbox(seed, readme.url, 'Docs README');
+  assert.equal(file.context.app, 'viewer');
+  assert.equal(file.context.url, readme.url);
+  assert.equal(file.loadPlan.kind, 'module');
+  assert.deepEqual(file.response, {
+    id: 'request-1',
+    ok: true,
+    protocol: sandboxAppProtocol,
+    result: {
+      resource: {
+        kind: 'file',
+        mediaType: 'text/markdown',
+        name: 'README.md',
+        sourceUrl: null,
+        text: readme.text,
+        title: 'README.md',
+        url: readme.url,
+      },
+      view: 'resource',
+    },
+    type: 'serviceResponse',
+  });
+
+  const folder = await routeViewerResourceThroughSandbox(seed, docs.url, 'Docs Folder');
+  assert.equal(folder.context.app, 'viewer');
+  assert.equal(folder.context.url, docs.url);
+  assert.equal(folder.loadPlan.kind, 'module');
+  assert.equal(folder.response.ok, true);
+  assert.equal(folder.response.result.view, 'resource');
+  assert.equal(folder.response.result.resource.kind, 'folder');
+  assert.equal(folder.response.result.resource.name, 'docs');
+  assert.equal(folder.response.result.resource.url, docs.url);
+  assert.equal(folder.response.result.resource.children.some((child) => (
+    child.kind === 'file'
+    && child.mediaType === 'text/markdown'
+    && child.name === 'README.md'
+    && child.url === readme.url
+  )), true);
 });
 
 void test('bootstrap runtime rejects route targets missing from seeded handles', async () => {
@@ -1222,6 +1280,77 @@ function createFakeRouteResource(seed, name, mimeType) {
   seed.documentHandles[handle.url] = handle;
   syncFilesystemIndexResources(seed.indexHandle, [handle]);
   return handle;
+}
+
+async function routeViewerResourceThroughSandbox(seed, url, title) {
+  const runtime = bootstrapRuntime(seed);
+  const result = await submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
+    intent: routeOpenIntent,
+    row: {
+      id: `viewer-sandbox-resource-${title.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`,
+      title,
+      url,
+    },
+  });
+  assert.equal(result.status, 'committed');
+
+  const contextId = `viewer:${url}`;
+  const context = seed.windowManagerHandle.doc().contexts[contextId];
+  assert.ok(context);
+  assert.equal(seed.windowManagerHandle.doc().surfaces.main.activeContext, contextId);
+
+  const root = seededFilesystemRoot(seed);
+  const viewer = installedAppsFromFilesystem({
+    getDocument: (documentUrl) => seed.documentHandles[documentUrl]?.doc(),
+    root,
+  }).find((app) => app.manifest.id === 'viewer');
+  assert.ok(viewer);
+  assert.equal(viewer.manifest.entry, 'app.js');
+  assert.equal(viewer.manifest.entryKind, 'module');
+  assert.equal(viewer.entry?.kind, 'file');
+
+  const sandboxEntry = sandboxFilesystemAppEntry({
+    entry: viewer.entry,
+    entryKind: viewer.manifest.entryKind,
+    entryPath: viewer.manifest.entry,
+    packageRoot: viewer.packageRoot,
+  });
+  const loadPlan = createSandboxPackageLoadPlan(sandboxEntry);
+
+  const bridge = createSandboxAppServiceBridge({
+    appId: viewer.manifest.id,
+    resourceRoot: root,
+    session: { app: context.app, id: context.id, url: context.url },
+  });
+  const response = bridge.respond({
+    id: 'request-1',
+    payload: { name: 'resource' },
+    protocol: sandboxAppProtocol,
+    service: 'view',
+    type: 'serviceRequest',
+  });
+
+  return { context, loadPlan, response };
+}
+
+function seededFilesystemRoot(seed) {
+  const filesystem = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
+  assert.deepEqual(filesystem.diagnostics, []);
+  assert.ok(filesystem.root);
+  return filesystem.root;
+}
+
+function nodeAtPath(root, path) {
+  if (path === '/') return root;
+  const parts = path.split('/').filter(Boolean);
+  let node = root;
+  for (const part of parts) {
+    if (node.kind !== 'folder') return undefined;
+    node = node.entries.find((entry) => entry.name === part);
+    if (node === undefined) return undefined;
+  }
+  return node;
 }
 
 function registerFakeSystemAppResource(seed, handle, stateType) {
