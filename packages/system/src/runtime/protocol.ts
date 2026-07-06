@@ -238,22 +238,8 @@ export type ProjectionSnapshot = {
   readonly relations: RelationSet;
 };
 
-export type ProjectionPatch = {
-  readonly subscriptionId: string;
-  readonly seq: number;
-  readonly patch: RelationPatch;
-  readonly storageHeads?: AutomergeHeadSet;
-};
-
-export type RelationPatch = {
-  readonly schemaId: TarstateSchemaId;
-  readonly format: 'tarstate.relationPatch@unstable';
-  readonly ops: readonly Json[];
-};
-
 export type ProjectionEvent =
   | { readonly type: 'snapshot'; readonly snapshot: ProjectionSnapshot }
-  | { readonly type: 'patch'; readonly patch: ProjectionPatch }
   | { readonly type: 'reset'; readonly snapshot: ProjectionSnapshot; readonly reason?: string }
   | { readonly type: 'error'; readonly error: RuntimeError };
 
@@ -344,7 +330,6 @@ export type IntentResult =
   | {
       readonly status: 'committed';
       readonly heads: AutomergeHeadSet;
-      readonly effects?: readonly RelationPatch[];
       readonly policy?: AppliedPolicyEffects;
     }
   | {

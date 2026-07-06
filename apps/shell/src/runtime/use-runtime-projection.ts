@@ -53,9 +53,7 @@ export function useFilesystemTreeProjection(
           schemaId: filesystemTreeSchemaId,
           basis: { kind: 'live' },
         },
-        (event) => {
-          if (event.type !== 'patch') setProjection(filesystemFromProjectionEvent(event, rootUrl));
-        },
+        (event) => setProjection(filesystemFromProjectionEvent(event, rootUrl)),
       );
     } catch (error) {
       setProjection({ status: 'failed', failure: runtimeProjectionFailureFromUnknownError(error) });
@@ -79,9 +77,7 @@ export function useWorkspaceProjection(runtime: RuntimeClient): WorkspaceProject
           schemaId: workspaceProjectionSchemaId,
           basis: { kind: 'live' },
         },
-        (event) => {
-          if (event.type !== 'patch') setProjection(workspaceProjectionFromProjectionEvent(event));
-        },
+        (event) => setProjection(workspaceProjectionFromProjectionEvent(event)),
       );
     } catch (error) {
       setProjection({
@@ -105,7 +101,6 @@ function filesystemFromProjectionEvent(
   if (event.type === 'error') {
     return { status: 'failed', failure: runtimeProjectionFailureFromRuntimeError(event.error) };
   }
-  if (event.type === 'patch') return { status: 'initializing' };
   return filesystemFromRelationSet(event.snapshot.relations, rootUrl);
 }
 
@@ -128,7 +123,6 @@ function workspaceProjectionFromProjectionEvent(event: ProjectionEvent): Workspa
   if (event.type === 'error') {
     return { status: 'failed', failure: runtimeProjectionFailureFromRuntimeError(event.error) };
   }
-  if (event.type === 'patch') return { status: 'initializing' };
   return workspaceProjectionFromRelationSet(
     event.snapshot.relations,
     event.snapshot.schemaHash,

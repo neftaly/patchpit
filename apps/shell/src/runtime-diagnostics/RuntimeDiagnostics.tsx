@@ -356,7 +356,7 @@ function runtimeDiagnosticsSectionPreview(
           detail: [
             entry.schemaId,
             `${entry.counters.snapshots} snapshots`,
-            `${entry.counters.patches} patches`,
+            `${entry.counters.resets} resets`,
             `${entry.counters.errors} errors`,
           ].join(' · '),
           meta: entry.lastEventAt ?? entry.openedAt,

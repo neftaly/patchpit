@@ -132,7 +132,6 @@ export type BootstrapProjectionDiagnostics = {
   readonly basis: ProjectionBasis;
   readonly counters: {
     readonly errors: number;
-    readonly patches: number;
     readonly resets: number;
     readonly snapshots: number;
   };
@@ -456,7 +455,6 @@ function createBootstrapRuntimeDiagnosticsStore(): BootstrapRuntimeDiagnosticsSt
         basis: request.basis ?? { kind: 'live' },
         counters: {
           errors: 0,
-          patches: 0,
           resets: 0,
           snapshots: 0,
         },
@@ -553,7 +551,6 @@ function intentResultDiagnostics(result: IntentResult): unknown {
   if (result.status === 'committed') {
     return {
       status: result.status,
-      effectCount: result.effects?.length ?? 0,
       headDocs: Object.keys(result.heads).sort(),
       ...(result.policy === undefined ? {} : { policy: result.policy }),
     };
@@ -597,7 +594,6 @@ function projectionCountersAfterEvent(
 ): BootstrapProjectionDiagnostics['counters'] {
   if (event.type === 'snapshot') return { ...counters, snapshots: counters.snapshots + 1 };
   if (event.type === 'reset') return { ...counters, resets: counters.resets + 1 };
-  if (event.type === 'patch') return { ...counters, patches: counters.patches + 1 };
   return { ...counters, errors: counters.errors + 1 };
 }
 
@@ -606,14 +602,6 @@ function projectionEventDiagnostics(event: ProjectionEvent): unknown {
     return {
       type: event.type,
       error: event.error,
-    };
-  }
-  if (event.type === 'patch') {
-    return {
-      type: event.type,
-      opCount: event.patch.patch.ops.length,
-      seq: event.patch.seq,
-      storageHeadDocs: Object.keys(event.patch.storageHeads ?? {}).sort(),
     };
   }
   return {
