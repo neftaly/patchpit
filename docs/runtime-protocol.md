@@ -668,36 +668,35 @@ relation requests:
   behavior: 'open-context' | 'toggle-surface'
   context?: WindowContext
   role: 'document-set' | 'workspace-view'
-  slot?: string
 ```
 
-`slot` names the app-managed persistent state instance for launches that do not
-provide an explicit `context`. It defaults to `default` and must be a non-empty
-string. The runtime combines app id and slot for handler-local reuse, while the
-canonical state remains the app's Automerge state doc under `/system/apps`.
-Tarstate projects and write lenses sit over that doc shape; app state docs are
-not flattened just to make launch admission convenient.
+If `context` is absent, `behavior` must be `open-context`. The runtime creates a
+fresh app instance state doc under `/system/apps` using the app manifest's
+declared state type and registered app instance state handler. Reuse and toggles
+are not part of context-less launch; callers that want reuse should launch,
+focus, or route to an existing context or document explicitly. Tarstate projects
+and write lenses sit over the app state doc shape; state docs are not flattened
+just to make launch admission convenient.
 
 If `context` is present, the runtime validates that the context app matches the
 request, the backing URL is still available, and any existing context id still
-targets the same app and URL. If `context` is absent, the app manifest's matching
-surface must declare a persisted `state` type and the runtime must have a
-managed launch state handler for it. The current slice implements that managed
-path for the terminal app only: terminal launch omits `context`, uses
-`behavior: 'open-context'`, targets `role: 'document-set'`, and creates or
-reuses a terminal state doc through a handler-local `terminal:<slot>` key. The
-document itself is a normal terminal state resource registered under
-`/system/apps`.
+targets the same app and URL. If `context` is absent, the app manifest's
+matching surface must declare a persisted `state` type and the runtime must have
+an app instance state handler for it. The current slice registers terminal state
+as the first app instance state handler: terminal launch omits `context`, uses
+`behavior: 'open-context'`, targets `role: 'document-set'`, and creates a normal
+terminal state resource registered under `/system/apps`. The resource is removed
+after its owning context closes.
 
 `app.launch` uses explicit failure states so callers do not infer placement or
 state ownership from a generic rejection:
 
 - `schema_mismatch`: request used a schema other than
   `patchpit.intent.appLaunch@1`.
-- `bad_request`: the relation set is malformed, the slot is empty, terminal
-  supplied a context, or required terminal behavior/role is wrong.
+- `bad_request`: the relation set is malformed, context-less launch uses
+  `toggle-surface`, or an explicit context does not match the requested app.
 - `missing_handler`: the app is not installed, has no matching surface state, or
-  no managed state handler exists for a context-less launch.
+  no app instance state handler exists for a context-less launch.
 - `policy_denied`: runtime policy rejected launch before mutation.
 - `stale_target`: `baseHeads` or an explicit context target no longer matches
   the current window-manager/filesystem state.
@@ -805,12 +804,11 @@ type CapabilityEvent =
   | { type: 'error'; error: RuntimeError };
 ```
 
-Initial capabilities:
+Initial core capabilities:
 
 ```txt
 filesystem.read
 filesystem.write
-terminal.filesystem
 context.control
 surface.place
 viewport.present
@@ -820,6 +818,10 @@ asset.import
 agent.suggestIntent
 export.request
 ```
+
+Apps can register narrower app-specific capabilities such as
+`terminal.filesystem`. Their subprotocols live with the app package, not in the
+core runtime protocol.
 
 Sandboxed apps must not receive raw `Repo`, unrestricted `DocHandle`, or broad
 storage access. They receive capabilities bound to subject, app, workspace,
@@ -836,60 +838,6 @@ verbs, TTLs, and queue bounds.
 Capability lifecycle events are delivered through `RuntimeEvent` with
 `type: 'capability'`. Capability-specific traffic uses the returned
 `MessagePort`.
-
-### Terminal Filesystem Capability
-
-`terminal.filesystem` exposes a scoped `just-bash` filesystem over a capability
-port. The bootstrap runtime serves it from the canonical Patchpit filesystem,
-and terminal UIs consume the returned port instead of raw `Repo` or `DocHandle`
-authority.
-
-The grant endpoint is explicit:
-
-```ts
-const terminalFilesystemCapability = 'terminal.filesystem';
-const terminalFilesystemProtocol = 'patchpit.terminal.filesystem@1';
-
-type TerminalFilesystemCapabilityGrant = CapabilityGrant & {
-  capability: 'terminal.filesystem';
-  verbs: readonly ('read' | 'write' | 'stat' | 'list' | 'mount')[];
-  endpoint: {
-    protocol: 'patchpit.terminal.filesystem@1';
-    rootUrl: string;
-    rootUrls: readonly string[];
-    initialPaths: readonly string[];
-    initialPathsByRoot?: Readonly<Record<string, readonly string[]>>;
-  };
-};
-```
-
-Port traffic is request/response. `rootUrl` selects the mounted Automerge root
-for the operation, so overlay mounts use the same capability without receiving
-broad filesystem authority.
-
-```ts
-type TerminalFilesystemRequest = {
-  protocol: 'patchpit.terminal.filesystem@1';
-  id: string;
-  capabilityId: string;
-  rootUrl: string;
-  op: TerminalFilesystemOperation;
-  args: readonly unknown[];
-};
-
-type TerminalFilesystemResponse =
-  | { protocol: 'patchpit.terminal.filesystem@1'; id: string; ok: true; result?: unknown }
-  | { protocol: 'patchpit.terminal.filesystem@1'; id: string; ok: false; error: { code?: string; message: string } }
-  | { protocol: 'patchpit.terminal.filesystem@1'; type: 'closed'; error: { code?: string; message: string } };
-```
-
-`rootUrls` is an allow-list. The server rejects requests for roots outside the
-grant and the bootstrap grant currently derives that list from the terminal
-container's Automerge mounts. Copy and move require both `read` and `write`
-verbs. `initialPathsByRoot` seeds the client's synchronous `getAllPaths()` cache;
-successful path-changing operations update that cache locally instead of forcing
-a full server tree walk. The serving side sends `type: 'closed'` before
-revocation so clients can reject in-flight filesystem calls.
 
 ## Realtime Capabilities
 
@@ -1194,10 +1142,9 @@ landed the handshake gate and the first shell extraction scaffold:
   construction in the UI.
 - Normal window controls now go through window intents for focus, close,
   preview pinning, tab drops, and split resize.
-- Terminal filesystems now open through
-  `openCapability('terminal.filesystem')`. The shell UI consumes a scoped
-  port-backed adapter instead of constructing the raw filesystem from
-  `Repo`/`DocHandle` authority.
+- Terminal registers its filesystem as an app-specific capability provider. The
+  shell UI consumes the scoped port-backed adapter instead of constructing the
+  raw filesystem from `Repo`/`DocHandle` authority.
 
 Next work:
 

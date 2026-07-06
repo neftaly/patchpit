@@ -7,16 +7,12 @@ import {
 } from '@patchpit/system/runtime';
 import { appLaunchIntentBoundary, type SurfaceRole, type WindowContext } from '@patchpit/system';
 
-type AppLaunchIntentBase = {
+export type AppLaunchIntentInput = {
   readonly app: string;
   readonly behavior: AppLaunchIntentRow['behavior'];
+  readonly context?: WindowContext;
   readonly role: SurfaceRole;
-  readonly slot?: string;
 };
-
-export type AppLaunchIntentInput =
-  | (AppLaunchIntentBase & { readonly app: 'terminal'; readonly context?: never })
-  | (AppLaunchIntentBase & { readonly context: WindowContext });
 
 let nextAppLaunchRequestId = 1;
 
@@ -34,13 +30,11 @@ export function submitAppLaunchIntent(
 }
 
 function appLaunchIntentRow(input: AppLaunchIntentInput): AppLaunchIntentRow {
-  const context = 'context' in input ? input.context : undefined;
   return {
     id: `app-launch:${nextAppLaunchRequestId++}`,
     app: input.app,
     behavior: input.behavior,
-    ...(context === undefined ? {} : { context }),
+    ...(input.context === undefined ? {} : { context: input.context }),
     role: input.role,
-    ...(input.slot === undefined ? {} : { slot: input.slot }),
   };
 }

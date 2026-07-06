@@ -241,6 +241,7 @@ export type RuntimeStateDoc = PatchpitDoc<PatchpitType.RuntimeState> & {
   extension: string;
   mimeType: string;
   title: string;
+  appInstances: RuntimeAppInstanceState[];
   protocol: RuntimeStateProtocol;
   boot: RuntimeStateBoot;
   features: RuntimeStateFeatures;
@@ -275,6 +276,13 @@ export type RuntimeStateOwnership = {
   canonicalState: 'automerge';
   currentAutomergeHandleOwner: string;
   note: string;
+};
+
+export type RuntimeAppInstanceState = {
+  app: string;
+  contextId: string;
+  stateType: string;
+  stateUrl: string;
 };
 
 export type RuntimeComponentState = {

@@ -1,5 +1,17 @@
 export { Terminal } from './Terminal';
 export {
+  terminalAppContextLabel,
+  terminalFilesystemCapabilityProvider,
+  terminalAppInstanceStateHandler,
+  terminalAppSessions,
+  terminalAppStateHandles,
+  useTerminalAppRuntime,
+  type TerminalAppRuntime,
+  type TerminalAppRuntimeIssue,
+  type TerminalAppSession,
+} from './patchpit-app-runtime';
+export { TerminalAppSurface } from './patchpit-app';
+export {
   clearedTerminalState,
   createTerminalStateActions,
   replaceTerminalState,

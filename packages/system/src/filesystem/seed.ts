@@ -405,6 +405,7 @@ function createRuntimeStateHandle(
 ): DocHandle<RuntimeStateDoc> {
   return repo.create<RuntimeStateDoc>({
     '@patchpit': patchpitDocMetadata(PatchpitType.RuntimeState),
+    appInstances: [],
     boot: {
       status: 'waiting-for-boot-gate-helloAck',
     },

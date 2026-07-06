@@ -93,7 +93,7 @@ export function Terminal({
       fitRef.current = null;
       xtermRef.current = null;
     };
-  }, [codeFont, codeSize, terminalCursor, terminalLineHeight, terminalSelection, terminalText]);
+  }, [codeFont, codeSize, terminalLineHeight]);
 
   useEffect(() => {
     const terminal = xtermRef.current;

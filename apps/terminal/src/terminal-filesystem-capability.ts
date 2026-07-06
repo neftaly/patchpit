@@ -6,19 +6,19 @@ import type {
   MkdirOptions,
   RmOptions,
 } from 'just-bash/browser';
+import { runtimeError, type CapabilityPort } from '@patchpit/system/runtime';
+import type { PatchpitFilesystem } from './terminal-filesystem';
 import {
-  runtimeError,
   terminalFilesystemCapability,
+  terminalFilesystemOperations,
   terminalFilesystemProtocol,
-  type CapabilityPort,
   type TerminalFilesystemCapabilityGrant,
   type TerminalFilesystemOperation,
   type TerminalFilesystemPayload,
   type TerminalFilesystemRequest,
   type TerminalFilesystemResponse,
   type TerminalFilesystemVerb,
-} from '@patchpit/system/runtime';
-import type { PatchpitFilesystem } from './terminal-filesystem';
+} from './terminal-filesystem-protocol';
 
 export type TerminalFilesystemCapabilityServerOptions = {
   readonly filesystem: PatchpitFilesystem;
@@ -482,29 +482,6 @@ function isInitialPathsByRoot(value: unknown): value is Readonly<Record<string, 
 function isTerminalFilesystemOperation(value: unknown): value is TerminalFilesystemOperation {
   return typeof value === 'string' && terminalFilesystemOperations.includes(value as TerminalFilesystemOperation);
 }
-
-const terminalFilesystemOperations: readonly TerminalFilesystemOperation[] = [
-  'appendFile',
-  'chmod',
-  'cp',
-  'exists',
-  'getAllPaths',
-  'link',
-  'lstat',
-  'mkdir',
-  'mv',
-  'readFile',
-  'readFileBuffer',
-  'readlink',
-  'readdir',
-  'realpath',
-  'resolvePath',
-  'rm',
-  'stat',
-  'symlink',
-  'utimes',
-  'writeFile',
-];
 
 function stringArg(args: readonly TerminalFilesystemPayload[], index: number): string {
   const value = args[index];

@@ -9,16 +9,36 @@ import {
   terminalContainer,
 } from '@patchpit/system';
 import {
-  terminalFilesystemCapability,
-  terminalFilesystemProtocol,
-} from '@patchpit/system/runtime';
-import {
   createPatchpitFilesystem,
   createTerminalFilesystemClient,
   serveTerminalFilesystemCapability,
+  terminalFilesystemCapability,
+  terminalFilesystemProtocol,
 } from './filesystem.ts';
+import { terminalAppStateHandles } from './patchpit-app-runtime.ts';
 import { PatchpitFs } from './patchpit-fs.ts';
 import { createTerminalRuntime, runTerminalCommand } from './terminal-bash.ts';
+
+void test('terminal app state handles follow the runtime app instance ledger', () => {
+  const seed = createSeedFilesystem();
+  const terminalState = createTerminalStateResource(seed, 'terminal-ledger-test');
+
+  assert.deepEqual(terminalAppStateHandles(seed, seed.runtimeStateHandle.doc()), []);
+
+  seed.runtimeStateHandle.change((doc) => {
+    doc.appInstances.push({
+      app: 'terminal',
+      contextId: `terminal:${terminalState.url}`,
+      stateType: PatchpitType.TerminalState,
+      stateUrl: terminalState.url,
+    });
+  });
+
+  assert.deepEqual(
+    terminalAppStateHandles(seed, seed.runtimeStateHandle.doc()).map((handle) => handle.url),
+    [terminalState.url],
+  );
+});
 
 void test('recursive rm drops descendant handles and filesystem index rows', async () => {
   const { fs, seed } = createTestFilesystem();
@@ -120,29 +140,7 @@ void test('terminal runtime opens roots through a scoped filesystem adapter', as
 });
 
 void test('terminal filesystem capability serves operations over a port', async () => {
-  const seed = createSeedFilesystem();
-  const filesystem = createPatchpitFilesystem({
-    documentHandles: seed.documentHandles,
-    indexHandle: seed.indexHandle,
-    repo: seed.repo,
-    rootUrl: seed.rootUrl,
-  });
-  const initialPaths = filesystem.openRoot(seed.rootUrl).getAllPaths();
-  const grant = {
-    capability: terminalFilesystemCapability,
-    capabilityId: 'terminal-filesystem:test',
-    endpoint: {
-      protocol: terminalFilesystemProtocol,
-      rootUrl: seed.rootUrl,
-      rootUrls: [seed.rootUrl],
-      initialPaths,
-      initialPathsByRoot: { [seed.rootUrl]: initialPaths },
-    },
-    verbs: ['read', 'write', 'stat', 'list', 'mount'],
-  };
-  const { port1, port2 } = new MessageChannel();
-  const closeServer = serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
-  const client = createTerminalFilesystemClient({ close: () => port2.close(), grant, port: port2 });
+  const { client, close, seed } = openSeedFilesystemCapability();
   const fs = client.openRoot(seed.rootUrl);
 
   try {
@@ -158,23 +156,12 @@ void test('terminal filesystem capability serves operations over a port', async 
       { code: 'EPERM' },
     );
   } finally {
-    closeServer();
-    client.close?.();
+    close();
   }
 });
 
 void test('terminal filesystem capability rejects pending requests on close', async () => {
-  const seed = createSeedFilesystem();
-  const filesystem = createPatchpitFilesystem({
-    documentHandles: seed.documentHandles,
-    indexHandle: seed.indexHandle,
-    repo: seed.repo,
-    rootUrl: seed.rootUrl,
-  });
-  const grant = terminalFilesystemGrant(seed, filesystem);
-  const { port1, port2 } = new MessageChannel();
-  const closeServer = serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
-  const client = createTerminalFilesystemClient({ close: () => port2.close(), grant, port: port2 });
+  const { client, closeServer, seed } = openSeedFilesystemCapability();
   const pending = client.openRoot(seed.rootUrl).readFile('/README.md');
 
   client.close?.();
@@ -204,9 +191,7 @@ void test('terminal filesystem capability rejects pending requests when the serv
       readFile: () => new Promise(() => {}),
     }),
   };
-  const { port1, port2 } = new MessageChannel();
-  const closeServer = serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
-  const client = createTerminalFilesystemClient({ close: () => port2.close(), grant, port: port2 });
+  const { client, closeServer } = openTerminalFilesystemCapability({ filesystem, grant });
   const pending = client.openRoot(rootUrl).readFile('/pending.txt');
 
   closeServer();
@@ -247,21 +232,10 @@ void test('terminal filesystem capability updates path cache without a full tree
       });
     },
   };
-  const grant = {
-    capability: terminalFilesystemCapability,
-    capabilityId: 'terminal-filesystem:test',
-    endpoint: {
-      protocol: terminalFilesystemProtocol,
-      rootUrl: seed.rootUrl,
-      rootUrls: [seed.rootUrl],
-      initialPaths,
-      initialPathsByRoot: { [seed.rootUrl]: initialPaths },
-    },
-    verbs: ['read', 'write', 'stat', 'list', 'mount'],
-  };
-  const { port1, port2 } = new MessageChannel();
-  const closeServer = serveTerminalFilesystemCapability({ filesystem: countingFilesystem, grant, port: port1 });
-  const client = createTerminalFilesystemClient({ close: () => port2.close(), grant, port: port2 });
+  const { client, close } = openTerminalFilesystemCapability({
+    filesystem: countingFilesystem,
+    grant: terminalFilesystemGrant(seed, filesystem, initialPaths),
+  });
   const fs = client.openRoot(seed.rootUrl);
 
   try {
@@ -270,26 +244,18 @@ void test('terminal filesystem capability updates path cache without a full tree
     assert.equal(fullTreeWalks, 0);
     assert.equal(fs.getAllPaths().includes('/home/no-refresh.txt'), true);
   } finally {
-    closeServer();
-    client.close?.();
+    close();
   }
 });
 
 void test('terminal filesystem capability requires read and write for copy and move', async () => {
   const seed = createSeedFilesystem();
-  const filesystem = createPatchpitFilesystem({
-    documentHandles: seed.documentHandles,
-    indexHandle: seed.indexHandle,
-    repo: seed.repo,
-    rootUrl: seed.rootUrl,
-  });
+  const filesystem = createSeedPatchpitFilesystem(seed);
   const grant = {
     ...terminalFilesystemGrant(seed, filesystem),
     verbs: ['write'],
   };
-  const { port1, port2 } = new MessageChannel();
-  const closeServer = serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
-  const client = createTerminalFilesystemClient({ close: () => port2.close(), grant, port: port2 });
+  const { client, close } = openTerminalFilesystemCapability({ filesystem, grant });
   const fs = client.openRoot(seed.rootUrl);
 
   try {
@@ -303,26 +269,58 @@ void test('terminal filesystem capability requires read and write for copy and m
       { code: 'EPERM' },
     );
   } finally {
-    closeServer();
-    client.close?.();
+    close();
   }
 });
 
 function createTestFilesystem() {
   const seed = createSeedFilesystem();
   return {
-    fs: new PatchpitFs({
-      documentHandles: seed.documentHandles,
-      indexHandle: seed.indexHandle,
-      repo: seed.repo,
-      rootUrl: seed.rootUrl,
-    }),
+    fs: new PatchpitFs(seedFilesystemOptions(seed)),
     seed,
   };
 }
 
-function terminalFilesystemGrant(seed, filesystem) {
-  const initialPaths = filesystem.openRoot(seed.rootUrl).getAllPaths();
+function seedFilesystemOptions(seed) {
+  return {
+    documentHandles: seed.documentHandles,
+    indexHandle: seed.indexHandle,
+    repo: seed.repo,
+    rootUrl: seed.rootUrl,
+  };
+}
+
+function createSeedPatchpitFilesystem(seed) {
+  return createPatchpitFilesystem(seedFilesystemOptions(seed));
+}
+
+function openSeedFilesystemCapability() {
+  const seed = createSeedFilesystem();
+  const filesystem = createSeedPatchpitFilesystem(seed);
+  return {
+    seed,
+    ...openTerminalFilesystemCapability({
+      filesystem,
+      grant: terminalFilesystemGrant(seed, filesystem),
+    }),
+  };
+}
+
+function openTerminalFilesystemCapability({ filesystem, grant }) {
+  const { port1, port2 } = new MessageChannel();
+  const closeServer = serveTerminalFilesystemCapability({ filesystem, grant, port: port1 });
+  const client = createTerminalFilesystemClient({ close: () => port2.close(), grant, port: port2 });
+  return {
+    client,
+    close: () => {
+      closeServer();
+      client.close?.();
+    },
+    closeServer,
+  };
+}
+
+function terminalFilesystemGrant(seed, filesystem, initialPaths = filesystem.openRoot(seed.rootUrl).getAllPaths()) {
   return {
     capability: terminalFilesystemCapability,
     capabilityId: 'terminal-filesystem:test',

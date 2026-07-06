@@ -1,17 +1,36 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { fileIcons } from '@patchpit/file-picker';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import {
-  createTerminalStateActions,
-  type PatchpitFilesystem,
+  FilePicker,
+  filePickerDragType,
+  fileIcons,
+  type DraggedFilePickerUrl,
+  type FileIcons,
+  type FilePickerActions,
+} from '@patchpit/file-picker';
+import {
+  TerminalAppSurface,
+  terminalAppContextLabel,
+  terminalFilesystemCapabilityProvider,
+  terminalAppInstanceStateHandler,
+  terminalAppSessions,
+  terminalAppStateHandles,
+  useTerminalAppRuntime,
+  type TerminalAppSession,
 } from '@patchpit/terminal';
-import { createTerminalFilesystemClient } from '@patchpit/terminal/filesystem';
+import { Viewer } from '@patchpit/viewer';
 import {
-  createTerminalStateResource,
+  containerRootUrl,
   createSeedFilesystem,
+  createTerminalStateResource,
+  findNode,
+  nodePath,
   recordRuntimeBootGateAck,
   resolveTheme,
   themeStyle,
+  type FilePickerStateDoc,
+  type FilesystemNode,
+  type ThemeDoc,
 } from '@patchpit/system';
 import {
   connectRuntimeBootGate,
@@ -22,7 +41,6 @@ import {
   routePreviewIntent,
   RuntimeBootGateConnectError,
   runtimePlatformFeatureLabel,
-  terminalFilesystemCapability,
   windowCloseContextIntent,
   windowFocusIntent,
   windowMoveTabIntent,
@@ -39,7 +57,7 @@ import { LauncherBar } from './launcher/LauncherBar';
 import { launcherItems } from './launcher/launch-router';
 import { createBootstrapRuntimeClient, type BootstrapRuntimeClient } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
-import { managedTerminalStateHandles } from './runtime/managed-terminal-state';
+import { detailFromUnknown, metadataDetails } from './runtime/runtime-error-details';
 import runtimeSharedWorkerUrl from './runtime/shared-worker.ts?sharedworker&url';
 import { submitFilePickerIntent, type FilePickerSelectUrlInput } from './runtime/file-picker-intents';
 import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/launch-intents';
@@ -47,11 +65,17 @@ import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from '
 import {
   createStateBrowserSnapshot,
   documentSchemaRefs,
+  StateBrowser,
+  type StateBrowserSnapshot,
   type StateBrowserRuntimeIssueEntry,
 } from './state-browser/StateBrowser';
 import { useFilesystemTreeProjection, useWorkspaceProjection } from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
-import { WindowManager } from './window-manager/WindowManager';
+import {
+  WindowManager,
+  type WindowManagerAppHost,
+  type WindowManagerDroppedUrl,
+} from './window-manager/WindowManager';
 import {
   focusedAppId,
   type ContextDropTarget,
@@ -95,11 +119,16 @@ function ShellApp({
   const [seed] = useState(createSeedFilesystem);
   const nextTerminalId = useRef(2);
   const [runtime] = useState(() => createBootstrapRuntimeClient({
-    createTerminalState: () => {
-      const handle = createTerminalStateResource(seed, `terminal-${nextTerminalId.current}`);
-      nextTerminalId.current += 1;
-      return handle;
-    },
+    appInstanceStateHandlers: [
+      terminalAppInstanceStateHandler(() => {
+        const handle = createTerminalStateResource(seed, `terminal-${nextTerminalId.current}`);
+        nextTerminalId.current += 1;
+        return handle;
+      }),
+    ],
+    capabilityProviders: [
+      terminalFilesystemCapabilityProvider(seed),
+    ],
     seed,
     workspaceId: 'default',
   }));
@@ -113,10 +142,9 @@ function ShellApp({
   const nextRuntimeIssueId = useRef(1);
   const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly StateBrowserRuntimeIssueEntry[]>([]);
   const filePickerState = useAutomergeDoc(seed.filePickerStateHandle);
-  const systemApps = useAutomergeDoc(seed.systemAppsHandle);
-  const terminalHandles = useMemo(() => managedTerminalStateHandles(seed, systemApps), [seed, systemApps]);
-  const terminalStates = useAutomergeDocs(terminalHandles);
   const runtimeState = useAutomergeDoc(seed.runtimeStateHandle);
+  const terminalHandles = useMemo(() => terminalAppStateHandles(seed, runtimeState), [seed, runtimeState]);
+  const terminalStates = useAutomergeDocs(terminalHandles);
   const windowManagerDocument = useAutomergeDoc(seed.windowManagerHandle);
   const prefersDark = usePrefersDark();
   const theme = resolveTheme(appearance, lightTheme, darkTheme, prefersDark);
@@ -178,21 +206,12 @@ function ShellApp({
     setRuntimeFault(failure);
     recordRuntimeIssue('runtime', failure);
   };
-  const terminalFilesystemState = useTerminalFilesystemCapability(runtime);
-  const lastTerminalCapabilityIssueKey = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (terminalFilesystemState.status !== 'failed') {
-      lastTerminalCapabilityIssueKey.current = undefined;
-      return;
-    }
-
-    const issue = terminalFilesystemState.failure;
-    const issueKey = `${issue.title}:${issue.message}:${issue.details.join('\n')}`;
-    if (lastTerminalCapabilityIssueKey.current === issueKey) return;
-    lastTerminalCapabilityIssueKey.current = issueKey;
+  const terminalRuntime = useTerminalAppRuntime(runtime, (issue) => {
     setRuntimeFault(issue);
     recordRuntimeIssue('capability', issue);
-  }, [terminalFilesystemState]);
+  }, {
+    enabled: terminalHandles.length > 0,
+  });
   const launchApp = (input: AppLaunchIntentInput) => {
     void submitAppLaunchIntent(runtime, input).then(reportIntentResult).catch(reportRuntimeError);
   };
@@ -243,26 +262,11 @@ function ShellApp({
         .catch(reportRuntimeError);
     },
   });
-  const filePickers = {
-    [seed.filePickerStateHandle.url]: {
-      actions: filePickerActions,
-      fileIcons: iconRules,
-      state: filePickerState,
-    },
-  };
-  const terminalRuntimeOptions = terminalFilesystemState.status === 'ready'
-    ? { filesystem: terminalFilesystemState.filesystem }
-    : undefined;
-  const terminals = terminalRuntimeOptions === undefined
-    ? {}
-    : Object.fromEntries(terminalHandles.map((handle) => [
-        handle.url,
-        {
-          actions: createTerminalStateActions(handle),
-          runtimeOptions: terminalRuntimeOptions,
-          state: terminalStates[handle.url] ?? handle.doc(),
-        },
-      ]));
+  const terminalSessions = terminalAppSessions({
+    handles: terminalHandles,
+    runtime: terminalRuntime,
+    states: terminalStates,
+  });
   const launchers = launcherItems({
     focusedAppId: workspaceProjection.status === 'ready'
       ? focusedAppId(workspaceProjection.workspace)
@@ -297,26 +301,22 @@ function ShellApp({
           message={workspaceProjection.failure.message}
           details={workspaceProjection.failure.details}
         />
-      ) : terminalFilesystemState.status === 'opening' ? (
-        <RuntimeStatusPanel
-          title="Terminal filesystem capability opening"
-          message="Waiting for the terminal.filesystem grant from the runtime."
-        />
-      ) : terminalFilesystemState.status === 'failed' ? (
-        <RuntimeStatusPanel
-          title={terminalFilesystemState.failure.title}
-          message={terminalFilesystemState.failure.message}
-          details={terminalFilesystemState.failure.details}
-        />
       ) : (
         <>
           <WindowManager
             actions={windowManagerActions}
-            filePickers={filePickers}
-            filesystemRoot={filesystemProjection.root}
-            stateBrowser={stateBrowserSnapshot}
-            terminals={terminals}
-            theme={theme}
+            appHost={shellAppHost({
+              filePicker: {
+                actions: filePickerActions,
+                fileIcons: iconRules,
+                state: filePickerState,
+                url: seed.filePickerStateHandle.url,
+              },
+              filesystemRoot: filesystemProjection.root,
+              stateBrowser: stateBrowserSnapshot,
+              terminalSessions,
+              theme,
+            })}
             workspace={workspaceProjection.workspace}
           />
           <LauncherBar items={launchers} onResetSession={onResetSession} />
@@ -324,6 +324,130 @@ function ShellApp({
       )}
     </main>
   );
+}
+
+function shellAppHost({
+  filePicker,
+  filesystemRoot,
+  stateBrowser,
+  terminalSessions,
+  theme,
+}: {
+  readonly filePicker: {
+    readonly actions: (surfaceId: string) => FilePickerActions;
+    readonly fileIcons: FileIcons;
+    readonly state: FilePickerStateDoc;
+    readonly url: string;
+  };
+  readonly filesystemRoot: FilesystemNode;
+  readonly stateBrowser: StateBrowserSnapshot;
+  readonly terminalSessions: Readonly<Record<string, TerminalAppSession>>;
+  readonly theme: ThemeDoc;
+}): WindowManagerAppHost {
+  return {
+    acceptsDroppedUrl(event) {
+      return event.dataTransfer.types.includes(filePickerDragType);
+    },
+
+    contextLabel(context) {
+      if (context.app === 'terminal') return terminalAppContextLabel(terminalSessions[context.url]);
+      if (context.app === 'state-browser') return context.title ?? 'State Browser';
+      return nodePath(filesystemRoot, context.url);
+    },
+
+    droppedUrl(event) {
+      return filePickerDroppedUrl(event);
+    },
+
+    renderSurface({ context, surfaceId }) {
+      if (context === undefined) return <Viewer filesystemRoot={filesystemRoot} url={undefined} />;
+
+      if (context.app === 'file-picker') {
+        if (context.url !== filePicker.url) {
+          return (
+            <SurfaceNotice
+              message="The file picker context no longer targets the active file picker state."
+              role="alert"
+              title="File picker state mismatch"
+            />
+          );
+        }
+        const rootUrl = containerRootUrl(context.container) ?? filePicker.state.rootUrl;
+        const root = findNode(filesystemRoot, rootUrl);
+        return root === null
+          ? (
+              <SurfaceNotice
+                message="The mounted root is no longer available in the filesystem projection."
+                role="alert"
+                title="File picker root missing"
+              />
+            )
+          : (
+              <FilePicker
+                actions={filePicker.actions(surfaceId)}
+                fileIcons={filePicker.fileIcons}
+                root={root}
+                state={filePicker.state}
+              />
+            );
+      }
+
+      if (context.app === 'terminal') {
+        return (
+          <TerminalAppSurface
+            context={context}
+            sessions={terminalSessions}
+            theme={theme}
+          />
+        );
+      }
+
+      if (context.app === 'state-browser') return <StateBrowser snapshot={stateBrowser} />;
+
+      if (context.app === 'viewer') return <Viewer filesystemRoot={filesystemRoot} url={context.url} />;
+
+      return (
+        <SurfaceNotice message={`No renderer registered for ${context.app}.`} />
+      );
+    },
+  };
+}
+
+function SurfaceNotice({
+  message,
+  role = 'status',
+  title,
+}: {
+  readonly message: string;
+  readonly role?: 'alert' | 'status';
+  readonly title?: string;
+}) {
+  return (
+    <section className="window-manager-empty-state" role={role}>
+      {title === undefined ? message : (
+        <>
+          <strong>{title}</strong>
+          <span>{message}</span>
+        </>
+      )}
+    </section>
+  );
+}
+
+function filePickerDroppedUrl(event: DragEvent): WindowManagerDroppedUrl | undefined {
+  const url = dragDataFromEvent<DraggedFilePickerUrl>(event, filePickerDragType);
+  if (url === undefined || typeof url.title !== 'string' || typeof url.url !== 'string') return undefined;
+  return url;
+}
+
+function dragDataFromEvent<T>(event: DragEvent, type: string): T | undefined {
+  const serializedDragData = event.dataTransfer.getData(type);
+  if (serializedDragData === '') return undefined;
+  try {
+    return JSON.parse(serializedDragData) as T;
+  } catch {
+    return undefined;
+  }
 }
 
 function useAutomergeDoc<T>(handle: DocHandle<T>): T {
@@ -355,57 +479,6 @@ function useRuntimeDiagnostics(runtime: BootstrapRuntimeClient) {
     (listener) => runtime.diagnostics.subscribe(listener),
     () => runtime.diagnostics.getSnapshot(),
   );
-}
-
-type TerminalFilesystemCapabilityState =
-  | { readonly status: 'opening' }
-  | { readonly status: 'ready'; readonly filesystem: PatchpitFilesystem }
-  | { readonly status: 'failed'; readonly failure: RuntimePanelFailure };
-
-function useTerminalFilesystemCapability(runtime: BootstrapRuntimeClient): TerminalFilesystemCapabilityState {
-  const [capability, setCapability] = useState<TerminalFilesystemCapabilityState>({ status: 'opening' });
-
-  useEffect(() => {
-    let closed = false;
-    let filesystem: PatchpitFilesystem | undefined;
-    let closeCapability: (() => void) | undefined;
-    setCapability({ status: 'opening' });
-
-    void runtime.openCapability({ capability: terminalFilesystemCapability })
-      .then((capabilityPort) => {
-        if (closed) {
-          capabilityPort.close();
-          return;
-        }
-
-        closeCapability = () => capabilityPort.close();
-        filesystem = createTerminalFilesystemClient(capabilityPort);
-        setCapability({
-          filesystem,
-          status: 'ready',
-        });
-      })
-      .catch((error: unknown) => {
-        if (!closed) {
-          setCapability({
-            failure: failureFromUnknownError(
-              'Terminal filesystem unavailable',
-              'Runtime could not open the terminal filesystem capability.',
-              error,
-            ),
-            status: 'failed',
-          });
-        }
-      });
-
-    return () => {
-      closed = true;
-      filesystem?.close?.();
-      if (filesystem === undefined) closeCapability?.();
-    };
-  }, [runtime]);
-
-  return capability;
 }
 
 const runtimeIssueHistoryLimit = 50;
@@ -516,14 +589,7 @@ function RuntimeStatusPanel({
       <div className="runtime-status-content">
         <h1>{title}</h1>
         <p>{message}</p>
-        {details.length === 0 ? null : (
-          <details>
-            <summary>Details</summary>
-            <ul>
-              {details.map((detail) => <li key={detail}>{detail}</li>)}
-            </ul>
-          </details>
-        )}
+        <RuntimeDetails details={details} />
       </div>
     </section>
   );
@@ -534,15 +600,19 @@ function RuntimeIssueBanner({ failure }: { readonly failure: RuntimePanelFailure
     <aside className="runtime-issue-banner" role="alert">
       <strong>{failure.title}</strong>
       <span>{failure.message}</span>
-      {failure.details.length === 0 ? null : (
-        <details>
-          <summary>Details</summary>
-          <ul>
-            {failure.details.map((detail) => <li key={detail}>{detail}</li>)}
-          </ul>
-        </details>
-      )}
+      <RuntimeDetails details={failure.details} />
     </aside>
+  );
+}
+
+function RuntimeDetails({ details }: { readonly details: readonly string[] }) {
+  return details.length === 0 ? null : (
+    <details>
+      <summary>Details</summary>
+      <ul>
+        {details.map((detail) => <li key={detail}>{detail}</li>)}
+      </ul>
+    </details>
   );
 }
 
@@ -628,60 +698,43 @@ function unsupportedRuntimePlatformFailure(platform: RuntimePlatformReport): Run
 
 function runtimeErrorTitle(error: RuntimeError, fallbackTitle: string): string {
   if (error.code === 'runtime_unavailable') return runtimeUnavailableTitle(error.reason);
-  if (error.code === 'unsupported_platform') return 'Unsupported runtime platform';
-  if (error.code === 'unsupported_protocol') return 'Runtime protocol unsupported';
-  if (error.code === 'unknown_projection') return 'Projection unavailable';
-  if (error.code === 'schema_mismatch') return 'Runtime schema mismatch';
-  if (error.code === 'unsupported_basis') return 'Projection basis unavailable';
-  if (error.code === 'policy_denied') return 'Request denied by policy';
-  if (error.code === 'policy_quarantined') return 'Request quarantined by policy';
-  if (error.code === 'unknown_intent') return 'Intent unavailable';
-  if (error.code === 'unknown_capability') return 'Capability unavailable';
-  if (error.code === 'missing_handler') return 'Runtime handler unavailable';
-  if (error.code === 'stale_target') return 'Runtime target changed';
-  if (error.code === 'commit_error') return 'Runtime commit failed';
-  if (error.code === 'conflict') return 'Runtime request conflict';
-  if (error.code === 'not_found') return 'Runtime target not found';
-  if (error.code === 'bad_request') return 'Runtime request invalid';
-  if (error.code === 'internal_error') return 'Runtime internal error';
-  return fallbackTitle;
+  return runtimeErrorTitles[error.code] ?? fallbackTitle;
 }
 
 function runtimeUnavailableTitle(reason: RuntimeError['reason']): string {
-  if (reason === 'shared-worker-api-unavailable') return 'SharedWorker unsupported';
-  if (reason === 'shared-worker-create-failed') return 'SharedWorker boot gate start failed';
-  if (reason === 'stale-build') return 'Runtime build mismatch';
-  if (reason === 'handshake-timeout') return 'Runtime boot gate timed out';
-  if (
-    reason === 'handshake-error'
-    || reason === 'handshake-message-error'
-    || reason === 'handshake-mismatch'
-    || reason === 'handshake-protocol-error'
-  ) {
-    return 'Runtime boot gate handshake failed';
-  }
-  if (reason === 'worker-connect-error') return 'Runtime boot gate connection failed';
-  return 'Runtime unavailable';
+  return reason === undefined ? 'Runtime unavailable' : runtimeUnavailableTitles[reason] ?? 'Runtime unavailable';
 }
 
-function detailFromUnknown(value: unknown): readonly string[] {
-  if (value === undefined || value instanceof Error) return [];
-  if (typeof value === 'string') return [value];
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return [String(value)];
-  }
-  try {
-    const json = JSON.stringify(value);
-    return json === undefined ? [] : [json];
-  } catch {
-    return [Object.prototype.toString.call(value)];
-  }
-}
+const runtimeErrorTitles = {
+  bad_request: 'Runtime request invalid',
+  commit_error: 'Runtime commit failed',
+  conflict: 'Runtime request conflict',
+  internal_error: 'Runtime internal error',
+  missing_handler: 'Runtime handler unavailable',
+  not_found: 'Runtime target not found',
+  policy_denied: 'Request denied by policy',
+  policy_quarantined: 'Request quarantined by policy',
+  schema_mismatch: 'Runtime schema mismatch',
+  stale_target: 'Runtime target changed',
+  unknown_capability: 'Capability unavailable',
+  unknown_intent: 'Intent unavailable',
+  unknown_projection: 'Projection unavailable',
+  unsupported_basis: 'Projection basis unavailable',
+  unsupported_platform: 'Unsupported runtime platform',
+  unsupported_protocol: 'Runtime protocol unsupported',
+} as const satisfies Partial<Record<RuntimeError['code'], string>>;
 
-function metadataDetails(metadata: RuntimeError['metadata']): readonly string[] {
-  if (metadata === undefined) return [];
-  return Object.entries(metadata).map(([key, value]) => `${key}: ${JSON.stringify(value)}`);
-}
+const runtimeUnavailableTitles: Readonly<Record<string, string>> = {
+  'handshake-error': 'Runtime boot gate handshake failed',
+  'handshake-message-error': 'Runtime boot gate handshake failed',
+  'handshake-mismatch': 'Runtime boot gate handshake failed',
+  'handshake-protocol-error': 'Runtime boot gate handshake failed',
+  'handshake-timeout': 'Runtime boot gate timed out',
+  'shared-worker-api-unavailable': 'SharedWorker unsupported',
+  'shared-worker-create-failed': 'SharedWorker boot gate start failed',
+  'stale-build': 'Runtime build mismatch',
+  'worker-connect-error': 'Runtime boot gate connection failed',
+};
 
 function platformDetails(platform: RuntimePlatformReport): readonly string[] {
   return [

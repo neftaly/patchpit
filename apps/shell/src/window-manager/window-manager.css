@@ -78,6 +78,22 @@
   overflow: hidden;
 }
 
+.window-manager-empty-state {
+  display: grid;
+  flex: 1 1 auto;
+  place-items: center;
+  gap: var(--tab-pad);
+  padding: var(--detail-pad);
+  color: var(--color-muted);
+  font-family: var(--font-code);
+  font-size: var(--font-code-size);
+  text-align: center;
+}
+
+.window-manager-empty-state > * {
+  min-width: 0;
+}
+
 .window-manager-content[data-drop-zone]::after {
   position: absolute;
   inset: 0;

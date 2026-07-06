@@ -73,20 +73,10 @@ export function launcherItems({
   }));
 }
 
-type LauncherSpec = ContextLauncherSpec | ManagedLauncherSpec;
-
-type ContextLauncherSpec = LauncherSpecBase & {
+type LauncherSpec = {
   readonly app: string;
-  readonly context: () => WindowContext;
-};
-
-type ManagedLauncherSpec = LauncherSpecBase & {
-  readonly app: 'terminal';
-  readonly context?: undefined;
-};
-
-type LauncherSpecBase = {
   readonly behavior: ContextLaunchBehavior;
+  readonly context?: () => WindowContext;
   readonly emoji: string;
   readonly label: string;
   readonly role: SurfaceRole;

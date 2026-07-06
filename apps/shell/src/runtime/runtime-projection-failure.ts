@@ -1,4 +1,5 @@
 import type { RuntimeError } from '@patchpit/system/runtime';
+import { detailFromUnknown, metadataDetails } from './runtime-error-details';
 
 export type RuntimeProjectionFailure = {
   readonly title: string;
@@ -40,23 +41,4 @@ function projectionFailureTitle(error: RuntimeError, fallbackTitle: string): str
   if (error.code === 'policy_denied') return 'Projection denied by policy';
   if (error.code === 'policy_quarantined') return 'Projection quarantined by policy';
   return fallbackTitle;
-}
-
-function detailFromUnknown(value: unknown): readonly string[] {
-  if (value === undefined || value instanceof Error) return [];
-  if (typeof value === 'string') return [value];
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return [String(value)];
-  }
-  try {
-    const json = JSON.stringify(value);
-    return json === undefined ? [] : [json];
-  } catch {
-    return [Object.prototype.toString.call(value)];
-  }
-}
-
-function metadataDetails(metadata: RuntimeError['metadata']): readonly string[] {
-  if (metadata === undefined) return [];
-  return Object.entries(metadata).map(([key, value]) => `${key}: ${JSON.stringify(value)}`);
 }

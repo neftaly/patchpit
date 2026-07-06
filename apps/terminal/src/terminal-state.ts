@@ -1,7 +1,6 @@
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
   TerminalLineKind,
-  type TerminalCapabilities,
   type TerminalLine,
   type TerminalStateDoc,
 } from '@patchpit/system';
@@ -20,16 +19,6 @@ export type TerminalStateActions = {
   readonly commitExecution: (execution: TerminalExecution) => void;
 };
 
-type TerminalStateRow = {
-  capabilities: TerminalCapabilities;
-  cwd: string;
-  env: Record<string, string>;
-  history: string[];
-  id: string;
-  lines: TerminalLine[];
-};
-
-const stateId = 'terminal';
 const terminalScrollbackLines = 1000;
 
 export function clearedTerminalState(state: TerminalStateDoc): TerminalStateDoc {
@@ -79,12 +68,11 @@ export function terminalPrompt(cwd: string): string {
 }
 
 export function replaceTerminalState(doc: TerminalStateDoc, state: TerminalStateDoc): void {
-  const changes = terminalStateRow(state);
-  doc.capabilities = structuredClone(changes.capabilities);
-  doc.cwd = changes.cwd;
-  doc.env = { ...changes.env };
-  doc.history = [...changes.history];
-  doc.lines = structuredClone(changes.lines);
+  doc.capabilities = structuredClone(state.capabilities);
+  doc.cwd = state.cwd;
+  doc.env = { ...state.env };
+  doc.history = [...state.history];
+  doc.lines = structuredClone(state.lines);
 }
 
 export function createTerminalStateActions(handle: DocHandle<TerminalStateDoc>): TerminalStateActions {
@@ -105,17 +93,6 @@ function commitTerminalState(
   handle.change((doc) => {
     replaceTerminalState(doc, next);
   });
-}
-
-function terminalStateRow(state: TerminalStateDoc): TerminalStateRow {
-  return {
-    capabilities: structuredClone(state.capabilities),
-    cwd: state.cwd,
-    env: { ...state.env },
-    history: [...state.history],
-    id: stateId,
-    lines: structuredClone(state.lines),
-  };
 }
 
 function cloneTerminalState(state: TerminalStateDoc): TerminalStateDoc {

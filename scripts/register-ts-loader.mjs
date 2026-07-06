@@ -9,11 +9,16 @@ registerHooks({
     if (context.parentURL?.startsWith('file:') && specifier.startsWith('.')) {
       const resolvedSpecifierPath = resolve(dirname(fileURLToPath(context.parentURL)), specifier);
       const candidatePaths = specifier.endsWith('.js')
-        ? [`${resolvedSpecifierPath.slice(0, -3)}.ts`]
+        ? [
+            `${resolvedSpecifierPath.slice(0, -3)}.ts`,
+            `${resolvedSpecifierPath.slice(0, -3)}.tsx`,
+          ]
         : [
             resolvedSpecifierPath,
             `${resolvedSpecifierPath}.ts`,
+            `${resolvedSpecifierPath}.tsx`,
             resolve(resolvedSpecifierPath, 'index.ts'),
+            resolve(resolvedSpecifierPath, 'index.tsx'),
           ];
       for (const candidate of candidatePaths) {
         if (!existsSync(candidate) || !statSync(candidate).isFile()) continue;
@@ -26,13 +31,16 @@ registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (!url.startsWith('file:') || !url.endsWith('.ts')) return nextLoad(url, context);
+    if (!url.startsWith('file:') || (!url.endsWith('.ts') && !url.endsWith('.tsx'))) {
+      return nextLoad(url, context);
+    }
 
     const typescriptSource = readFileSync(fileURLToPath(url), 'utf8');
     const transpiledModule = ts.transpileModule(typescriptSource, {
       compilerOptions: {
         module: ts.ModuleKind.ESNext,
         target: ts.ScriptTarget.ES2022,
+        jsx: ts.JsxEmit.ReactJSX,
         verbatimModuleSyntax: true,
       },
       fileName: fileURLToPath(url),

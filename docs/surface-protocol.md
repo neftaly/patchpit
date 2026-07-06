@@ -30,7 +30,7 @@ The window manager owns:
 - surfaces and their roles
 - focus
 - tab membership
-- preview slots
+- temporary preview context membership
 
 Apps own:
 
@@ -93,9 +93,6 @@ type AppManifest = {
 
 type SurfaceSpec = {
   role: SurfaceRole;
-  forms?: SurfaceForm[];
-  placementHint?: PlacementHint;
-  reuseHint?: ReuseHint;
   state?: { type: string; schema?: PatchpitSchemaRef };
 };
 
@@ -111,12 +108,12 @@ language as file icon rules: exact matches such as `text/markdown`, wildcards
 such as `image/*`, and a final fallback such as `*/*`.
 
 `SurfaceSpec.state` declares the app-owned persistent state document type that a
-managed `app.launch` may create or reuse. It does not give the app placement,
+context-less `app.launch` may create. It does not give the app placement,
 focus, or tab authority. A context-less launch is admitted only when the runtime
-has a handler for the app, surface role, state type, and non-empty launch slot;
-the current slice implements that managed path for terminal state. Apps such as
-the file picker can still launch by providing an explicit context around an
-existing state doc.
+has a handler for the app, surface role, and state type. Each context-less
+`open-context` launch creates a fresh app instance state doc. Toggle launches
+must provide an explicit context around an existing state doc. Apps such as the
+file picker use that explicit-context path.
 
 ## Intents
 
@@ -143,13 +140,15 @@ produces a routed intent with a concrete `port`.
 
 Intent behavior:
 
-- `preview` creates or reuses a temporary preview context
+- `preview` creates or replaces a temporary context on a compatible surface
 - `open` creates or reuses a durable pinned context
 - `reveal` navigates an existing surface to show a resource
 - `activate` focuses or raises without changing content
 
 Preview contexts are intentionally non-durable until promoted. Double-clicking
-or dragging a preview tab can promote it to a pinned context.
+or dragging a preview tab can promote it to a pinned context. The window
+manager only owns the temporary-context mechanic; the file picker or another
+producer decides when a selection should submit `preview` instead of `open`.
 
 ## Contexts
 
@@ -198,9 +197,10 @@ type SurfaceRole =
   | 'shell';
 ```
 
-`contexts` are pinned context ids. `previewContext` is the one temporary slot. A
-document-set surface can hold many viewer/editor contexts. A workspace-view
-surface usually holds one file picker context and rejects document tab drops.
+`contexts` are pinned context ids. `previewContext` is an optional temporary
+context id for the surface. A document-set surface can hold many viewer/editor
+contexts. A workspace-view surface usually holds one file picker context and
+rejects document tab drops.
 
 Tab behavior:
 
@@ -290,8 +290,9 @@ The first useful implementation should stay small:
 1. App manifests live under `/apps`.
 2. File picker, viewer, and terminal each run as contexts.
 3. File picker state, runtime state, themes, and window-manager state live as
-   boot-seeded Automerge docs under `/system`; managed app states such as
-   terminal sessions are created under `/system/apps` on launch.
+   boot-seeded Automerge docs under `/system`; app instance state docs are
+   created under `/system/apps` on launch and removed when their owning context
+   closes.
 4. The window-manager doc owns surfaces, tabs, focus, and split layout.
 5. A router creates viewer contexts from route intents; file picker UI submits
    open/preview intents instead of constructing viewer contexts directly.

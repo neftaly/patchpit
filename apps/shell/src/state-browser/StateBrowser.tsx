@@ -183,6 +183,7 @@ function runtimeBootGateData(input: StateBrowserSnapshotInput) {
       ack: input.runtimeAck,
     },
     stateDocument: {
+      appInstances: input.runtimeState.appInstances,
       boot: input.runtimeState.boot,
       features: input.runtimeState.features,
       ownership: input.runtimeState.ownership,

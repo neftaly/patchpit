@@ -6,30 +6,17 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type PointerEvent,
+  type ReactNode,
 } from 'react';
 import {
-  filePickerDragType,
-  type DraggedFilePickerUrl,
-  type FilePickerActions,
-  type FileIcons,
-} from '@patchpit/file-picker';
-import {
-  nodePath,
   type SplitDirection,
   SurfaceRole,
   WindowManagerNodeKind,
-  type FilePickerStateDoc,
-  type FilesystemNode,
-  type TerminalStateDoc,
-  type ThemeDoc,
   type WindowContext,
   type WindowLayoutNode,
   type WindowManagerStateDoc,
   type WindowSurface,
 } from '@patchpit/system';
-import type { TerminalRuntimeOptions, TerminalStateActions } from '@patchpit/terminal';
-import type { StateBrowserSnapshot } from '../state-browser/StateBrowser';
-import { SurfaceContent } from './SurfaceContent';
 import {
   type ContentDropZone,
   type ContextDropTarget,
@@ -47,33 +34,32 @@ type WindowManagerActions = {
   readonly resizeSplit: (path: SplitPath, ratio: number) => Promise<boolean>;
 };
 
-type RunningFilePicker = {
-  readonly actions: (surfaceId: string) => FilePickerActions;
-  readonly fileIcons: FileIcons;
-  readonly state: FilePickerStateDoc;
+export type WindowManagerAppHost = {
+  acceptsDroppedUrl(event: DragEvent): boolean;
+  contextLabel(context: WindowContext): string | undefined;
+  droppedUrl(event: DragEvent): WindowManagerDroppedUrl | undefined;
+  renderSurface(input: {
+    readonly context: WindowContext | undefined;
+    readonly surfaceId: string;
+  }): ReactNode;
 };
 
-type RunningTerminal = {
-  readonly actions: TerminalStateActions;
-  readonly runtimeOptions: TerminalRuntimeOptions;
-  readonly state: TerminalStateDoc;
+export type WindowManagerDroppedUrl = {
+  readonly title: string;
+  readonly url: string;
 };
 
 export type WindowManagerWorkspace = Pick<WindowManagerStateDoc, 'contexts' | 'focus' | 'layout' | 'surfaces'>;
 
-export type WindowManagerRuntime = {
+type WindowManagerRuntime = {
   readonly actions: WindowManagerActions;
+  readonly appHost: WindowManagerAppHost;
   readonly contexts: Readonly<Record<string, WindowContext>>;
   readonly draggedTab: DraggedTab | undefined;
   readonly dropTarget: DropTarget | undefined;
-  readonly filePickers: Readonly<Record<string, RunningFilePicker>>;
-  readonly filesystemRoot: FilesystemNode;
   readonly setDraggedTab: (tab: DraggedTab | undefined) => void;
   readonly setDropTarget: (target: DropTarget | undefined) => void;
-  readonly stateBrowser: StateBrowserSnapshot;
   readonly surfaces: Readonly<Record<string, WindowSurface>>;
-  readonly terminals: Readonly<Record<string, RunningTerminal>>;
-  readonly theme: ThemeDoc;
 };
 
 type DropTarget = ContextDropTarget;
@@ -91,19 +77,11 @@ type SplitResizeDraft = {
 
 export function WindowManager({
   actions,
-  filePickers,
-  filesystemRoot,
-  stateBrowser,
-  terminals,
-  theme,
+  appHost,
   workspace,
 }: {
   readonly actions: WindowManagerActions;
-  readonly filePickers: Readonly<Record<string, RunningFilePicker>>;
-  readonly filesystemRoot: FilesystemNode;
-  readonly stateBrowser: StateBrowserSnapshot;
-  readonly terminals: Readonly<Record<string, RunningTerminal>>;
-  readonly theme: ThemeDoc;
+  readonly appHost: WindowManagerAppHost;
   readonly workspace: WindowManagerWorkspace;
 }) {
   const [draggedTab, setDraggedTab] = useState<DraggedTab>();
@@ -113,17 +91,13 @@ export function WindowManager({
   };
   const runtime = {
     actions,
+    appHost,
     contexts: workspace.contexts,
     draggedTab,
     dropTarget,
-    filePickers,
-    filesystemRoot,
     setDraggedTab,
     setDropTarget,
-    stateBrowser,
     surfaces: workspace.surfaces,
-    terminals,
-    theme,
   };
 
   return (
@@ -422,7 +396,7 @@ function SurfaceView({
           }
         }}
       >
-        <SurfaceContent context={selectedContext} runtime={runtime} surfaceId={surface.id} />
+        {runtime.appHost.renderSurface({ context: selectedContext, surfaceId: surface.id })}
       </div>
     </section>
   );
@@ -442,7 +416,7 @@ function acceptDrag(
   target: DropTarget,
   stopPropagation = false,
 ): void {
-  if (!allowDrop(event)) return;
+  if (!allowDrop(event, runtime)) return;
   if (!canDrop(runtime.draggedTab, target)) {
     runtime.setDropTarget(undefined);
     return;
@@ -451,8 +425,8 @@ function acceptDrag(
   runtime.setDropTarget(target);
 }
 
-function allowDrop(event: DragEvent): boolean {
-  if (!event.dataTransfer.types.includes(tabDragType) && !event.dataTransfer.types.includes(filePickerDragType)) return false;
+function allowDrop(event: DragEvent, runtime: WindowManagerRuntime): boolean {
+  if (!event.dataTransfer.types.includes(tabDragType) && !runtime.appHost.acceptsDroppedUrl(event)) return false;
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
   return true;
@@ -464,7 +438,7 @@ function dropDraggedItem(
   handleDrop: (dragged: DraggedItem) => void,
   stopPropagation = false,
 ): void {
-  const dragged = draggedItemFromEvent(event);
+  const dragged = draggedItemFromEvent(event, runtime);
   if (dragged === undefined) return;
 
   event.preventDefault();
@@ -477,7 +451,7 @@ function dropDraggedItem(
 type DraggedTab = { contextId: string; surfaceId: string };
 type DraggedItem =
   | ({ kind: 'tab' } & DraggedTab)
-  | ({ kind: 'url' } & DraggedFilePickerUrl);
+  | ({ kind: 'url' } & WindowManagerDroppedUrl);
 
 function dropItem(runtime: WindowManagerRuntime, dragged: DraggedItem, target: ContextDropTarget): void {
   if (dragged.kind === 'tab') {
@@ -487,11 +461,11 @@ function dropItem(runtime: WindowManagerRuntime, dragged: DraggedItem, target: C
   }
 }
 
-function draggedItemFromEvent(event: DragEvent): DraggedItem | undefined {
+function draggedItemFromEvent(event: DragEvent, runtime: WindowManagerRuntime): DraggedItem | undefined {
   const tab = dragDataFromEvent<DraggedTab>(event, tabDragType);
   if (tab !== undefined) return { kind: 'tab', ...tab };
 
-  const url = dragDataFromEvent<DraggedFilePickerUrl>(event, filePickerDragType);
+  const url = runtime.appHost.droppedUrl(event);
   return url === undefined ? undefined : { kind: 'url', ...url };
 }
 
@@ -597,20 +571,7 @@ function sameRatio(left: number, right: number): boolean {
 function contextLabel(runtime: WindowManagerRuntime, contextId: string): string {
   const context = runtime.contexts[contextId];
   if (context === undefined) return contextId;
-  if (context.app === 'state-browser') return context.title ?? 'State Browser';
-  if (context.app === 'terminal') {
-    return terminalTitle(runtime.terminals[context.url]?.state.cwd);
-  }
-  return nodePath(runtime.filesystemRoot, context.url) ?? context.title ?? context.url;
-}
-
-function terminalTitle(cwd: string | undefined): string {
-  if (cwd === undefined) return 'Terminal';
-  return `${currentDirectoryName(cwd)} - Terminal`;
-}
-
-function currentDirectoryName(path: string): string {
-  return path.split('/').filter(Boolean).at(-1) ?? '/';
+  return runtime.appHost.contextLabel(context) ?? context.title ?? context.url;
 }
 
 function resizeRatioFromPointer(
