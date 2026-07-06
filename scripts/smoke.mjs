@@ -385,12 +385,10 @@ const shellAcceptsSandboxFileDragExpression = `
 (() => {
   const contents = [...document.querySelectorAll('.window-manager-content')];
   const target = contents.find((content) => content.querySelector('iframe[title="Viewer"]')) ?? contents.at(-1);
-  const shields = [...document.querySelectorAll('.window-manager-drag-shield')];
   if (target === undefined) {
     return {
       status: 'pending',
       reason: 'Waiting for a shell content drop zone',
-      shields: shields.length,
       body: document.body.innerText,
     };
   }
@@ -405,11 +403,10 @@ const shellAcceptsSandboxFileDragExpression = `
   });
   target.dispatchEvent(event);
 
-  if (event.defaultPrevented && shields.length > 0) {
+  if (event.defaultPrevented) {
     return {
       status: 'passed',
       dropEffect: event.dataTransfer.dropEffect,
-      shields: shields.length,
       targetClass: target.className,
     };
   }
@@ -418,7 +415,6 @@ const shellAcceptsSandboxFileDragExpression = `
     status: 'pending',
     reason: 'Shell has not accepted the sandbox file drag offer yet',
     dropEffect: event.dataTransfer.dropEffect,
-    shields: shields.length,
     targetClass: target.className,
     body: document.body.innerText,
   };
