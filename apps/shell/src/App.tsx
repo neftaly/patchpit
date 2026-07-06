@@ -36,7 +36,6 @@ import {
   type InstalledApp,
 } from './app-host/installed-apps';
 import { SandboxedFilesystemApp, type SandboxFilePickerHostScope } from './app-host/SandboxedFilesystemApp';
-import type { SandboxSurfaceDragOffer } from './app-host/sandbox-service-bridge';
 import { createBootstrapRuntimeClient, type BootstrapSessionEventInput } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
 import { parseHashLaunchConfig } from './runtime/launch-from-hash';
@@ -111,7 +110,6 @@ function ShellApp({
   const launchHash = useLocationHash();
   const processedLaunchHash = useRef<string | undefined>(undefined);
   const nextRuntimeIssueId = useRef(1);
-  const currentSandboxDragOffer = useRef<SandboxSurfaceDragOffer | undefined>(undefined);
   const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly RuntimeDiagnosticsIssueEntry[]>([]);
   const filePickerState = useRuntimeDocument<FilePickerStateDoc>(runtime.resources, documentUrls.filePickerState);
   const prefersDark = usePrefersDark();
@@ -268,7 +266,6 @@ function ShellApp({
                 runtime,
                 state: filePickerState,
               },
-              currentSandboxDragOffer,
               filesystemRoot: filesystemProjection.root,
               installedApps,
               recordSessionEvent: (event) => runtime.diagnostics.recordSessionEvent({
@@ -297,13 +294,11 @@ function ShellApp({
 }
 
 function shellAppHost({
-  currentSandboxDragOffer,
   filePicker,
   filesystemRoot,
   installedApps,
   recordSessionEvent,
 }: {
-  readonly currentSandboxDragOffer: { current: SandboxSurfaceDragOffer | undefined };
   readonly filePicker: {
     readonly fileTypes: SandboxFilePickerHostScope['fileTypes'];
     readonly rootUrl: string;
@@ -317,8 +312,7 @@ function shellAppHost({
   const appsById = new Map(installedApps.map((app) => [app.manifest.id, app]));
   return {
     acceptsDroppedUrl(event) {
-      return event.dataTransfer.types.includes(filePickerDragType)
-        || currentSandboxDragOffer.current?.type === 'patchpit.url';
+      return event.dataTransfer.types.includes(filePickerDragType);
     },
 
     contextLabel(context) {
@@ -330,12 +324,7 @@ function shellAppHost({
     },
 
     droppedUrl(event) {
-      const nativeDrop = filePickerDroppedUrl(event);
-      if (nativeDrop !== undefined) return nativeDrop;
-
-      const sandboxDrop = sandboxDroppedUrl(currentSandboxDragOffer.current);
-      if (sandboxDrop !== undefined) currentSandboxDragOffer.current = undefined;
-      return sandboxDrop;
+      return filePickerDroppedUrl(event);
     },
 
     renderSurface({ context, surfaceId }) {
@@ -350,7 +339,6 @@ function shellAppHost({
           />
         );
       }
-      const canOfferFileDrag = context.app === 'file-picker' && installedApp.manifest.id === 'file-picker';
 
       return (
         <SandboxedFilesystemApp
@@ -363,16 +351,6 @@ function shellAppHost({
             state: filePicker.state,
           }}
           filesystemRoot={filesystemRoot}
-          onDragOfferEnd={canOfferFileDrag
-            ? (offer) => {
-              if (currentSandboxDragOffer.current === offer) currentSandboxDragOffer.current = undefined;
-            }
-            : undefined}
-          onDragOfferStart={canOfferFileDrag
-            ? (offer) => {
-              currentSandboxDragOffer.current = offer;
-            }
-            : undefined}
           onSessionEvent={(event) => recordSessionEvent({ ...event, surfaceId })}
           surfaceId={surfaceId}
         />
@@ -416,10 +394,6 @@ function SurfaceNotice({
 function filePickerDroppedUrl(event: DragEvent): WindowManagerDroppedUrl | undefined {
   const data = dragDataFromEvent(event, filePickerDragType);
   return isDraggedFilePickerUrl(data) ? data : undefined;
-}
-
-function sandboxDroppedUrl(offer: SandboxSurfaceDragOffer | undefined): WindowManagerDroppedUrl | undefined {
-  return offer?.type === 'patchpit.url' ? { title: offer.title, url: offer.url } : undefined;
 }
 
 function resolveHashLaunchTarget({

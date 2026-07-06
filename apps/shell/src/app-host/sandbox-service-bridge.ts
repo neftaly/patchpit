@@ -29,12 +29,6 @@ export type SandboxAppServiceErrorCode = 'bad_request' | 'missing_scope' | 'not_
 
 export type SandboxAppServiceCapabilities = Readonly<Record<SandboxAppServiceName, boolean>>;
 
-export type SandboxSurfaceDragOffer = {
-  readonly title: string;
-  readonly type: 'patchpit.url';
-  readonly url: string;
-};
-
 export type SandboxAppResourceView =
   | {
       readonly kind: 'file';
@@ -118,15 +112,6 @@ export type SandboxFrameToHostMessage =
       readonly protocol: SandboxAppProtocol;
       readonly type: 'error';
       readonly error: SandboxAppReportedError;
-    }
-  | {
-      readonly protocol: SandboxAppProtocol;
-      readonly type: 'surface.drag.start';
-      readonly offer: SandboxSurfaceDragOffer;
-    }
-  | {
-      readonly protocol: SandboxAppProtocol;
-      readonly type: 'surface.drag.end';
     }
   | {
       readonly protocol: SandboxAppProtocol;
@@ -390,13 +375,6 @@ export function sandboxFrameMessage(value: unknown): SandboxFrameToHostMessage |
   }
 
   if (value.type === 'running') return { protocol: sandboxAppProtocol, type: 'running' };
-
-  if (value.type === 'surface.drag.start') {
-    const offer = sandboxSurfaceDragOffer(value.offer);
-    return offer === undefined ? undefined : { offer, protocol: sandboxAppProtocol, type: 'surface.drag.start' };
-  }
-
-  if (value.type === 'surface.drag.end') return { protocol: sandboxAppProtocol, type: 'surface.drag.end' };
 
   if (value.type === 'error') {
     const error = reportedError(value.error);
@@ -695,14 +673,6 @@ function reportedError(value: unknown): SandboxAppReportedError | undefined {
   if (!isRecord(value) || typeof value.message !== 'string') return undefined;
   if (typeof value.stack !== 'string') return { message: value.message };
   return { message: value.message, stack: value.stack };
-}
-
-function sandboxSurfaceDragOffer(value: unknown): SandboxSurfaceDragOffer | undefined {
-  if (!isRecord(value)) return undefined;
-  if (value.type !== 'patchpit.url' || typeof value.title !== 'string' || typeof value.url !== 'string') {
-    return undefined;
-  }
-  return { title: value.title, type: 'patchpit.url', url: value.url };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

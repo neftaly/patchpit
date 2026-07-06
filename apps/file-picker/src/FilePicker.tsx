@@ -10,8 +10,6 @@ import { fileIcon, folderIcon, type FileIcons } from './file-icons';
 import './file-picker.css';
 
 export type FilePickerActions = {
-  readonly dragUrl?: (url: string, title: string) => void;
-  readonly endDragUrl?: () => void;
   readonly openUrl: (url: string, title: string) => void;
   readonly previewUrl: (url: string, title: string) => void;
   readonly selectUrl: (url: string, options?: FileSelectionOptions) => void;
@@ -113,11 +111,7 @@ function TreeItem({
           }
         }}
         onDragStart={(event) => {
-          actions.dragUrl?.(node.url, displayName);
           beginFileDrag(event, { title: displayName, url: node.url });
-        }}
-        onDragEnd={() => {
-          actions.endDragUrl?.();
         }}
         style={depthStyle(depth)}
         type="button"
