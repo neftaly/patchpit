@@ -14,6 +14,7 @@ import {
   type RuntimeError,
 } from '@patchpit/system/runtime';
 import { isPackageAppManifestDoc } from './app-manifest-discovery';
+import { resolvePackageEntry } from './package-entry';
 
 type RouteIntentName = typeof routeOpenIntent | typeof routePreviewIntent;
 type RouteHandlerIntent = Extract<AppManifestHandler['intent'], 'open' | 'preview'>;
@@ -35,6 +36,14 @@ export function manifestRouteHandler(
 ): ManifestRouteHandler | RuntimeError {
   const targetTypes = routeTargetTypes(seed, url);
   if ('code' in targetTypes) return targetTypes;
+  const appEntry = installedAppEntryManifest(seed, url);
+  if (appEntry !== undefined) {
+    return {
+      app: appEntry.id,
+      handler: { accepts: [...targetTypes], intent: routeHandlerIntent(intent), port: 'entry' },
+      targetTypes,
+    };
+  }
   const match = bestManifestRouteHandler(seed, routeHandlerIntent(intent), targetTypes);
   if (match === undefined) {
     return runtimeError(
@@ -88,6 +97,61 @@ export function installedAppManifests(seed: SeedFilesystem): AppManifestDoc[] {
   if (!isFolderDoc(appsFolderDoc)) return [];
 
   return appsFolderDoc.docs.flatMap((entry) => installedAppManifestFromEntry(seed, entry.url));
+}
+
+function installedAppEntryManifest(seed: SeedFilesystem, url: string): AppManifestDoc | undefined {
+  const root = seed.documentHandles[seed.rootUrl]?.doc();
+  if (!isFolderDoc(root)) return undefined;
+
+  const appsFolder = root.docs
+    .find((entry) => entry.name === 'apps' && entry.type === PatchpitType.Folder);
+  const appsFolderDoc = appsFolder === undefined
+    ? undefined
+    : seed.documentHandles[appsFolder.url]?.doc();
+  if (!isFolderDoc(appsFolderDoc)) return undefined;
+
+  for (const entry of appsFolderDoc.docs) {
+    const packageFolder = seed.documentHandles[entry.url]?.doc();
+    if (!isFolderDoc(packageFolder)) continue;
+    const manifest = packageManifest(seed, packageFolder);
+    if (manifest === undefined) continue;
+    const packageRoot: PackageEntryNode = { folder: packageFolder, url: entry.url };
+    const entryNode = resolvePackageEntry(
+      packageRoot,
+      manifest.entry,
+      (node, name) => packageEntryNode(seed, node, name),
+    );
+    if (entryNode?.url === url) return manifest;
+  }
+
+  return undefined;
+}
+
+type PackageEntryNode = {
+  readonly folder: FolderDoc | undefined;
+  readonly url: string;
+};
+
+function packageEntryNode(
+  seed: SeedFilesystem,
+  node: PackageEntryNode,
+  name: string,
+): PackageEntryNode | undefined {
+  const entry = node.folder?.docs.find((candidate) => candidate.name === name);
+  if (entry === undefined) return undefined;
+  const doc = seed.documentHandles[entry.url]?.doc();
+  return {
+    folder: isFolderDoc(doc) ? doc : undefined,
+    url: entry.url,
+  };
+}
+
+function packageManifest(seed: SeedFilesystem, folder: FolderDoc): AppManifestDoc | undefined {
+  for (const entry of folder.docs) {
+    const doc = seed.documentHandles[entry.url]?.doc();
+    if (isPackageAppManifestDoc(doc)) return doc;
+  }
+  return undefined;
 }
 
 function installedAppManifestFromEntry(seed: SeedFilesystem, url: string): readonly AppManifestDoc[] {

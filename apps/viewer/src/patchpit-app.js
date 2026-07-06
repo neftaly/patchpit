@@ -1,3 +1,21 @@
+export const patchpitApp = {
+  handles: [
+    { accepts: ['*/*'], intent: 'preview', port: 'view' },
+    { accepts: ['*/*'], intent: 'open', port: 'view' },
+    { accepts: ['*/*'], intent: 'reveal', port: 'view' },
+    { accepts: ['*/*'], intent: 'activate', port: 'view' },
+  ],
+  icon: '📄',
+  id: 'viewer',
+  name: 'Viewer',
+  surfaces: [
+    {
+      role: 'document-set',
+    },
+  ],
+  version: '0.0.0',
+};
+
 export default async function activate(env) {
   const root = document.getElementById('patchpit-root') ?? document.body;
   root.innerHTML = '';

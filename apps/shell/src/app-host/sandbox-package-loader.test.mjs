@@ -174,8 +174,8 @@ void test('seeded file picker is a sandbox-loadable module app', async () => {
   }).find((app) => app.manifest.id === 'file-picker');
 
   assert.ok(filePicker);
-  assert.equal(filePicker.manifest.entry, 'app.js');
-  assert.equal(filePicker.manifest.entryKind, 'module');
+  assert.equal(filePicker.manifest.entry, 'index.html');
+  assert.equal(filePicker.manifest.entryKind, 'html');
   assert.equal(filePicker.entry?.kind, 'file');
 
   const plan = createSandboxPackageLoadPlan(sandboxFilesystemAppEntry({
@@ -185,10 +185,10 @@ void test('seeded file picker is a sandbox-loadable module app', async () => {
     packageRoot: filePicker.packageRoot,
   }));
 
-  assert.equal(plan.kind, 'module');
-  if (plan.kind !== 'module') return;
-  const module = await import(plan.entryModuleUrl);
-  assert.equal(typeof module.default, 'function');
+  assert.equal(plan.kind, 'html');
+  if (plan.kind !== 'html') return;
+  assert.match(plan.html, /patchpit-root/);
+  assert.match(plan.html, /data:text\/javascript;charset=utf-8,/);
 });
 
 void test('seeded app package entries match generated Vite package metadata', async () => {
@@ -210,17 +210,19 @@ void test('seeded app package entries match generated Vite package metadata', as
   for (const appId of expectedIds) {
     const app = installedApps.find((candidate) => candidate.manifest.id === appId);
     const appPackage = seedAppPackages.find((candidate) => candidate.manifest.id === appId);
-    const appJs = appPackage?.files.find((file) => file.name === appPackage.manifest.entry);
+    const entryFile = appPackage?.files.find((file) => file.name === appPackage.manifest.entry);
+    const assetFile = appPackage?.files.find((file) => file.name.startsWith('assets/') && file.name.endsWith('.js'));
 
     assert.ok(app, `expected installed app ${appId}`);
     assert.ok(appPackage, `expected generated app package ${appId}`);
-    assert.ok(appJs, `expected generated app.js for ${appId}`);
+    assert.ok(entryFile, `expected generated index.html for ${appId}`);
+    assert.ok(assetFile, `expected generated JavaScript asset for ${appId}`);
     assert.equal(app.manifest.entry, appPackage.manifest.entry);
     assert.equal(app.manifest.entryKind, appPackage.manifest.entryKind);
     assert.equal(app.manifest.name, appPackage.manifest.name);
     assert.equal(app.manifest.version, appPackage.manifest.version);
     assert.equal(app.entry?.kind, 'file');
-    assert.equal(app.entry.text, appJs.content);
+    assert.equal(app.entry.text, entryFile.content);
 
     const plan = createSandboxPackageLoadPlan(sandboxFilesystemAppEntry({
       entry: app.entry,
@@ -229,10 +231,9 @@ void test('seeded app package entries match generated Vite package metadata', as
       packageRoot: app.packageRoot,
     }));
 
-    assert.equal(plan.kind, 'module');
-    if (plan.kind !== 'module') return;
-    const module = await import(plan.entryModuleUrl);
-    assert.equal(typeof module.default, 'function');
+    assert.equal(plan.kind, 'html');
+    if (plan.kind !== 'html') return;
+    assert.match(plan.html, /data:text\/javascript;charset=utf-8,/);
   }
 });
 

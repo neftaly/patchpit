@@ -217,8 +217,8 @@ void test('seeded and dynamically created system docs carry schema refs', () => 
   );
 
   const filePickerApp = appManifest(seed, 'file-picker');
-  assert.equal(filePickerApp.entry, 'app.js');
-  assert.equal(filePickerApp.entryKind, 'module');
+  assert.equal(filePickerApp.entry, 'index.html');
+  assert.equal(filePickerApp.entryKind, 'html');
   assert.equal(filePickerApp.version, '0.0.0');
   assert.deepEqual(
     filePickerApp.surfaces[0].state.schema,
@@ -227,12 +227,12 @@ void test('seeded and dynamically created system docs carry schema refs', () => 
   assert.deepEqual(filePickerApp.schemas[filePickerStateSchema.schemaId], filePickerStateSchema);
 
   const viewerApp = appManifest(seed, 'viewer');
-  assert.equal(viewerApp.entry, 'app.js');
-  assert.equal(viewerApp.entryKind, 'module');
+  assert.equal(viewerApp.entry, 'index.html');
+  assert.equal(viewerApp.entryKind, 'html');
 
   const helloWorldApp = appManifest(seed, 'hello-world');
-  assert.equal(helloWorldApp.entry, 'app.js');
-  assert.equal(helloWorldApp.entryKind, 'module');
+  assert.equal(helloWorldApp.entry, 'index.html');
+  assert.equal(helloWorldApp.entryKind, 'html');
 });
 
 function schemaWithPizzaField(fieldName, field) {

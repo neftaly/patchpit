@@ -36,6 +36,7 @@ import {
   projectionVirtualRootUrl,
   projectionVirtualServiceRootUrl,
   routeOpenIntent,
+  routePreviewIntent,
   runtimeProjectionsProjection,
   runtimeProjectionsRelation,
   runtimeProjectionsSchemaId,
@@ -260,8 +261,8 @@ void test('bootstrap runtime serves installed app package projection', () => {
     const viewer = rows.find((row) => row.appId === 'viewer');
     assert.ok(viewer);
     assert.equal(viewer.name, 'Viewer');
-    assert.equal(viewer.entryKind, 'module');
-    assert.equal(viewer.entryPath, 'app.js');
+    assert.equal(viewer.entryKind, 'html');
+    assert.equal(viewer.entryPath, 'index.html');
     assert.equal(viewer.entryStatus, 'resolved');
     assert.match(viewer.entryUrl, /^automerge:/);
     assert.equal(viewer.icon, '📄');
@@ -480,6 +481,39 @@ void test('bootstrap runtime routes documents through installed manifest handler
   assert.equal(seed.windowManagerHandle.doc().contexts[contextId].title, 'Manifest Route Target');
 });
 
+for (const [intent, contextKind] of [
+  [routeOpenIntent, 'pinned'],
+  [routePreviewIntent, 'preview'],
+]) {
+  void test(`bootstrap runtime routes installed app entry html as ${contextKind} app context`, async () => {
+    const seed = createSeedFilesystem();
+    const runtime = bootstrapRuntime(seed);
+    const root = seededFilesystemRoot(seed);
+    const entry = nodeAtPath(root, '/apps/file-picker/index.html');
+    assert.equal(entry?.kind, 'file');
+
+    const result = await submitRuntimeIntent(runtime, {
+      boundary: routeIntentBoundary,
+      intent,
+      row: {
+        id: `manifest-entry-${contextKind}-test`,
+        title: 'File Picker Entry',
+        url: entry.url,
+      },
+    });
+
+    const contextId = `file-picker:${entry.url}`;
+    assert.equal(result.status, 'committed');
+    assert.equal(seed.windowManagerHandle.doc().contexts[contextId].app, 'file-picker');
+    assert.equal(seed.windowManagerHandle.doc().contexts[contextId].url, entry.url);
+    if (intent === routeOpenIntent) {
+      assert.equal(seed.windowManagerHandle.doc().surfaces.main.activeContext, contextId);
+    } else {
+      assert.equal(seed.windowManagerHandle.doc().surfaces.main.previewContext, contextId);
+    }
+  });
+}
+
 void test('bootstrap runtime routes projection virtual JSON files without Automerge handles', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
@@ -522,7 +556,7 @@ void test('bootstrap runtime route-opened Viewer resolves sandbox resource views
   const file = await routeViewerResourceThroughSandbox(seed, readme.url, 'Docs README');
   assert.equal(file.context.app, 'viewer');
   assert.equal(file.context.url, readme.url);
-  assert.equal(file.loadPlan.kind, 'module');
+  assert.equal(file.loadPlan.kind, 'html');
   assert.deepEqual(file.response, {
     id: 'request-1',
     ok: true,
@@ -545,7 +579,7 @@ void test('bootstrap runtime route-opened Viewer resolves sandbox resource views
   const folder = await routeViewerResourceThroughSandbox(seed, docs.url, 'Docs Folder');
   assert.equal(folder.context.app, 'viewer');
   assert.equal(folder.context.url, docs.url);
-  assert.equal(folder.loadPlan.kind, 'module');
+  assert.equal(folder.loadPlan.kind, 'html');
   assert.equal(folder.response.ok, true);
   assert.equal(folder.response.result.view, 'resource');
   assert.equal(folder.response.result.resource.kind, 'folder');
@@ -718,7 +752,7 @@ void test('bootstrap runtime reuses manifest-declared state context for non-file
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 
-void test('bootstrap runtime creates stateless package context for contextless module app launch', async () => {
+void test('bootstrap runtime creates stateless package context for contextless html app launch', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
   const initialSystemAppUrls = systemAppUrls(seed);
@@ -737,7 +771,7 @@ void test('bootstrap runtime creates stateless package context for contextless m
   assert.ok(context);
   assert.equal(context.title, 'Hello World');
   assert.match(context.id, /^hello-world:automerge:/);
-  assert.equal(seed.documentHandles[context.url]?.doc().name, 'app.js');
+  assert.equal(seed.documentHandles[context.url]?.doc().name, 'index.html');
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 
@@ -852,7 +886,7 @@ void test('bootstrap runtime creates stateless package context for contextless v
   assert.ok(context);
   assert.equal(context.title, 'Viewer');
   assert.match(context.id, /^viewer:automerge:/);
-  assert.equal(seed.documentHandles[context.url]?.doc().name, 'app.js');
+  assert.equal(seed.documentHandles[context.url]?.doc().name, 'index.html');
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 
@@ -1282,8 +1316,8 @@ async function routeViewerResourceThroughSandbox(seed, url, title) {
     root,
   }).find((app) => app.manifest.id === 'viewer');
   assert.ok(viewer);
-  assert.equal(viewer.manifest.entry, 'app.js');
-  assert.equal(viewer.manifest.entryKind, 'module');
+  assert.equal(viewer.manifest.entry, 'index.html');
+  assert.equal(viewer.manifest.entryKind, 'html');
   assert.equal(viewer.entry?.kind, 'file');
 
   const sandboxEntry = sandboxFilesystemAppEntry({

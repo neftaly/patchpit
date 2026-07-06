@@ -3,24 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "./src/patchpit-app.js",
   "exports": "./src/index.ts",
-  "patchpit": {
-    "displayName": "Viewer",
-    "entryKind": "module",
-    "handles": [
-      { "accepts": ["*/*"], "intent": "preview", "port": "view" },
-      { "accepts": ["*/*"], "intent": "open", "port": "view" },
-      { "accepts": ["*/*"], "intent": "reveal", "port": "view" },
-      { "accepts": ["*/*"], "intent": "activate", "port": "view" }
-    ],
-    "icon": "📄",
-    "surfaces": [
-      {
-        "role": "document-set"
-      }
-    ]
-  },
   "dependencies": {
     "@patchpit/system": "workspace:*",
     "react": "catalog:",

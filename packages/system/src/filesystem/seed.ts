@@ -498,26 +498,67 @@ type InstalledSeedAppPackage = {
 
 function installSeedAppPackage(repo: Repo, input: SeedAppPackageInput): InstalledSeedAppPackage {
   const manifestHandle = createAppManifest(repo, input);
-  const fileHandles = input.files.map((file) => createFile(repo, file.name, file.content));
-  const entryFileName = packageEntryFileName(input.entry);
-  if (!input.files.some((file) => file.name === entryFileName)) {
-    throw new Error(`Seed app ${input.id} is missing entry resource ${entryFileName}.`);
+  const packageFiles = createPackageFileEntries(repo, input.files);
+  if (!input.files.some((file) => file.name === input.entry)) {
+    throw new Error(`Seed app ${input.id} is missing entry resource ${input.entry}.`);
   }
 
   const packageHandle = createFolder(repo, input.id, [
     folderEntry(automergeFileName('manifest'), PatchpitType.AppManifest, manifestHandle.url),
-    ...fileHandles.map((handle) => folderEntry(handle.doc().name, PatchpitType.File, handle.url)),
+    ...packageFiles.entries,
   ]);
 
   return {
     entry: folderEntry(input.id, PatchpitType.Folder, packageHandle.url),
-    handles: [packageHandle, manifestHandle, ...fileHandles],
+    handles: [packageHandle, manifestHandle, ...packageFiles.handles],
   };
 }
 
-function packageEntryFileName(entry: string): string {
-  const lastSlash = entry.lastIndexOf('/');
-  return lastSlash === -1 ? entry : entry.slice(lastSlash + 1);
+function createPackageFileEntries(
+  repo: Repo,
+  files: readonly SeedAppPackageFile[],
+): {
+  readonly entries: FolderEntry[];
+  readonly handles: Array<DocHandle<FileDoc | FolderDoc>>;
+} {
+  const directFiles = new Map<string, SeedAppPackageFile>();
+  const childFiles = new Map<string, SeedAppPackageFile[]>();
+
+  for (const file of files) {
+    const parts = file.name.split('/').filter((part) => part !== '');
+    if (parts.length === 0 || parts.includes('.') || parts.includes('..')) {
+      throw new Error(`Invalid seed app package file path: ${file.name}`);
+    }
+    const [name, ...rest] = parts;
+    if (name === undefined) throw new Error(`Invalid seed app package file path: ${file.name}`);
+    if (rest.length === 0) {
+      if (directFiles.has(name) || childFiles.has(name)) throw new Error(`Duplicate seed app package path: ${file.name}`);
+      directFiles.set(name, { ...file, name });
+      continue;
+    }
+    if (directFiles.has(name)) throw new Error(`Duplicate seed app package path: ${file.name}`);
+    const siblings = childFiles.get(name) ?? [];
+    siblings.push({ ...file, name: rest.join('/') });
+    childFiles.set(name, siblings);
+  }
+
+  const entries: FolderEntry[] = [];
+  const handles: Array<DocHandle<FileDoc | FolderDoc>> = [];
+
+  for (const [name, file] of [...directFiles.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const handle = createFile(repo, name, file.content);
+    entries.push(folderEntry(name, PatchpitType.File, handle.url));
+    handles.push(handle);
+  }
+
+  for (const [name, children] of [...childFiles.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const child = createPackageFileEntries(repo, children);
+    const handle = createFolder(repo, name, child.entries);
+    entries.push(folderEntry(name, PatchpitType.Folder, handle.url));
+    handles.push(handle, ...child.handles);
+  }
+
+  return { entries, handles };
 }
 
 function createAppManifest(

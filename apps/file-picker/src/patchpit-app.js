@@ -4,6 +4,24 @@ const toggleFolderAction = 'filePicker.toggleFolder';
 const previewAction = 'route.preview';
 const openAction = 'route.open';
 
+export const patchpitApp = {
+  handles: [],
+  icon: '📁',
+  id: 'file-picker',
+  name: 'File Picker',
+  schemaIds: ['patchpit.app.filePicker.state@1'],
+  surfaces: [
+    {
+      role: 'workspace-view',
+      state: {
+        schemaId: 'patchpit.app.filePicker.state@1',
+        type: 'file-picker-state',
+      },
+    },
+  ],
+  version: '0.0.0',
+};
+
 let currentView;
 let hostEnv;
 

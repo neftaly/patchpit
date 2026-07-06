@@ -1,3 +1,16 @@
+export const patchpitApp = {
+  handles: [],
+  icon: '👋',
+  id: 'hello-world',
+  name: 'Hello World',
+  surfaces: [
+    {
+      role: 'document-set',
+    },
+  ],
+  version: '0.0.0',
+};
+
 export default async function activate(env) {
   const root = document.getElementById('patchpit-root') ?? document.body;
   root.innerHTML = '';

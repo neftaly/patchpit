@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'vite';
 
 const repoRoot = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
@@ -13,24 +13,22 @@ await rm(buildRoot, { force: true, recursive: true });
 const packages = [];
 
 for (const app of seedApps) {
-  const appRoot = resolve(repoRoot, app.root);
+  const sourceRoot = resolve(buildRoot, '__sources', app.id);
   const outDir = resolve(buildRoot, app.id);
+  await mkdir(sourceRoot, { recursive: true });
+  await writeFile(resolve(sourceRoot, 'index.html'), seedAppHtml(app));
   await build({
+    base: './',
     build: {
       emptyOutDir: true,
-      lib: {
-        entry: resolve(appRoot, app.main),
-        fileName: () => 'app.js',
-        formats: ['es'],
-      },
       minify: false,
       outDir,
       rollupOptions: {
+        input: resolve(sourceRoot, 'index.html'),
         output: {
           assetFileNames: 'assets/[name][extname]',
           chunkFileNames: 'assets/[name].js',
-          entryFileNames: 'app.js',
-          inlineDynamicImports: true,
+          entryFileNames: 'assets/[name].js',
         },
       },
       sourcemap: false,
@@ -39,7 +37,7 @@ for (const app of seedApps) {
     configFile: false,
     logLevel: 'warn',
     publicDir: false,
-    root: appRoot,
+    root: sourceRoot,
   });
 
   packages.push({
@@ -100,38 +98,37 @@ async function seedAppPackages() {
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     if (!entry.isDirectory()) continue;
     const root = `apps/${entry.name}`;
-    const packageJsonPath = resolve(repoRoot, root, 'package.json');
-    let packageSource;
+    const appEntry = 'src/patchpit-app.js';
+    const appEntryPath = resolve(repoRoot, root, appEntry);
+    let appModule;
     try {
-      packageSource = await readFile(packageJsonPath, 'utf8');
+      await readFile(appEntryPath, 'utf8');
+      appModule = await import(pathToFileURL(appEntryPath).href);
     } catch (error) {
       if (error?.code === 'ENOENT') continue;
       throw error;
     }
 
-    const packageJson = JSON.parse(packageSource);
-    const patchpit = packageJson.patchpit;
-    if (typeof patchpit !== 'object' || patchpit === null || Array.isArray(patchpit)) {
-      continue;
+    const metadata = appModule.patchpitApp;
+    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+      throw new Error(`Seed app ${root} must export patchpitApp metadata from ${appEntry}.`);
     }
-    if (typeof packageJson.main !== 'string') {
-      throw new Error(`Seed app ${root} must declare package.json main.`);
+    if (typeof metadata.id !== 'string') {
+      throw new Error(`Seed app ${root} patchpitApp metadata must declare id.`);
     }
-    if (typeof packageJson.name !== 'string') {
-      throw new Error(`Seed app ${root} must declare package.json name.`);
+    if (typeof metadata.name !== 'string') {
+      throw new Error(`Seed app ${root} patchpitApp metadata must declare name.`);
     }
-    const appId = packageNameAppId(packageJson.name);
-    const { bundleEntry: _bundleEntry, displayName, ...manifestFields } = patchpit;
+
     packages.push({
-      id: appId,
-      main: packageJson.main,
+      id: metadata.id,
+      main: appEntry,
       manifest: {
-        ...manifestFields,
-        entry: 'app.js',
-        handles: patchpit.handles ?? [],
-        id: appId,
-        name: displayName ?? packageJson.name,
-        version: packageJson.version ?? '0.0.0',
+        ...metadata,
+        entry: 'index.html',
+        entryKind: 'html',
+        handles: metadata.handles ?? [],
+        version: metadata.version ?? '0.0.0',
       },
       root,
     });
@@ -140,15 +137,41 @@ async function seedAppPackages() {
   return packages;
 }
 
-function packageNameAppId(name) {
-  const unscoped = name.split('/').at(-1) ?? name;
-  return unscoped.startsWith('patchpit-') ? unscoped.slice('patchpit-'.length) : unscoped;
+function seedAppHtml(app) {
+  const appRoot = resolve(repoRoot, app.root);
+  const entry = resolve(appRoot, app.main).split(sep).join('/');
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(app.manifest.name)}</title>
+  </head>
+  <body>
+    <div id="patchpit-root"></div>
+    <script type="module">
+      import activate from "/@fs/${entry}";
+      await activate(window.patchpit);
+    </script>
+  </body>
+</html>
+`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]);
 }
 
 async function bundleFiles(directory) {
   const files = await listFiles(directory);
-  if (!files.includes('app.js')) {
-    throw new Error(`Seed app bundle at ${directory} did not emit app.js.`);
+  if (!files.includes('index.html')) {
+    throw new Error(`Seed app package at ${directory} did not emit index.html.`);
   }
 
   return Promise.all(files.map(async (name) => {
