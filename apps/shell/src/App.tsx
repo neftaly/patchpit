@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import {
   FilePicker,
   filePickerDragType,
@@ -69,8 +69,8 @@ import runtimeSharedWorkerUrl from './runtime/shared-worker.ts?sharedworker&url'
 import { submitFilePickerIntent, type FilePickerSelectUrlInput } from './runtime/file-picker-intents';
 import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/launch-intents';
 import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from './runtime/route-intents';
-import { type StateBrowserRuntimeIssueEntry } from './state-browser/StateBrowser';
-import { StateBrowserSurface } from './state-browser/StateBrowserSurface';
+import { type RuntimeDiagnosticsIssueEntry } from './runtime-diagnostics/RuntimeDiagnostics';
+import { RuntimeDiagnosticsSurface } from './runtime-diagnostics/RuntimeDiagnosticsSurface';
 import { useAutomergeDocs, useRuntimeDocument } from './runtime/use-automerge-doc';
 import { useFilesystemTreeProjection, useWorkspaceProjection } from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
@@ -143,7 +143,7 @@ function ShellApp({
   const lightTheme = useRuntimeDocument<ThemeDoc>(runtime.resources, documentUrls.lightTheme);
   const [runtimeFault, setRuntimeFault] = useState<RuntimePanelFailure>();
   const nextRuntimeIssueId = useRef(1);
-  const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly StateBrowserRuntimeIssueEntry[]>([]);
+  const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly RuntimeDiagnosticsIssueEntry[]>([]);
   const filePickerState = useRuntimeDocument<FilePickerStateDoc>(runtime.resources, documentUrls.filePickerState);
   const runtimeState = useRuntimeDocument<RuntimeStateDoc>(runtime.resources, documentUrls.runtimeState);
   const terminalHandles = useMemo(() => terminalAppStateHandles(seed, runtimeState), [seed, runtimeState]);
@@ -165,8 +165,8 @@ function ShellApp({
         })
       : []
   ), [filesystemProjection, runtime.resources]);
-  const recordRuntimeIssue = (source: StateBrowserRuntimeIssueEntry['source'], issue: RuntimePanelFailure) => {
-    const entry: StateBrowserRuntimeIssueEntry = {
+  const recordRuntimeIssue = (source: RuntimeDiagnosticsIssueEntry['source'], issue: RuntimePanelFailure) => {
+    const entry: RuntimeDiagnosticsIssueEntry = {
       id: nextRuntimeIssueId.current++,
       issue,
       observedAt: new Date().toISOString(),
@@ -263,7 +263,6 @@ function ShellApp({
     installedApps,
     launchApp,
     rootUrl,
-    runtimeStateUrl: documentUrls.runtimeState,
   });
   return (
     <main className="standalone-app shell-app" style={themeStyle(theme)}>
@@ -303,23 +302,23 @@ function ShellApp({
               },
               filesystemRoot: filesystemProjection.root,
               installedApps,
-              stateBrowser: (
-                <StateBrowserSurface
-                  filesystemProjection={filesystemProjection}
-                  runtimeAck={runtimeConnection.ack}
-                  runtime={runtime}
-                  runtimeIssue={runtimeFault}
-                  runtimeIssueHistory={runtimeIssueHistory}
-                  runtimePlatform={runtimePlatform}
-                  runtimeState={runtimeState}
-                  workspaceProjection={workspaceProjection}
-                />
-              ),
               terminalSessions,
               theme,
             })}
             workspace={workspaceProjection.workspace}
           />
+          {runtimeDiagnosticsEnabled() ? (
+            <div className="runtime-diagnostics-dev-overlay">
+              <RuntimeDiagnosticsSurface
+                runtimeAck={runtimeConnection.ack}
+                runtime={runtime}
+                runtimeIssue={runtimeFault}
+                runtimeIssueHistory={runtimeIssueHistory}
+                runtimePlatform={runtimePlatform}
+                runtimeState={runtimeState}
+              />
+            </div>
+          ) : null}
           <LauncherBar items={launchers} onResetSession={onResetSession} />
         </>
       )}
@@ -331,7 +330,6 @@ function shellAppHost({
   filePicker,
   filesystemRoot,
   installedApps,
-  stateBrowser,
   terminalSessions,
   theme,
 }: {
@@ -343,7 +341,6 @@ function shellAppHost({
   };
   readonly filesystemRoot: FilesystemNode;
   readonly installedApps: readonly InstalledApp[];
-  readonly stateBrowser: ReactNode;
   readonly terminalSessions: Readonly<Record<string, TerminalAppSession>>;
   readonly theme: ThemeDoc;
 }): WindowManagerAppHost {
@@ -355,7 +352,6 @@ function shellAppHost({
 
     contextLabel(context) {
       if (context.app === 'terminal') return terminalAppContextLabel(terminalSessions[context.url]);
-      if (context.app === 'state-browser') return context.title ?? 'State Browser';
       return nodePath(filesystemRoot, context.url) ?? context.title ?? appsById.get(context.app)?.manifest.name;
     },
 
@@ -416,8 +412,6 @@ function shellAppHost({
         );
       }
 
-      if (context.app === 'state-browser') return stateBrowser;
-
       if (context.app === 'viewer') return <Viewer filesystemRoot={filesystemRoot} url={context.url} />;
 
       return <SandboxedFilesystemApp app={installedApp} context={context} surfaceId={surfaceId} />;
@@ -451,6 +445,10 @@ function filePickerDroppedUrl(event: DragEvent): WindowManagerDroppedUrl | undef
   return isDraggedFilePickerUrl(data) ? data : undefined;
 }
 
+function runtimeDiagnosticsEnabled(): boolean {
+  return new URLSearchParams(window.location.search).has('runtimeDiagnostics');
+}
+
 function dragDataFromEvent(event: DragEvent, type: string): unknown {
   const serializedDragData = event.dataTransfer.getData(type);
   if (serializedDragData === '') return undefined;
@@ -470,9 +468,9 @@ function isDraggedFilePickerUrl(data: unknown): data is DraggedFilePickerUrl {
 const runtimeIssueHistoryLimit = 50;
 
 function appendRuntimeIssueHistory(
-  history: readonly StateBrowserRuntimeIssueEntry[],
-  entry: StateBrowserRuntimeIssueEntry,
-): readonly StateBrowserRuntimeIssueEntry[] {
+  history: readonly RuntimeDiagnosticsIssueEntry[],
+  entry: RuntimeDiagnosticsIssueEntry,
+): readonly RuntimeDiagnosticsIssueEntry[] {
   const next = [...history, entry];
   return next.length > runtimeIssueHistoryLimit ? next.slice(next.length - runtimeIssueHistoryLimit) : next;
 }

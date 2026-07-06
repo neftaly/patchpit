@@ -80,7 +80,8 @@ of executable documents.
 - App management belongs in a Settings app that is installed and launched like
   other first-party apps.
 - Document work belongs in file/document surfaces.
-- Deep runtime inspection belongs in State Browser and diagnostics.
+- Deep runtime inspection belongs in trusted runtime diagnostics and
+  `/srv/projections`, not in the installed app model.
 - Users should not need to know `/apps`, `/system/apps`, or capability protocol
   details to answer normal questions such as "what can this app access?".
 - Paths, manifests, schemas, and grants should remain inspectable for advanced
@@ -485,7 +486,7 @@ The Settings app should include an Apps area with a split layout:
   apps;
 - a detail surface for the selected app;
 - a runtime/session area for active contexts and opened capabilities;
-- a diagnostics link into State Browser or runtime diagnostics when deeper
+- a diagnostics link into runtime diagnostics when deeper
   inspection is needed.
 
 For each app, Settings should show:
@@ -591,8 +592,8 @@ The default file picker should center user work, not system registries.
   not in the normal document viewer.
 
 The GUI rule is: the runtime owns app-management authority; Settings is the
-installed app UI for it; file surfaces own document work; State Browser owns
-deep runtime inspection.
+installed app UI for it; file surfaces own document work; trusted shell/dev
+diagnostics own deep runtime inspection.
 
 ### Fresh Machine Experience
 
@@ -700,10 +701,10 @@ conflict, quarantine, capability timeout, and backpressure. Capability mocks
 must use the same request/response and revocation protocol as real capability
 providers.
 
-State Browser and `/system/runtime` diagnostics should make app development
-observable: installed manifest, schema refs, effective grants, projection
-subscriptions, intent logs, capability events, runner lifecycle, SES timings,
-first paint, crash reasons, and schema hash mismatches.
+Runtime diagnostics, `/system/runtime`, and `/srv/projections` should make app
+development observable: installed manifest, schema refs, effective grants,
+projection subscriptions, intent logs, capability events, runner lifecycle, SES
+timings, first paint, crash reasons, and schema hash mismatches.
 
 Version fields must stay separate:
 
@@ -712,9 +713,8 @@ Version fields must stay separate:
 - `patchpit.app@1` and `patchpit.runtime@1` are protocol versions;
 - `schemaId@N` is the Tarstate compatibility boundary.
 
-State Browser should be an app in the product model, but it can remain in a
-trusted debug placement during the migration. It should not be the first app
-moved into the untrusted sandbox path.
+Runtime diagnostics should stay trusted shell/dev tooling during the migration.
+It should not be moved into the untrusted sandbox path.
 
 ## App Pressure Tests
 
@@ -876,8 +876,7 @@ once.
    compatibility placement.
 
 The old path should disappear only after the manifest-hosted path can run
-Settings, Launcher, Files, Viewer, Terminal, and State Browser through the same
-app API.
+Settings, Launcher, Files, Viewer, and Terminal through the same app API.
 
 ## Migration Plan
 

@@ -106,19 +106,6 @@ export function createSeedFilesystem(): SeedFilesystem {
     }),
     installSeedAppPackage(repo, {
       entry: 'index.html',
-      files: [firstPartyShellEntryFile('State Browser')],
-      handles: [],
-      icon: '🧭',
-      id: 'state-browser',
-      name: 'State Browser',
-      surfaces: [
-        {
-          role: SurfaceRole.DocumentSet,
-        },
-      ],
-    }),
-    installSeedAppPackage(repo, {
-      entry: 'index.html',
       files: [firstPartyShellEntryFile('Terminal')],
       handles: [],
       icon: '💬',

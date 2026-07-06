@@ -2,6 +2,7 @@ import {
   filesystemTreeProjectionRelations,
   filesystemTreeSchema,
   patchpitSystemSchemaRef,
+  PatchpitType,
   projectFilesystemTreeRows,
   runtimeProjectionsSchema,
   windowManagerStateSchema,
@@ -11,17 +12,23 @@ import {
 import {
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  projectionVirtualDirectoryUrl,
+  projectionVirtualFileUrl,
+  projectionVirtualRootUrl,
+  projectionVirtualServiceRootUrl,
   runtimeProjectionsProjection,
   runtimeProjectionsRelation,
   runtimeProjectionsSchemaId,
   runtimeError,
   workspaceProjectionRelationSet,
   type AutomergeHeadSet,
+  type FilesystemTreeNodeRow,
   type ProjectionName,
   workspaceLayoutProjection,
   workspaceProjectionSchemaId,
   type ProjectionBasis,
   type ProjectionEvent,
+  type ProjectionVirtualFileName,
   type ProjectionSnapshot,
   type ProjectionSubscription,
   type ProjectionSubscriptionRequest,
@@ -30,7 +37,11 @@ import {
   type RuntimeClient,
   type RuntimeError,
 } from '@patchpit/system/runtime';
-import { relationSetFromRows } from '@patchpit/system/runtime/relations';
+import {
+  relationRows,
+  relationSetFromRows,
+  relationSetNames,
+} from '@patchpit/system/runtime/relations';
 import { automergeHeadSetForHandle } from './automerge-heads';
 
 type ProjectionDiagnosticsRecorder = {
@@ -249,6 +260,31 @@ function projectionSnapshot({
 }
 
 function filesystemTreePayload(seed: SeedFilesystem): ProjectionPayload | RuntimeError {
+  const projection = filesystemTreeBaseRows(seed);
+  if (isRuntimeError(projection)) return projection;
+
+  const rows = [
+    ...projection.rows,
+    ...projectionVirtualTreeRows(seed, projection.rows.length),
+  ];
+
+  return {
+    storageHeads: automergeHeadSetForHandle(seed.indexHandle),
+    relations: relationSetFromRows(filesystemTreeProjectionRelations(rows)),
+  };
+}
+
+function filesystemTreeBasePayload(seed: SeedFilesystem): ProjectionPayload | RuntimeError {
+  const projection = filesystemTreeBaseRows(seed);
+  if (isRuntimeError(projection)) return projection;
+
+  return {
+    storageHeads: automergeHeadSetForHandle(seed.indexHandle),
+    relations: relationSetFromRows(filesystemTreeProjectionRelations(projection.rows)),
+  };
+}
+
+function filesystemTreeBaseRows(seed: SeedFilesystem): { readonly rows: readonly FilesystemTreeNodeRow[] } | RuntimeError {
   const projection = projectFilesystemTreeRows(seed.indexHandle.doc(), seed.rootUrl);
   if (projection.diagnostics.length > 0) {
     return {
@@ -258,10 +294,7 @@ function filesystemTreePayload(seed: SeedFilesystem): ProjectionPayload | Runtim
     };
   }
 
-  return {
-    storageHeads: automergeHeadSetForHandle(seed.indexHandle),
-    relations: relationSetFromRows(filesystemTreeProjectionRelations(projection.rows)),
-  };
+  return { rows: projection.rows };
 }
 
 function workspaceLayoutPayload(seed: SeedFilesystem): ProjectionPayload {
@@ -282,20 +315,159 @@ function projectionCatalogPayload(): ProjectionPayload {
   };
 }
 
-function projectionCatalogRow(definition: BootstrapProjectionDefinition): RuntimeProjectionCatalogRow {
-  const schemaHash = definition.schemaRef.hash ?? definition.schema.schemaHash;
-  if (schemaHash === undefined) {
-    throw new Error(`Projection ${definition.projection} must ship a schema hash.`);
+function projectionVirtualTreeRows(seed: SeedFilesystem, position: number): readonly FilesystemTreeNodeRow[] {
+  const projectionDefinitions = Object.values(bootstrapProjectionDefinitions)
+    .map((definition) => assertProjectionDefinition(definition))
+    .sort((left, right) => left.projection.localeCompare(right.projection));
+  const rows: FilesystemTreeNodeRow[] = [
+    projectionVirtualFolderRow({
+      name: 'srv',
+      parentUrl: seed.rootUrl,
+      position,
+      title: 'srv',
+      url: projectionVirtualServiceRootUrl,
+    }),
+    projectionVirtualFolderRow({
+      name: 'projections',
+      parentUrl: projectionVirtualServiceRootUrl,
+      position: 0,
+      title: 'projections',
+      url: projectionVirtualRootUrl,
+    }),
+  ];
+
+  projectionDefinitions.forEach((definition, projectionPosition) => {
+    const projectionUrl = projectionVirtualDirectoryUrl(definition.projection);
+    rows.push(projectionVirtualFolderRow({
+      name: definition.projection,
+      parentUrl: projectionVirtualRootUrl,
+      position: projectionPosition,
+      title: definition.projection,
+      url: projectionUrl,
+    }));
+    projectionVirtualFileNames.forEach((file, filePosition) => {
+      rows.push(projectionVirtualFileRow({
+        name: file,
+        parentUrl: projectionUrl,
+        position: filePosition,
+        text: projectionVirtualFileText(seed, definition, file),
+        title: file,
+        url: projectionVirtualFileUrl(definition.projection, file),
+      }));
+    });
+  });
+
+  return rows;
+}
+
+const projectionVirtualFileNames: readonly ProjectionVirtualFileName[] = ['meta.json', 'schema.json', 'summary.json'];
+
+function projectionVirtualFolderRow(input: {
+  readonly name: string;
+  readonly parentUrl: string;
+  readonly position: number;
+  readonly title: string;
+  readonly url: string;
+}): FilesystemTreeNodeRow {
+  return {
+    isRoot: false,
+    kind: 'folder',
+    mediaType: null,
+    name: input.name,
+    parentUrl: input.parentUrl,
+    position: input.position,
+    sourceUrl: null,
+    text: '',
+    title: input.title,
+    type: PatchpitType.Folder,
+    url: input.url,
+  };
+}
+
+function projectionVirtualFileRow(input: {
+  readonly name: string;
+  readonly parentUrl: string;
+  readonly position: number;
+  readonly text: string;
+  readonly title: string;
+  readonly url: string;
+}): FilesystemTreeNodeRow {
+  return {
+    isRoot: false,
+    kind: 'file',
+    mediaType: 'application/json',
+    name: input.name,
+    parentUrl: input.parentUrl,
+    position: input.position,
+    sourceUrl: null,
+    text: input.text,
+    title: input.title,
+    type: PatchpitType.File,
+    url: input.url,
+  };
+}
+
+function projectionVirtualFileText(
+  seed: SeedFilesystem,
+  definition: BootstrapProjectionDefinition,
+  file: ProjectionVirtualFileName,
+): string {
+  const value = file === 'meta.json'
+    ? projectionMetaExport(definition)
+    : file === 'schema.json'
+      ? definition.schema.schema
+      : projectionSummaryExport(seed, definition);
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function projectionMetaExport(definition: BootstrapProjectionDefinition) {
+  return projectionCatalogRow(definition);
+}
+
+function projectionSummaryExport(seed: SeedFilesystem, definition: BootstrapProjectionDefinition) {
+  const payload = definition.projection === filesystemTreeProjection
+    ? filesystemTreeBasePayload(seed)
+    : definition.payload(seed);
+  if (isRuntimeError(payload)) {
+    return {
+      basis: { kind: 'live' },
+      error: payload,
+      projection: definition.projection,
+      schemaHash: projectionSchemaHash(definition),
+      schemaId: definition.schemaId,
+    };
   }
+
+  return {
+    basis: { kind: 'live' },
+    projection: definition.projection,
+    relationCounts: Object.fromEntries(relationSetNames(payload.relations)
+      .map((relation) => [relation, relationRows(payload.relations, relation).length])),
+    schemaHash: projectionSchemaHash(definition),
+    schemaId: definition.schemaId,
+    storageHeads: payload.storageHeads,
+  };
+}
+
+function projectionCatalogRow(definition: BootstrapProjectionDefinition): RuntimeProjectionCatalogRow {
   return {
     basisKinds: ['live'],
     description: definition.description,
     name: definition.projection,
     owner: definition.owner,
-    schemaHash,
+    readOnly: true,
+    schemaHash: projectionSchemaHash(definition),
     schemaId: definition.schemaId,
     ...(definition.schemaRef.url === undefined ? {} : { schemaUrl: definition.schemaRef.url }),
   };
+}
+
+function projectionSchemaHash(definition: BootstrapProjectionDefinition): NonNullable<ProjectionSnapshot['schemaHash']> {
+  const schemaHash = definition.schemaRef.hash ?? definition.schema.schemaHash;
+  if (schemaHash === undefined) {
+    throw new Error(`Projection ${definition.projection} must ship a schema hash.`);
+  }
+  return schemaHash;
 }
 
 function assertProjectionDefinitionsShipSchemas(

@@ -1,43 +1,34 @@
 import { useSyncExternalStore } from 'react';
 import type { BootstrapRuntimeClient } from '../runtime/bootstrap-runtime';
-import { useRuntimeProjectionCatalog } from '../runtime/use-runtime-projection';
 import {
-  createStateBrowserSnapshot,
-  StateBrowser,
-  type StateBrowserSnapshotInput,
-} from './StateBrowser';
+  createRuntimeDiagnosticsSnapshot,
+  RuntimeDiagnostics,
+  type RuntimeDiagnosticsSnapshotInput,
+} from './RuntimeDiagnostics';
 
-type StateBrowserSurfaceProps = Omit<StateBrowserSnapshotInput, 'runtimeDiagnostics' | 'runtimeProjectionCatalog'> & {
+type RuntimeDiagnosticsSurfaceProps = Omit<RuntimeDiagnosticsSnapshotInput, 'runtimeDiagnostics'> & {
   readonly runtime: BootstrapRuntimeClient;
 };
 
-export function StateBrowserSurface({
-  filesystemProjection,
+export function RuntimeDiagnosticsSurface({
   runtime,
   runtimeAck,
   runtimeIssue,
   runtimeIssueHistory,
   runtimePlatform,
   runtimeState,
-  workspaceProjection,
-}: StateBrowserSurfaceProps) {
+}: RuntimeDiagnosticsSurfaceProps) {
   const runtimeDiagnostics = useRuntimeDiagnostics(runtime);
-  const runtimeProjectionCatalog = useRuntimeProjectionCatalog(runtime);
 
   return (
-    <StateBrowser
-      projectionCatalog={runtimeProjectionCatalog}
-      runtime={runtime}
-      snapshot={createStateBrowserSnapshot({
-        filesystemProjection,
+    <RuntimeDiagnostics
+      snapshot={createRuntimeDiagnosticsSnapshot({
         runtimeAck,
         runtimeDiagnostics,
         runtimeIssue,
         runtimeIssueHistory,
         runtimePlatform,
-        runtimeProjectionCatalog,
         runtimeState,
-        workspaceProjection,
       })}
     />
   );

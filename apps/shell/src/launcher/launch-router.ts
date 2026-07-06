@@ -24,14 +24,12 @@ export function launcherItems({
   installedApps,
   launchApp,
   rootUrl,
-  runtimeStateUrl,
 }: {
   readonly focusedAppId: string | undefined;
   readonly filePickerStateUrl: string;
   readonly installedApps: readonly InstalledApp[];
   readonly launchApp: (input: AppLaunchIntentInput) => void;
   readonly rootUrl: string;
-  readonly runtimeStateUrl: string;
 }): readonly LauncherItem[] {
   return installedApps.map((app) => ({
     active: focusedAppId === app.manifest.id,
@@ -39,7 +37,7 @@ export function launcherItems({
     emoji: app.icon,
     label: app.manifest.id === 'file-picker' ? 'Files' : app.manifest.name,
     launch: () => {
-      launchApp(launcherLaunchInput(app, { filePickerStateUrl, rootUrl, runtimeStateUrl }));
+      launchApp(launcherLaunchInput(app, { filePickerStateUrl, rootUrl }));
     },
   }));
 }
@@ -49,7 +47,6 @@ function launcherLaunchInput(
   urls: {
     readonly filePickerStateUrl: string;
     readonly rootUrl: string;
-    readonly runtimeStateUrl: string;
   },
 ): AppLaunchIntentInput {
   const role = installedAppRole(app);
@@ -58,14 +55,6 @@ function launcherLaunchInput(
       app: app.manifest.id,
       behavior: ContextLaunchBehavior.ToggleSurface,
       context: filePickerContext(urls.filePickerStateUrl, urls.rootUrl),
-      role,
-    };
-  }
-  if (app.manifest.id === 'state-browser') {
-    return {
-      app: app.manifest.id,
-      behavior: ContextLaunchBehavior.OpenContext,
-      context: stateBrowserContext(urls.runtimeStateUrl, urls.rootUrl),
       role,
     };
   }
@@ -98,16 +87,6 @@ function filePickerContext(url: string, rootUrl: string): WindowContext {
     container: rootContainer(rootUrl),
     id: 'file-picker',
     title: 'File Picker',
-    url,
-  };
-}
-
-function stateBrowserContext(url: string, rootUrl: string): WindowContext {
-  return {
-    app: 'state-browser',
-    container: rootContainer(rootUrl),
-    id: 'state-browser',
-    title: 'State Browser',
     url,
   };
 }

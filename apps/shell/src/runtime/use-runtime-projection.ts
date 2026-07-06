@@ -220,12 +220,14 @@ function isRuntimeProjectionCatalogRow(row: unknown): row is RuntimeProjectionCa
   const candidate = row as {
     readonly basisKinds?: unknown;
     readonly name?: unknown;
+    readonly readOnly?: unknown;
     readonly schemaHash?: unknown;
     readonly schemaId?: unknown;
   };
   return typeof candidate.name === 'string'
     && typeof candidate.schemaId === 'string'
     && typeof candidate.schemaHash === 'string'
+    && candidate.readOnly === true
     && Array.isArray(candidate.basisKinds)
     && candidate.basisKinds.every((kind) => typeof kind === 'string');
 }

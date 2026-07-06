@@ -197,6 +197,44 @@ export const workspaceStateRelation = 'state' as const;
 export const workspaceContextsRelation = 'contexts' as const;
 export const workspaceSurfacesRelation = 'surfaces' as const;
 
+export type ProjectionVirtualFileName = 'meta.json' | 'schema.json' | 'summary.json';
+export const projectionVirtualServiceRootUrl = 'patchpit-srv:/' as const;
+export const projectionVirtualRootUrl = 'patchpit-srv:/projections' as const;
+const projectionNames = [
+  filesystemTreeProjection,
+  runtimeProjectionsProjection,
+  workspaceLayoutProjection,
+] as const satisfies readonly ProjectionName[];
+
+export function projectionVirtualDirectoryUrl(projection: ProjectionName): string {
+  return `${projectionVirtualRootUrl}/${projection}`;
+}
+
+export function projectionVirtualFileUrl(projection: ProjectionName, file: ProjectionVirtualFileName): string {
+  return `${projectionVirtualDirectoryUrl(projection)}/${file}`;
+}
+
+export function parseProjectionVirtualFileUrl(
+  url: string,
+): { readonly projection: ProjectionName; readonly file: ProjectionVirtualFileName } | undefined {
+  if (!url.startsWith(`${projectionVirtualRootUrl}/`)) return undefined;
+  const parts = url.slice(projectionVirtualRootUrl.length + 1).split('/');
+  if (parts.length !== 2) return undefined;
+  const projection = projectionNameFromVirtualPathComponent(parts[0] ?? '');
+  const file = parts[1];
+  return projection !== undefined && isProjectionVirtualFileName(file)
+    ? { projection, file }
+    : undefined;
+}
+
+function projectionNameFromVirtualPathComponent(pathComponent: string): ProjectionName | undefined {
+  return projectionNames.find((projection) => projection === pathComponent);
+}
+
+function isProjectionVirtualFileName(value: string | undefined): value is ProjectionVirtualFileName {
+  return value === 'meta.json' || value === 'schema.json' || value === 'summary.json';
+}
+
 export type FilesystemTreeNodeKind = 'folder' | 'file';
 export type FilesystemTreeNodeRow = {
   readonly isRoot: boolean;
@@ -229,6 +267,7 @@ export type RuntimeProjectionCatalogRow = {
   readonly description?: string;
   readonly name: ProjectionName;
   readonly owner?: string;
+  readonly readOnly: true;
   readonly schemaHash: PatchpitSchemaHash;
   readonly schemaId: TarstateSchemaId;
   readonly schemaUrl?: string;

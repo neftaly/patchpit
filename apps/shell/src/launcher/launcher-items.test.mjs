@@ -15,7 +15,6 @@ void test('launcher items are derived from installed app manifests', () => {
     ],
     launchApp: (input) => launches.push(input),
     rootUrl: 'automerge:root',
-    runtimeStateUrl: 'automerge:runtime-state',
   });
 
   assert.deepEqual(items.map((item) => [item.app, item.label, item.emoji, item.active]), [

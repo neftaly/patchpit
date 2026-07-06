@@ -10,12 +10,12 @@ notes at the end, but the model here is Patchpit's own runtime contract.
 
 ## System Model
 
-Patchpit currently seeds three durable roots and reserves one live-service root:
+Patchpit currently seeds three durable roots and exposes one live-service root:
 
 - `/apps` contains installed app package folders
 - `/home` contains user and workspace documents
 - `/system` contains runtime/compositor-owned persistent state
-- `/srv` is reserved for future live mountable services
+- `/srv` contains read-only virtual service exports such as projection metadata
 
 The bootloader creates only the initial filesystem, the minimal runtime state
 needed to boot, and the compositor/window-manager state needed to display
@@ -82,9 +82,11 @@ doc should not become the interchange format.
 
 The active runtime also serves `runtime.projections` with
 `schemaId: patchpit.runtime.projections@1` as a catalog of projections and their
-schemas. A future read-only `/srv/projections` tree may export this kind of live
-state for inspection, but it should be a virtual service export rather than
-canonical filesystem storage.
+schemas. The filesystem tree includes read-only virtual service exports under
+`/srv/projections/<projection>/` for `meta.json`, `schema.json`, and
+`summary.json`. These `patchpit-srv:` URLs are inspection views, not Automerge
+documents or canonical filesystem storage. Writes go through intents and the
+owning canonical state layer, not through editable projection files.
 
 ## App Manifests
 
@@ -306,7 +308,8 @@ runtime exposes relation-shaped `surfaces`, `contexts`, `layoutNodes`, or
 The first useful implementation should stay small:
 
 1. App packages live under `/apps`.
-2. Settings, Launcher, Files, Viewer, Terminal, and State Browser are apps.
+2. Settings, Launcher, Files, Viewer, and Terminal are apps; runtime diagnostics
+   are shell/dev tooling, not an installed app.
 3. The window-manager doc owns surfaces, tabs, focus, reserved slots, and split
    layout.
 4. Route and launch requests share one admission path that resolves manifests
@@ -316,7 +319,7 @@ The first useful implementation should stay small:
    second app-instance registry.
 6. Runtime projections expose schema-bound relation views over durable docs and
    live runtime state.
-7. `/srv` remains reserved for future live services, not persisted app state.
+7. `/srv` remains live service state, not persisted app state.
 
 Do not implement permissions, spatial placement, or multiple viewports until the
 basic desktop projection is stable.

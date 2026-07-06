@@ -26,6 +26,11 @@ import {
   filesystemTreeNodesRelation,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  parseProjectionVirtualFileUrl,
+  projectionVirtualDirectoryUrl,
+  projectionVirtualFileUrl,
+  projectionVirtualRootUrl,
+  projectionVirtualServiceRootUrl,
   routeOpenIntent,
   runtimeProjectionsProjection,
   runtimeProjectionsRelation,
@@ -82,6 +87,47 @@ void test('bootstrap runtime serves a live filesystem tree projection', () => {
     assert.equal(rootRows.length, 1);
     assert.equal(rootRows[0].isRoot, true);
     assert.equal(rootRows[0].parentUrl, null);
+
+    const srvRow = rows.find((row) => row.url === projectionVirtualServiceRootUrl);
+    assert.equal(srvRow?.parentUrl, seed.rootUrl);
+    assert.equal(srvRow?.kind, 'folder');
+    assert.equal(srvRow?.name, 'srv');
+    assert.equal(rows.find((row) => row.url === projectionVirtualRootUrl)?.parentUrl, projectionVirtualServiceRootUrl);
+
+    for (const projection of [runtimeProjectionsProjection, workspaceLayoutProjection]) {
+      const projectionUrl = projectionVirtualDirectoryUrl(projection);
+      const projectionRow = rows.find((row) => row.url === projectionUrl);
+      assert.equal(projectionRow?.parentUrl, projectionVirtualRootUrl);
+      assert.equal(projectionRow?.name, projection);
+      assert.match(projectionRow?.name ?? '', /\./);
+      for (const file of ['meta.json', 'schema.json', 'summary.json']) {
+        const row = rows.find((candidate) => candidate.url === projectionVirtualFileUrl(projection, file));
+        assert.equal(row?.kind, 'file');
+        assert.equal(row?.parentUrl, projectionUrl);
+        assert.equal(row?.mediaType, 'application/json');
+        assert.doesNotThrow(() => JSON.parse(row.text));
+      }
+    }
+
+    const runtimeMeta = JSON.parse(rows.find((row) => (
+      row.url === projectionVirtualFileUrl(runtimeProjectionsProjection, 'meta.json')
+    )).text);
+    const runtimeSchema = JSON.parse(rows.find((row) => (
+      row.url === projectionVirtualFileUrl(runtimeProjectionsProjection, 'schema.json')
+    )).text);
+    const runtimeSummary = JSON.parse(rows.find((row) => (
+      row.url === projectionVirtualFileUrl(runtimeProjectionsProjection, 'summary.json')
+    )).text);
+    assert.equal(runtimeMeta.name, runtimeProjectionsProjection);
+    assert.equal(runtimeMeta.schemaId, runtimeProjectionsSchemaId);
+    assert.match(runtimeMeta.schemaHash, /^sha256:[a-f0-9]{64}$/);
+    assert.deepEqual(runtimeMeta.basisKinds, ['live']);
+    assert.equal(runtimeMeta.owner, '@patchpit/system/runtime');
+    assert.equal(runtimeMeta.readOnly, true);
+    assert.equal(runtimeSchema.schemaId, runtimeProjectionsSchemaId);
+    assert.equal(runtimeSummary.projection, runtimeProjectionsProjection);
+    assert.equal(runtimeSummary.schemaId, runtimeProjectionsSchemaId);
+    assert.equal(runtimeSummary.relationCounts[runtimeProjectionsRelation], 3);
   } finally {
     subscription.close();
   }
@@ -133,6 +179,7 @@ void test('bootstrap runtime serves a runtime projection catalog including itsel
       assert.equal(typeof row.schemaId, 'string');
       assert.match(row.schemaHash, /^sha256:[a-f0-9]{64}$/);
       assert.deepEqual(row.basisKinds, ['live']);
+      assert.equal(row.readOnly, true);
     }
     assert.equal(
       rows.find((row) => row.name === filesystemTreeProjection)?.schemaId,
@@ -311,6 +358,37 @@ void test('bootstrap runtime routes documents through installed manifest handler
   assert.equal(seed.windowManagerHandle.doc().surfaces.main.activeContext, contextId);
   assert.equal(seed.windowManagerHandle.doc().contexts[contextId].app, 'fake-viewer');
   assert.equal(seed.windowManagerHandle.doc().contexts[contextId].title, 'Manifest Route Target');
+});
+
+void test('bootstrap runtime routes projection virtual JSON files without Automerge handles', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+  const url = projectionVirtualFileUrl(runtimeProjectionsProjection, 'summary.json');
+
+  assert.equal(url, 'patchpit-srv:/projections/runtime.projections/summary.json');
+  assert.deepEqual(parseProjectionVirtualFileUrl(url), {
+    file: 'summary.json',
+    projection: runtimeProjectionsProjection,
+  });
+  assert.equal(parseProjectionVirtualFileUrl('patchpit-srv:/projections/unknown.projection/summary.json'), undefined);
+  assert.equal(parseProjectionVirtualFileUrl('patchpit-srv:/projections/appManifests.handlers/summary.json'), undefined);
+  assert.equal(Object.hasOwn(seed.documentHandles, url), false);
+
+  const result = await submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
+    intent: routeOpenIntent,
+    row: {
+      id: 'projection-virtual-route-open-test',
+      title: 'runtime.projections summary',
+      url,
+    },
+  });
+
+  const contextId = `viewer:${url}`;
+  assert.equal(result.status, 'committed');
+  assert.equal(seed.windowManagerHandle.doc().surfaces.main.activeContext, contextId);
+  assert.equal(seed.windowManagerHandle.doc().contexts[contextId].app, 'viewer');
+  assert.equal(seed.windowManagerHandle.doc().contexts[contextId].url, url);
 });
 
 void test('bootstrap runtime rejects route targets missing from seeded handles', async () => {
@@ -608,10 +686,10 @@ void test('bootstrap runtime leaves explicit-context app documents in place afte
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
   const context = {
-    app: 'state-browser',
+    app: 'viewer',
     container: rootContainer(seed.rootUrl),
-    id: 'state-browser-explicit-context-test',
-    title: 'State Browser',
+    id: 'viewer-explicit-context-test',
+    title: 'Runtime State',
     url: seed.runtimeStateHandle.url,
   };
 
@@ -619,12 +697,12 @@ void test('bootstrap runtime leaves explicit-context app documents in place afte
     app: context.app,
     behavior: 'open-context',
     context,
-    id: 'state-browser-launch-test',
+    id: 'viewer-launch-test',
     role: SurfaceRole.DocumentSet,
   });
   assert.equal(launchResult.status, 'committed');
 
-  const closeResult = await closeWindowContext(runtime, seed, context, 'state-browser-close-test');
+  const closeResult = await closeWindowContext(runtime, seed, context, 'viewer-close-test');
 
   assert.equal(closeResult.status, 'committed');
   assert.deepEqual(Object.keys(closeResult.heads), [seed.windowManagerHandle.url]);

@@ -1,0 +1,87 @@
+.runtime-diagnostics {
+  gap: 0;
+  background: var(--color-surface);
+}
+
+.runtime-diagnostics-header {
+  flex: 0 0 auto;
+  border-bottom: var(--app-border) solid var(--color-border);
+  padding: calc(var(--detail-pad) * 0.75) var(--detail-pad);
+  background: var(--color-bg);
+}
+
+.runtime-diagnostics-header h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.runtime-diagnostics-header p {
+  margin: calc(var(--detail-pad) * 0.25) 0 0;
+  color: var(--color-muted);
+  font-size: var(--font-code-size);
+}
+
+.runtime-diagnostics-sections {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.runtime-diagnostics-section {
+  border-bottom: var(--app-border) solid var(--color-border);
+}
+
+.runtime-diagnostics-section summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--detail-pad);
+  padding: calc(var(--detail-pad) * 0.75) var(--detail-pad);
+  cursor: default;
+  font-size: var(--font-code-size);
+}
+
+.runtime-diagnostics-section summary:focus {
+  outline: none;
+}
+
+.runtime-diagnostics-section summary:focus-visible {
+  outline: var(--app-border) solid currentColor;
+  outline-offset: calc(var(--app-border) * -1);
+}
+
+.runtime-diagnostics-section summary span {
+  flex: 0 0 auto;
+}
+
+.runtime-diagnostics-section summary small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-muted);
+  font: inherit;
+  text-align: end;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-diagnostics-json {
+  border-top: var(--app-border) solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.runtime-diagnostics-dev-overlay {
+  position: fixed;
+  z-index: 20;
+  right: var(--detail-pad);
+  bottom: calc(var(--detail-pad) * 4);
+  display: flex;
+  width: min(44rem, calc(100vw - var(--detail-pad) * 2));
+  max-height: min(36rem, calc(100vh - var(--detail-pad) * 6));
+  overflow: hidden;
+  border: var(--app-border) solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}

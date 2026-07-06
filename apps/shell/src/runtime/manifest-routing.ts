@@ -7,6 +7,7 @@ import {
   type SeedFilesystem,
 } from '@patchpit/system';
 import {
+  parseProjectionVirtualFileUrl,
   routeOpenIntent,
   routePreviewIntent,
   runtimeError,
@@ -107,6 +108,14 @@ function isFolderDoc(doc: FilesystemResource | undefined): doc is FolderDoc {
 }
 
 function routeTargetTypes(seed: SeedFilesystem, url: string): readonly string[] | RuntimeError {
+  if (parseProjectionVirtualFileUrl(url) !== undefined) {
+    return [
+      'application/json',
+      `application/vnd.patchpit.${PatchpitType.File}`,
+      PatchpitType.File,
+    ];
+  }
+
   const doc = seed.documentHandles[url]?.doc();
   if (doc === undefined) return runtimeError('not_found', `Route target ${url} is not in the filesystem.`);
 
