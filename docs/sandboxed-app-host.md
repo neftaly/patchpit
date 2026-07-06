@@ -56,7 +56,8 @@ operations. The in-process bootstrap runtime still owns the first runtime slice.
 
 The first implementation target is therefore a host boundary, not a new app:
 
-- keep `WindowManagerAppHost.renderSurface` as the shell content slot;
+- keep `WindowManagerAppHost.renderSurface` as the current compositor content
+  slot;
 - replace the direct app switch with a `SandboxAppHost`;
 - resolve the launched context to its app manifest entry;
 - bootstrap the app through a scoped runtime proxy;
@@ -91,7 +92,7 @@ of executable documents.
 | Durable documents | Automerge docs | Canonical state lives in linked Patchpit documents. |
 | Relation views and validation | Tarstate | Projections, schema checks, indexes, and write lenses are derived machinery. |
 | Launch, routing, policy | Runtime | Runtime admits app launches, routes documents, attaches scope, and records lifecycle. |
-| Window management and placement | Shell/window manager | Surface creation, focus, splits, previews, drag targets, reserved slots, and placement enforcement stay host-owned. |
+| Window management and placement | Compositor/window manager | Surface creation, focus, splits, previews, drag targets, reserved slots, and placement enforcement stay host-owned. |
 | App semantics | App package | Apps define manifests, handlers, state schemas, and how to interpret their own state docs. |
 | App code execution | Sandboxed app host | The host loads app bundles and gives them only scoped app services. |
 | JavaScript authority | SES compartment | Compartments prevent ambient JS authority and constrain endowments. |
@@ -100,8 +101,7 @@ of executable documents.
 State logic belongs in the owning layer. The app host may cache or mirror data
 for presentation, but it must not become canonical storage or a parallel runtime
 policy service. App-owned state docs are still Automerge documents; sandboxed
-apps interpret them and request changes through runtime intents or scoped state
-writer capabilities.
+apps interpret them and request changes through scoped runtime actions or ports.
 
 ## Smallest Patchpit Model
 
@@ -242,7 +242,8 @@ The app host lifecycle is:
 
 1. Runtime admits `app.launch`, `route.open`, or `route.preview` and commits the
    context/surface effect.
-2. Shell asks `WindowManagerAppHost.renderSurface` to render that context.
+2. The compositor asks `WindowManagerAppHost.renderSurface` to render that
+   context.
 3. `SandboxAppHost` resolves the app manifest and selected runner placement.
 4. The host creates or reuses a runner, then creates a session-local app
    instance.
@@ -284,9 +285,9 @@ protocol should work in different placements:
 | `local-bwrap` | Local command runner or app logic under a supervisor. | Linux process/namespace isolation. |
 | `local-webview-bwrap` | Future DOM app host under a native supervisor. | OS process isolation plus a brokered display/WebView boundary. |
 
-A browser-only shell cannot create an OS sandbox by itself. OS-level placement
-requires a trusted local supervisor process. The app protocol must not change
-when placement changes.
+A browser-only Patchpit client cannot create an OS sandbox by itself. OS-level
+placement requires a trusted local supervisor process. The app protocol must not
+change when placement changes.
 
 ### App Host Runner
 
@@ -664,7 +665,7 @@ A local authoring loop should:
 3. build or serve `dist/`;
 4. link or update the installed manifest under `/apps`;
 5. launch through normal `app.launch`, `route.open`, or `route.preview`;
-6. hot-reload the app session without changing shell-owned state.
+6. hot-reload the app session without changing compositor-owned state.
 
 The app SDK should be a typed wrapper over app services, not a new runtime and
 not a direct exposure of runtime internals:
@@ -784,9 +785,9 @@ The sandbox boundary must not enter the frame path.
 
 Almost-free paths:
 
-- shell layout, tab focus, split resize drafts, drag hit testing;
-- small intents such as preview, open, select, toggle, focus, and close;
-- small capability calls with warm runners;
+- compositor layout, tab focus, split resize drafts, drag hit testing;
+- small actions such as preview, open, select, toggle, focus, and close;
+- small port calls with warm runners;
 - SES compartments after one `lockdown()` per runner;
 - viewer and file-picker steady state with metadata patches.
 
@@ -802,7 +803,7 @@ Initial measurement targets:
 
 - warm viewer/file-picker launch to first interactive frame under 100 ms;
 - warm terminal prompt under 250 ms;
-- small capability round trip p95 under 10 ms;
+- small port round trip p95 under 10 ms;
 - small view update to visible update under one frame;
 - no cross-boundary clone of file/media payloads over 256 KiB by default;
 - terminal input echo under 16 ms;
@@ -823,9 +824,9 @@ useful even without OS sandboxing or SES.
 2. Move app state reads behind views. Viewer, file picker, and terminal should
    read document or app state through schema-bound runtime views rather than
    direct `DocHandle` reads or shell-derived object graphs.
-3. Make `WindowManagerAppHost` manifest-driven. The shell content slot should
-   resolve contexts through app manifests instead of hard-coding app ids in the
-   render switch.
+3. Make `WindowManagerAppHost` manifest-driven. The compositor content slot
+   should resolve contexts through app manifests instead of hard-coding app ids
+   in the render switch.
 4. Split content handles from tree metadata. File picker needs filesystem tree
    metadata; viewer needs content. Large text and media should not ride inside
    `filesystem.tree` rows.

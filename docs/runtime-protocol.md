@@ -4,10 +4,10 @@ Patchpit needs a shared runtime boundary for Automerge, Tarstate, policy, and
 app capabilities. This document narrows that boundary and records the first
 implementation slice.
 
-The surface protocol defines Patchpit's shell objects: app manifests, intents,
-contexts, surfaces, layouts, and viewports. This document defines how clients
-talk to the live runtime that owns the underlying Automerge repo and Tarstate
-projections.
+The surface protocol defines Patchpit's user-visible runtime objects: app
+manifests, intents, contexts, surfaces, layouts, and viewports. This document
+defines how clients talk to the live runtime that owns the underlying Automerge
+repo and Tarstate projections.
 
 ## Goals
 
@@ -46,7 +46,7 @@ projections.
 - Automerge docs are the only canonical durable document state.
 - Tarstate projections, indexes, materialized views, and policy indexes are
   derived state.
-- Apps, shell surfaces, and sandboxed code never receive raw `Repo`,
+- Apps, compositor surfaces, and sandboxed code never receive raw `Repo`,
   unrestricted `DocHandle`, or broad storage authority.
 - Every durable mutation enters through `submitIntent`.
 - Every read exposed across the runtime boundary is a projection or capability
@@ -120,10 +120,10 @@ Use Patchpit's existing surface vocabulary where possible.
 - `Runtime`: the live Patchpit OS service behind the worker boundary.
 - `Client`: one connected actor, such as a browser tab, headset, tablet,
   spatial laptop, agent bridge, BCI adapter, or sandbox host.
-- `Workspace`: durable shell state for a working set of surfaces, contexts, and
-  layout policy.
+- `Workspace`: durable compositor state for a working set of surfaces, contexts,
+  and layout policy.
 - `Context`: a running/session object for one app around one primary URL.
-- `Surface`: a shell-visible container for contexts and tabs.
+- `Surface`: a compositor-visible container for contexts and tabs.
 - `Viewport`: one client's local presentation of a surface.
 - `Projection`: a Tarstate-derived read model over Automerge docs.
 - `Intent`: a request for the runtime to do something.
@@ -155,7 +155,7 @@ These names are intentionally not generic RPC terms, but they are also not the
 preferred app SDK vocabulary.
 
 - `subscribeProjection` says the read side is Tarstate-derived.
-- `submitIntent` matches Patchpit's surface protocol and shell routing model.
+- `submitIntent` matches Patchpit's surface protocol and runtime routing model.
 - `openCapability` says the returned port carries authority, not just messages.
 
 App-facing SDKs should map these to the smaller `view`, `act`, and `open`
@@ -203,7 +203,7 @@ diagnostics, and lifecycle still need to know which workspace the request came
 from.
 
 At the runtime boundary, `workspaceId` selects the durable workspace state for
-surfaces, contexts, layout, and shell routing. Different clients may connect to
+surfaces, contexts, layout, and runtime routing. Different clients may connect to
 the same Patchpit OS while using different workspace ids. Local viewport state
 remains client-owned unless an explicit shared workspace projection says
 otherwise.
@@ -692,7 +692,7 @@ route.reveal
 route.activate
 ```
 
-Initial filesystem and shell intents:
+Initial filesystem and compositor intents:
 
 ```txt
 app.launch
@@ -747,7 +747,7 @@ docs are not flattened just to make launch admission convenient.
 
 V0 may keep narrow compatibility handlers for apps such as Terminal, but the
 target is generic runtime-owned state creation from manifest-declared state
-schemas or an app-scoped init action, not a trusted shell registry of per-app
+schemas or an app-scoped init action, not a trusted runtime registry of per-app
 state factories.
 
 `app.launch` uses explicit failure states so callers do not infer placement or
