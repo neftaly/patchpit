@@ -12,6 +12,8 @@ import {
   dropContext,
   normalizeWindowManagerState,
   openContext,
+  pinContext,
+  previewContext,
 } from './window-manager-state.ts';
 
 void test('seeded window manager starts with a stable empty document surface', () => {
@@ -140,6 +142,57 @@ void test('opening the first document creates a content-bearing main surface', (
   assert.equal(state.focus, 'main');
   assert.deepEqual(layoutSurfaceIds(state.layout), ['files', 'main']);
   assertNoEmptyDocumentSurfaces(state);
+});
+
+void test('opening a previewed document promotes it to a pinned tab', () => {
+  const handle = testHandle(windowState({
+    contexts: { 'file-picker': context('file-picker', 'file-picker') },
+    focus: 'files',
+    layout: row(surfaceNode('files'), surfaceNode('main')),
+    surfaces: {
+      files: workspaceSurface('files', ['file-picker']),
+      main: documentSurface('main', []),
+    },
+  }));
+
+  commitWindowManagerState(handle, (doc) => {
+    previewContext(doc, context('a'), 'files');
+    openContext(doc, context('a'), 'files');
+  });
+
+  const state = handle.doc();
+  assert.deepEqual(state.surfaces.main.contexts, ['a']);
+  assert.equal(state.surfaces.main.previewContext, undefined);
+  assert.equal(state.surfaces.main.activeContext, 'a');
+  assert.equal(state.focus, 'main');
+});
+
+void test('pinning a previewed tab makes it durable on the surface', () => {
+  const handle = testHandle(windowState({
+    contexts: { a: context('a'), 'file-picker': context('file-picker', 'file-picker') },
+    focus: 'main',
+    layout: row(surfaceNode('files'), surfaceNode('main')),
+    surfaces: {
+      files: workspaceSurface('files', ['file-picker']),
+      main: {
+        activeContext: 'a',
+        contexts: [],
+        id: 'main',
+        previewContext: 'a',
+        role: SurfaceRole.DocumentSet,
+      },
+    },
+  }));
+
+  commitWindowManagerState(handle, (doc) => {
+    pinContext(doc, 'main', 'a');
+  });
+
+  const state = handle.doc();
+  assert.deepEqual(state.surfaces.main.contexts, ['a']);
+  assert.equal(state.surfaces.main.previewContext, undefined);
+  assert.equal(state.surfaces.main.activeContext, 'a');
+  assert.equal(state.focus, 'main');
 });
 
 void test('closing the final document collapses back to the hidden workspace surface', () => {
