@@ -53,6 +53,8 @@ async function refresh(main) {
 }
 
 function render(main, view) {
+  const previousTreeScrollTop = main.querySelector('.tree-pane')?.scrollTop ?? 0;
+  const previousListScrollTop = main.querySelector('.tree')?.scrollTop ?? 0;
   const tree = document.createElement('nav');
   tree.className = 'tree-pane';
   tree.setAttribute('aria-label', 'project explorer');
@@ -64,6 +66,8 @@ function render(main, view) {
   list.append(treeItem(view.root, view, 0));
   tree.append(list);
   main.replaceChildren(tree);
+  tree.scrollTop = previousTreeScrollTop;
+  list.scrollTop = previousListScrollTop;
 }
 
 function treeItem(node, view, depth) {
