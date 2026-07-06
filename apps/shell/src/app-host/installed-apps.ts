@@ -4,6 +4,7 @@ import {
   type FilesystemNode,
 } from '@patchpit/system';
 import { isPackageAppManifestDoc } from '../runtime/app-manifest-discovery';
+import { resolvePackageEntry } from '../runtime/package-entry';
 
 type FilesystemFolder = Extract<FilesystemNode, { readonly kind: 'folder' }>;
 
@@ -69,20 +70,6 @@ function installedApp(
     packagePath,
     packageRoot,
   };
-}
-
-export function resolvePackageEntry<T>(
-  packageRoot: T,
-  entry: string,
-  child: (node: T, name: string) => T | undefined,
-): T | undefined {
-  const parts = entry.split('/').filter((part) => part !== '' && part !== '.');
-  let node: T | undefined = packageRoot;
-  for (const part of parts) {
-    if (node === undefined) return undefined;
-    node = child(node, part);
-  }
-  return node;
 }
 
 function childEntryNode(node: FilesystemNode, name: string): FilesystemNode | undefined {

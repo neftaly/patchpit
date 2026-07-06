@@ -67,7 +67,7 @@ import { installedAppManifests } from './manifest-routing';
 import { automergeHeadSetForHandle } from './automerge-heads';
 import { allowAllRuntimePolicy, type RuntimePolicy } from './policy';
 import { isPackageAppManifestDoc } from './app-manifest-discovery';
-import { resolvePackageEntry } from '../app-host/installed-apps';
+import { resolvePackageEntry } from './package-entry';
 
 export type BootstrapRuntimeOptions = {
   readonly capabilityProviders?: readonly BootstrapCapabilityProvider[];

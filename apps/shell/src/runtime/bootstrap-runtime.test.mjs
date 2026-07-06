@@ -602,6 +602,40 @@ void test('bootstrap runtime creates stateless package context for contextless m
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 
+void test('bootstrap runtime rejects contextless package launches with invalid app entry paths', async () => {
+  const seed = createSeedFilesystem();
+  clearInstalledApps(seed);
+  const outside = seed.repo.create({
+    '@patchpit': patchpitDocMetadata(PatchpitType.File),
+    content: '',
+    extension: 'html',
+    mimeType: 'text/html',
+    name: 'escape.html',
+  });
+  seed.documentHandles[outside.url] = outside;
+  const appsHandle = appsFolderHandle(seed);
+  appsHandle.change((doc) => {
+    appendFolderEntry(doc, folderEntry('escape.html', PatchpitType.File, outside.url));
+  });
+  syncFilesystemIndexResources(seed.indexHandle, [appsHandle, outside]);
+  installFakeAppManifest(seed, {
+    app: 'invalid-entry-app',
+    entry: '../escape.html',
+  });
+  const runtime = bootstrapRuntime(seed);
+
+  const result = await launchApp(runtime, {
+    app: 'invalid-entry-app',
+    behavior: 'open-context',
+    id: 'invalid-entry-app-contextless-launch-test',
+    role: SurfaceRole.DocumentSet,
+  });
+
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.error.code, 'missing_handler');
+  assert.equal(result.error.message, 'App invalid-entry-app entry ../escape.html is not installed.');
+});
+
 void test('bootstrap runtime carries inert app launch delegation into sandbox launch view', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
@@ -983,11 +1017,12 @@ function closeWindowContext(runtime, seed, context, id) {
 
 function installFakeAppManifest(seed, {
   app,
+  entry = `${app}.html`,
   handles = [],
 }) {
   const handle = seed.repo.create({
     '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
-    entry: `${app}.html`,
+    entry,
     entryKind: 'html',
     extension: automergeExtension,
     handles,

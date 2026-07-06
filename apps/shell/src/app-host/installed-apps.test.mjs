@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PatchpitType } from '@patchpit/system';
-import { installedAppsFromFilesystem, resolvePackageEntry } from './installed-apps.ts';
+import { installedAppsFromFilesystem } from './installed-apps.ts';
 import { installedAppManifests } from '../runtime/manifest-routing.ts';
+import { resolvePackageEntry } from '../runtime/package-entry.ts';
 
 void test('installed app discovery paths use package manifests in filesystem order', () => {
   const manifests = new Map([
