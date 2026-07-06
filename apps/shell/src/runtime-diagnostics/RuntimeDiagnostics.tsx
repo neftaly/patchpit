@@ -91,8 +91,14 @@ export function createRuntimeDiagnosticsSnapshot(
         data: runtimeIssuesData(input.runtimeIssue, input.runtimeIssueHistory),
       },
       {
-        id: 'intent-log',
+        id: 'session-events',
         title: 'Events',
+        summary: sessionEventsSummary(input.runtimeDiagnostics.sessionEvents),
+        data: sessionEventsData(input.runtimeDiagnostics.sessionEvents),
+      },
+      {
+        id: 'intent-log',
+        title: 'Intents',
         summary: intentLogSummary(input.runtimeDiagnostics.intentLog),
         data: intentLogData(input.runtimeDiagnostics.intentLog),
       },
@@ -167,6 +173,21 @@ function platformFeatureSummary(feature: RuntimePlatformFeature) {
   return {
     feature,
     label: runtimePlatformFeatureLabel(feature),
+  };
+}
+
+function sessionEventsSummary(log: BootstrapRuntimeDiagnostics['sessionEvents']): string {
+  if (log.length === 0) return 'No session events recorded';
+  const latest = log.at(-1);
+  return latest === undefined
+    ? `${log.length} session events`
+    : `${log.length} session events, latest ${latest.source} ${latest.kind}`;
+}
+
+function sessionEventsData(log: BootstrapRuntimeDiagnostics['sessionEvents']) {
+  return {
+    count: log.length,
+    entries: [...log].reverse(),
   };
 }
 

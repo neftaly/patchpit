@@ -22,9 +22,22 @@ export type SandboxAppHostProps = {
   readonly appId: string;
   readonly entry: SandboxFilesystemAppEntry | undefined;
   readonly filePicker?: SandboxFilePickerServiceScope | undefined;
+  readonly onSessionEvent?: ((event: SandboxAppHostSessionEvent) => void) | undefined;
   readonly resourceRoot?: FilesystemNode | undefined;
   readonly session: SandboxAppSession;
   readonly title?: string;
+};
+
+export type SandboxAppHostSessionEvent = {
+  readonly appId: string;
+  readonly contextId: string;
+  readonly data?: unknown;
+  readonly error?: string;
+  readonly kind: string;
+  readonly requestId?: string;
+  readonly service?: SandboxAppServiceRequest['service'];
+  readonly sessionUrl: string;
+  readonly status?: string;
 };
 
 type SandboxStatus =
@@ -36,6 +49,7 @@ export function SandboxAppHost({
   appId,
   entry,
   filePicker,
+  onSessionEvent,
   resourceRoot,
   session,
   title = `${appId} sandbox`,
@@ -52,6 +66,7 @@ export function SandboxAppHost({
     serviceBridge.capabilities.open,
     serviceBridge.capabilities.view,
   ]);
+  const onSessionEventRef = useRef(onSessionEvent);
   const srcDoc = useMemo(() => (
     loadPlan === undefined || loadPlan.kind === 'error'
       ? undefined
@@ -66,8 +81,22 @@ export function SandboxAppHost({
   const [status, setStatus] = useState<SandboxStatus>({ kind: 'starting' });
 
   useEffect(() => {
-    if (loadPlan !== undefined && loadPlan.kind !== 'error') setStatus({ kind: 'starting' });
-  }, [loadPlan, srcDoc]);
+    onSessionEventRef.current = onSessionEvent;
+  }, [onSessionEvent]);
+
+  useEffect(() => {
+    if (loadPlan !== undefined && loadPlan.kind !== 'error') {
+      setStatus({ kind: 'starting' });
+      onSessionEventRef.current?.({
+        appId,
+        contextId: session.id,
+        data: { entryKind: loadPlan.kind },
+        kind: 'sandbox.host.starting',
+        sessionUrl: session.url,
+        status: 'starting',
+      });
+    }
+  }, [appId, loadPlan, session.id, session.url, srcDoc]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent<unknown>) {
@@ -79,11 +108,46 @@ export function SandboxAppHost({
 
       if (message.type === 'running') {
         setStatus((current) => (current.kind === 'error' ? current : { kind: 'running' }));
+        onSessionEventRef.current?.({
+          appId,
+          contextId: session.id,
+          kind: 'sandbox.frame.running',
+          sessionUrl: session.url,
+          status: 'running',
+        });
       } else if (message.type === 'error') {
         setStatus({ kind: 'error', error: message.error });
+        onSessionEventRef.current?.({
+          appId,
+          contextId: session.id,
+          data: message.error.stack === undefined ? undefined : { hasStack: true },
+          error: message.error.message,
+          kind: 'sandbox.frame.error',
+          sessionUrl: session.url,
+          status: 'error',
+        });
       } else {
+        onSessionEventRef.current?.({
+          appId,
+          contextId: session.id,
+          data: sandboxServiceRequestDiagnostics(message),
+          kind: 'sandbox.service.request',
+          requestId: message.id,
+          service: message.service,
+          sessionUrl: session.url,
+        });
         void Promise.resolve(serviceBridge.respond(message)).then((response) => {
           frameWindow.postMessage(response, '*');
+          onSessionEventRef.current?.({
+            appId,
+            contextId: session.id,
+            data: sandboxServiceResponseDiagnostics(response),
+            kind: 'sandbox.service.response',
+            requestId: message.id,
+            service: message.service,
+            sessionUrl: session.url,
+            status: response.ok ? 'ok' : response.error.code,
+          });
         }).catch((error: unknown) => {
           const reportedError = sandboxServiceBridgeError(error);
           try {
@@ -91,6 +155,17 @@ export function SandboxAppHost({
           } catch {
             // The frame may have navigated before the failure response could be delivered.
           }
+          onSessionEventRef.current?.({
+            appId,
+            contextId: session.id,
+            data: sandboxServiceRequestDiagnostics(message),
+            error: reportedError.message,
+            kind: 'sandbox.service.thrown',
+            requestId: message.id,
+            service: message.service,
+            sessionUrl: session.url,
+            status: 'thrown',
+          });
           setStatus({ kind: 'error', error: reportedError });
         });
       }
@@ -98,7 +173,7 @@ export function SandboxAppHost({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [serviceBridge]);
+  }, [appId, serviceBridge, session.id, session.url]);
 
   if (entry === undefined || loadPlan === undefined) {
     return (
@@ -143,6 +218,64 @@ export function SandboxAppHost({
       )}
     </section>
   );
+}
+
+function sandboxServiceRequestDiagnostics(request: SandboxAppServiceRequest): unknown {
+  return {
+    payload: sandboxPayloadDiagnostics(request.payload),
+    service: request.service,
+  };
+}
+
+function sandboxServiceResponseDiagnostics(response: SandboxHostToFrameMessage): unknown {
+  if (!response.ok) {
+    return {
+      ok: false,
+      errorCode: response.error.code,
+      message: response.error.message,
+    };
+  }
+
+  return {
+    ok: true,
+    result: sandboxPayloadDiagnostics(response.result),
+  };
+}
+
+function sandboxPayloadDiagnostics(payload: unknown): unknown {
+  if (typeof payload === 'string') return { value: payload };
+  if (!isRecord(payload)) return payload === undefined ? undefined : { type: typeof payload };
+
+  const view = stringField(payload, 'view') ?? stringField(payload, 'name');
+  const action = stringField(payload, 'action') ?? stringField(payload, 'intent') ?? stringField(payload, 'name');
+  const url = stringField(payload, 'url');
+  const title = stringField(payload, 'title');
+  const resource = isRecord(payload.resource) ? payload.resource : undefined;
+  const state = isRecord(payload.state) ? payload.state : undefined;
+
+  return {
+    ...(view === undefined ? {} : { view }),
+    ...(action === undefined ? {} : { action }),
+    ...(url === undefined ? {} : { url }),
+    ...(title === undefined ? {} : { title }),
+    ...(resource === undefined ? {} : { resource: {
+      kind: stringField(resource, 'kind'),
+      name: stringField(resource, 'name'),
+      url: stringField(resource, 'url'),
+    } }),
+    ...(state === undefined ? {} : { state: {
+      activeUrl: stringField(state, 'activeUrl'),
+      rootUrl: stringField(state, 'rootUrl'),
+    } }),
+  };
+}
+
+function stringField(record: Readonly<Record<string, unknown>>, field: string): string | undefined {
+  return typeof record[field] === 'string' ? record[field] : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function SandboxStatusOverlay({ status }: { readonly status: Exclude<SandboxStatus, { readonly kind: 'running' }> }) {

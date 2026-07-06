@@ -37,7 +37,7 @@ import {
   type InstalledApp,
 } from './app-host/installed-apps';
 import { SandboxedFilesystemApp, type SandboxFilePickerHostScope } from './app-host/SandboxedFilesystemApp';
-import { createBootstrapRuntimeClient } from './runtime/bootstrap-runtime';
+import { createBootstrapRuntimeClient, type BootstrapSessionEventInput } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
 import { parseHashLaunchConfig } from './runtime/launch-from-hash';
 import { detailFromUnknown, metadataDetails } from './runtime/runtime-error-details';
@@ -264,6 +264,10 @@ function ShellApp({
               },
               filesystemRoot: filesystemProjection.root,
               installedApps,
+              recordSessionEvent: (event) => runtime.diagnostics.recordSessionEvent({
+                ...event,
+                source: 'sandbox',
+              }),
             })}
             workspace={workspaceProjection.workspace}
           />
@@ -289,6 +293,7 @@ function shellAppHost({
   filePicker,
   filesystemRoot,
   installedApps,
+  recordSessionEvent,
 }: {
   readonly filePicker: {
     readonly fileTypes: SandboxFilePickerHostScope['fileTypes'];
@@ -298,6 +303,7 @@ function shellAppHost({
   };
   readonly filesystemRoot: FilesystemNode;
   readonly installedApps: readonly InstalledApp[];
+  readonly recordSessionEvent: (event: Omit<BootstrapSessionEventInput, 'source'>) => void;
 }): WindowManagerAppHost {
   const appsById = new Map(installedApps.map((app) => [app.manifest.id, app]));
   return {
@@ -341,6 +347,7 @@ function shellAppHost({
             state: filePicker.state,
           }}
           filesystemRoot={filesystemRoot}
+          onSessionEvent={(event) => recordSessionEvent({ ...event, surfaceId })}
           surfaceId={surfaceId}
         />
       );

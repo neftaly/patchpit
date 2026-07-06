@@ -82,6 +82,7 @@ export type BootstrapRuntimeClient = RuntimeClient & {
 
 export type BootstrapRuntimeDiagnosticsStore = {
   getSnapshot(): BootstrapRuntimeDiagnostics;
+  recordSessionEvent(event: BootstrapSessionEventInput): void;
   subscribe(listener: () => void): () => void;
 };
 
@@ -106,6 +107,28 @@ export type BootstrapRuntimeDocumentUrls = {
 export type BootstrapRuntimeDiagnostics = {
   readonly intentLog: readonly BootstrapIntentLogEntry[];
   readonly projectionSubscriptions: readonly BootstrapProjectionDiagnostics[];
+  readonly sessionEvents: readonly BootstrapSessionEvent[];
+};
+
+export type BootstrapSessionEventSource = 'runtime' | 'sandbox';
+
+export type BootstrapSessionEventInput = {
+  readonly appId?: string;
+  readonly contextId?: string;
+  readonly data?: unknown;
+  readonly error?: string;
+  readonly intent?: IntentName;
+  readonly kind: string;
+  readonly requestId?: string;
+  readonly sessionUrl?: string;
+  readonly source: BootstrapSessionEventSource;
+  readonly status?: string;
+  readonly surfaceId?: string;
+};
+
+export type BootstrapSessionEvent = BootstrapSessionEventInput & {
+  readonly observedAt: string;
+  readonly sequence: number;
 };
 
 export type BootstrapProjectionDiagnostics = {
@@ -317,9 +340,11 @@ const diagnosticsLogLimit = 50;
 
 function createBootstrapRuntimeDiagnosticsStore(): BootstrapRuntimeDiagnosticsStoreInternal {
   let nextIntentSequence = 1;
+  let nextSessionEventSequence = 1;
   let snapshot: BootstrapRuntimeDiagnostics = {
     intentLog: [],
     projectionSubscriptions: [],
+    sessionEvents: [],
   };
   const listeners = new Set<() => void>();
 
@@ -343,6 +368,18 @@ function createBootstrapRuntimeDiagnosticsStore(): BootstrapRuntimeDiagnosticsSt
   return {
     getSnapshot() {
       return snapshot;
+    },
+
+    recordSessionEvent(event) {
+      const entry: BootstrapSessionEvent = {
+        ...event,
+        observedAt: nowIso(),
+        sequence: nextSessionEventSequence++,
+      };
+      setSnapshot((current) => ({
+        ...current,
+        sessionEvents: appendLimited(current.sessionEvents, entry),
+      }));
     },
 
     subscribe(listener) {
@@ -435,12 +472,33 @@ async function submitIntentWithDiagnostics(
   submit: () => Promise<IntentResult>,
 ): Promise<IntentResult> {
   const sequence = diagnostics.recordIntentStart(request);
+  diagnostics.recordSessionEvent({
+    data: intentSessionEventData(request),
+    intent: request.intent,
+    kind: 'intent.started',
+    source: 'runtime',
+    status: 'pending',
+  });
   try {
     const result = await submit();
     diagnostics.recordIntentResult(sequence, result);
+    diagnostics.recordSessionEvent({
+      data: intentResultDiagnostics(result),
+      intent: request.intent,
+      kind: 'intent.finished',
+      source: 'runtime',
+      status: result.status,
+    });
     return result;
   } catch (error) {
     diagnostics.recordIntentThrown(sequence, error);
+    diagnostics.recordSessionEvent({
+      error: errorReason(error),
+      intent: request.intent,
+      kind: 'intent.thrown',
+      source: 'runtime',
+      status: 'thrown',
+    });
     throw error;
   }
 }
@@ -496,6 +554,14 @@ function intentResultDiagnostics(result: IntentResult): unknown {
   return {
     status: result.status,
     reason: result.reason,
+  };
+}
+
+function intentSessionEventData(request: IntentRequest): unknown {
+  return {
+    baseHeadDocs: Object.keys(request.baseHeads ?? {}).sort(),
+    ...(request.idempotencyKey === undefined ? {} : { idempotencyKey: request.idempotencyKey }),
+    relationCounts: relationRowCounts(request.input.relations),
   };
 }
 

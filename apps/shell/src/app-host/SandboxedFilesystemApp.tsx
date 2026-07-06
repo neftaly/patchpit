@@ -7,7 +7,7 @@ import {
 } from '@patchpit/system';
 import { useMemo } from 'react';
 import type { RuntimeClient } from '@patchpit/system/runtime';
-import { SandboxAppHost } from './SandboxAppHost';
+import { SandboxAppHost, type SandboxAppHostSessionEvent } from './SandboxAppHost';
 import type { InstalledApp } from './installed-apps';
 import { sandboxFilesystemAppEntry } from './sandbox-package-loader';
 import type { SandboxAppFilePickerType, SandboxFilePickerServiceScope } from './sandbox-service-bridge';
@@ -17,12 +17,14 @@ export function SandboxedFilesystemApp({
   context,
   filePicker,
   filesystemRoot,
+  onSessionEvent,
   surfaceId,
 }: {
   readonly app: InstalledApp;
   readonly context: WindowContext;
   readonly filePicker?: SandboxFilePickerHostScope | undefined;
   readonly filesystemRoot: FilesystemNode;
+  readonly onSessionEvent?: ((event: SandboxAppHostSessionEvent) => void) | undefined;
   readonly surfaceId: string;
 }) {
   const entry = useMemo(() => (app.entry?.kind === 'file'
@@ -39,6 +41,7 @@ export function SandboxedFilesystemApp({
       appId={app.manifest.id}
       entry={entry}
       filePicker={sandboxFilePickerServiceScope({ app, context, filePicker, filesystemRoot, surfaceId })}
+      onSessionEvent={onSessionEvent}
       resourceRoot={filesystemRoot}
       session={{
         app: context.app,

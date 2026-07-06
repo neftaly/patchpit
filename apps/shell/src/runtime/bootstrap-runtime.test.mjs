@@ -353,6 +353,42 @@ void test('bootstrap runtime commits route, file-picker, and window intents', as
       [windowFocusIntent, 'committed'],
     ],
   );
+  assert.deepEqual(
+    runtime.diagnostics.getSnapshot().sessionEvents.map((entry) => [entry.source, entry.kind, entry.intent, entry.status]),
+    [
+      ['runtime', 'intent.started', routeOpenIntent, 'pending'],
+      ['runtime', 'intent.finished', routeOpenIntent, 'committed'],
+      ['runtime', 'intent.started', filePickerSelectUrlIntent, 'pending'],
+      ['runtime', 'intent.finished', filePickerSelectUrlIntent, 'committed'],
+      ['runtime', 'intent.started', filePickerToggleFolderIntent, 'pending'],
+      ['runtime', 'intent.finished', filePickerToggleFolderIntent, 'committed'],
+      ['runtime', 'intent.started', windowFocusIntent, 'pending'],
+      ['runtime', 'intent.finished', windowFocusIntent, 'committed'],
+    ],
+  );
+
+  runtime.diagnostics.recordSessionEvent({
+    appId: 'file-picker',
+    contextId: 'file-picker',
+    data: { service: 'view', payload: { view: 'file-picker' } },
+    kind: 'sandbox.service.request',
+    requestId: '1',
+    sessionUrl: seed.filePickerStateHandle.url,
+    source: 'sandbox',
+    surfaceId: 'files',
+  });
+  assert.deepEqual(runtime.diagnostics.getSnapshot().sessionEvents.at(-1), {
+    appId: 'file-picker',
+    contextId: 'file-picker',
+    data: { service: 'view', payload: { view: 'file-picker' } },
+    kind: 'sandbox.service.request',
+    observedAt: runtime.diagnostics.getSnapshot().sessionEvents.at(-1)?.observedAt,
+    requestId: '1',
+    sequence: 9,
+    sessionUrl: seed.filePickerStateHandle.url,
+    source: 'sandbox',
+    surfaceId: 'files',
+  });
 });
 
 void test('bootstrap runtime routes documents through installed manifest handlers', async () => {
