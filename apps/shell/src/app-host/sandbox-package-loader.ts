@@ -11,7 +11,7 @@ export type SandboxFilesystemAppResource = {
 };
 
 export type SandboxFilesystemAppEntry = SandboxFilesystemAppResource & {
-  readonly entryKind?: AppManifestDoc['entryKind'];
+  readonly entryKind: AppManifestDoc['entryKind'];
   readonly resources: readonly SandboxFilesystemAppResource[];
 };
 
@@ -79,7 +79,7 @@ export function createSandboxPackageLoadPlan(entry: SandboxFilesystemAppEntry): 
       return { error: `Sandbox app entryKind "module" requires a JavaScript entry, got "${entry.path}".`, kind: 'error' };
     }
 
-    if (entry.entryKind === 'html' || (entry.entryKind === undefined && isHtmlResource(entryResource))) {
+    if (entry.entryKind === 'html') {
       return {
         html: rewriteSandboxHtmlEntry({
           entryPath,
@@ -90,14 +90,7 @@ export function createSandboxPackageLoadPlan(entry: SandboxFilesystemAppEntry): 
       };
     }
 
-    if (entry.entryKind === 'module' || (entry.entryKind === undefined && isJavaScriptResource(entryResource))) {
-      return { entryModuleUrl: modules.moduleUrl(entryPath), kind: 'module' };
-    }
-
-    return {
-      error: `Unsupported sandbox app entry "${entry.path}". HTML and JavaScript module entries are supported.`,
-      kind: 'error',
-    };
+    return { entryModuleUrl: modules.moduleUrl(entryPath), kind: 'module' };
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),
