@@ -3,6 +3,7 @@ const selectAction = 'filePicker.selectUrl';
 const toggleFolderAction = 'filePicker.toggleFolder';
 const previewAction = 'route.preview';
 const openAction = 'route.open';
+const doublePointerActivationMs = 500;
 
 export const patchpitApp = {
   handles: [],
@@ -24,6 +25,7 @@ export const patchpitApp = {
 
 let currentView;
 let hostEnv;
+let lastPrimaryPointerActivation;
 
 export default async function activate(env) {
   hostEnv = env;
@@ -96,11 +98,8 @@ function treeItem(node, view, depth) {
   name.textContent = displayName;
   button.append(name);
 
-  button.addEventListener('click', (event) => {
-    void selectFromPointer(event, node, view, displayName);
-  });
-  button.addEventListener('dblclick', () => {
-    void act({ name: openAction, title: displayName, url: node.url });
+  button.addEventListener('pointerup', (event) => {
+    void selectFromPointer(event, node, view, displayName, primaryPointerActivationCount(event, node.url));
   });
   button.addEventListener('dragstart', (event) => {
     event.dataTransfer.effectAllowed = 'copyMove';
@@ -120,7 +119,8 @@ function treeItem(node, view, depth) {
   return item;
 }
 
-async function selectFromPointer(event, node, view, title) {
+async function selectFromPointer(event, node, view, title, activationCount) {
+  if (activationCount === 0) return;
   const visibleUrls = visibleFilePickerUrls(view.root, view.state);
   const options = event.shiftKey
     ? { selectedUrls: selectionRange(view.state.activeUrl, node.url, visibleUrls) }
@@ -130,6 +130,13 @@ async function selectFromPointer(event, node, view, title) {
 
   optimisticSelect(node.url, options);
   await act(options === undefined ? { name: selectAction, url: node.url } : { name: selectAction, options, url: node.url });
+
+  if (activationCount >= 2 && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+    await act({ name: openAction, title, url: node.url });
+    const main = document.querySelector('.file-picker-app');
+    if (main !== null) await refresh(main);
+    return;
+  }
 
   if (!event.metaKey && !event.ctrlKey && !event.shiftKey) {
     if (node.kind === 'folder') {
@@ -141,6 +148,19 @@ async function selectFromPointer(event, node, view, title) {
 
   const main = document.querySelector('.file-picker-app');
   if (main !== null) await refresh(main);
+}
+
+function primaryPointerActivationCount(event, url) {
+  if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return 0;
+  const now = event.timeStamp;
+  const previous = lastPrimaryPointerActivation;
+  const count = previous?.url === url
+    && previous.pointerType === event.pointerType
+    && now - previous.at <= doublePointerActivationMs
+      ? previous.count + 1
+      : 1;
+  lastPrimaryPointerActivation = { at: now, count, pointerType: event.pointerType, url };
+  return count;
 }
 
 async function act(request) {

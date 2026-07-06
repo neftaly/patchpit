@@ -57,7 +57,9 @@ type WindowManagerRuntime = {
   readonly appHost: WindowManagerAppHost;
   readonly contexts: Readonly<Record<string, WindowContext>>;
   readonly draggedTab: DraggedTab | undefined;
+  readonly dragShieldActive: boolean;
   readonly dropTarget: DropTarget | undefined;
+  readonly setDragShieldActive: (active: boolean) => void;
   readonly setDraggedTab: (tab: DraggedTab | undefined) => void;
   readonly setDropTarget: (target: DropTarget | undefined) => void;
   readonly surfaces: Readonly<Record<string, WindowSurface>>;
@@ -75,6 +77,13 @@ type SplitResizeDraft = {
   readonly baseRatio: number;
   readonly ratio: number;
 };
+const doublePointerActivationMs = 500;
+let lastPrimaryPointerActivation: {
+  readonly at: number;
+  readonly count: number;
+  readonly key: string;
+  readonly pointerType: string;
+} | undefined;
 
 export function WindowManager({
   actions,
@@ -86,6 +95,7 @@ export function WindowManager({
   readonly workspace: WindowManagerWorkspace;
 }) {
   const [draggedTab, setDraggedTab] = useState<DraggedTab>();
+  const [dragShieldActive, setDragShieldActive] = useState(false);
   const [dropTarget, setDropTargetState] = useState<DropTarget>();
   const setDropTarget = (target: DropTarget | undefined) => {
     setDropTargetState((current) => sameDropTarget(current, target) ? current : target);
@@ -95,14 +105,38 @@ export function WindowManager({
     appHost,
     contexts: workspace.contexts,
     draggedTab,
+    dragShieldActive,
     dropTarget,
+    setDragShieldActive,
     setDraggedTab,
     setDropTarget,
     surfaces: workspace.surfaces,
   };
 
   return (
-    <section className="window-manager" aria-label="window manager">
+    <section
+      className="window-manager"
+      aria-label="window manager"
+      onDragEnter={(event) => {
+        if (event.dataTransfer.types.includes(tabDragType) || appHost.acceptsDroppedUrl(event)) {
+          setDragShieldActive(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setDragShieldActive(false);
+          setDropTarget(undefined);
+        }
+      }}
+      onDragEnd={() => {
+        setDraggedTab(undefined);
+        setDragShieldActive(false);
+        setDropTarget(undefined);
+      }}
+      onDrop={() => {
+        setDragShieldActive(false);
+      }}
+    >
       <LayoutNodeView node={workspace.layout} path={[]} runtime={runtime} />
     </section>
   );
@@ -316,7 +350,12 @@ function SurfaceView({
                   data-selected={contextId === selectedContextId ? '' : undefined}
                   draggable
                   key={contextId}
-                  onClick={() => runtime.actions.focusContext(surface.id, contextId)}
+                  onPointerUp={(event) => {
+                    const activationCount = primaryPointerActivationCount(event, `${surface.id}:${contextId}`);
+                    if (activationCount === 0) return;
+                    if (activationCount >= 2) runtime.actions.pinContext(surface.id, contextId);
+                    else runtime.actions.focusContext(surface.id, contextId);
+                  }}
                   onDragOver={(event) => {
                     acceptDrag(event, runtime, {
                       area: 'tabs',
@@ -328,11 +367,13 @@ function SurfaceView({
                   onDragStart={(event) => {
                     const dragged = { contextId, surfaceId: surface.id };
                     runtime.setDraggedTab(dragged);
+                    runtime.setDragShieldActive(true);
                     event.dataTransfer.effectAllowed = 'move';
                     event.dataTransfer.setData(tabDragType, JSON.stringify(dragged));
                   }}
                   onDragEnd={() => {
                     runtime.setDraggedTab(undefined);
+                    runtime.setDragShieldActive(false);
                     runtime.setDropTarget(undefined);
                   }}
                   onDrop={(event) => {
@@ -351,7 +392,6 @@ function SurfaceView({
                       });
                     }, true);
                   }}
-                  onDoubleClick={() => runtime.actions.pinContext(surface.id, contextId)}
                   onKeyDown={(event) => {
                     if (isActivationKey(event)) runtime.actions.focusContext(surface.id, contextId);
                   }}
@@ -363,12 +403,10 @@ function SurfaceView({
                   <button
                     aria-label={`Close ${label}`}
                     className="window-manager-tab-icon"
-                    onClick={(event) => {
+                    onPointerUp={(event) => {
                       event.stopPropagation();
+                      if (!isPrimaryPointer(event)) return;
                       runtime.actions.closeContext(surface.id, contextId);
-                    }}
-                    onDoubleClick={(event) => {
-                      event.stopPropagation();
                     }}
                     draggable={false}
                     title="Close window"
@@ -398,6 +436,9 @@ function SurfaceView({
           }
         }}
       >
+        {runtime.dragShieldActive && (
+          <div className="window-manager-drag-shield" aria-hidden="true" />
+        )}
         {runtime.appHost.renderSurface({ context: selectedContext, surfaceId: surface.id })}
       </div>
     </section>
@@ -408,6 +449,22 @@ function isActivationKey(event: KeyboardEvent): boolean {
   if (event.key !== 'Enter' && event.key !== ' ') return false;
   event.preventDefault();
   return true;
+}
+
+function primaryPointerActivationCount(event: PointerEvent, key: string): number {
+  if (!isPrimaryPointer(event)) return 0;
+  const previous = lastPrimaryPointerActivation;
+  const count = previous?.key === key
+    && previous.pointerType === event.pointerType
+    && event.timeStamp - previous.at <= doublePointerActivationMs
+      ? previous.count + 1
+      : 1;
+  lastPrimaryPointerActivation = { at: event.timeStamp, count, key, pointerType: event.pointerType };
+  return count;
+}
+
+function isPrimaryPointer(event: PointerEvent): boolean {
+  return event.isPrimary && (event.pointerType !== 'mouse' || event.button === 0);
 }
 
 const tabDragType = 'application/x.patchpit-tab';
@@ -424,6 +481,7 @@ function acceptDrag(
     return;
   }
   if (stopPropagation) event.stopPropagation();
+  runtime.setDragShieldActive(true);
   runtime.setDropTarget(target);
 }
 
@@ -446,6 +504,7 @@ function dropDraggedItem(
   event.preventDefault();
   if (stopPropagation) event.stopPropagation();
   runtime.setDraggedTab(undefined);
+  runtime.setDragShieldActive(false);
   runtime.setDropTarget(undefined);
   handleDrop(dragged);
 }

@@ -1,4 +1,4 @@
-import type { CSSProperties, DragEvent, MouseEvent } from 'react';
+import type { CSSProperties, DragEvent, PointerEvent } from 'react';
 import type { FilePickerStateDoc, FilesystemNode } from '@patchpit/system';
 import {
   filePickerSelectionRange,
@@ -17,6 +17,14 @@ export type FilePickerActions = {
 };
 
 export const filePickerDragType = 'application/x.patchpit-file';
+const doublePointerActivationMs = 500;
+
+let lastPrimaryPointerActivation: {
+  readonly at: number;
+  readonly count: number;
+  readonly pointerType: string;
+  readonly url: string;
+} | undefined;
 
 export type DraggedFilePickerUrl = {
   readonly title: string;
@@ -89,15 +97,18 @@ function TreeItem({
         aria-pressed={isSelected}
         className="tree-item"
         draggable
-        onClick={(event) => {
+        onPointerUp={(event) => {
+          const activationCount = primaryPointerActivationCount(event, node.url);
+          if (activationCount === 0) return;
           selectUrlFromPointer(event, state.activeUrl, node.url, visibleUrls, actions.selectUrl);
           if (!event.metaKey && !event.ctrlKey && !event.shiftKey) {
+            if (activationCount >= 2) {
+              actions.openUrl(node.url, displayName);
+              return;
+            }
             if (node.kind === 'folder') actions.toggleFolder(node.url);
             actions.previewUrl(node.url, displayName);
           }
-        }}
-        onDoubleClick={() => {
-          actions.openUrl(node.url, displayName);
         }}
         onDragStart={(event) => {
           beginFileDrag(event, { title: displayName, url: node.url });
@@ -133,7 +144,7 @@ function beginFileDrag(event: DragEvent, draggedFile: DraggedFilePickerUrl): voi
 }
 
 function selectUrlFromPointer(
-  event: MouseEvent,
+  event: PointerEvent,
   selectionAnchorUrl: string | undefined,
   url: string,
   visibleUrls: readonly string[],
@@ -147,6 +158,18 @@ function selectUrlFromPointer(
         ? { toggle: true }
         : undefined,
   );
+}
+
+function primaryPointerActivationCount(event: PointerEvent, url: string): number {
+  if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return 0;
+  const previous = lastPrimaryPointerActivation;
+  const count = previous?.url === url
+    && previous.pointerType === event.pointerType
+    && event.timeStamp - previous.at <= doublePointerActivationMs
+      ? previous.count + 1
+      : 1;
+  lastPrimaryPointerActivation = { at: event.timeStamp, count, pointerType: event.pointerType, url };
+  return count;
 }
 
 function depthStyle(depth: number): FilePickerItemStyle {
