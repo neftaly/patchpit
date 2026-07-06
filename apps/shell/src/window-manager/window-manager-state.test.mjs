@@ -25,7 +25,7 @@ void test('seeded window manager starts with a stable empty document surface', (
   assert.deepEqual(state.surfaces.main.contexts, []);
 });
 
-void test('normalizer removes seed-like empty document surfaces from layout and focus', () => {
+void test('normalizer preserves the last empty document surface as a workspace placeholder', () => {
   const state = windowState({
     contexts: { 'file-picker': context('file-picker', 'file-picker') },
     focus: 'main',
@@ -38,10 +38,10 @@ void test('normalizer removes seed-like empty document surfaces from layout and 
 
   const normalized = normalizeWindowManagerState(state);
 
-  assert.equal(normalized.surfaces.main, undefined);
-  assert.deepEqual(normalized.layout, surfaceNode('files'));
-  assert.equal(normalized.focus, 'files');
-  assertNoEmptyDocumentSurfaces(normalized);
+  assert.deepEqual(documentSurfaceIds(normalized), ['main']);
+  assert.deepEqual(normalized.layout, row(surfaceNode('files'), surfaceNode('main')));
+  assert.equal(normalized.focus, 'main');
+  assertNoExtraEmptyDocumentSurfaces(normalized);
   assert.ok(state.surfaces.main);
 });
 
@@ -66,7 +66,7 @@ void test('committed last-context moves remove the empty source surface', () => 
   assert.deepEqual(state.surfaces.right.contexts, ['b', 'a']);
   assert.equal(state.focus, 'right');
   assert.equal(layoutSurfaceIds(state.layout).includes('main'), false);
-  assertNoEmptyDocumentSurfaces(state);
+  assertNoExtraEmptyDocumentSurfaces(state);
 });
 
 void test('committed edge drops keep the new split surface and remove the empty source leaf', () => {
@@ -96,7 +96,7 @@ void test('committed edge drops keep the new split surface and remove the empty 
   assert.equal(surfaceId, 'surface-3');
   assert.deepEqual(state.surfaces[surfaceId].contexts, ['a']);
   assert.deepEqual(layoutSurfaceIds(state.layout), ['files', surfaceId]);
-  assertNoEmptyDocumentSurfaces(state);
+  assertNoExtraEmptyDocumentSurfaces(state);
 });
 
 void test('normalizer preserves preview-only document surfaces and repairs active context', () => {
@@ -119,7 +119,7 @@ void test('normalizer preserves preview-only document surfaces and repairs activ
 
   assert.deepEqual(documentSurfaceIds(normalized), ['preview']);
   assert.equal(normalized.surfaces.preview.activeContext, 'p');
-  assertNoEmptyDocumentSurfaces(normalized);
+  assertNoExtraEmptyDocumentSurfaces(normalized);
 });
 
 void test('opening the first document creates a content-bearing main surface', () => {
@@ -141,7 +141,7 @@ void test('opening the first document creates a content-bearing main surface', (
   assert.equal(state.surfaces.main.activeContext, 'a');
   assert.equal(state.focus, 'main');
   assert.deepEqual(layoutSurfaceIds(state.layout), ['files', 'main']);
-  assertNoEmptyDocumentSurfaces(state);
+  assertNoExtraEmptyDocumentSurfaces(state);
 });
 
 void test('opening a previewed document promotes it to a pinned tab', () => {
@@ -195,11 +195,11 @@ void test('pinning a previewed tab makes it durable on the surface', () => {
   assert.equal(state.focus, 'main');
 });
 
-void test('closing the final document collapses back to the hidden workspace surface', () => {
+void test('closing the final document keeps a stable empty document surface', () => {
   const handle = testHandle(windowState({
     contexts: { a: context('a'), 'file-picker': context('file-picker', 'file-picker') },
     focus: 'main',
-    layout: surfaceNode('main'),
+    layout: row(surfaceNode('files'), surfaceNode('main')),
     surfaces: {
       files: workspaceSurface('files', ['file-picker']),
       main: documentSurface('main', ['a']),
@@ -211,11 +211,12 @@ void test('closing the final document collapses back to the hidden workspace sur
   });
 
   const state = handle.doc();
-  assert.equal(state.surfaces.main, undefined);
+  assert.deepEqual(state.surfaces.main.contexts, []);
+  assert.equal(state.surfaces.main.activeContext, undefined);
   assert.equal(state.contexts.a, undefined);
-  assert.deepEqual(state.layout, surfaceNode('files'));
-  assert.equal(state.focus, 'files');
-  assertNoEmptyDocumentSurfaces(state);
+  assert.deepEqual(state.layout, row(surfaceNode('files'), surfaceNode('main')));
+  assert.equal(state.focus, 'main');
+  assertNoExtraEmptyDocumentSurfaces(state);
 });
 
 function testHandle(initialState) {
@@ -296,7 +297,7 @@ function layoutSurfaceIds(node) {
   return [...layoutSurfaceIds(node.first), ...layoutSurfaceIds(node.second)];
 }
 
-function assertNoEmptyDocumentSurfaces(state) {
+function assertNoExtraEmptyDocumentSurfaces(state) {
   const emptySurfaceIds = Object.values(state.surfaces)
     .filter((surface) => (
       surface.role === SurfaceRole.DocumentSet
@@ -304,5 +305,5 @@ function assertNoEmptyDocumentSurfaces(state) {
       && surface.previewContext === undefined
     ))
     .map((surface) => surface.id);
-  assert.deepEqual(emptySurfaceIds, []);
+  assert.ok(emptySurfaceIds.length <= 1);
 }
