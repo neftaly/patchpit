@@ -14,7 +14,7 @@ Patchpit currently seeds three durable roots and reserves one live-service root:
 
 - `/apps` contains installed app manifest docs
 - `/home` contains user and workspace documents
-- `/system` contains shell-owned persistent state
+- `/system` contains runtime/compositor-owned persistent state
 - `/srv` is reserved for future live mountable services
 
 The bootloader creates only the initial filesystem, the minimal runtime state
@@ -59,7 +59,7 @@ for reads, views, and writes.
 Within `/system`:
 
 - `/system/apps` contains durable app state docs for installed app sessions
-- `/system/config` contains shell configuration docs
+- `/system/config` contains runtime and first-party configuration docs
 - `/system/runtime` contains inspectable runtime and worker state docs
 - `/system/themes` contains theme docs
 - `/system/window-manager.am` contains shared window-manager state
@@ -120,7 +120,7 @@ keep compatibility handlers while that generic path lands.
 ## Intents
 
 An intent is the message used to preview, open, reveal, or activate a resource.
-It is the shell equivalent of a command-line invocation.
+It is the runtime equivalent of a command-line invocation.
 
 ```ts
 type Intent = {
@@ -173,14 +173,14 @@ Examples:
 - a file picker context for a file-picker state doc
 - a terminal context for a terminal state doc
 
-The shell/router assigns the context's container, which defines the app's mount
-namespace. Tabs display a shell context label: currently filesystem path or
-runtime title, falling back to `title ?? url`.
+The runtime/router assigns the context's container, which defines the app's
+mount namespace. Tabs display a compositor context label: currently filesystem
+path or runtime title, falling back to `title ?? url`.
 
 ## Surfaces
 
-A surface is a shell-visible container for one or more contexts. It is the owner
-of shell-managed tabs.
+A surface is a compositor-visible container for one or more contexts. It is the
+owner of compositor-managed tabs.
 
 ```ts
 type Surface = {
@@ -196,8 +196,13 @@ type SurfaceRole =
   | 'workspace-view'
   | 'session-set'
   | 'transient'
-  | 'shell';
+  | 'reserved';
 ```
+
+`reserved` is target vocabulary for compositor placement such as the Launcher
+edge surface. Current code only needs `document-set` and `workspace-view`; add
+`reserved` when the Launcher edge becomes manifest-driven. It is not a special
+app type.
 
 `contexts` are pinned context ids. `previewContext` is an optional temporary
 context id for the surface. A document-set surface can hold many viewer/editor
@@ -236,8 +241,8 @@ node.
 ## Viewports
 
 A viewport is one client's presentation of a surface. It lets multiple devices
-look at the same shared shell state without forcing them to share every local
-presentation choice.
+look at the same shared workspace state without forcing them to share every
+local presentation choice.
 
 ```ts
 type Viewport = {
@@ -309,7 +314,7 @@ basic desktop projection is stable.
 The protocol is informed by app manifests, desktop window-manager protocols,
 tiling window managers, spatial shells, Plan 9 namespaces, and Tarstate schemas.
 Those references are useful for vocabulary and edge cases, but Patchpit should
-keep the runtime boundary simple: apps describe capabilities, the shell owns
+keep the runtime boundary simple: apps describe behavior, the compositor owns
 placement, and durable state lives in linked Automerge docs.
 
 ## Sources
