@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  createSeedFilesystem,
   filePickerIntentBoundary,
+  projectFilesystem,
   routeIntentBoundary,
 } from '@patchpit/system';
 import {
@@ -17,6 +19,7 @@ import {
   createSandboxAppServiceBridge,
   sandboxAppProtocol,
 } from './sandbox-service-bridge.ts';
+import { installedAppsFromFilesystem } from './installed-apps.ts';
 
 void test('sandbox module entries resolve package-relative imports', async () => {
   const entry = appEntry({
@@ -91,6 +94,34 @@ void test('sandbox package loader rejects shell compatibility entries', () => {
     error: 'Sandbox app entry "index.html" is shell compatibility content and must be rendered by a host adapter.',
     kind: 'error',
   });
+});
+
+void test('seeded file picker is a sandbox-loadable module app', async () => {
+  const seed = createSeedFilesystem();
+  const filesystem = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
+  assert.deepEqual(filesystem.diagnostics, []);
+  assert.ok(filesystem.root);
+  const filePicker = installedAppsFromFilesystem({
+    getDocument: (url) => seed.documentHandles[url]?.doc(),
+    root: filesystem.root,
+  }).find((app) => app.manifest.id === 'file-picker');
+
+  assert.ok(filePicker);
+  assert.equal(filePicker.manifest.entry, 'app.js');
+  assert.equal(filePicker.manifest.entryKind, 'module');
+  assert.equal(filePicker.entry?.kind, 'file');
+
+  const plan = createSandboxPackageLoadPlan(sandboxFilesystemAppEntry({
+    entry: filePicker.entry,
+    entryKind: filePicker.manifest.entryKind,
+    entryPath: filePicker.manifest.entry,
+    packageRoot: filePicker.packageRoot,
+  }));
+
+  assert.equal(plan.kind, 'module');
+  if (plan.kind !== 'module') return;
+  const module = await import(plan.entryModuleUrl);
+  assert.equal(typeof module.default, 'function');
 });
 
 void test('sandbox service bridge reports host-decided capabilities', () => {

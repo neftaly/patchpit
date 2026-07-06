@@ -65,8 +65,10 @@ when `entryKind` is `module` or `html`. The seeded `hello-world` app is the
 canonical minimal real file-backed sandbox package: its manifest points at
 `app.js`, and the iframe runner uses `sandbox="allow-scripts"` with no
 same-origin authority. The seeded File Picker, Terminal, and Viewer
-`index.html` files are compatibility placeholders and are not runnable app
-bundles.
+packages show the current migration boundary: File Picker is a runnable
+filesystem module app whose manifest points at `app.js`, while Terminal and
+Viewer still use `index.html` compatibility placeholders rendered by host
+adapters.
 
 The SharedWorker is still the boot gate, not the owner of Automerge handles or
 runtime operations. The in-process bootstrap runtime still owns the first
@@ -81,9 +83,11 @@ projection. In the File Picker app/session scope,
 `window.patchpit.services.view({ name: 'file-picker' })` returns the mounted
 tree, file type rules, and picker state, and `window.patchpit.services.act(...)`
 admits only host-scoped `filePicker.selectUrl`, `filePicker.toggleFolder`,
-`route.preview`, and `route.open` requests. Apps cannot supply `url`, `rootUrl`,
-`contextId`, `surfaceId`, or other authority scope fields. `open` remains
-reserved for a later slice and returns unsupported-service errors.
+`route.preview`, and `route.open` requests. Apps cannot supply `rootUrl`,
+`contextId`, `surfaceId`, or other authority scope fields; action targets such
+as `url` are interpreted inside the host-attached File Picker session scope.
+`open` remains reserved for a later slice and returns unsupported-service
+errors.
 
 Remaining app-host work:
 

@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import {
-  FilePicker,
-  filePickerDragType,
-  fileIcons,
-  type DraggedFilePickerUrl,
-  type FileIcons,
-  type FilePickerActions,
-} from '@patchpit/file-picker';
-import {
   TerminalAppSurface,
   terminalAppContextLabel,
   terminalFilesystemCapabilityProvider,
@@ -18,10 +10,8 @@ import {
   type TerminalAppSession,
 } from '@patchpit/terminal';
 import {
-  containerRootUrl,
   createSeedFilesystem,
   createTerminalStateResource,
-  findNode,
   nodePath,
   recordRuntimeBootGateAck,
   resolveTheme,
@@ -29,17 +19,15 @@ import {
   type AppearanceDoc,
   type FilePickerStateDoc,
   type FileTypesDoc,
+  type FileType,
   type FilesystemNode,
   type RuntimeStateDoc,
   type ThemeDoc,
 } from '@patchpit/system';
 import {
   connectRuntimeBootGate,
-  filePickerSelectUrlIntent,
-  filePickerToggleFolderIntent,
   probeRuntimePlatform,
   routeOpenIntent,
-  routePreviewIntent,
   RuntimeBootGateConnectError,
   runtimePlatformFeatureLabel,
   windowCloseContextIntent,
@@ -65,7 +53,6 @@ import { createBootstrapRuntimeClient } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
 import { detailFromUnknown, metadataDetails } from './runtime/runtime-error-details';
 import runtimeSharedWorkerUrl from './runtime/shared-worker.ts?sharedworker&url';
-import { submitFilePickerIntent, type FilePickerSelectUrlInput } from './runtime/file-picker-intents';
 import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/launch-intents';
 import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from './runtime/route-intents';
 import { type RuntimeDiagnosticsIssueEntry } from './runtime-diagnostics/RuntimeDiagnostics';
@@ -138,7 +125,7 @@ function ShellApp({
   const appearance = useRuntimeDocument<AppearanceDoc>(runtime.resources, documentUrls.appearance);
   const darkTheme = useRuntimeDocument<ThemeDoc>(runtime.resources, documentUrls.darkTheme);
   const fileTypes = useRuntimeDocument<FileTypesDoc>(runtime.resources, documentUrls.fileTypes);
-  const iconRules = useMemo(() => fileIcons(fileTypes), [fileTypes]);
+  const filePickerTypes = useMemo(() => normalizedFileTypes(fileTypes), [fileTypes]);
   const lightTheme = useRuntimeDocument<ThemeDoc>(runtime.resources, documentUrls.lightTheme);
   const [runtimeFault, setRuntimeFault] = useState<RuntimePanelFailure>();
   const nextRuntimeIssueId = useRef(1);
@@ -227,28 +214,6 @@ function ShellApp({
         });
     },
   };
-  const filePickerActions = (sourceSurfaceId: string) => ({
-    openUrl: (url: string, title: string) => {
-      routeUrl(routeOpenIntent, { rootUrl, sourceSurfaceId, title, url });
-    },
-    previewUrl: (url: string, title: string) => {
-      routeUrl(routePreviewIntent, { rootUrl, sourceSurfaceId, title, url });
-    },
-    selectUrl: (
-      url: string,
-      options?: FilePickerSelectUrlInput['options'],
-    ) => {
-      const input = options === undefined ? { url } : { options, url };
-      void submitFilePickerIntent(runtime, filePickerSelectUrlIntent, input)
-        .then(reportIntentResult)
-        .catch(reportRuntimeError);
-    },
-    toggleFolder: (url: string) => {
-      void submitFilePickerIntent(runtime, filePickerToggleFolderIntent, { url })
-        .then(reportIntentResult)
-        .catch(reportRuntimeError);
-    },
-  });
   const terminalSessions = terminalAppSessions({
     handles: terminalHandles,
     runtime: terminalRuntime,
@@ -292,12 +257,10 @@ function ShellApp({
             actions={windowManagerActions}
             appHost={shellAppHost({
               filePicker: {
-                actions: filePickerActions,
-                fileIcons: iconRules,
+                fileTypes: filePickerTypes,
                 rootUrl,
                 runtime,
                 state: filePickerState,
-                url: documentUrls.filePickerState,
               },
               filesystemRoot: filesystemProjection.root,
               installedApps,
@@ -333,12 +296,10 @@ function shellAppHost({
   theme,
 }: {
   readonly filePicker: {
-    readonly actions: (surfaceId: string) => FilePickerActions;
-    readonly fileIcons: FileIcons;
+    readonly fileTypes: SandboxFilePickerHostScope['fileTypes'];
     readonly rootUrl: string;
     readonly runtime: SandboxFilePickerHostScope['runtime'];
     readonly state: FilePickerStateDoc;
-    readonly url: string;
   };
   readonly filesystemRoot: FilesystemNode;
   readonly installedApps: readonly InstalledApp[];
@@ -373,36 +334,6 @@ function shellAppHost({
         );
       }
 
-      if (context.app === 'file-picker') {
-        if (context.url !== filePicker.url) {
-          return (
-            <SurfaceNotice
-              message="The file picker context no longer targets the active file picker state."
-              role="alert"
-              title="File picker state mismatch"
-            />
-          );
-        }
-        const rootUrl = containerRootUrl(context.container) ?? filePicker.state.rootUrl;
-        const root = findNode(filesystemRoot, rootUrl);
-        return root === null
-          ? (
-              <SurfaceNotice
-                message="The mounted root is no longer available in the filesystem projection."
-                role="alert"
-                title="File picker root missing"
-              />
-            )
-          : (
-              <FilePicker
-                actions={filePicker.actions(surfaceId)}
-                fileIcons={filePicker.fileIcons}
-                root={root}
-                state={filePicker.state}
-              />
-            );
-      }
-
       if (context.app === 'terminal') {
         return (
           <TerminalAppSurface
@@ -418,7 +349,7 @@ function shellAppHost({
           app={installedApp}
           context={context}
           filePicker={{
-            fileTypes: filePicker.fileIcons,
+            fileTypes: filePicker.fileTypes,
             rootUrl: filePicker.rootUrl,
             runtime: filePicker.runtime,
             state: filePicker.state,
@@ -476,6 +407,29 @@ function isDraggedFilePickerUrl(data: unknown): data is DraggedFilePickerUrl {
   const candidate = data as Partial<Record<keyof DraggedFilePickerUrl, unknown>>;
   return typeof candidate.title === 'string' && typeof candidate.url === 'string';
 }
+
+function normalizedFileTypes(doc: FileTypesDoc): readonly Pick<FileType, 'emoji' | 'match'>[] {
+  return Array.isArray(doc.fileTypes)
+    ? doc.fileTypes.filter(isFileType).map((fileType) => ({ emoji: fileType.emoji, match: fileType.match }))
+    : [];
+}
+
+function isFileType(value: unknown): value is FileType {
+  return (
+    typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && typeof (value as Partial<FileType>).emoji === 'string'
+    && typeof (value as Partial<FileType>).match === 'string'
+  );
+}
+
+const filePickerDragType = 'application/x.patchpit-file';
+
+type DraggedFilePickerUrl = {
+  readonly title: string;
+  readonly url: string;
+};
 
 const runtimeIssueHistoryLimit = 50;
 

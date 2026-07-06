@@ -220,8 +220,8 @@ void test('seeded and dynamically created system docs carry schema refs', () => 
   );
 
   const filePickerApp = appManifest(seed, 'file-picker');
-  assert.equal(filePickerApp.entry, 'index.html');
-  assert.equal(filePickerApp.entryKind, 'shell-compat');
+  assert.equal(filePickerApp.entry, 'app.js');
+  assert.equal(filePickerApp.entryKind, 'module');
   assert.equal(filePickerApp.version, '0.0.0');
   assert.deepEqual(
     filePickerApp.surfaces[0].state.schema,
