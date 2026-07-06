@@ -42,9 +42,13 @@ export type RuntimeDiagnosticsSnapshot = {
 type RuntimeDiagnosticsSection = {
   readonly data: unknown;
   readonly id: string;
+  readonly kind: RuntimeDiagnosticsSectionKind;
   readonly summary: string;
   readonly title: string;
 };
+
+type RuntimeDiagnosticsSectionKind = 'events' | 'intents' | 'issues' | 'projections' | 'runtime';
+type RuntimeDiagnosticsFilter = 'all' | 'errors' | 'open';
 
 export function RuntimeDiagnostics({
   snapshot,
@@ -52,6 +56,11 @@ export function RuntimeDiagnostics({
   readonly snapshot: RuntimeDiagnosticsSnapshot;
 }) {
   const [exportState, setExportState] = useState<RuntimeDiagnosticsExportState>('idle');
+  const [filter, setFilter] = useState<RuntimeDiagnosticsFilter>('all');
+  const visibleSections = snapshot.sections.map((section) => ({
+    ...section,
+    preview: runtimeDiagnosticsSectionPreview(section, filter),
+  }));
 
   useEffect(() => {
     if (exportState === 'idle') return undefined;
@@ -86,16 +95,37 @@ export function RuntimeDiagnostics({
         </div>
         <p>Transient runtime health and session events. Inspect exported projections at /srv/projections.</p>
       </header>
+      <div className="runtime-diagnostics-toolbar" aria-label="Diagnostics filters">
+        {runtimeDiagnosticsFilters.map((candidate) => (
+          <button
+            aria-pressed={filter === candidate.filter}
+            className="runtime-diagnostics-filter"
+            key={candidate.filter}
+            onClick={() => setFilter(candidate.filter)}
+            type="button"
+          >
+            {candidate.label}
+          </button>
+        ))}
+      </div>
       <div className="runtime-diagnostics-sections">
-        {snapshot.sections.map((section) => (
-          <details className="runtime-diagnostics-section" key={section.id}>
+        {visibleSections.map(({ preview, ...section }) => (
+          <details
+            className="runtime-diagnostics-section"
+            key={section.id}
+            open={section.kind === 'events' || section.kind === 'intents' || section.kind === 'projections'}
+          >
             <summary>
               <span>{section.title}</span>
               <small>{section.summary}</small>
             </summary>
-            <pre className="diagnostics-json runtime-diagnostics-json">
-              {formatRuntimeDiagnosticsJson(section.data)}
-            </pre>
+            {preview}
+            <details className="runtime-diagnostics-raw">
+              <summary>Raw JSON</summary>
+              <pre className="diagnostics-json runtime-diagnostics-json">
+                {formatRuntimeDiagnosticsJson(section.data)}
+              </pre>
+            </details>
           </details>
         ))}
       </div>
@@ -112,24 +142,35 @@ export function createRuntimeDiagnosticsSnapshot(
     sections: [
       {
         id: 'runtime',
+        kind: 'runtime',
         title: 'Runtime',
         summary: runtimeSummary(input),
         data: runtimeDiagnosticsData(input),
       },
       {
         id: 'runtime-issues',
+        kind: 'issues',
         title: 'Issues',
         summary: runtimeIssuesSummary(input.runtimeIssue, input.runtimeIssueHistory),
         data: runtimeIssuesData(input.runtimeIssue, input.runtimeIssueHistory),
       },
       {
+        id: 'projection-subscriptions',
+        kind: 'projections',
+        title: 'Projections',
+        summary: projectionSubscriptionsSummary(input.runtimeDiagnostics.projectionSubscriptions),
+        data: projectionSubscriptionsData(input.runtimeDiagnostics.projectionSubscriptions),
+      },
+      {
         id: 'session-events',
+        kind: 'events',
         title: 'Events',
         summary: sessionEventsSummary(input.runtimeDiagnostics.sessionEvents),
         data: sessionEventsData(input.runtimeDiagnostics.sessionEvents),
       },
       {
         id: 'intent-log',
+        kind: 'intents',
         title: 'Intents',
         summary: intentLogSummary(input.runtimeDiagnostics.intentLog),
         data: intentLogData(input.runtimeDiagnostics.intentLog),
@@ -219,6 +260,24 @@ function sessionEventsSummary(log: BootstrapRuntimeDiagnostics['sessionEvents'])
 function sessionEventsData(log: BootstrapRuntimeDiagnostics['sessionEvents']) {
   return {
     count: log.length,
+    counts: countBy(log, (entry) => entry.source),
+    entries: [...log].reverse(),
+  };
+}
+
+function projectionSubscriptionsSummary(
+  log: BootstrapRuntimeDiagnostics['projectionSubscriptions'],
+): string {
+  if (log.length === 0) return 'No projection subscriptions recorded';
+  const active = log.filter((entry) => entry.status === 'active').length;
+  const errors = log.filter((entry) => entry.status === 'error').length;
+  return `${log.length} subscriptions, ${active} active, ${errors} errors`;
+}
+
+function projectionSubscriptionsData(log: BootstrapRuntimeDiagnostics['projectionSubscriptions']) {
+  return {
+    count: log.length,
+    counts: countBy(log, (entry) => entry.status),
     entries: [...log].reverse(),
   };
 }
@@ -234,8 +293,145 @@ function intentLogSummary(log: BootstrapRuntimeDiagnostics['intentLog']): string
 function intentLogData(log: BootstrapRuntimeDiagnostics['intentLog']) {
   return {
     count: log.length,
+    counts: countBy(log, (entry) => entry.status),
     entries: [...log].reverse(),
   };
+}
+
+function runtimeDiagnosticsSectionPreview(
+  section: RuntimeDiagnosticsSection,
+  filter: RuntimeDiagnosticsFilter,
+) {
+  if (section.kind === 'events') {
+    const data = section.data as ReturnType<typeof sessionEventsData>;
+    const entries = data.entries.filter((entry) => {
+      if (filter === 'errors') return entry.error !== undefined || entry.status === 'error';
+      if (filter === 'open') return entry.status === 'pending';
+      return true;
+    });
+    return (
+      <RuntimeDiagnosticsRows
+        emptyLabel="No matching session events"
+        rows={entries.map((entry) => ({
+          detail: [entry.intent, entry.requestId, entry.sessionUrl].filter(Boolean).join(' · '),
+          meta: `#${entry.sequence} ${entry.observedAt}`,
+          status: entry.status ?? entry.source,
+          title: `${entry.source} ${entry.kind}`,
+        }))}
+      />
+    );
+  }
+
+  if (section.kind === 'intents') {
+    const data = section.data as ReturnType<typeof intentLogData>;
+    const entries = data.entries.filter((entry) => {
+      if (filter === 'errors') return entry.status === 'rejected' || entry.status === 'thrown';
+      if (filter === 'open') return entry.status === 'pending';
+      return true;
+    });
+    return (
+      <RuntimeDiagnosticsRows
+        emptyLabel="No matching intents"
+        rows={entries.map((entry) => ({
+          detail: `${entry.request.baseHeadDocs.length} base docs · ${relationCountsSummary(entry.request.relationCounts)}`,
+          meta: `#${entry.sequence} ${entry.durationMs ?? 0}ms`,
+          status: entry.status,
+          title: entry.intent,
+        }))}
+      />
+    );
+  }
+
+  if (section.kind === 'projections') {
+    const data = section.data as ReturnType<typeof projectionSubscriptionsData>;
+    const entries = data.entries.filter((entry) => {
+      if (filter === 'errors') return entry.status === 'error' || entry.counters.errors > 0;
+      if (filter === 'open') return entry.status === 'active';
+      return true;
+    });
+    return (
+      <RuntimeDiagnosticsRows
+        emptyLabel="No matching projection subscriptions"
+        rows={entries.map((entry) => ({
+          detail: [
+            entry.schemaId,
+            `${entry.counters.snapshots} snapshots`,
+            `${entry.counters.patches} patches`,
+            `${entry.counters.errors} errors`,
+          ].join(' · '),
+          meta: entry.lastEventAt ?? entry.openedAt,
+          status: entry.status,
+          title: entry.projection,
+        }))}
+      />
+    );
+  }
+
+  return null;
+}
+
+function RuntimeDiagnosticsRows({
+  emptyLabel,
+  rows,
+}: {
+  readonly emptyLabel: string;
+  readonly rows: readonly RuntimeDiagnosticsRow[];
+}) {
+  if (rows.length === 0) {
+    return <p className="runtime-diagnostics-empty">{emptyLabel}</p>;
+  }
+  return (
+    <ol className="runtime-diagnostics-rows">
+      {rows.slice(0, 12).map((row, index) => (
+        <li className="runtime-diagnostics-row" key={`${row.title}:${row.meta}:${index}`}>
+          <span className={`runtime-diagnostics-status ${runtimeDiagnosticsStatusClass(row.status)}`}>
+            {row.status}
+          </span>
+          <span className="runtime-diagnostics-row-main">
+            <strong>{row.title}</strong>
+            <small>{row.detail}</small>
+          </span>
+          <time>{row.meta}</time>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+type RuntimeDiagnosticsRow = {
+  readonly detail: string;
+  readonly meta: string;
+  readonly status: string;
+  readonly title: string;
+};
+
+const runtimeDiagnosticsFilters = [
+  { filter: 'all', label: 'All' },
+  { filter: 'open', label: 'Open' },
+  { filter: 'errors', label: 'Errors' },
+] as const satisfies readonly {
+  readonly filter: RuntimeDiagnosticsFilter;
+  readonly label: string;
+}[];
+
+function runtimeDiagnosticsStatusClass(status: string): string {
+  if (status === 'active' || status === 'committed') return 'is-ok';
+  if (status === 'pending') return 'is-pending';
+  if (status === 'error' || status === 'rejected' || status === 'thrown') return 'is-error';
+  return 'is-muted';
+}
+
+function relationCountsSummary(counts: Readonly<Record<string, number>>): string {
+  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  return `${total} relation rows`;
+}
+
+function countBy<T>(entries: readonly T[], key: (entry: T) => string): Readonly<Record<string, number>> {
+  return entries.reduce<Record<string, number>>((counts, entry) => {
+    const countKey = key(entry);
+    counts[countKey] = (counts[countKey] ?? 0) + 1;
+    return counts;
+  }, {});
 }
 
 function formatRuntimeDiagnosticsJson(data: unknown): string {
