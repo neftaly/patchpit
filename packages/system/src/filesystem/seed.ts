@@ -743,11 +743,11 @@ async function selectFromPointer(event, node, view, title) {
   await act(options === undefined ? { name: selectAction, url: node.url } : { name: selectAction, options, url: node.url });
 
   if (!event.metaKey && !event.ctrlKey && !event.shiftKey) {
-    await act({ name: previewAction, title, url: node.url });
     if (node.kind === 'folder') {
       optimisticToggleFolder(node.url);
       await act({ name: toggleFolderAction, url: node.url });
     }
+    await act({ name: previewAction, title, url: node.url });
   }
 
   const main = document.querySelector('.file-picker-app');

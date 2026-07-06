@@ -19,9 +19,10 @@ Patchpit currently seeds three durable roots and exposes one live-service root:
 
 The bootloader creates only the initial filesystem, the minimal runtime state
 needed to boot, and the compositor/window-manager state needed to display
-surfaces. First-party apps such as Settings, Launcher, Files, and Viewer are
-installed through the same installer path as other apps. A first-run script may
-automate those installs, but it must call the normal installer rather than seed a
+surfaces. The active seed installs File Picker, Viewer, and Hello World as
+module app packages under `/apps`; Terminal is archived under
+`archive/terminal-shell-compat` and is not part of the active architecture.
+Future first-party apps should use the same installer path rather than seed a
 second app registry.
 
 Apps are opened through one runtime admission path: route, launch, preview, and
@@ -325,8 +326,8 @@ runtime exposes relation-shaped `surfaces`, `contexts`, `layoutNodes`, or
 The first useful implementation should stay small:
 
 1. App packages live under `/apps`.
-2. Settings, Launcher, Files, and Viewer are apps; runtime diagnostics are
-   shell/dev tooling, not an installed app.
+2. File Picker, Viewer, and Hello World are active seeded module apps; runtime
+   diagnostics are shell/dev tooling, not an installed app.
 3. The window-manager doc owns surfaces, tabs, focus, reserved slots, and split
    layout.
 4. Route and launch requests share one admission path that resolves manifests

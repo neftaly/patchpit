@@ -28,8 +28,8 @@ other way around.
 - Keep compositor/window-manager enforcement, focus, and placement host-owned.
   Apps such as Launcher may render chrome in reserved surfaces, but they do not
   become the trusted compositor.
-- Let Settings, Launcher, viewer, file picker, and future apps move to
-  the same app-host boundary without a big-bang rewrite.
+- Keep File Picker, Viewer, Hello World, and future apps on the same app-host
+  boundary without a big-bang rewrite.
 
 ## Non-Goals
 
@@ -64,6 +64,10 @@ runner uses `sandbox="allow-scripts"` with no same-origin authority. The seeded
 File Picker and Viewer packages are runnable filesystem module apps whose
 manifests point at `app.js`.
 
+The active seeded app set is File Picker, Viewer, and Hello World. Terminal is
+archived under `archive/terminal-shell-compat`; it is no longer an active
+runtime, shell-compat, or app-host path.
+
 The SharedWorker is still the boot gate, not the owner of Automerge handles or
 runtime operations. The in-process bootstrap runtime still owns the first
 runtime slice.
@@ -85,8 +89,6 @@ errors.
 
 Remaining app-host work:
 
-- move first-party app UI from compatibility adapters into sandboxed app
-  entries;
 - define shared library and import-map handling for installed app packages;
 - expand remaining scoped `view`, `act`, and `open` services behind the sandbox
   bridge;
@@ -164,10 +166,10 @@ The smaller runtime shape is:
 - one trusted substrate: runtime, compositor/window manager, app host, and local
   supervisor.
 
-Everything visible and product-shaped should be an app. Settings, Launcher,
-Files, and Viewer are first-party apps, not shell widgets. They may
-receive stronger runtime grants in V0, but those grants should be attached to
-their app ids and contexts, not to separate rendering paths.
+Everything visible and product-shaped should be an app. File Picker, Viewer,
+and Hello World are active seeded apps, not shell widgets. Future first-party
+apps may receive stronger runtime grants in V0, but those grants should be
+attached to their app ids and contexts, not to separate rendering paths.
 
 The trusted substrate should stay small and non-product:
 
@@ -636,7 +638,7 @@ First-run flow:
 1. Patchpit boots to an empty workspace with only the bootstrap install
    affordance.
 2. The user, a dev command, or a first-run setup script installs a small app set,
-   such as Settings, Launcher, Files, and Viewer.
+   such as File Picker, Viewer, and a minimal demo app.
 3. The installed Launcher app occupies its reserved edge surface.
 4. Installed runnable apps appear in Launcher.
 5. Opening a document routes through installed handlers. If no handler is
@@ -743,7 +745,8 @@ It should not be moved into the untrusted sandbox path.
 
 ### Viewer
 
-Viewer is the first migration target because it is read-only.
+Viewer is migrated to a sandboxed module app and remains a useful read-only
+pressure test.
 
 Needs:
 
@@ -767,7 +770,8 @@ enough.
 
 ### File Picker
 
-File picker proves view and action pressure.
+File Picker is migrated to a sandboxed module app and proves view and action
+pressure.
 
 Needs:
 
@@ -826,8 +830,8 @@ useful even without OS sandboxing or SES.
 1. Introduce a scoped app service facade. Current apps should depend on a small
    app-facing surface shaped like views, actions, and ports instead of
    shell-built props backed by raw documents. The host/runtime attaches scope.
-2. Move app state reads behind views. Viewer and file picker should
-   read document or app state through schema-bound runtime views rather than
+2. Move app state reads behind views. Viewer and File Picker read document or
+   app state through schema-bound runtime views rather than
    direct `DocHandle` reads or shell-derived object graphs.
 3. Make `WindowManagerAppHost` manifest-driven. The compositor content slot
    should resolve contexts through app manifests instead of hard-coding app ids
@@ -849,41 +853,30 @@ placement does not change app semantics.
 
 ## First Landing
 
-The first app-host boundary is in place without rewriting all current apps at
-once.
+The first app-host boundary is in place for the active seeded apps.
 
-1. Keep the current in-process render switch only as a compatibility path while
-   first-party apps migrate.
-2. Keep manifest-driven rendering, installed-app projection, and the minimal
-   manifest-hosted app on the same app-host path.
-3. Add Settings and Launcher as first-party manifests that use the same app-host
-   path. The first-run script installs them by calling the normal installer.
-4. Migrate viewer as the first real app because it is read-only and pressures
-   view/content boundaries without write authority.
-5. Migrate file picker after viewer because it adds app state views and route or
-   file-picker actions.
-6. Add SES and OS runner placement after the app API works through the
-   compatibility placement.
-
-The old path should disappear only after the manifest-hosted path can run
-Settings, Launcher, Files, and Viewer through the same app API.
+1. Manifest-driven rendering, installed-app projection, and sandboxed module
+   entries are on the same app-host path.
+2. File Picker uses scoped `file-picker` views plus file-picker and route
+   actions.
+3. Viewer uses the scoped `resource` view for file and folder output.
+4. Hello World remains the minimal launchable sandbox package.
+5. Add SES and OS runner placement after the app API works through this current
+   sandbox placement.
 
 ## Migration Plan
 
 1. Keep the manifest-driven `SandboxAppHost` behind
-   `WindowManagerAppHost.renderSurface` while preserving existing app behavior
-   through compatibility adapters.
-2. Add scoped app services that attach runtime scope server-side and reject
+   `WindowManagerAppHost.renderSurface`.
+2. Keep scoped app services attaching runtime scope server-side and rejecting
    app-supplied scope.
-3. Add app/document views through Tarstate schemas instead of passing raw
+3. Keep app/document views behind runtime services instead of passing raw
    `DocHandle` state to apps.
-4. Replace hard-coded launcher specs and app render switches with manifest
-   projection plus manifest entry resolution.
-5. Migrate viewer through the sandbox host.
-6. Migrate file picker through views and actions.
-7. Add local OS placement for command runners, then for app hosts where a local
+4. Keep launcher specs and app rendering derived from manifest projection plus
+   manifest entry resolution.
+5. Add local OS placement for command runners, then for app hosts where a local
    supervisor exists.
-8. Move runtime ownership from the in-process bootstrap scaffold into the
+6. Move runtime ownership from the in-process bootstrap scaffold into the
    SharedWorker runtime. The app API should not change when this happens.
 
 ## Review Checks

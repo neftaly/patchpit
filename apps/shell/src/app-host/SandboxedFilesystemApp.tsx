@@ -39,7 +39,12 @@ export function SandboxedFilesystemApp({
       entry={entry}
       filePicker={sandboxFilePickerServiceScope({ app, context, filePicker, filesystemRoot, surfaceId })}
       resourceRoot={filesystemRoot}
-      session={{ app: context.app, id: context.id, url: context.url }}
+      session={{
+        app: context.app,
+        ...(context.delegation === undefined ? {} : { delegation: context.delegation }),
+        id: context.id,
+        url: context.url,
+      }}
       title={app.manifest.name}
     />
   );

@@ -550,6 +550,64 @@ void test('bootstrap runtime creates stateless package context for contextless m
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 
+void test('bootstrap runtime carries inert app launch delegation into sandbox launch view', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+
+  const result = await launchApp(runtime, {
+    app: 'hello-world',
+    behavior: 'open-context',
+    delegation: 'delegation:test-token',
+    id: 'hello-world-delegation-launch-test',
+    role: SurfaceRole.DocumentSet,
+  });
+
+  assert.equal(result.status, 'committed');
+  const context = Object.values(seed.windowManagerHandle.doc().contexts).find((candidate) => (
+    candidate.app === 'hello-world'
+    && candidate.delegation === 'delegation:test-token'
+  ));
+  assert.ok(context);
+
+  const bridge = createSandboxAppServiceBridge({
+    appId: 'hello-world',
+    session: {
+      app: context.app,
+      delegation: context.delegation,
+      id: context.id,
+      url: context.url,
+    },
+  });
+
+  assert.deepEqual(bridge.capabilities, {
+    act: false,
+    open: false,
+    view: true,
+  });
+  assert.deepEqual(bridge.respond({
+    id: 'request-1',
+    payload: { name: 'launch' },
+    protocol: sandboxAppProtocol,
+    service: 'view',
+    type: 'serviceRequest',
+  }), {
+    id: 'request-1',
+    ok: true,
+    protocol: sandboxAppProtocol,
+    result: {
+      appId: 'hello-world',
+      session: {
+        app: 'hello-world',
+        delegation: 'delegation:test-token',
+        id: context.id,
+        url: context.url,
+      },
+      view: 'launch',
+    },
+    type: 'serviceResponse',
+  });
+});
+
 void test('bootstrap runtime creates stateless package context for contextless viewer app launch', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);

@@ -348,6 +348,7 @@ export type AppLaunchIntentRow = {
   readonly app: string;
   readonly behavior: AppLaunchBehavior;
   readonly context?: WindowContext;
+  readonly delegation?: string;
   readonly role: SurfaceRole;
 };
 

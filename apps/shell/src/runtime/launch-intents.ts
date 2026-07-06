@@ -11,6 +11,7 @@ export type AppLaunchIntentInput = {
   readonly app: string;
   readonly behavior: AppLaunchIntentRow['behavior'];
   readonly context?: WindowContext;
+  readonly delegation?: string;
   readonly role: SurfaceRole;
 };
 
@@ -35,6 +36,7 @@ function appLaunchIntentRow(input: AppLaunchIntentInput): AppLaunchIntentRow {
     app: input.app,
     behavior: input.behavior,
     ...(input.context === undefined ? {} : { context: input.context }),
+    ...(input.delegation === undefined ? {} : { delegation: input.delegation }),
     role: input.role,
   };
 }

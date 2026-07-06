@@ -115,9 +115,6 @@ importers:
       '@patchpit/system':
         specifier: workspace:*
         version: link:../../packages/system
-      '@patchpit/viewer':
-        specifier: workspace:*
-        version: link:../viewer
       react:
         specifier: 'catalog:'
         version: 19.2.7

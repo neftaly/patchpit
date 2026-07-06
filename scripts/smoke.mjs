@@ -13,7 +13,7 @@ if (!distIndexHtml.includes(`${smokeBasePath}assets/index-`)) {
   throw new Error(`dist/index.html is missing the root app bundle for base ${smokeBasePath}`);
 }
 
-async function smokeHelloWorldLauncher() {
+async function smokeSandboxApps() {
   const distRoot = resolve('dist');
   const staticServer = await startStaticServer(distRoot, smokeBasePath);
   const userDataDir = await mkdtemp(join(tmpdir(), 'patchpit-smoke-'));
@@ -24,21 +24,54 @@ async function smokeHelloWorldLauncher() {
     const browserCdp = await CdpSession.connect(browserDebuggerUrl);
     let pageCdp;
     try {
+      await browserCdp.send('Target.setDiscoverTargets', { discover: true });
       const { targetId } = await browserCdp.send('Target.createTarget', { url: 'about:blank' });
       const { webSocketDebuggerUrl } = await fetchJson(`http://127.0.0.1:${browser.debugPort}/json/list`)
         .then((targets) => targets.find((target) => target.id === targetId) ?? {});
       if (webSocketDebuggerUrl === undefined) throw new Error('Chromium did not expose a DevTools URL for the smoke page');
 
       pageCdp = await CdpSession.connect(webSocketDebuggerUrl);
+      const targets = new TargetSessionRegistry(pageCdp);
+      await pageCdp.send('Target.setAutoAttach', {
+        autoAttach: true,
+        flatten: true,
+        waitForDebuggerOnStart: false,
+      });
       await pageCdp.send('Page.enable');
       await pageCdp.send('Runtime.enable');
 
       const load = pageCdp.waitForEvent('Page.loadEventFired', 10_000);
       await pageCdp.send('Page.navigate', { url: `${staticServer.origin}${smokeBasePath}` });
       await load;
+      const mainFrameId = await pageMainFrameId(pageCdp);
 
       const ready = await waitForBrowserState(pageCdp, launcherReadyExpression, 10_000);
       if (ready.status !== 'passed') throw smokeError('Shell launcher did not become ready', ready);
+
+      const filePickerHost = await waitForBrowserState(pageCdp, filePickerHostExpression, 10_000);
+      if (filePickerHost.status !== 'passed') throw smokeError('File Picker sandbox host did not mount', filePickerHost);
+
+      const filePicker = await waitForSandboxState(pageCdp, targets, mainFrameId, filePickerTreeExpression, 10_000);
+      if (filePicker.status !== 'passed') throw smokeError('File Picker sandbox did not render cleanly', filePicker);
+
+      const docsClickTarget = await waitForBrowserState(pageCdp, filePickerDocsClickTargetExpression, 5_000);
+      if (docsClickTarget.status !== 'passed') {
+        throw smokeError('File Picker docs folder click target could not be located', docsClickTarget);
+      }
+      await clickPoint(pageCdp, docsClickTarget.x, docsClickTarget.y);
+
+      const viewerFolder = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerFolderExpression, 5_000);
+      if (viewerFolder.status !== 'passed') throw smokeError('Viewer did not render the docs folder preview', viewerFolder);
+
+      await sleep(1_500);
+      const readmeClickTarget = await waitForBrowserState(pageCdp, filePickerReadmeClickTargetExpression, 5_000);
+      if (readmeClickTarget.status !== 'passed') {
+        throw smokeError('File Picker README.md click target could not be located', readmeClickTarget);
+      }
+      await clickPoint(pageCdp, readmeClickTarget.x, readmeClickTarget.y);
+
+      const viewerReadme = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerReadmeExpression, 5_000);
+      if (viewerReadme.status !== 'passed') throw smokeError('Viewer did not render the seeded README.md text', viewerReadme);
 
       const clicked = await evaluate(pageCdp, clickHelloWorldExpression);
       if (clicked.status !== 'passed') throw smokeError('Hello World launcher could not be clicked', clicked);
@@ -146,6 +179,158 @@ const helloWorldVisibleExpression = `
     hasFrame,
     selectedTabs,
     body: document.body.innerText,
+  };
+})()
+`;
+
+const filePickerHostExpression = `
+(() => {
+  const alert = document.querySelector('[role="alert"]');
+  const host = document.querySelector('section.sandbox-app-host[aria-label="File Picker"]');
+  const frame = host === null ? null : host.querySelector('iframe[title="File Picker"]');
+  const hasHost = host !== null;
+  const hasFrame = frame !== null;
+
+  if (alert !== null) {
+    return {
+      status: 'failed',
+      reason: 'Runtime issue banner is visible before File Picker sandbox check',
+      alert: alert.innerText,
+      hasHost,
+      hasFrame,
+      body: document.body.innerText,
+    };
+  }
+  if (hasHost && hasFrame) {
+    return {
+      status: 'passed',
+      hasHost,
+      hasFrame,
+    };
+  }
+  return {
+    status: 'pending',
+    reason: 'Waiting for File Picker sandbox host',
+    hasHost,
+    hasFrame,
+    body: document.body.innerText,
+  };
+})()
+`;
+
+const filePickerTreeExpression = `
+(() => {
+  const tree = document.querySelector('[role="tree"][aria-label="project files"]');
+  const names = [...document.querySelectorAll('.tree-name')]
+    .map((node) => node.textContent?.trim() ?? '')
+    .filter((name) => name !== '');
+  if (tree !== null && names.includes('docs')) {
+    return {
+      status: 'passed',
+      names,
+      body: document.body.innerText,
+    };
+  }
+
+  return {
+    status: 'pending',
+    reason: 'Waiting for File Picker tree from view("file-picker")',
+    names,
+    body: document.body.innerText,
+  };
+})()
+`;
+
+const filePickerDocsClickTargetExpression = filePickerClickTargetExpression({
+  minHeight: 110,
+  reason: 'docs folder',
+  rowCenterY: 76,
+  xOffset: 56,
+});
+
+const filePickerReadmeClickTargetExpression = filePickerClickTargetExpression({
+  minHeight: 170,
+  reason: 'README.md',
+  rowCenterY: 132,
+  xOffset: 96,
+});
+
+function filePickerClickTargetExpression({
+  minHeight,
+  reason,
+  rowCenterY,
+  xOffset,
+}) {
+  return `
+(() => {
+  const frame = document.querySelector('section.sandbox-app-host[aria-label="File Picker"] iframe[title="File Picker"]');
+  if (frame === null) {
+    return {
+      status: 'pending',
+      reason: ${JSON.stringify(`Waiting for File Picker iframe before ${reason} coordinate click`)},
+      body: document.body.innerText,
+    };
+  }
+
+  const rect = frame.getBoundingClientRect();
+  if (rect.width < 120 || rect.height < ${minHeight}) {
+    return {
+      status: 'pending',
+      reason: ${JSON.stringify(`Waiting for File Picker iframe to be large enough for ${reason} coordinate click`)},
+      rect: { height: rect.height, width: rect.width, x: rect.x, y: rect.y },
+      body: document.body.innerText,
+    };
+  }
+
+  return {
+    status: 'passed',
+    rect: { height: rect.height, width: rect.width, x: rect.x, y: rect.y },
+    x: Math.round(rect.left + Math.min(${xOffset}, rect.width - 16)),
+    y: Math.round(rect.top + ${rowCenterY}),
+  };
+})()
+`;
+}
+
+const viewerFolderExpression = `
+(() => {
+  const body = document.body.innerText;
+  const items = [...document.querySelectorAll('li')].map((item) => item.textContent.trim());
+  if (items.includes('File: README.md') && items.includes('File: architecture.md')) {
+    return {
+      status: 'passed',
+      items,
+      body,
+    };
+  }
+
+  return {
+    status: 'pending',
+    reason: 'Waiting for Viewer folder resource output',
+    items,
+    body,
+  };
+})()
+`;
+
+const viewerReadmeExpression = `
+(() => {
+  const body = document.body.innerText;
+  if (
+    body.includes('# Patchpit Docs')
+    && body.includes('Current specs:')
+    && body.includes('surface-protocol.md')
+  ) {
+    return {
+      status: 'passed',
+      body,
+    };
+  }
+
+  return {
+    status: 'pending',
+    reason: 'Waiting for Viewer README.md resource text',
+    body,
   };
 })()
 `;
@@ -287,13 +472,14 @@ async function waitForBrowserState(cdp, expression, timeoutMs) {
   return evaluate(cdp, browserStateWaitExpression(expression, timeoutMs));
 }
 
-async function evaluate(cdp, expression) {
+async function evaluate(cdp, expression, options = {}) {
   const evaluation = await cdp.send('Runtime.evaluate', {
     awaitPromise: true,
+    ...(options.contextId === undefined ? {} : { contextId: options.contextId }),
     expression,
     returnByValue: true,
     userGesture: true,
-  });
+  }, options.timeoutMs ?? CdpSession.commandTimeoutMs, options.sessionId);
   if (evaluation.exceptionDetails !== undefined) {
     throw new Error(`Browser evaluation failed: ${
       evaluation.exceptionDetails.exception?.description
@@ -301,6 +487,179 @@ async function evaluate(cdp, expression) {
     }`);
   }
   return evaluation.result.value;
+}
+
+async function pageMainFrameId(cdp) {
+  const frameTree = await cdp.send('Page.getFrameTree');
+  const mainFrameId = frameTree.frameTree?.frame?.id;
+  if (typeof mainFrameId !== 'string') throw new Error('CDP did not return a main frame id');
+  return mainFrameId;
+}
+
+async function clickPoint(cdp, x, y) {
+  await cdp.send('Input.dispatchMouseEvent', {
+    button: 'none',
+    type: 'mouseMoved',
+    x,
+    y,
+  });
+  await cdp.send('Input.dispatchMouseEvent', {
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+    type: 'mousePressed',
+    x,
+    y,
+  });
+  await cdp.send('Input.dispatchMouseEvent', {
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+    type: 'mouseReleased',
+    x,
+    y,
+  });
+}
+
+async function waitForSandboxState(cdp, targets, mainFrameId, expression, timeoutMs) {
+  const started = Date.now();
+  let lastState = {
+    status: 'pending',
+    reason: 'Waiting for sandbox execution contexts',
+    sandboxFrames: [],
+  };
+
+  while (Date.now() - started < timeoutMs) {
+    const states = await evaluateSandboxStates(cdp, targets, mainFrameId, expression);
+    const passed = states.find((state) => state.status === 'passed');
+    if (passed !== undefined) {
+      return {
+        ...passed,
+        elapsedMs: Date.now() - started,
+        timeoutMs,
+      };
+    }
+
+    const failed = states.find((state) => state.status === 'failed');
+    if (failed !== undefined) {
+      return {
+        ...failed,
+        elapsedMs: Date.now() - started,
+        timeoutMs,
+      };
+    }
+
+    lastState = states.at(-1) ?? lastState;
+    await sleep(100);
+  }
+
+  return {
+    ...lastState,
+    status: 'failed',
+    reason: lastState.reason ?? 'Sandbox state did not settle before timeout',
+    elapsedMs: Date.now() - started,
+    timeoutMs,
+  };
+}
+
+async function evaluateSandboxStates(cdp, targets, mainFrameId, expression) {
+  const sandboxContexts = [
+    ...targets.sandboxTargets(),
+    ...await sandboxExecutionContexts(cdp, mainFrameId),
+  ];
+  const states = [];
+  for (const context of sandboxContexts) {
+    try {
+      const state = await evaluate(cdp, expression, {
+        ...(context.contextId === undefined ? {} : { contextId: context.contextId }),
+        ...(context.sessionId === undefined ? {} : { sessionId: context.sessionId }),
+        timeoutMs: 1_000,
+      });
+      states.push({
+        ...state,
+        sandboxFrame: contextSummary(context),
+        sandboxFrames: sandboxContexts.map(contextSummary),
+      });
+    } catch (error) {
+      if (isMissingExecutionContextError(error)) continue;
+      states.push({
+        status: 'failed',
+        reason: 'Sandbox evaluation failed',
+        error: error instanceof Error ? error.stack : String(error),
+        sandboxFrame: contextSummary(context),
+        sandboxFrames: sandboxContexts.map(contextSummary),
+      });
+    }
+  }
+
+  return states;
+}
+
+async function sandboxExecutionContexts(cdp, mainFrameId) {
+  const frameIds = (await pageFrameIds(cdp)).filter((frameId) => frameId !== mainFrameId);
+  const contexts = [];
+  for (const frameId of frameIds) {
+    try {
+      const { executionContextId } = await cdp.send('Page.createIsolatedWorld', {
+        frameId,
+        worldName: 'patchpit-smoke',
+      });
+      if (typeof executionContextId === 'number') {
+        contexts.push({
+          contextId: executionContextId,
+          frameId,
+          name: 'patchpit-smoke',
+          origin: 'isolated-world',
+          type: 'frame',
+        });
+      }
+    } catch (error) {
+      if (!isMissingFrameError(error)) throw error;
+    }
+  }
+  return contexts;
+}
+
+async function pageFrameIds(cdp) {
+  const { frameTree } = await cdp.send('Page.getFrameTree');
+  const frameIds = [];
+  collectFrameIds(frameTree, frameIds);
+  return frameIds;
+}
+
+function collectFrameIds(frameTree, frameIds) {
+  const frameId = frameTree?.frame?.id;
+  if (typeof frameId === 'string') frameIds.push(frameId);
+  for (const child of frameTree?.childFrames ?? []) collectFrameIds(child, frameIds);
+}
+
+function isMissingExecutionContextError(error) {
+  return error instanceof Error && (
+    error.message.includes('Cannot find context with specified id')
+    || error.message.includes('Inspected target navigated or closed')
+    || error.message.includes('Timed out waiting for CDP command Runtime.evaluate')
+  );
+}
+
+function isMissingFrameError(error) {
+  return error instanceof Error && (
+    error.message.includes('No frame for given id found')
+    || error.message.includes('Frame with the given id was not found')
+    || error.message.includes('Inspected target navigated or closed')
+  );
+}
+
+function contextSummary(context) {
+  return {
+    contextId: context.contextId,
+    frameId: context.frameId,
+    name: context.name,
+    origin: context.origin,
+    sessionId: context.sessionId,
+    targetId: context.targetId,
+    title: context.title,
+    type: context.type,
+  };
 }
 
 function browserStateWaitExpression(expression, timeoutMs) {
@@ -378,6 +737,8 @@ function smokeError(message, state) {
     state.alert === undefined ? undefined : `Runtime issue banner:\n${truncate(state.alert, 1_000)}`,
     state.selectedTabs === undefined ? undefined : `Selected tabs: ${state.selectedTabs.join(', ')}`,
     state.hasHost === undefined ? undefined : `Hello World DOM: host=${state.hasHost}, frame=${state.hasFrame}`,
+    state.sandboxFrame === undefined ? undefined : `Sandbox frame:\n${JSON.stringify(state.sandboxFrame, null, 2)}`,
+    state.sandboxFrames === undefined ? undefined : `Sandbox frames:\n${JSON.stringify(state.sandboxFrames, null, 2)}`,
     state.body === undefined ? undefined : `Visible text:\n${truncate(state.body, 1_500)}`,
   ].filter((line) => line !== undefined && line !== '').join('\n\n'));
 }
@@ -448,6 +809,7 @@ class CdpSession {
 
   constructor(socket) {
     this.events = new Map();
+    this.handlers = new Map();
     this.nextId = 1;
     this.pending = new Map();
     this.socket = socket;
@@ -465,6 +827,10 @@ class CdpSession {
       }
 
       const listeners = this.events.get(message.method);
+      const handlers = this.handlers.get(message.method);
+      if (handlers !== undefined) {
+        for (const handler of handlers) handler(message.params ?? {});
+      }
       if (listeners === undefined) return;
       for (const listener of listeners.splice(0)) listener.resolve(message.params ?? {});
     });
@@ -472,10 +838,26 @@ class CdpSession {
     socket.addEventListener('error', () => this.rejectPending(new Error('CDP websocket error')));
   }
 
-  send(method, params = {}, timeoutMs = CdpSession.commandTimeoutMs) {
+  on(method, handler) {
+    const handlers = this.handlers.get(method) ?? [];
+    handlers.push(handler);
+    this.handlers.set(method, handlers);
+    return () => {
+      const current = this.handlers.get(method);
+      if (current === undefined) return;
+      this.handlers.set(method, current.filter((candidate) => candidate !== handler));
+    };
+  }
+
+  send(method, params = {}, timeoutMs = CdpSession.commandTimeoutMs, sessionId) {
     const id = this.nextId;
     this.nextId += 1;
-    const payload = JSON.stringify({ id, method, params });
+    const payload = JSON.stringify({
+      id,
+      method,
+      params,
+      ...(sessionId === undefined ? {} : { sessionId }),
+    });
     return new Promise((resolveSend, rejectSend) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
@@ -533,6 +915,31 @@ class CdpSession {
   }
 }
 
+class TargetSessionRegistry {
+  constructor(cdp) {
+    this.sessions = new Map();
+    cdp.on('Target.attachedToTarget', ({ sessionId, targetInfo }) => {
+      if (typeof sessionId !== 'string' || targetInfo?.type !== 'iframe') return;
+      this.sessions.set(sessionId, {
+        name: targetInfo.url,
+        origin: targetInfo.url,
+        sessionId,
+        targetId: targetInfo.targetId,
+        title: targetInfo.title,
+        type: targetInfo.type,
+      });
+      void cdp.send('Runtime.enable', {}, CdpSession.commandTimeoutMs, sessionId).catch(() => {});
+    });
+    cdp.on('Target.detachedFromTarget', ({ sessionId }) => {
+      if (typeof sessionId === 'string') this.sessions.delete(sessionId);
+    });
+  }
+
+  sandboxTargets() {
+    return [...this.sessions.values()];
+  }
+}
+
 function messageDataText(data) {
   if (typeof data === 'string') return data;
   if (data instanceof ArrayBuffer) return Buffer.from(data).toString('utf8');
@@ -540,4 +947,4 @@ function messageDataText(data) {
   return String(data);
 }
 
-await smokeHelloWorldLauncher();
+await smokeSandboxApps();

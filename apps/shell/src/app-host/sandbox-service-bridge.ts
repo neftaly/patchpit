@@ -23,7 +23,7 @@ export const sandboxResourceView = 'resource' as const;
 
 export type SandboxAppProtocol = typeof sandboxAppProtocol;
 export type SandboxAppServiceName = 'act' | 'open' | 'view';
-export type SandboxAppSession = Pick<WindowContext, 'app' | 'id' | 'url'>;
+export type SandboxAppSession = Pick<WindowContext, 'app' | 'delegation' | 'id' | 'url'>;
 export type SandboxAppServiceErrorCode = 'bad_request' | 'missing_scope' | 'not_found' | 'unsupported_service';
 
 export type SandboxAppServiceCapabilities = Readonly<Record<SandboxAppServiceName, boolean>>;
@@ -193,6 +193,7 @@ export function createSandboxAppServiceBridge({
           appId,
           session: {
             app: session.app,
+            ...(session.delegation === undefined ? {} : { delegation: session.delegation }),
             id: session.id,
             url: session.url,
           },

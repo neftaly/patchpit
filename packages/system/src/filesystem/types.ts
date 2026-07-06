@@ -288,6 +288,7 @@ export type WindowContext = {
   id: string;
   app: string;
   container: AppContainer;
+  delegation?: string;
   title?: string;
   url: string;
 };

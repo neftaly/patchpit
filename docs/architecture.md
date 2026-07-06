@@ -14,8 +14,6 @@ manifest resolver, adapters, sandbox"]
 manifest plus entry resources"]
   Sandbox["Sandbox runner
 opaque iframe, scoped services"]
-  Adapters["First-party adapters
-Files and Viewer"]
   External["Outside world
 network, peers, local runners"]
 
@@ -26,8 +24,6 @@ network, peers, local runners"]
   Window --> Host
   Packages --> Host
   Host --> Sandbox
-  Host --> Adapters
   Sandbox <--> Runtime
-  Adapters <--> Runtime
   Runtime <-.-> External
 ```

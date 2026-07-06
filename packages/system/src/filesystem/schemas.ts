@@ -321,6 +321,7 @@ export const windowManagerStateSchema = defineRelationSchema({
       fields: {
         app: { type: 'string' },
         container: { type: 'json' },
+        delegation: { type: 'string', optional: true },
         id: idField('windowContext'),
         title: { type: 'string', optional: true },
         url: { type: 'string' },
@@ -473,6 +474,11 @@ export const appLaunchIntentSchema = defineRelationSchema({
           type: 'json',
           optional: true,
           description: 'Optional shell WindowContext for already-created app state.',
+        },
+        delegation: {
+          type: 'string',
+          optional: true,
+          description: 'Opaque launch delegation metadata; not authority.',
         },
         id: idField('appLaunchIntentRequest'),
         role: {
@@ -686,7 +692,7 @@ const patchpitSystemSchemaHashes = {
   'patchpit.filesystem.folder@1': 'sha256:b66316f285cdf8772105be4f6ef9de97eba1f4faf9795c07d8915f5c6f84907d',
   'patchpit.filesystem.index@1': 'sha256:9a4c2b0e876f84c540ab95aa5faddfcd86860754b76fe605338feb04508744a0',
   'patchpit.filesystem.tree@1': 'sha256:ee3cf0878502927b4b7f90839f8f10cfa8f7d8a4ad740142c6d3d0c5ce9aa168',
-  'patchpit.intent.appLaunch@1': 'sha256:b2593733f0928d21084238d71ded945caecf0eaae476ae66b850cbacbce4efeb',
+  'patchpit.intent.appLaunch@1': 'sha256:80a59ccf64319d9f64b6411523ea5097da1fa1f59a017487b4928a32d7b6b19a',
   'patchpit.intent.filePicker@1': 'sha256:9d22ea794acb16f21159f3a41ee2f7b5085579d4d91b168cbd20af465dffc970',
   'patchpit.intent.route@1': 'sha256:b788b4f922f50dc25d36141190ec1872e8d1ec24cc0cbc205235c6a88f2bbf85',
   'patchpit.intent.window@1': 'sha256:f6fc795ee96f61af948e486b88765757967171387ac641bbfb9ad25b69f205e0',
@@ -695,7 +701,7 @@ const patchpitSystemSchemaHashes = {
   'patchpit.system.appManifest@1': 'sha256:d669fe4c41059f3897dc736a6c5265af06992ee80be805b980acfd75a91344ad',
   'patchpit.system.appearance@1': 'sha256:a3a297b433293a35d1380c666821e6883016adbaab760ed3b8e898f77dad46d4',
   'patchpit.system.theme@1': 'sha256:b7ccfb5659debca60a397102a96c5ae722434f14ffc4d19af085e39c8806ec4f',
-  'patchpit.system.windowManager.state@1': 'sha256:ae080f3790d51376f411d32d3f9706193c5ed58ab77c374bb59d2d748b48db6f',
+  'patchpit.system.windowManager.state@1': 'sha256:190de691672cd1ed04f23d654bbca0819301f44785ef37427d709cb5208f3586',
 } as const satisfies Readonly<Record<PatchpitSystemSchemaId, PatchpitSchemaHash>>;
 
 export const patchpitSystemSchemaByDocType = {

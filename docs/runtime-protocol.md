@@ -699,7 +699,7 @@ ticket result should be terminal: `committed`, `rejected`, `conflict`, or
 clients that need retry safety should use `idempotencyKey`.
 
 Queued tickets are target protocol behavior, not required V0 surface. The first
-runtime slice should return terminal results directly unless a concrete async
+runtime slice should return final results directly unless a concrete async
 operation needs tickets.
 
 If policy transforms a durable intent before commit, the committed result must

@@ -157,6 +157,7 @@ type AppLaunchRequest = {
   readonly app: string;
   readonly behavior: ContextLaunchBehavior;
   readonly context?: WindowContext;
+  readonly delegation?: string;
   readonly role: SurfaceRole;
 };
 
@@ -546,7 +547,7 @@ function nowIso(): string {
 }
 
 function appLaunchCommit(launch: AppLaunchRequest): AppLaunchCommit | RuntimeError {
-  if (launch.context !== undefined) return { context: launch.context };
+  if (launch.context !== undefined) return { context: launchContextWithDelegation(launch.context, launch.delegation) };
 
   return runtimeError(
     'missing_handler',
@@ -584,6 +585,7 @@ function resolveAppLaunchContext(seed: SeedFilesystem, launch: AppLaunchRequest)
     context: {
       app: launch.app,
       container: rootContainer(seed.rootUrl),
+      ...(launch.delegation === undefined ? {} : { delegation: launch.delegation }),
       id: `${launch.app}:${entryUrl}`,
       title: manifest.name,
       url: entryUrl,
@@ -786,6 +788,7 @@ function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | Runt
 
   const role = appLaunchSurfaceRole(row.role);
   if (role === undefined) return badRequest('App launch request role is invalid.');
+  if (!isOptionalString(row.delegation)) return badRequest('App launch request delegation must be a string.');
 
   const context = row.context === undefined ? undefined : appLaunchContext(row.context);
   if (context instanceof Error) return badRequest(context);
@@ -798,7 +801,16 @@ function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | Runt
     app: row.app,
     behavior,
     ...(context === undefined ? {} : { context }),
+    ...(row.delegation === undefined ? {} : { delegation: row.delegation }),
     role,
+  };
+}
+
+function launchContextWithDelegation(context: WindowContext, delegation: string | undefined): WindowContext {
+  if (delegation === undefined) return context;
+  return {
+    ...context,
+    delegation,
   };
 }
 
@@ -819,6 +831,7 @@ function appLaunchContext(value: unknown): WindowContext | Error {
   if (typeof value.id !== 'string') return new Error('App launch context requires an id.');
   if (typeof value.app !== 'string') return new Error('App launch context requires an app.');
   if (typeof value.url !== 'string') return new Error('App launch context requires a url.');
+  if (!isOptionalString(value.delegation)) return new Error('App launch context delegation must be a string.');
   if (!isOptionalString(value.title)) return new Error('App launch context title must be a string.');
 
   const container = appContainer(value.container);
@@ -827,6 +840,7 @@ function appLaunchContext(value: unknown): WindowContext | Error {
   return {
     app: value.app,
     container,
+    ...(value.delegation === undefined ? {} : { delegation: value.delegation }),
     id: value.id,
     ...(value.title === undefined ? {} : { title: value.title }),
     url: value.url,

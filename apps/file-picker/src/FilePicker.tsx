@@ -92,8 +92,8 @@ function TreeItem({
         onClick={(event) => {
           selectUrlFromPointer(event, state.activeUrl, node.url, visibleUrls, actions.selectUrl);
           if (!event.metaKey && !event.ctrlKey && !event.shiftKey) {
-            actions.previewUrl(node.url, displayName);
             if (node.kind === 'folder') actions.toggleFolder(node.url);
+            actions.previewUrl(node.url, displayName);
           }
         }}
         onDoubleClick={() => {
