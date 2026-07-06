@@ -579,6 +579,67 @@ void test('bootstrap runtime resolves contextless toggle launches to existing fi
   assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
 });
 
+void test('bootstrap runtime reuses manifest-declared state context for non-file-picker app launch', async () => {
+  const seed = createSeedFilesystem();
+  const app = 'stateful-test';
+  const contextId = 'stateful-test-existing-context';
+  const skippedContextId = 'stateful-test-schema-mismatch-context';
+  const initialSystemAppUrls = systemAppUrls(seed);
+
+  installFakeAppManifest(seed, {
+    app,
+    surfaces: [
+      {
+        role: SurfaceRole.WorkspaceView,
+        state: {
+          schema: seed.filePickerStateHandle.doc()['@patchpit'].schema,
+          type: PatchpitType.FilePickerState,
+        },
+      },
+    ],
+  });
+  const schemaMismatchHandle = seed.repo.create({
+    '@patchpit': {
+      schema: { id: 'patchpit.test.state@1' },
+      type: PatchpitType.FilePickerState,
+    },
+    extension: automergeExtension,
+    mimeType: automergeMimeType,
+    name: automergeFileName('schema-mismatch-state'),
+  });
+  seed.documentHandles[schemaMismatchHandle.url] = schemaMismatchHandle;
+  seed.windowManagerHandle.change((doc) => {
+    doc.contexts[skippedContextId] = {
+      app,
+      container: rootContainer(seed.rootUrl),
+      id: skippedContextId,
+      title: 'Schema Mismatch State',
+      url: schemaMismatchHandle.url,
+    };
+    doc.contexts[contextId] = {
+      app,
+      container: rootContainer(seed.rootUrl),
+      id: contextId,
+      title: 'Stateful Test',
+      url: seed.filePickerStateHandle.url,
+    };
+    doc.surfaces.files.contexts.push(skippedContextId, contextId);
+  });
+  const runtime = bootstrapRuntime(seed);
+
+  const result = await launchApp(runtime, {
+    app,
+    behavior: 'open-context',
+    id: 'stateful-test-contextless-launch-test',
+    role: SurfaceRole.WorkspaceView,
+  });
+
+  assert.equal(result.status, 'committed');
+  assert.equal(seed.windowManagerHandle.doc().surfaces.files.activeContext, contextId);
+  assert.equal(seed.windowManagerHandle.doc().contexts[contextId].url, seed.filePickerStateHandle.url);
+  assert.deepEqual(systemAppUrls(seed), initialSystemAppUrls);
+});
+
 void test('bootstrap runtime creates stateless package context for contextless module app launch', async () => {
   const seed = createSeedFilesystem();
   const runtime = bootstrapRuntime(seed);
@@ -1019,6 +1080,9 @@ function installFakeAppManifest(seed, {
   app,
   entry = `${app}.html`,
   handles = [],
+  surfaces = [
+    { role: SurfaceRole.DocumentSet },
+  ],
 }) {
   const handle = seed.repo.create({
     '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
@@ -1031,9 +1095,7 @@ function installFakeAppManifest(seed, {
     manifestVersion: 1,
     mimeType: automergeMimeType,
     name: app,
-    surfaces: [
-      { role: SurfaceRole.DocumentSet },
-    ],
+    surfaces,
     version: '0.0.0',
   });
   seed.documentHandles[handle.url] = handle;

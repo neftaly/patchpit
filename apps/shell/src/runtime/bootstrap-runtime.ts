@@ -12,6 +12,7 @@ import {
   type FilesystemResource,
   type FolderDoc,
   type SeedFilesystem,
+  type SurfaceSpec,
   type WindowContext,
   type WindowManagerStateDoc,
 } from '@patchpit/system';
@@ -636,9 +637,7 @@ function resolveAppLaunchContext(seed: SeedFilesystem, launch: AppLaunchRequest)
   }
 
   if (surface.state !== undefined) {
-    const existing = launch.app === 'file-picker'
-      ? existingStatefulLaunchContext(seed, launch.app, surface.state.type)
-      : undefined;
+    const existing = existingStatefulLaunchContext(seed, launch.app, surface.state);
     return existing === undefined ? launch : { ...launch, context: existing };
   }
 
@@ -663,12 +662,27 @@ function resolveAppLaunchContext(seed: SeedFilesystem, launch: AppLaunchRequest)
 function existingStatefulLaunchContext(
   seed: SeedFilesystem,
   app: string,
-  stateType: string,
+  state: NonNullable<SurfaceSpec['state']>,
 ): WindowContext | undefined {
   return Object.values(seed.windowManagerHandle.doc().contexts).find((context) => {
     if (context.app !== app) return false;
-    return seed.documentHandles[context.url]?.doc()['@patchpit'].type === stateType;
+    return documentMatchesStateSpec(seed.documentHandles[context.url]?.doc(), state);
   });
+}
+
+function documentMatchesStateSpec(
+  doc: FilesystemResource | undefined,
+  state: NonNullable<SurfaceSpec['state']>,
+): boolean {
+  const metadata = doc?.['@patchpit'];
+  if (metadata?.type !== state.type) return false;
+  if (state.schema === undefined) return true;
+
+  const schema = metadata.schema;
+  if (schema?.id !== state.schema.id) return false;
+  if (state.schema.hash !== undefined && schema.hash !== state.schema.hash) return false;
+  if (state.schema.url !== undefined && schema.url !== state.schema.url) return false;
+  return true;
 }
 
 function installedAppEntryUrl(seed: SeedFilesystem, manifest: AppManifestDoc): string | undefined {
