@@ -176,12 +176,16 @@ export type RuntimeEvent =
 
 export type ProjectionName =
   | 'filesystem.tree'
+  | 'runtime.installedApps'
   | 'runtime.projections'
   | 'workspace.layout';
 
 export const filesystemTreeProjection = 'filesystem.tree' as const satisfies ProjectionName;
 export const filesystemTreeSchemaId = 'patchpit.filesystem.tree@1' as const;
 export const filesystemTreeNodesRelation = 'nodes' as const;
+export const installedAppsProjection = 'runtime.installedApps' as const satisfies ProjectionName;
+export const installedAppsSchemaId = 'patchpit.runtime.installedApps@1' as const;
+export const installedAppsRelation = 'apps' as const;
 export const runtimeProjectionsProjection = 'runtime.projections' as const satisfies ProjectionName;
 export const runtimeProjectionsSchemaId = 'patchpit.runtime.projections@1' as const;
 export const runtimeProjectionsRelation = 'projections' as const;
@@ -196,6 +200,7 @@ export const projectionVirtualServiceRootUrl = 'patchpit-srv:/' as const;
 export const projectionVirtualRootUrl = 'patchpit-srv:/projections' as const;
 const projectionNames = [
   filesystemTreeProjection,
+  installedAppsProjection,
   runtimeProjectionsProjection,
   workspaceLayoutProjection,
 ] as const satisfies readonly ProjectionName[];
@@ -265,6 +270,24 @@ export type RuntimeProjectionCatalogRow = {
   readonly schemaHash: PatchpitSchemaHash;
   readonly schemaId: TarstateSchemaId;
   readonly schemaUrl?: string;
+};
+
+export type InstalledAppRuntimeRow = {
+  readonly appId: string;
+  readonly entryKind: string;
+  readonly entryPath: string;
+  readonly entryStatus: 'resolved' | 'missing';
+  readonly entryUrl?: string;
+  readonly handles: Json;
+  readonly hasStatefulLaunch: boolean;
+  readonly icon: string;
+  readonly launchRole: string;
+  readonly manifestUrl: string;
+  readonly name: string;
+  readonly packagePath: string;
+  readonly packageUrl: string;
+  readonly surfaces: Json;
+  readonly version: string;
 };
 
 export type ProjectionSubscriptionRequest = {

@@ -27,6 +27,9 @@ import {
   filesystemTreeNodesRelation,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  installedAppsProjection,
+  installedAppsRelation,
+  installedAppsSchemaId,
   parseProjectionVirtualFileUrl,
   projectionVirtualDirectoryUrl,
   projectionVirtualFileUrl,
@@ -50,7 +53,7 @@ import {
   relationRows,
   relationSetNames,
 } from '@patchpit/system/runtime/relations';
-import { installedAppsFromFilesystem } from '../app-host/installed-apps.ts';
+import { installedAppsFromFilesystem } from './installed-apps.ts';
 import {
   createSandboxPackageLoadPlan,
   sandboxFilesystemAppEntry,
@@ -102,7 +105,7 @@ void test('bootstrap runtime serves a live filesystem tree projection', () => {
     assert.equal(srvRow?.name, 'srv');
     assert.equal(rows.find((row) => row.url === projectionVirtualRootUrl)?.parentUrl, projectionVirtualServiceRootUrl);
 
-    for (const projection of [runtimeProjectionsProjection, workspaceLayoutProjection]) {
+    for (const projection of [installedAppsProjection, runtimeProjectionsProjection, workspaceLayoutProjection]) {
       const projectionUrl = projectionVirtualDirectoryUrl(projection);
       const projectionRow = rows.find((row) => row.url === projectionUrl);
       assert.equal(projectionRow?.parentUrl, projectionVirtualRootUrl);
@@ -135,7 +138,7 @@ void test('bootstrap runtime serves a live filesystem tree projection', () => {
     assert.equal(runtimeSchema.schemaId, runtimeProjectionsSchemaId);
     assert.equal(runtimeSummary.projection, runtimeProjectionsProjection);
     assert.equal(runtimeSummary.schemaId, runtimeProjectionsSchemaId);
-    assert.equal(runtimeSummary.relationCounts[runtimeProjectionsRelation], 3);
+    assert.equal(runtimeSummary.relationCounts[runtimeProjectionsRelation], 4);
   } finally {
     subscription.close();
   }
@@ -196,6 +199,7 @@ void test('bootstrap runtime serves a runtime projection catalog including itsel
     const rows = relationRows(snapshot.relations, runtimeProjectionsRelation);
     assert.deepEqual(rows.map((row) => row.name), [
       filesystemTreeProjection,
+      installedAppsProjection,
       runtimeProjectionsProjection,
       workspaceLayoutProjection,
     ]);
@@ -210,6 +214,10 @@ void test('bootstrap runtime serves a runtime projection catalog including itsel
       filesystemTreeSchemaId,
     );
     assert.equal(
+      rows.find((row) => row.name === installedAppsProjection)?.schemaId,
+      installedAppsSchemaId,
+    );
+    assert.equal(
       rows.find((row) => row.name === workspaceLayoutProjection)?.schemaId,
       workspaceProjectionSchemaId,
     );
@@ -217,6 +225,59 @@ void test('bootstrap runtime serves a runtime projection catalog including itsel
       rows.find((row) => row.name === runtimeProjectionsProjection)?.schemaId,
       runtimeProjectionsSchemaId,
     );
+  } finally {
+    subscription.close();
+  }
+});
+
+void test('bootstrap runtime serves installed app package projection', () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+  const events = [];
+  const subscription = runtime.subscribeProjection(
+    {
+      projection: installedAppsProjection,
+      schemaId: installedAppsSchemaId,
+      basis: { kind: 'live' },
+    },
+    (event) => events.push(event),
+  );
+
+  try {
+    assert.equal(events.length, 1);
+    const snapshotEvent = events[0];
+    assert.equal(snapshotEvent.type, 'snapshot');
+
+    const snapshot = snapshotEvent.snapshot;
+    assert.equal(snapshot.projection, installedAppsProjection);
+    assert.equal(snapshot.schemaId, installedAppsSchemaId);
+    assert.equal(snapshot.schema?.schemaId, installedAppsSchemaId);
+    assert.match(snapshot.schemaHash, /^sha256:[a-f0-9]{64}$/);
+    assert.deepEqual(Object.keys(snapshot.storageHeads ?? {}), [seed.indexHandle.url]);
+    assert.deepEqual(relationSetNames(snapshot.relations), [installedAppsRelation]);
+
+    const rows = relationRows(snapshot.relations, installedAppsRelation);
+    const viewer = rows.find((row) => row.appId === 'viewer');
+    assert.ok(viewer);
+    assert.equal(viewer.name, 'Viewer');
+    assert.equal(viewer.entryKind, 'module');
+    assert.equal(viewer.entryPath, 'app.js');
+    assert.equal(viewer.entryStatus, 'resolved');
+    assert.match(viewer.entryUrl, /^automerge:/);
+    assert.equal(viewer.icon, '📄');
+    assert.equal(viewer.launchRole, SurfaceRole.DocumentSet);
+    assert.equal(viewer.manifestUrl.startsWith('automerge:'), true);
+    assert.equal(viewer.packagePath, '/apps/viewer');
+    assert.equal(viewer.packageUrl.startsWith('automerge:'), true);
+    assert.equal(viewer.handles.some((handler) => (
+      handler.intent === 'open'
+      && handler.port === 'view'
+      && handler.accepts.includes('*/*')
+    )), true);
+    assert.deepEqual(viewer.surfaces, [
+      { role: SurfaceRole.DocumentSet },
+    ]);
+    assert.equal(viewer.version, '0.0.0');
   } finally {
     subscription.close();
   }
@@ -528,19 +589,36 @@ void test('bootstrap runtime ignores direct app manifest files under apps folder
     ],
   });
   const runtime = bootstrapRuntime(seed);
-
-  const result = await submitRuntimeIntent(runtime, {
-    boundary: routeIntentBoundary,
-    intent: routeOpenIntent,
-    row: {
-      id: 'direct-manifest-route-open-test',
-      title: 'Direct Manifest Route Target',
-      url: target.url,
+  const projectionEvents = [];
+  const projectionSubscription = runtime.subscribeProjection(
+    {
+      projection: installedAppsProjection,
+      schemaId: installedAppsSchemaId,
+      basis: { kind: 'live' },
     },
-  });
+    (event) => projectionEvents.push(event),
+  );
 
-  assert.equal(result.status, 'rejected');
-  assert.equal(result.error.code, 'missing_handler');
+  try {
+    const projectionSnapshot = projectionEvents[0];
+    assert.equal(projectionSnapshot.type, 'snapshot');
+    assert.deepEqual(relationRows(projectionSnapshot.snapshot.relations, installedAppsRelation), []);
+
+    const result = await submitRuntimeIntent(runtime, {
+      boundary: routeIntentBoundary,
+      intent: routeOpenIntent,
+      row: {
+        id: 'direct-manifest-route-open-test',
+        title: 'Direct Manifest Route Target',
+        url: target.url,
+      },
+    });
+
+    assert.equal(result.status, 'rejected');
+    assert.equal(result.error.code, 'missing_handler');
+  } finally {
+    projectionSubscription.close();
+  }
 });
 
 void test('bootstrap runtime reuses existing matching context for contextless file picker launch', async () => {

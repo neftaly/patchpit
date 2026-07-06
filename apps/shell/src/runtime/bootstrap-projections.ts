@@ -1,8 +1,10 @@
 import {
   filesystemTreeProjectionRelations,
   filesystemTreeSchema,
+  patchpitSystemSchemaCatalog,
   patchpitSystemSchemaRef,
   PatchpitType,
+  projectFilesystem,
   projectFilesystemTreeRows,
   runtimeProjectionsSchema,
   windowManagerStateSchema,
@@ -12,6 +14,9 @@ import {
 import {
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  installedAppsProjection,
+  installedAppsRelation,
+  installedAppsSchemaId,
   projectionVirtualDirectoryUrl,
   projectionVirtualFileUrl,
   projectionVirtualRootUrl,
@@ -23,6 +28,7 @@ import {
   workspaceProjectionRelationSet,
   type AutomergeHeadSet,
   type FilesystemTreeNodeRow,
+  type InstalledAppRuntimeRow,
   type ProjectionName,
   workspaceLayoutProjection,
   workspaceProjectionSchemaId,
@@ -42,6 +48,10 @@ import {
   relationSetFromRows,
   relationSetNames,
 } from '@patchpit/system/runtime/relations';
+import {
+  installedAppRuntimeRows,
+  installedAppsFromFilesystem,
+} from './installed-apps';
 import { automergeHeadSetForHandle } from './automerge-heads';
 
 type ProjectionDiagnosticsRecorder = {
@@ -93,6 +103,13 @@ const runtimeProjectionsSnapshotSchema = {
   ...(runtimeProjectionsSchemaRef.hash === undefined ? {} : { schemaHash: runtimeProjectionsSchemaRef.hash }),
 } as const;
 
+const installedAppsSchema = requiredSystemSchema(installedAppsSchemaId);
+const installedAppsSchemaRef = patchpitSystemSchemaRef(installedAppsSchemaId);
+const installedAppsSnapshotSchema = {
+  schema: installedAppsSchema,
+  ...(installedAppsSchemaRef.hash === undefined ? {} : { schemaHash: installedAppsSchemaRef.hash }),
+} as const;
+
 const workspaceProjectionSchemaRef = patchpitSystemSchemaRef(windowManagerStateSchema);
 const workspaceProjectionSnapshotSchema = {
   schema: windowManagerStateSchema,
@@ -123,6 +140,19 @@ const bootstrapProjectionDefinitions: Partial<Record<ProjectionName, BootstrapPr
     subscribe: () => () => {},
     payload: projectionCatalogPayload,
   },
+  [installedAppsProjection]: {
+    projection: installedAppsProjection,
+    description: 'Read-only runtime projection of installed app packages discovered under /apps.',
+    owner: '@patchpit/system/runtime',
+    schemaId: installedAppsSchemaId,
+    schema: installedAppsSnapshotSchema,
+    schemaRef: installedAppsSchemaRef,
+    subscribe: (seed, update) => {
+      seed.indexHandle.on('change', update);
+      return () => seed.indexHandle.off('change', update);
+    },
+    payload: installedAppsPayload,
+  },
   [workspaceLayoutProjection]: {
     projection: workspaceLayoutProjection,
     description: 'Shared Patchpit window-manager state projected as runtime layout relations.',
@@ -139,6 +169,12 @@ const bootstrapProjectionDefinitions: Partial<Record<ProjectionName, BootstrapPr
 } as const satisfies Partial<Record<ProjectionName, BootstrapProjectionDefinition>>;
 
 assertProjectionDefinitionsShipSchemas(bootstrapProjectionDefinitions);
+
+function requiredSystemSchema(schemaId: string) {
+  const schema = patchpitSystemSchemaCatalog[schemaId];
+  if (schema === undefined) throw new Error(`Unknown Patchpit system schema: ${schemaId}`);
+  return schema;
+}
 
 export function createBootstrapProjectionSubscriber({
   diagnostics,
@@ -301,6 +337,30 @@ function workspaceLayoutPayload(seed: SeedFilesystem): ProjectionPayload {
   return {
     storageHeads: automergeHeadSetForHandle(seed.windowManagerHandle),
     relations: workspaceProjectionRelationSet(seed.windowManagerHandle.doc()),
+  };
+}
+
+function installedAppsPayload(seed: SeedFilesystem): ProjectionPayload | RuntimeError {
+  const projection = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
+  if (projection.diagnostics.length > 0) {
+    return {
+      code: 'internal_error',
+      message: 'Installed apps projection failed.',
+      metadata: { diagnostics: projection.diagnostics.map((diagnostic) => String(diagnostic)) },
+    };
+  }
+  if (projection.root === null) {
+    return runtimeError('not_found', `Filesystem root ${seed.rootUrl} is not available.`);
+  }
+
+  const rows = installedAppRuntimeRows(installedAppsFromFilesystem({
+    getDocument: (url) => seed.documentHandles[url]?.doc(),
+    root: projection.root,
+  })) satisfies readonly InstalledAppRuntimeRow[];
+
+  return {
+    storageHeads: automergeHeadSetForHandle(seed.indexHandle),
+    relations: relationSetFromRows({ [installedAppsRelation]: rows }),
   };
 }
 
