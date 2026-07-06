@@ -294,7 +294,22 @@ function clickFilePickerTreeItemExpression({ name, occurrence = 0 }) {
     };
   }
 
-  button.click();
+  button.dispatchEvent(new PointerEvent('pointerdown', {
+    bubbles: true,
+    button: 0,
+    buttons: 1,
+    isPrimary: true,
+    pointerId: 1,
+    pointerType: 'mouse',
+  }));
+  button.dispatchEvent(new PointerEvent('pointerup', {
+    bubbles: true,
+    button: 0,
+    buttons: 0,
+    isPrimary: true,
+    pointerId: 1,
+    pointerType: 'mouse',
+  }));
   return {
     status: 'passed',
     clicked: ${JSON.stringify(name)},

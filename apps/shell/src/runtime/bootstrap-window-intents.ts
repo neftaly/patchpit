@@ -157,7 +157,7 @@ function commitRouteIntent(
   const target = contextDropTarget(route.target);
   const context = target === undefined
     ? routedContext(app, route.url, route.title, route.rootUrl ?? defaultRootUrl)
-    : duplicateRoutedContext(doc, app, route.url, route.title, route.rootUrl ?? defaultRootUrl, route.id);
+    : placedRoutedContext(doc, app, route.url, route.title, route.rootUrl ?? defaultRootUrl, route.id);
 
   if (target !== undefined) {
     dropNewContext(doc, context, target);
@@ -295,7 +295,7 @@ function commitWindowIntent(
   }
 }
 
-function duplicateRoutedContext(
+function placedRoutedContext(
   doc: WindowManagerStateDoc,
   app: string,
   url: string,
@@ -303,10 +303,9 @@ function duplicateRoutedContext(
   rootUrl: string,
   intentId: string,
 ): WindowContext {
-  const base = routedContext(app, url, title, rootUrl);
   return {
-    ...base,
-    id: uniqueContextId(doc, `${base.id}:${intentId}`),
+    ...routedContext(app, url, title, rootUrl),
+    id: uniqueContextId(doc, `${app}:intent:${intentId}`),
   };
 }
 

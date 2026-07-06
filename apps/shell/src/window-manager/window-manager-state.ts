@@ -384,7 +384,6 @@ function normalizeSurfaceActiveContexts(state: WindowManagerStateDoc): void {
 function removeEmptyDocumentSurfaces(state: WindowManagerStateDoc): void {
   for (const surface of Object.values(state.surfaces)) {
     if (!isEmptyDocumentSurface(surface)) continue;
-    if (documentSurfaceCount(state) <= 1) continue;
     if (!removeDocumentSurface(state, surface)) continue;
     delete state.surfaces[surface.id];
   }
