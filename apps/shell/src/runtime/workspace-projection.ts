@@ -8,6 +8,7 @@ import {
 } from '@patchpit/system';
 import {
   workspaceContextsRelation,
+  relationRows,
   workspaceStateRelation,
   workspaceSurfacesRelation,
   type AutomergeHeadSet,
@@ -58,9 +59,9 @@ export function workspaceProjectionFromRelationSet(
   storageHeads?: AutomergeHeadSet,
 ): WorkspaceProjectionState {
   const diagnostics: string[] = [];
-  const stateRows = relations.relations[workspaceStateRelation] ?? [];
-  const contextRows = relations.relations[workspaceContextsRelation] ?? [];
-  const surfaceRows = relations.relations[workspaceSurfacesRelation] ?? [];
+  const stateRows = relationRows(relations, workspaceStateRelation);
+  const contextRows = relationRows(relations, workspaceContextsRelation);
+  const surfaceRows = relationRows(relations, workspaceSurfacesRelation);
 
   if (stateRows.length !== 1) {
     diagnostics.push(`Expected exactly one workspace state row, found ${stateRows.length}.`);

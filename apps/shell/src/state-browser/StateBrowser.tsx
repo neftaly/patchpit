@@ -41,7 +41,7 @@ export type StateBrowserSnapshotInput = {
   readonly runtimeIssueHistory: readonly StateBrowserRuntimeIssueEntry[];
   readonly runtimePlatform: RuntimePlatformReport;
   readonly runtimeState: RuntimeStateDoc;
-  readonly schemaRefs: readonly DocumentSchemaRef[];
+  readonly stateDocuments: Readonly<Record<string, unknown>>;
   readonly workspaceProjection: WorkspaceProjectionState;
 };
 
@@ -58,7 +58,17 @@ type StateBrowserSection = {
 type PatchpitMetadataSummary = Readonly<Record<string, unknown>> & {
   readonly type: string;
 };
-export type DocumentSchemaRef = {
+type StateDocumentSummary = {
+  readonly stateKind: 'canonical';
+  readonly exposure: {
+    readonly fileBrowser: 'reachable' | 'not-in-file-tree';
+    readonly path?: string;
+    readonly viewer: 'raw-state-not-rendered';
+  };
+  readonly metadata: PatchpitMetadataSummary;
+  readonly url: string;
+};
+type DocumentSchemaRef = {
   readonly inlineSchemaIds?: readonly string[];
   readonly schema?: unknown;
   readonly type: string;
@@ -90,8 +100,10 @@ export function StateBrowser({ snapshot }: { readonly snapshot: StateBrowserSnap
 }
 
 export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): StateBrowserSnapshot {
-  const schemaRefs = input.schemaRefs;
+  const schemaRefs = documentSchemaRefs(input.stateDocuments);
   const schemaCatalog = systemSchemaCatalogSummary();
+  const projectionCounters = totalProjectionCounters(input.runtimeDiagnostics);
+  const stateDocuments = stateDocumentSummaries(input);
 
   return {
     sections: [
@@ -131,13 +143,26 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
         summary: projectionStatusSummary(
           input.filesystemProjection,
           input.workspaceProjection,
-          input.runtimeDiagnostics,
+          projectionCounters,
         ),
         data: projectionStatusData(
           input.filesystemProjection,
           input.workspaceProjection,
           input.runtimeDiagnostics,
+          projectionCounters,
         ),
+      },
+      {
+        id: 'state-documents',
+        title: 'State Documents',
+        summary: stateDocumentsSummary(stateDocuments),
+        data: stateDocumentsData(input.stateDocuments, stateDocuments),
+      },
+      {
+        id: 'projection-snapshots',
+        title: 'Projection Snapshots',
+        summary: projectionSnapshotsSummary(input.filesystemProjection, input.workspaceProjection),
+        data: projectionSnapshotsData(input.filesystemProjection, input.workspaceProjection),
       },
       {
         id: 'schemas',
@@ -161,14 +186,16 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
         summary: 'Bootstrap runtime placeholders',
         data: {
           policy: {
+            stateKind: 'live',
             current: 'allowAllRuntimePolicy',
             scope: 'submitIntent admission',
             note: 'The bootstrap runtime currently allows all admitted intents after shape and target validation.',
           },
           capabilities: {
+            stateKind: 'live',
             activeGrants: [],
-            openCapability: 'unknown_capability',
-            note: 'Capability grants are protocol-shaped but not implemented in the bootstrap runtime.',
+            providerRegistration: 'bootstrap runtime dispatches registered capability providers',
+            note: 'Capability grants are opened on demand; persistent grant tracking is not represented yet.',
           },
         },
       },
@@ -179,10 +206,12 @@ export function createStateBrowserSnapshot(input: StateBrowserSnapshotInput): St
 function runtimeBootGateData(input: StateBrowserSnapshotInput) {
   return {
     connection: {
+      stateKind: 'live',
       status: 'ready',
       ack: input.runtimeAck,
     },
     stateDocument: {
+      stateKind: 'canonical',
       appInstances: input.runtimeState.appInstances,
       boot: input.runtimeState.boot,
       features: input.runtimeState.features,
@@ -318,9 +347,8 @@ function layoutSummary(node: WindowLayoutNode): unknown {
 function projectionStatusSummary(
   projection: FilesystemTreeProjectionState,
   workspaceProjection: WorkspaceProjectionState,
-  diagnostics: BootstrapRuntimeDiagnostics,
+  counters: ProjectionCounters,
 ): string {
-  const counters = totalProjectionCounters(diagnostics);
   return [
     `filesystem ${projection.status}`,
     `workspace ${workspaceProjection.status}`,
@@ -333,26 +361,24 @@ function projectionStatusData(
   projection: FilesystemTreeProjectionState,
   workspaceProjection: WorkspaceProjectionState,
   diagnostics: BootstrapRuntimeDiagnostics,
+  counters: ProjectionCounters,
 ) {
   return {
     current: {
+      stateKind: 'derived',
       filesystem: filesystemProjectionData(projection),
       workspace: workspaceProjectionData(workspaceProjection),
     },
+    stateKind: 'live',
     subscriptions: diagnostics.projectionSubscriptions,
-    totals: totalProjectionCounters(diagnostics),
+    totals: counters,
   };
 }
 
 function filesystemProjectionData(projection: FilesystemTreeProjectionState) {
-  if (projection.status === 'initializing') return { status: projection.status };
-  if (projection.status === 'failed') {
-    return {
-      status: projection.status,
-      failure: projection.failure,
-    };
-  }
+  if (projection.status !== 'ready') return unavailableProjectionData(projection);
   return {
+    stateKind: 'derived',
     status: projection.status,
     rootUrl: projection.root.url,
     nodeCount: countFilesystemNodes(projection.root),
@@ -360,12 +386,9 @@ function filesystemProjectionData(projection: FilesystemTreeProjectionState) {
 }
 
 function workspaceProjectionData(projection: WorkspaceProjectionState) {
-  if (projection.status === 'initializing') return { status: projection.status };
-  if (projection.status === 'failed') return {
-    status: projection.status,
-    failure: projection.failure,
-  };
+  if (projection.status !== 'ready') return unavailableProjectionData(projection);
   return {
+    stateKind: 'derived',
     status: projection.status,
     focus: projection.workspace.focus,
     contextCount: Object.keys(projection.workspace.contexts).length,
@@ -374,6 +397,120 @@ function workspaceProjectionData(projection: WorkspaceProjectionState) {
     storageHeadDocs: Object.keys(projection.workspace.storageHeads ?? {}),
   };
 }
+
+function stateDocumentsSummary(entries: readonly StateDocumentSummary[]): string {
+  const hiddenCount = entries.filter((entry) => entry.exposure.fileBrowser === 'not-in-file-tree').length;
+  return `${entries.length} canonical docs, ${hiddenCount} not in file tree`;
+}
+
+function stateDocumentsData(
+  documents: Readonly<Record<string, unknown>>,
+  summaries: readonly StateDocumentSummary[],
+) {
+  return {
+    stateKind: 'canonical',
+    summary: {
+      count: summaries.length,
+      notInFileTree: summaries.filter((entry) => entry.exposure.fileBrowser === 'not-in-file-tree').length,
+      byType: countBy(summaries, (entry) => entry.metadata.type),
+    },
+    documents: summaries.map((summary) => ({
+      ...summary,
+      document: documents[summary.url],
+    })),
+  };
+}
+
+function stateDocumentSummaries(input: StateBrowserSnapshotInput): readonly StateDocumentSummary[] {
+  const pathsByUrl = fileTreePathsByUrl(input.filesystemProjection);
+  return Object.entries(input.stateDocuments)
+    .map(([url, document]) => {
+      const metadata = patchpitMetadata(document);
+      if (metadata === undefined) return undefined;
+
+      const path = pathsByUrl.get(url);
+      return {
+        stateKind: 'canonical',
+        url,
+        metadata,
+        exposure: {
+          fileBrowser: path === undefined ? 'not-in-file-tree' : 'reachable',
+          ...(path === undefined ? {} : { path }),
+          viewer: 'raw-state-not-rendered',
+        },
+      } satisfies StateDocumentSummary;
+    })
+    .filter(isDefined)
+    .sort(compareStateDocumentSummaries);
+}
+
+function compareStateDocumentSummaries(left: StateDocumentSummary, right: StateDocumentSummary): number {
+  return left.metadata.type.localeCompare(right.metadata.type)
+    || (left.exposure.path ?? '').localeCompare(right.exposure.path ?? '')
+    || left.url.localeCompare(right.url);
+}
+
+function projectionSnapshotsSummary(
+  filesystemProjection: FilesystemTreeProjectionState,
+  workspaceProjection: WorkspaceProjectionState,
+): string {
+  return `filesystem ${filesystemProjection.status}, workspace ${workspaceProjection.status}`;
+}
+
+function projectionSnapshotsData(
+  filesystemProjection: FilesystemTreeProjectionState,
+  workspaceProjection: WorkspaceProjectionState,
+) {
+  return {
+    stateKind: 'derived',
+    filesystem: filesystemProjectionSnapshotData(filesystemProjection),
+    workspace: workspaceProjectionSnapshotData(workspaceProjection),
+  };
+}
+
+function filesystemProjectionSnapshotData(projection: FilesystemTreeProjectionState) {
+  if (projection.status !== 'ready') return unavailableProjectionData(projection);
+  return {
+    stateKind: 'derived',
+    status: projection.status,
+    root: projection.root,
+  };
+}
+
+function workspaceProjectionSnapshotData(projection: WorkspaceProjectionState) {
+  if (projection.status !== 'ready') return unavailableProjectionData(projection);
+  return {
+    stateKind: 'derived',
+    status: projection.status,
+    workspace: projection.workspace,
+  };
+}
+
+function unavailableProjectionData(projection: { readonly status: 'initializing' } | { readonly status: 'failed'; readonly failure: unknown }) {
+  return projection.status === 'initializing'
+    ? { stateKind: 'derived', status: projection.status }
+    : { stateKind: 'derived', status: projection.status, failure: projection.failure };
+}
+
+function fileTreePathsByUrl(projection: FilesystemTreeProjectionState): ReadonlyMap<string, string> {
+  if (projection.status !== 'ready') return new Map();
+
+  const paths = new Map<string, string>();
+  collectFilesystemPaths(projection.root, paths);
+  return paths;
+}
+
+function collectFilesystemPaths(node: FilesystemNode, paths: Map<string, string>, path = '/'): void {
+  paths.set(node.url, path);
+  if (node.kind === 'file') return;
+  for (const entry of node.entries) collectFilesystemPaths(entry, paths, childPath(path, entry.name));
+}
+
+function childPath(parent: string, child: string): string {
+  return parent === '/' ? `/${child}` : `${parent}/${child}`;
+}
+
+type ProjectionCounters = ReturnType<typeof totalProjectionCounters>;
 
 function totalProjectionCounters(diagnostics: BootstrapRuntimeDiagnostics) {
   return diagnostics.projectionSubscriptions.reduce(
@@ -441,7 +578,7 @@ function intentLogData(log: BootstrapRuntimeDiagnostics['intentLog']) {
   };
 }
 
-export function documentSchemaRefs(documents: Readonly<Record<string, unknown>>): readonly DocumentSchemaRef[] {
+function documentSchemaRefs(documents: Readonly<Record<string, unknown>>): readonly DocumentSchemaRef[] {
   return Object.entries(documents)
     .map(([url, document]) => documentSchemaRef(url, document))
     .filter(isDefined)

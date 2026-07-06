@@ -13,7 +13,10 @@ import {
   automergeHeadSetForHandle,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  relationSetFromRows,
   runtimeError,
+  type AutomergeHeadSet,
+  type ProjectionName,
   workspaceContextsRelation,
   workspaceLayoutProjection,
   workspaceProjectionSchemaId,
@@ -27,7 +30,6 @@ import {
   type RelationSet,
   type RuntimeClient,
   type RuntimeError,
-  type TarstateRow,
   type WorkspaceProjectionRelations,
   type WorkspaceProjectionStateRow,
 } from '@patchpit/system/runtime';
@@ -44,10 +46,26 @@ type BootstrapProjectionSubscriberOptions = {
   readonly workspaceId: string;
 };
 
-type LiveProjectionBuildContext = {
+type BootstrapProjectionDefinition = {
+  readonly projection: ProjectionName;
+  readonly schemaId: string;
+  readonly schema: ProjectionSnapshotSchema;
+  readonly subscribe: (seed: SeedFilesystem, update: () => void) => () => void;
+  readonly payload: (seed: SeedFilesystem) => ProjectionPayload | RuntimeError;
+};
+
+type ProjectionPayload = {
+  readonly relations: RelationSet;
+  readonly storageHeads: AutomergeHeadSet;
+};
+
+type ProjectionSnapshotSchema = Pick<ProjectionSnapshot, 'schema' | 'schemaHash'>;
+
+type ProjectionBuildContext = {
+  readonly definition: BootstrapProjectionDefinition;
   readonly request: ProjectionSubscriptionRequest;
-  readonly seed: SeedFilesystem;
   readonly subscriptionId: string;
+  readonly payload: ProjectionPayload;
 };
 
 const filesystemTreeSchemaRef = patchpitSystemSchemaRef(filesystemTreeSchema);
@@ -62,6 +80,29 @@ const workspaceProjectionSnapshotSchema = {
   ...(workspaceProjectionSchemaRef.hash === undefined ? {} : { schemaHash: workspaceProjectionSchemaRef.hash }),
 } as const;
 
+const bootstrapProjectionDefinitions: Partial<Record<ProjectionName, BootstrapProjectionDefinition>> = {
+  [filesystemTreeProjection]: {
+    projection: filesystemTreeProjection,
+    schemaId: filesystemTreeSchemaId,
+    schema: filesystemTreeSnapshotSchema,
+    subscribe: (seed, update) => {
+      seed.indexHandle.on('change', update);
+      return () => seed.indexHandle.off('change', update);
+    },
+    payload: filesystemTreePayload,
+  },
+  [workspaceLayoutProjection]: {
+    projection: workspaceLayoutProjection,
+    schemaId: workspaceProjectionSchemaId,
+    schema: workspaceProjectionSnapshotSchema,
+    subscribe: (seed, update) => {
+      seed.windowManagerHandle.on('change', update);
+      return () => seed.windowManagerHandle.off('change', update);
+    },
+    payload: workspaceLayoutPayload,
+  },
+};
+
 export function createBootstrapProjectionSubscriber({
   diagnostics,
   seed,
@@ -72,42 +113,33 @@ export function createBootstrapProjectionSubscriber({
   return (request, listener) => {
     const subscriptionId = `${workspaceId}:projection:${nextSubscriptionId++}`;
     diagnostics.recordProjectionOpened(subscriptionId, request);
+    const definition = bootstrapProjectionDefinitions[request.projection];
 
-    if (request.projection === filesystemTreeProjection) {
-      return subscribeFilesystemTreeProjection({
+    return definition === undefined
+      ? errorSubscription(subscriptionId, listener, runtimeError(
+        'unknown_projection',
+        `Unknown projection: ${request.projection}`,
+      ), diagnostics)
+      : subscribeLiveProjection({
+        definition,
         diagnostics,
         listener,
         request,
         seed,
         subscriptionId,
       });
-    }
-
-    if (request.projection === workspaceLayoutProjection) {
-      return subscribeWorkspaceLayoutProjection({
-        diagnostics,
-        listener,
-        request,
-        seed,
-        subscriptionId,
-      });
-    }
-
-    return errorSubscription(subscriptionId, listener, runtimeError(
-      'unknown_projection',
-      `Unknown projection: ${request.projection}`,
-    ), diagnostics);
   };
 }
 
-function subscribeFilesystemTreeProjection({
+function subscribeLiveProjection({
+  definition,
   diagnostics,
   listener,
   request,
   seed,
   subscriptionId,
 }: LiveProjectionSubscriptionOptions): ProjectionSubscription {
-  const schemaError = projectionSchemaError(request, filesystemTreeSchemaId);
+  const schemaError = projectionSchemaError(request, definition.schemaId);
   if (schemaError !== undefined) {
     return errorSubscription(subscriptionId, listener, schemaError, diagnostics);
   }
@@ -121,44 +153,13 @@ function subscribeFilesystemTreeProjection({
     subscriptionId,
     listener,
     diagnostics,
-    (update) => {
-      seed.indexHandle.on('change', update);
-      return () => seed.indexHandle.off('change', update);
-    },
-    () => filesystemTreeSnapshot({ request, seed, subscriptionId }),
-  );
-}
-
-function subscribeWorkspaceLayoutProjection({
-  diagnostics,
-  listener,
-  request,
-  seed,
-  subscriptionId,
-}: LiveProjectionSubscriptionOptions): ProjectionSubscription {
-  const schemaError = projectionSchemaError(request, workspaceProjectionSchemaId);
-  if (schemaError !== undefined) {
-    return errorSubscription(subscriptionId, listener, schemaError, diagnostics);
-  }
-
-  const basisError = liveBasisError(request);
-  if (basisError !== undefined) {
-    return errorSubscription(subscriptionId, listener, basisError, diagnostics);
-  }
-
-  return liveProjectionSubscription(
-    subscriptionId,
-    listener,
-    diagnostics,
-    (update) => {
-      seed.windowManagerHandle.on('change', update);
-      return () => seed.windowManagerHandle.off('change', update);
-    },
-    () => workspaceLayoutSnapshot({ request, seed, subscriptionId }),
+    (update) => definition.subscribe(seed, update),
+    () => buildProjectionSnapshot({ definition, request, seed, subscriptionId }),
   );
 }
 
 type LiveProjectionSubscriptionOptions = {
+  readonly definition: BootstrapProjectionDefinition;
   readonly diagnostics: ProjectionDiagnosticsRecorder;
   readonly listener: (event: ProjectionEvent) => void;
   readonly request: ProjectionSubscriptionRequest;
@@ -187,11 +188,41 @@ function liveBasisError(request: ProjectionSubscriptionRequest): RuntimeError | 
     );
 }
 
-function filesystemTreeSnapshot({
+function buildProjectionSnapshot({
+  definition,
   request,
   seed,
   subscriptionId,
-}: LiveProjectionBuildContext): ProjectionSnapshot | RuntimeError {
+}: Omit<LiveProjectionSubscriptionOptions, 'diagnostics' | 'listener'>): ProjectionSnapshot | RuntimeError {
+  const payload = definition.payload(seed);
+  if (isRuntimeError(payload)) return payload;
+
+  return projectionSnapshot({
+    definition,
+    request,
+    subscriptionId,
+    payload,
+  });
+}
+
+function projectionSnapshot({
+  definition,
+  payload,
+  request,
+  subscriptionId,
+}: ProjectionBuildContext): ProjectionSnapshot {
+  return {
+    subscriptionId,
+    projection: definition.projection,
+    schemaId: request.schemaId,
+    ...definition.schema,
+    basis: request.basis ?? { kind: 'live' },
+    storageHeads: payload.storageHeads,
+    relations: payload.relations,
+  };
+}
+
+function filesystemTreePayload(seed: SeedFilesystem): ProjectionPayload | RuntimeError {
   const projection = projectFilesystemTreeRows(seed.indexHandle.doc(), seed.rootUrl);
   if (projection.diagnostics.length > 0) {
     return {
@@ -202,38 +233,24 @@ function filesystemTreeSnapshot({
   }
 
   return {
-    subscriptionId,
-    projection: request.projection,
-    schemaId: request.schemaId,
-    ...filesystemTreeSnapshotSchema,
-    basis: request.basis ?? { kind: 'live' },
     storageHeads: automergeHeadSetForHandle(seed.indexHandle),
     relations: filesystemTreeRelationSet(projection.rows),
   };
 }
 
 function filesystemTreeRelationSet(rows: Parameters<typeof filesystemTreeProjectionRelations>[0]): RelationSet {
-  return relationSet(filesystemTreeProjectionRelations(rows));
+  return relationSetFromRows(filesystemTreeProjectionRelations(rows));
 }
 
-function workspaceLayoutSnapshot({
-  request,
-  seed,
-  subscriptionId,
-}: LiveProjectionBuildContext): ProjectionSnapshot {
+function workspaceLayoutPayload(seed: SeedFilesystem): ProjectionPayload {
   return {
-    subscriptionId,
-    projection: request.projection,
-    schemaId: request.schemaId,
-    ...workspaceProjectionSnapshotSchema,
-    basis: request.basis ?? { kind: 'live' },
     storageHeads: automergeHeadSetForHandle(seed.windowManagerHandle),
     relations: workspaceLayoutRelationSet(seed.windowManagerHandle.doc()),
   };
 }
 
 function workspaceLayoutRelationSet(state: WindowManagerStateDoc): RelationSet {
-  return relationSet(workspaceProjectionRelations(state));
+  return relationSetFromRows(workspaceProjectionRelations(state));
 }
 
 function workspaceProjectionRelations(
@@ -339,10 +356,6 @@ function errorSubscription(
       diagnostics.recordProjectionClosed(subscriptionId);
     },
   };
-}
-
-function relationSet(relations: Readonly<Record<string, readonly unknown[]>>): RelationSet {
-  return { relations: relations as Readonly<Record<string, readonly TarstateRow[]>> };
 }
 
 function isRuntimeError(value: unknown): value is RuntimeError {

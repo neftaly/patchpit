@@ -8,6 +8,7 @@ import {
   filesystemTreeNodesRelation,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  relationRows,
   workspaceLayoutProjection,
   workspaceProjectionSchemaId,
   type ProjectionEvent,
@@ -110,7 +111,7 @@ function filesystemFromProjectionEvent(
 }
 
 function filesystemFromRelationSet(relations: RelationSet, rootUrl: string): FilesystemTreeProjectionState {
-  const rows = relations.relations[filesystemTreeNodesRelation] ?? [];
+  const rows = relationRows(relations, filesystemTreeNodesRelation);
   const filesystem = projectFilesystemTreeFromRows(rows, rootUrl);
   if (filesystem.root !== null) return { status: 'ready', filesystem, root: filesystem.root };
 

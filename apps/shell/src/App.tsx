@@ -1,5 +1,4 @@
-import type { DocHandle } from '@automerge/automerge-repo';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react';
 import {
   FilePicker,
   filePickerDragType,
@@ -55,20 +54,16 @@ import {
 } from '@patchpit/system/runtime';
 import { LauncherBar } from './launcher/LauncherBar';
 import { launcherItems } from './launcher/launch-router';
-import { createBootstrapRuntimeClient, type BootstrapRuntimeClient } from './runtime/bootstrap-runtime';
+import { createBootstrapRuntimeClient } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
 import { detailFromUnknown, metadataDetails } from './runtime/runtime-error-details';
 import runtimeSharedWorkerUrl from './runtime/shared-worker.ts?sharedworker&url';
 import { submitFilePickerIntent, type FilePickerSelectUrlInput } from './runtime/file-picker-intents';
 import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/launch-intents';
 import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from './runtime/route-intents';
-import {
-  createStateBrowserSnapshot,
-  documentSchemaRefs,
-  StateBrowser,
-  type StateBrowserSnapshot,
-  type StateBrowserRuntimeIssueEntry,
-} from './state-browser/StateBrowser';
+import { type StateBrowserRuntimeIssueEntry } from './state-browser/StateBrowser';
+import { StateBrowserSurface } from './state-browser/StateBrowserSurface';
+import { useAutomergeDoc, useAutomergeDocs } from './runtime/use-automerge-doc';
 import { useFilesystemTreeProjection, useWorkspaceProjection } from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
 import {
@@ -132,7 +127,6 @@ function ShellApp({
     seed,
     workspaceId: 'default',
   }));
-  const runtimeDiagnostics = useRuntimeDiagnostics(runtime);
   const appearance = useAutomergeDoc(seed.appearanceHandle);
   const darkTheme = useAutomergeDoc(seed.darkThemeHandle);
   const fileTypes = useAutomergeDoc(seed.fileTypesHandle);
@@ -145,7 +139,6 @@ function ShellApp({
   const runtimeState = useAutomergeDoc(seed.runtimeStateHandle);
   const terminalHandles = useMemo(() => terminalAppStateHandles(seed, runtimeState), [seed, runtimeState]);
   const terminalStates = useAutomergeDocs(terminalHandles);
-  const windowManagerDocument = useAutomergeDoc(seed.windowManagerHandle);
   const prefersDark = usePrefersDark();
   const theme = resolveTheme(appearance, lightTheme, darkTheme, prefersDark);
 
@@ -153,30 +146,8 @@ function ShellApp({
     recordRuntimeBootGateAck(seed, { ack: runtimeConnection.ack, platform: runtimePlatform });
   }, [runtimeConnection.ack, runtimePlatform, seed]);
 
-  const liveDocuments = {
-    [seed.appearanceHandle.url]: appearance,
-    [seed.darkThemeHandle.url]: darkTheme,
-    [seed.fileTypesHandle.url]: fileTypes,
-    [seed.filePickerStateHandle.url]: filePickerState,
-    [seed.lightThemeHandle.url]: lightTheme,
-    [seed.runtimeStateHandle.url]: runtimeState,
-    [seed.windowManagerHandle.url]: windowManagerDocument,
-    ...terminalStates,
-  };
-  const schemaRefs = documentSchemaRefs(liveDocuments);
   const filesystemProjection = useFilesystemTreeProjection(runtime, seed.rootUrl);
   const workspaceProjection = useWorkspaceProjection(runtime);
-  const stateBrowserSnapshot = createStateBrowserSnapshot({
-    filesystemProjection,
-    runtimeAck: runtimeConnection.ack,
-    runtimeDiagnostics,
-    runtimeIssue: runtimeFault,
-    runtimeIssueHistory,
-    runtimePlatform,
-    runtimeState,
-    schemaRefs,
-    workspaceProjection,
-  });
   const recordRuntimeIssue = (source: StateBrowserRuntimeIssueEntry['source'], issue: RuntimePanelFailure) => {
     const entry: StateBrowserRuntimeIssueEntry = {
       id: nextRuntimeIssueId.current++,
@@ -313,7 +284,19 @@ function ShellApp({
                 url: seed.filePickerStateHandle.url,
               },
               filesystemRoot: filesystemProjection.root,
-              stateBrowser: stateBrowserSnapshot,
+              stateBrowser: (
+                <StateBrowserSurface
+                  filesystemProjection={filesystemProjection}
+                  runtimeAck={runtimeConnection.ack}
+                  runtime={runtime}
+                  runtimeIssue={runtimeFault}
+                  runtimeIssueHistory={runtimeIssueHistory}
+                  runtimePlatform={runtimePlatform}
+                  runtimeState={runtimeState}
+                  seed={seed}
+                  workspaceProjection={workspaceProjection}
+                />
+              ),
               terminalSessions,
               theme,
             })}
@@ -340,7 +323,7 @@ function shellAppHost({
     readonly url: string;
   };
   readonly filesystemRoot: FilesystemNode;
-  readonly stateBrowser: StateBrowserSnapshot;
+  readonly stateBrowser: ReactNode;
   readonly terminalSessions: Readonly<Record<string, TerminalAppSession>>;
   readonly theme: ThemeDoc;
 }): WindowManagerAppHost {
@@ -402,7 +385,7 @@ function shellAppHost({
         );
       }
 
-      if (context.app === 'state-browser') return <StateBrowser snapshot={stateBrowser} />;
+      if (context.app === 'state-browser') return stateBrowser;
 
       if (context.app === 'viewer') return <Viewer filesystemRoot={filesystemRoot} url={context.url} />;
 
@@ -448,37 +431,6 @@ function dragDataFromEvent<T>(event: DragEvent, type: string): T | undefined {
   } catch {
     return undefined;
   }
-}
-
-function useAutomergeDoc<T>(handle: DocHandle<T>): T {
-  return useSyncExternalStore(
-    (update) => {
-      handle.on('change', update);
-      return () => handle.off('change', update);
-    },
-    () => handle.doc(),
-  );
-}
-
-function useAutomergeDocs<T>(handles: readonly DocHandle<T>[]): Readonly<Record<string, T>> {
-  const [, setVersion] = useState(0);
-
-  useEffect(() => {
-    const update = () => setVersion((current) => current + 1);
-    for (const handle of handles) handle.on('change', update);
-    return () => {
-      for (const handle of handles) handle.off('change', update);
-    };
-  }, [handles]);
-
-  return Object.fromEntries(handles.map((handle) => [handle.url, handle.doc()]));
-}
-
-function useRuntimeDiagnostics(runtime: BootstrapRuntimeClient) {
-  return useSyncExternalStore(
-    (listener) => runtime.diagnostics.subscribe(listener),
-    () => runtime.diagnostics.getSnapshot(),
-  );
 }
 
 const runtimeIssueHistoryLimit = 50;

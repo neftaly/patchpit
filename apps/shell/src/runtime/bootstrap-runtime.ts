@@ -19,6 +19,8 @@ import {
 import {
   appLaunchIntent,
   automergeHeadSetForHandle,
+  relationRowCounts,
+  relationSetCounts,
   runtimeError,
   runtimeIntentRequestRow,
   windowCloseContextIntent,
@@ -424,7 +426,7 @@ function intentRequestDiagnostics(request: IntentRequest): BootstrapIntentLogEnt
     baseHeadDocs: Object.keys(request.baseHeads ?? {}).sort(),
     ...(request.idempotencyKey === undefined ? {} : { idempotencyKey: request.idempotencyKey }),
     input: request.input,
-    relationCounts: relationCounts(request.input.relations),
+    relationCounts: relationRowCounts(request.input.relations),
   };
 }
 
@@ -490,18 +492,10 @@ function projectionEventDiagnostics(event: ProjectionEvent): unknown {
   return {
     type: event.type,
     ...(event.type === 'reset' && event.reason !== undefined ? { reason: event.reason } : {}),
-    relationCounts: relationCounts(event.snapshot.relations.relations),
+    relationCounts: relationSetCounts(event.snapshot.relations),
     schemaHash: event.snapshot.schemaHash,
     storageHeadDocs: Object.keys(event.snapshot.storageHeads ?? {}).sort(),
   };
-}
-
-function relationCounts(relations: Readonly<Record<string, readonly unknown[]>>): Readonly<Record<string, number>> {
-  return Object.fromEntries(
-    Object.entries(relations)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([name, rows]) => [name, rows.length]),
-  );
 }
 
 function appendLimited<T>(entries: readonly T[], entry: T): readonly T[] {

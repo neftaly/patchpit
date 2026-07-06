@@ -1,4 +1,4 @@
-import { validateRelationRow } from '@tarstate/core/evaluate';
+import { validateRelationRow } from '@tarstate/core/relation';
 import { hydrateSchemaManifest, type HydratedSchema, type RelationRef } from '@tarstate/core/schema';
 import type { SurfaceRole, WindowContext, WindowLayoutNode, WindowSurface } from '../filesystem/types';
 import type {

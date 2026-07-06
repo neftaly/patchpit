@@ -1,8 +1,9 @@
 # State Visibility TODO
 
 This list tracks runtime and system state that should be visible through a
-state/debug surface. It intentionally does not count normal Automerge documents
-that are already visible through the file picker.
+state/debug surface. Normal user file/folder documents stay in the file picker;
+state-shaped Automerge docs are also inspectable in the State Browser because
+the viewer does not render their raw document shape.
 
 ## Upstream Candidates
 
@@ -28,6 +29,10 @@ that are already visible through the file picker.
 - Runtime platform and feature checks.
 - Current filesystem projection status, subscription lifecycle, event counters,
   storage-head document summaries, and latest event diagnostics.
+- Canonical non-file/folder state documents, including filesystem visibility
+  metadata that distinguishes file-tree-reachable docs from hidden docs such as
+  the filesystem index.
+- Full current derived filesystem and workspace projection snapshots.
 - Intent request/result log with request relation counts, outcomes, timings, and
   thrown errors.
 - Window-manager surface/context/layout summary.
@@ -42,9 +47,9 @@ that are already visible through the file picker.
   affected intent ids, recovery status, or durable failure-relation rows.
 - Policy and capability state is still mostly hard-coded placeholder behavior;
   there is no visible effective grants/quarantine/revocation state.
-- Projection diagnostics are limited to bootstrap filesystem subscription
-  entries; there is no general projection catalog, historical basis browser, or
-  full patch/storage-head inspector.
+- Projection diagnostics include current snapshots and bootstrap subscription
+  entries, but there is no general projection catalog, historical basis browser,
+  or full patch/storage-head inspector.
 - Schema refs are visible as refs/catalog summaries, but there is no dedicated
   schema-detail browser or ref integrity checker.
 - Client/session/presence/viewport state is protocol-shaped in docs but not

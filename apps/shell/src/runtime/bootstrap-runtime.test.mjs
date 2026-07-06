@@ -26,6 +26,8 @@ import {
   filesystemTreeNodesRelation,
   filesystemTreeProjection,
   filesystemTreeSchemaId,
+  relationRows,
+  relationSetNames,
   routeOpenIntent,
   submitRuntimeIntent,
   windowCloseContextIntent,
@@ -68,9 +70,9 @@ void test('bootstrap runtime serves a live filesystem tree projection', () => {
     assert.equal(snapshot.schema?.schemaId, filesystemTreeSchemaId);
     assert.match(snapshot.schemaHash, /^sha256:[a-f0-9]{64}$/);
     assert.deepEqual(Object.keys(snapshot.storageHeads ?? {}), [seed.indexHandle.url]);
-    assert.deepEqual(Object.keys(snapshot.relations.relations), [filesystemTreeNodesRelation]);
+    assert.deepEqual(relationSetNames(snapshot.relations), [filesystemTreeNodesRelation]);
 
-    const rows = snapshot.relations.relations[filesystemTreeNodesRelation] ?? [];
+    const rows = relationRows(snapshot.relations, filesystemTreeNodesRelation);
     const rootRows = rows.filter((row) => row.url === seed.rootUrl);
     assert.equal(rootRows.length, 1);
     assert.equal(rootRows[0].isRoot, true);
@@ -551,15 +553,15 @@ void test('bootstrap runtime serves a live workspace layout projection', async (
     assert.equal(snapshot.schema?.schemaId, workspaceProjectionSchemaId);
     assert.match(snapshot.schemaHash, /^sha256:[a-f0-9]{64}$/);
     assert.deepEqual(Object.keys(snapshot.storageHeads ?? {}), [seed.windowManagerHandle.url]);
-    assert.deepEqual(snapshot.relations.relations[workspaceStateRelation], [
+    assert.deepEqual(relationRows(snapshot.relations, workspaceStateRelation), [
       {
         focus: 'files',
         id: 'window-manager',
         layout: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
       },
     ]);
-    assert.equal(snapshot.relations.relations[workspaceContextsRelation]?.length, 1);
-    assert.equal(snapshot.relations.relations[workspaceSurfacesRelation]?.length, 1);
+    assert.equal(relationRows(snapshot.relations, workspaceContextsRelation).length, 1);
+    assert.equal(relationRows(snapshot.relations, workspaceSurfacesRelation).length, 1);
 
     seed.windowManagerHandle.change((doc) => {
       doc.surfaces.secondary = {
@@ -581,7 +583,7 @@ void test('bootstrap runtime serves a live workspace layout projection', async (
     assert.equal(resetEvent.type, 'reset');
     assert.equal(resetEvent.reason, 'source-change');
     assert.equal(resetEvent.snapshot.storageHeads?.[seed.windowManagerHandle.url]?.length > 0, true);
-    assert.equal(resetEvent.snapshot.relations.relations[workspaceSurfacesRelation]?.length, 2);
+    assert.equal(relationRows(resetEvent.snapshot.relations, workspaceSurfacesRelation).length, 2);
   } finally {
     subscription.close();
   }
