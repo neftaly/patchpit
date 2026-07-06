@@ -20,7 +20,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  background: var(--color-sidebar);
+  background: transparent;
 }
 
 .tree,

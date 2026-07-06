@@ -878,8 +878,8 @@ function notice(title, message) {
 
 function css() {
   return 'html,body,#patchpit-root{height:100%;margin:0;}' +
-    'body{overflow:hidden;background:#ebebec;color:#242529;font:13px system-ui,sans-serif;}' +
-    '.file-picker-app{box-sizing:border-box;height:100%;overflow:auto;background:#ebebec;color:#242529;}' +
+    'body{overflow:hidden;background:transparent;color:#242529;font:13px system-ui,sans-serif;}' +
+    '.file-picker-app{box-sizing:border-box;height:100%;overflow:auto;background:transparent;color:#242529;}' +
     '.tree-pane{height:100%;overflow:auto;padding:0.375rem 0;}' +
     '.tree,.tree ul{list-style:none;margin:0;padding:0;}' +
     '.tree-item{box-sizing:border-box;display:grid;grid-template-columns:1.25rem minmax(0,1fr);align-items:center;gap:0.25rem;width:100%;min-height:1.75rem;border:0;background:transparent;color:inherit;text-align:left;font:inherit;padding:0.25rem 0.5rem 0.25rem calc(0.5rem + var(--tree-depth-size));}' +
@@ -904,7 +904,7 @@ const viewerAppFiles = [
   root.style.cssText = 'height:100%;';
 
   const main = document.createElement('main');
-  main.style.cssText = 'box-sizing:border-box;height:100%;overflow:auto;padding:1rem;font:14px/1.45 system-ui,sans-serif;color:#242529;background:#f6f6f7;';
+  main.style.cssText = 'box-sizing:border-box;height:100%;overflow:auto;padding:1rem;font:14px/1.45 system-ui,sans-serif;color:#242529;background:transparent;';
   root.append(main);
 
   const showNotice = (title, message) => {
@@ -941,7 +941,7 @@ const viewerAppFiles = [
       for (const child of resource.children ?? []) {
         const item = document.createElement('li');
         item.textContent = (child.kind === 'folder' ? 'Folder: ' : 'File: ') + child.name;
-        item.style.cssText = 'padding:0.4rem 0.5rem;border:1px solid #d7d7d9;background:#fff;';
+        item.style.cssText = 'padding:0.4rem 0.5rem;border:1px solid #d7d7d9;background:transparent;';
         list.append(item);
       }
       main.append(list);

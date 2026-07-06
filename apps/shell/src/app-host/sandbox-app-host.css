@@ -27,7 +27,7 @@
   place-content: center;
   gap: var(--tab-pad);
   padding: var(--detail-pad);
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-muted);
   font-family: var(--font-code);
   font-size: var(--font-code-size);

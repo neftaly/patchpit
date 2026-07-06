@@ -1,13 +1,13 @@
 .runtime-diagnostics {
   gap: 0;
-  background: var(--color-surface);
+  background: transparent;
 }
 
 .runtime-diagnostics-header {
   flex: 0 0 auto;
   border-bottom: var(--app-border) solid var(--color-border);
   padding: calc(var(--detail-pad) * 0.75) var(--detail-pad);
-  background: var(--color-bg);
+  background: transparent;
 }
 
 .runtime-diagnostics-header h1 {
@@ -69,7 +69,7 @@
 
 .runtime-diagnostics-json {
   border-top: var(--app-border) solid var(--color-border);
-  background: var(--color-bg);
+  background: transparent;
 }
 
 .runtime-diagnostics-dev-overlay {
