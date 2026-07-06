@@ -2,7 +2,6 @@ import type { FilesystemNode } from '@patchpit/system';
 
 type FilesystemFile = Extract<FilesystemNode, { readonly kind: 'file' }>;
 type FilesystemFolder = Extract<FilesystemNode, { readonly kind: 'folder' }>;
-type SandboxEntryKind = 'html' | 'module';
 
 export type SandboxFilesystemAppResource = {
   readonly mediaType: string;
@@ -12,7 +11,6 @@ export type SandboxFilesystemAppResource = {
 };
 
 export type SandboxFilesystemAppEntry = SandboxFilesystemAppResource & {
-  readonly entryKind: SandboxEntryKind;
   readonly resources: readonly SandboxFilesystemAppResource[];
 };
 
@@ -22,27 +20,20 @@ export type SandboxPackageLoadPlan =
       readonly html: string;
     }
   | {
-      readonly entryModuleUrl: string;
-      readonly kind: 'module';
-    }
-  | {
       readonly error: string;
       readonly kind: 'error';
     };
 
 export function sandboxFilesystemAppEntry({
   entry,
-  entryKind,
   entryPath,
   packageRoot,
 }: {
   readonly entry: FilesystemFile;
-  readonly entryKind: SandboxEntryKind;
   readonly entryPath: string;
   readonly packageRoot: FilesystemFolder;
 }): SandboxFilesystemAppEntry {
   return {
-    entryKind,
     mediaType: entry.mediaType,
     path: entryPath,
     resources: sandboxPackageResources(packageRoot),
@@ -79,25 +70,18 @@ export function createSandboxPackageLoadPlan(entry: SandboxFilesystemAppEntry): 
       return isJavaScriptResource(resource) ? modules.moduleUrl(path) : textDataUrl(resource.mediaType, resource.text);
     };
 
-    if (entry.entryKind === 'html' && !isHtmlResource(entryResource)) {
-      return { error: `Sandbox app entryKind "html" requires an HTML entry, got "${entry.path}".`, kind: 'error' };
-    }
-    if (entry.entryKind === 'module' && !isJavaScriptResource(entryResource)) {
-      return { error: `Sandbox app entryKind "module" requires a JavaScript entry, got "${entry.path}".`, kind: 'error' };
+    if (!isHtmlResource(entryResource)) {
+      return { error: `Sandbox app entries must be HTML documents, got "${entry.path}".`, kind: 'error' };
     }
 
-    if (entry.entryKind === 'html') {
-      return {
-        html: rewriteSandboxHtmlEntry({
-          entryPath,
-          html: entryResource.text,
-          resourceUrl,
-        }),
-        kind: 'html',
-      };
-    }
-
-    return { entryModuleUrl: modules.moduleUrl(entryPath), kind: 'module' };
+    return {
+      html: rewriteSandboxHtmlEntry({
+        entryPath,
+        html: entryResource.text,
+        resourceUrl,
+      }),
+      kind: 'html',
+    };
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),

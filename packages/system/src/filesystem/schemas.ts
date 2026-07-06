@@ -78,8 +78,8 @@ export const appManifestSchema = defineRelationSchema({
         entry: { type: 'string' },
         entryKind: {
           type: 'string',
-          description: 'How the current host interprets entry: JavaScript module or HTML document.',
-          metadata: enumMetadata(['module', 'html']),
+          description: 'How the current host interprets entry. Current app entries are HTML documents.',
+          metadata: enumMetadata(['html']),
         },
         extension: { type: 'string' },
         id: idField('app'),

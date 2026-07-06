@@ -2,7 +2,6 @@ import { Repo, type DocHandle } from '@automerge/automerge-repo';
 import {
   seedAppPackages,
   type SeedAppPackageDefinition,
-  type SeedAppPackageEntryKind,
   type SeedAppPackageFile,
   type SeedAppPackageSurface,
 } from '../fixtures/seed-app-packages';
@@ -568,7 +567,7 @@ function seedAppPackageInput(appPackage: SeedAppPackageDefinition): SeedAppPacka
   const schemas = manifest.schemaIds?.map(seedAppPackageSchema);
   return {
     entry: manifest.entry,
-    entryKind: seedAppPackageEntryKind(manifest.entryKind),
+    entryKind: manifest.entryKind,
     files: appPackage.files,
     handles: manifest.handles.map((handle) => ({ accepts: [...handle.accepts], intent: handle.intent, port: handle.port })),
     icon: manifest.icon,
@@ -578,10 +577,6 @@ function seedAppPackageInput(appPackage: SeedAppPackageDefinition): SeedAppPacka
     surfaces: manifest.surfaces.map(seedAppPackageSurface),
     version: manifest.version,
   };
-}
-
-function seedAppPackageEntryKind(entryKind: SeedAppPackageEntryKind): AppManifestDoc['entryKind'] {
-  return entryKind;
 }
 
 function seedAppPackageSurface(surface: SeedAppPackageSurface): SurfaceSpec {

@@ -30,11 +30,10 @@ export function SandboxedFilesystemApp({
   const entry = useMemo(() => (app.entry?.kind === 'file'
     ? sandboxFilesystemAppEntry({
         entry: app.entry,
-        entryKind: app.entryKind,
         entryPath: app.entryPath,
         packageRoot: app.packageRoot,
       })
-    : undefined), [app.entry, app.entryKind, app.entryPath, app.packageRoot]);
+    : undefined), [app.entry, app.entryPath, app.packageRoot]);
 
   return (
     <SandboxAppHost

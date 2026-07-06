@@ -315,12 +315,10 @@ async function routeViewerResourceThroughSandbox(seed, url, title) {
   const viewer = coreAppsFromFilesystem(root).find((app) => app.id === 'viewer');
   assert.ok(viewer);
   assert.equal(viewer.entryPath, 'index.html');
-  assert.equal(viewer.entryKind, 'html');
   assert.equal(viewer.entry?.kind, 'file');
 
   const sandboxEntry = sandboxFilesystemAppEntry({
     entry: viewer.entry,
-    entryKind: viewer.entryKind,
     entryPath: viewer.entryPath,
     packageRoot: viewer.packageRoot,
   });

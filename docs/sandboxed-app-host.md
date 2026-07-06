@@ -56,10 +56,9 @@ package manifests. Both `app.launch` and document routing resolve app package
 manifests before creating sessions.
 
 `WindowManagerAppHost.renderSurface` is now a manifest-driven host boundary:
-the host resolves `context.app` through `/home/apps` and runs filesystem JavaScript
-module and HTML document entries through `SandboxAppHost` when `entryKind` is
-`module` or `html`. The seeded `hello-world` app is the canonical minimal real
-Vite-built sandbox package: its built `dist` files are inserted under
+the host resolves `context.app` through `/home/apps` and runs filesystem HTML
+document entries through `SandboxAppHost`. The seeded `hello-world` app is the
+canonical minimal real Vite-built sandbox package: its built `dist` files are inserted under
 `/home/apps/hello-world`, and the iframe runner uses `sandbox="allow-scripts"` with
 no same-origin authority. The seeded File Picker and Viewer packages are
 runnable filesystem HTML packages built from their app entry modules.
@@ -303,10 +302,9 @@ type AppManifestRunner = {
 
 The first app-host slice should keep manifests close to today's shape:
 `manifestVersion`, `id`, `name`, `version`, `entry`, `entryKind`, `handles`,
-`surfaces`, and `schemas`, with optional runner metadata. `entryKind: 'module'`
-and `entryKind: 'html'` are current real sandbox paths. Fine-grained permission
-declarations can be added later when Patchpit has the
-capability model and UX to support them.
+`surfaces`, and `schemas`, with optional runner metadata. `entryKind: 'html'`
+is the current sandbox path. Fine-grained permission declarations can be added
+later when Patchpit has the capability model and UX to support them.
 
 ## Runner Placement
 

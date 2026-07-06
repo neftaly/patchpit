@@ -344,7 +344,6 @@ function webBrowserAppForHtmlFile(root: FilesystemNode, url: string): Filesystem
   if (target === undefined || !isHtmlMediaType(target.file.mediaType)) return undefined;
   return {
     entry: target.file,
-    entryKind: 'html',
     entryPath: target.file.name,
     icon: '',
     id: webBrowserAppId,

@@ -98,7 +98,7 @@ export type AppManifestDoc = PatchpitDoc<PatchpitType.AppManifest> & {
   version: string;
 };
 
-export type AppManifestEntryKind = 'module' | 'html';
+export type AppManifestEntryKind = 'html';
 
 export type AppManifestHandler = {
   port: string;

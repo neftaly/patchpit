@@ -57,8 +57,6 @@ const fixtureSource = `export type SeedAppPackageFile = {
   readonly name: string;
 };
 
-export type SeedAppPackageEntryKind = 'html' | 'module';
-
 export type SeedAppPackageHandler = {
   readonly accepts: readonly string[];
   readonly intent: 'activate' | 'open' | 'preview' | 'reveal';
@@ -75,7 +73,7 @@ export type SeedAppPackageSurface = {
 
 export type SeedAppPackageManifest = {
   readonly entry: string;
-  readonly entryKind: SeedAppPackageEntryKind;
+  readonly entryKind: 'html';
   readonly handles: readonly SeedAppPackageHandler[];
   readonly icon: string;
   readonly id: string;

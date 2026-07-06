@@ -101,7 +101,7 @@ export function SandboxAppHost({
       recordSessionEvent({
         appId,
         contextId: session.id,
-        data: { entryKind: loadPlan.kind },
+        data: { entryKind: 'html' },
         kind: 'sandbox.host.starting',
         sessionUrl: session.url,
         status: 'starting',
@@ -368,53 +368,11 @@ function sandboxSrcDoc({
 }): string {
   const bridgeScript = sandboxBridgeScript({ appId, capabilities, protocol, session });
 
-  if (loadPlan.kind === 'html') {
-    return injectSandboxHead(loadPlan.html, [
-      sandboxCspMeta(appId),
-      `<script>${bridgeScript}</script>`,
-      `<script>${htmlReadyScript()}</script>`,
-    ]);
-  }
-
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  ${sandboxCspMeta(appId)}
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    html,
-    body,
-    #patchpit-root {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-    }
-
-    body {
-      overflow: hidden;
-    }
-  </style>
-</head>
-<body>
-  <div id="patchpit-root"></div>
-  <script>${bridgeScript}</script>
-  <script type="module">
-    try {
-      const appModule = await import(${scriptJson(loadPlan.entryModuleUrl)});
-      const app = appModule.default ?? appModule.main ?? window.patchpitApp;
-      if (typeof app !== 'function') {
-        throw new Error('App entry must export a default function or main(env).');
-      }
-
-      Promise.resolve(app(window.patchpit)).catch(window.patchpitReportError);
-      window.patchpitMarkRunning();
-    } catch (error) {
-      window.patchpitReportError(error);
-    }
-  </script>
-</body>
-</html>`;
+  return injectSandboxHead(loadPlan.html, [
+    sandboxCspMeta(appId),
+    `<script>${bridgeScript}</script>`,
+    `<script>${htmlReadyScript()}</script>`,
+  ]);
 }
 
 function sandboxBridgeScript({

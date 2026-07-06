@@ -9,7 +9,6 @@ export const webBrowserAppId = 'web-browser';
 
 export type FilesystemApp = {
   readonly entry: FilesystemNode | undefined;
-  readonly entryKind: 'html' | 'module';
   readonly entryPath: string;
   readonly icon: string;
   readonly id: string;
@@ -19,7 +18,6 @@ export type FilesystemApp = {
 };
 
 type CoreAppSpec = {
-  readonly entryKind: FilesystemApp['entryKind'];
   readonly entryPath: string;
   readonly icon: string;
   readonly id: string;
@@ -29,7 +27,6 @@ type CoreAppSpec = {
 
 const coreAppSpecs: readonly CoreAppSpec[] = [
   {
-    entryKind: 'html',
     entryPath: 'index.html',
     icon: '📁',
     id: 'file-picker',
@@ -37,7 +34,6 @@ const coreAppSpecs: readonly CoreAppSpec[] = [
     packagePath: '/home/apps/file-picker',
   },
   {
-    entryKind: 'html',
     entryPath: 'index.html',
     icon: '📄',
     id: 'viewer',
@@ -45,7 +41,6 @@ const coreAppSpecs: readonly CoreAppSpec[] = [
     packagePath: '/home/apps/viewer',
   },
   {
-    entryKind: 'html',
     entryPath: 'index.html',
     icon: '👋',
     id: 'hello-world',
@@ -60,7 +55,6 @@ export function coreAppsFromFilesystem(root: FilesystemNode): readonly Filesyste
     if (packageRoot?.kind !== 'folder') return [];
     return [{
       entry: resolvePackageEntry(packageRoot, spec.entryPath, childEntryNode),
-      entryKind: spec.entryKind,
       entryPath: spec.entryPath,
       icon: spec.icon,
       id: spec.id,

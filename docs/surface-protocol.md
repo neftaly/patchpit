@@ -95,7 +95,7 @@ type AppManifest = {
   id: string;
   name: string;
   entry: string;
-  entryKind: 'module' | 'html';
+  entryKind: 'html';
   version: string;
   scope?: string;
   icons?: Icon[];
@@ -119,13 +119,9 @@ type Handler = {
 
 Current V0 manifests keep `entry` as a package-relative path because the
 implemented resolver still resolves a file node by path. `entryKind` records how
-that path is interpreted:
-
-- `module` is the implemented filesystem bundle path. The host loads the
-  package file as a JavaScript module whose default export is `activate(env)`.
-- `html` is an implemented filesystem document path. The host injects the
-  sandbox bridge into the package HTML document and rewrites package-relative
-  module and asset references it can resolve.
+that path is interpreted. The active filesystem bundle path is `html`: the host
+injects the sandbox bridge into the package HTML document and rewrites
+package-relative module and asset references it can resolve.
 
 `manifestVersion` is the Patchpit manifest format version. `version` is the app
 package version. Shared libraries, import maps, content-hashed assets, and
