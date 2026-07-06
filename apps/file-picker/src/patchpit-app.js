@@ -263,8 +263,8 @@ function notice(title, message) {
 function css() {
   return 'html,body,#patchpit-root{height:100%;margin:0;}' +
     'body{overflow:hidden;background:transparent;color:#242529;font:13px system-ui,sans-serif;}' +
-    '.file-picker-app{box-sizing:border-box;height:100%;overflow:auto;background:transparent;color:#242529;}' +
-    '.tree-pane{height:100%;overflow:auto;padding:0.375rem 0;}' +
+    '.file-picker-app{box-sizing:border-box;height:100%;overflow:auto;background:transparent;color:#242529;scrollbar-width:thin;}' +
+    '.tree-pane{height:100%;overflow:auto;padding:0.375rem 0;scrollbar-width:thin;}' +
     '.tree,.tree ul{list-style:none;margin:0;padding:0;}' +
     '.tree-item{box-sizing:border-box;display:grid;grid-template-columns:1.25rem minmax(0,1fr);align-items:center;gap:0.25rem;width:100%;min-height:1.75rem;border:0;background:transparent;color:inherit;text-align:left;font:inherit;padding:0.25rem 0.5rem 0.25rem calc(0.5rem + var(--tree-depth-size));}' +
     '.tree-item:hover{background:#dfdfe0;}' +

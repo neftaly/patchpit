@@ -35,6 +35,7 @@
   min-height: 0;
   overflow: auto;
   padding-block: calc(var(--sidebar-pad-y) * 3);
+  scrollbar-width: thin;
 }
 
 .tree ul,
