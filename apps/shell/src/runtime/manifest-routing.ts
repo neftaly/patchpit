@@ -29,6 +29,11 @@ type ScoredManifestRouteHandler = ManifestRouteHandler & {
   readonly score: number;
 };
 
+type InstalledAppPackage = {
+  readonly entryUrl: string | undefined;
+  readonly manifest: AppManifestDoc;
+};
+
 export function manifestRouteHandler(
   seed: SeedFilesystem,
   intent: RouteIntentName,
@@ -86,6 +91,16 @@ function routeHandlerIntent(intent: RouteIntentName): RouteHandlerIntent {
 }
 
 export function installedAppManifests(seed: SeedFilesystem): AppManifestDoc[] {
+  return installedAppPackages(seed).map((appPackage) => appPackage.manifest);
+}
+
+function installedAppEntryManifest(seed: SeedFilesystem, url: string): AppManifestDoc | undefined {
+  return installedAppPackages(seed)
+    .find((appPackage) => appPackage.entryUrl === url)
+    ?.manifest;
+}
+
+function installedAppPackages(seed: SeedFilesystem): InstalledAppPackage[] {
   const root = seed.documentHandles[seed.rootUrl]?.doc();
   if (!isFolderDoc(root)) return [];
 
@@ -96,35 +111,7 @@ export function installedAppManifests(seed: SeedFilesystem): AppManifestDoc[] {
     : seed.documentHandles[appsFolder.url]?.doc();
   if (!isFolderDoc(appsFolderDoc)) return [];
 
-  return appsFolderDoc.docs.flatMap((entry) => installedAppManifestFromEntry(seed, entry.url));
-}
-
-function installedAppEntryManifest(seed: SeedFilesystem, url: string): AppManifestDoc | undefined {
-  const root = seed.documentHandles[seed.rootUrl]?.doc();
-  if (!isFolderDoc(root)) return undefined;
-
-  const appsFolder = root.docs
-    .find((entry) => entry.name === 'apps' && entry.type === PatchpitType.Folder);
-  const appsFolderDoc = appsFolder === undefined
-    ? undefined
-    : seed.documentHandles[appsFolder.url]?.doc();
-  if (!isFolderDoc(appsFolderDoc)) return undefined;
-
-  for (const entry of appsFolderDoc.docs) {
-    const packageFolder = seed.documentHandles[entry.url]?.doc();
-    if (!isFolderDoc(packageFolder)) continue;
-    const manifest = packageManifest(seed, packageFolder);
-    if (manifest === undefined) continue;
-    const packageRoot: PackageEntryNode = { folder: packageFolder, url: entry.url };
-    const entryNode = resolvePackageEntry(
-      packageRoot,
-      manifest.entry,
-      (node, name) => packageEntryNode(seed, node, name),
-    );
-    if (entryNode?.url === url) return manifest;
-  }
-
-  return undefined;
+  return appsFolderDoc.docs.flatMap((entry) => installedAppPackage(seed, entry.url));
 }
 
 type PackageEntryNode = {
@@ -154,14 +141,20 @@ function packageManifest(seed: SeedFilesystem, folder: FolderDoc): AppManifestDo
   return undefined;
 }
 
-function installedAppManifestFromEntry(seed: SeedFilesystem, url: string): readonly AppManifestDoc[] {
+function installedAppPackage(seed: SeedFilesystem, url: string): readonly InstalledAppPackage[] {
   const doc = seed.documentHandles[url]?.doc();
   if (!isFolderDoc(doc)) return [];
 
-  return doc.docs.flatMap((entry) => {
-    const child = seed.documentHandles[entry.url]?.doc();
-    return isPackageAppManifestDoc(child) ? [child] : [];
-  });
+  const manifest = packageManifest(seed, doc);
+  if (manifest === undefined) return [];
+
+  const packageRoot: PackageEntryNode = { folder: doc, url };
+  const entry = resolvePackageEntry(
+    packageRoot,
+    manifest.entry,
+    (node, name) => packageEntryNode(seed, node, name),
+  );
+  return [{ entryUrl: entry?.url, manifest }];
 }
 
 function isFolderDoc(doc: FilesystemResource | undefined): doc is FolderDoc {
