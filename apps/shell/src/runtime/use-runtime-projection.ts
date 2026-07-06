@@ -14,6 +14,10 @@ import {
   runtimeProjectionsProjection,
   runtimeProjectionsRelation,
   runtimeProjectionsSchemaId,
+  installedAppsProjection,
+  installedAppsRelation,
+  installedAppsSchemaId,
+  type InstalledAppRuntimeRow,
   type ProjectionEvent,
   type ProjectionSnapshot,
   type ProjectionSubscription,
@@ -30,6 +34,7 @@ import {
   runtimeProjectionFailureFromUnknownError,
   type RuntimeProjectionFailure,
 } from './runtime-projection-failure';
+import { isInstalledAppRuntimeRow } from './installed-apps';
 
 export type { RuntimeProjectionFailure } from './runtime-projection-failure';
 export type { WorkspaceProjection, WorkspaceProjectionState };
@@ -44,6 +49,15 @@ export type RuntimeProjectionCatalogState =
   | {
       readonly status: 'ready';
       readonly rows: readonly RuntimeProjectionCatalogRow[];
+      readonly snapshot: ProjectionSnapshot;
+    }
+  | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
+
+export type InstalledAppsProjectionState =
+  | { readonly status: 'initializing' }
+  | {
+      readonly status: 'ready';
+      readonly rows: readonly InstalledAppRuntimeRow[];
       readonly snapshot: ProjectionSnapshot;
     }
   | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
@@ -71,6 +85,24 @@ export function useRuntimeProjectionCatalog(runtime: RuntimeClient): RuntimeProj
       projection.snapshot.relations,
       runtimeProjectionsRelation,
     ).filter(isRuntimeProjectionCatalogRow),
+    snapshot: projection.snapshot,
+  };
+}
+
+export function useInstalledAppsProjection(runtime: RuntimeClient): InstalledAppsProjectionState {
+  const projection = useRuntimeProjectionSnapshot(runtime, {
+    projection: installedAppsProjection,
+    schemaId: installedAppsSchemaId,
+  });
+
+  if (projection.status !== 'ready') return projection;
+
+  return {
+    status: 'ready',
+    rows: relationRows<unknown>(
+      projection.snapshot.relations,
+      installedAppsRelation,
+    ).filter(isInstalledAppRuntimeRow),
     snapshot: projection.snapshot,
   };
 }

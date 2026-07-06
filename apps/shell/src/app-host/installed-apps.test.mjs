@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PatchpitType } from '@patchpit/system';
-import { installedAppsFromFilesystem } from './installed-apps.ts';
+import {
+  installedAppRuntimeRows,
+  installedAppsFromFilesystem,
+  installedAppsFromProjectionRows,
+  isInstalledAppRuntimeRow,
+} from './installed-apps.ts';
 import { installedAppManifests } from '../runtime/manifest-routing.ts';
 import { resolvePackageEntry } from '../runtime/package-entry.ts';
 
@@ -30,9 +35,18 @@ void test('installed app discovery paths use package manifests in filesystem ord
     root,
   });
   const routedManifests = installedAppManifests(seedFromFilesystem(root, manifests));
+  const rows = installedAppRuntimeRows(apps);
+  const projectionApps = installedAppsFromProjectionRows({
+    getDocument: (url) => manifests.get(url),
+    root,
+    rows,
+  });
 
   assert.deepEqual(apps.map((app) => app.manifest.id), ['zeta', 'alpha']);
   assert.deepEqual(apps.map((app) => app.packagePath), ['/apps/zeta', '/apps/alpha']);
+  assert.equal(rows.every(isInstalledAppRuntimeRow), true);
+  assert.deepEqual(projectionApps.map((app) => app.manifest.id), ['zeta', 'alpha']);
+  assert.deepEqual(projectionApps.map((app) => app.packageRoot.url), ['automerge:zeta-package', 'automerge:alpha-package']);
   assert.deepEqual(routedManifests.map((manifest) => manifest.id), ['zeta', 'alpha']);
 });
 

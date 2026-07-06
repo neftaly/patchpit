@@ -3,7 +3,6 @@
 }
 
 .launcher-bar,
-.launcher-bar-items,
 .launcher-bar-system-buttons,
 .launcher-bar-button {
   display: flex;
@@ -20,7 +19,6 @@
   background: var(--color-tabs);
 }
 
-.launcher-bar-items,
 .launcher-bar-system-buttons {
   justify-content: center;
   gap: var(--tab-control-margin);
@@ -38,8 +36,7 @@
   line-height: 1;
 }
 
-.launcher-bar-button:is(:hover, :focus-visible),
-.launcher-bar-button[data-active] {
+.launcher-bar-button:is(:hover, :focus-visible) {
   background: var(--color-hover);
   color: var(--color-text);
 }
@@ -51,10 +48,6 @@
 .launcher-bar-button:focus-visible {
   outline: var(--app-border) solid currentColor;
   outline-offset: calc(var(--app-border) * -1);
-}
-
-.launcher-bar-icon {
-  line-height: 1;
 }
 
 .launcher-bar-reset-icon {

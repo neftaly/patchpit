@@ -31,9 +31,8 @@ import {
   type RuntimeError,
 } from '@patchpit/system/runtime';
 import { LauncherBar } from './launcher/LauncherBar';
-import { launcherItems } from './launcher/launch-router';
 import {
-  installedAppsFromFilesystem,
+  installedAppsFromProjectionRows,
   type InstalledApp,
 } from './app-host/installed-apps';
 import { SandboxedFilesystemApp, type SandboxFilePickerHostScope } from './app-host/SandboxedFilesystemApp';
@@ -42,12 +41,15 @@ import { patchpitRuntimeBuildId } from './runtime/build-id';
 import { parseHashLaunchConfig } from './runtime/launch-from-hash';
 import { detailFromUnknown, metadataDetails } from './runtime/runtime-error-details';
 import runtimeSharedWorkerUrl from './runtime/shared-worker.ts?sharedworker&url';
-import { submitAppLaunchIntent, type AppLaunchIntentInput } from './runtime/launch-intents';
 import { submitRouteIntent, type RouteIntentInput, type RouteIntentName } from './runtime/route-intents';
 import { type RuntimeDiagnosticsIssueEntry } from './runtime-diagnostics/RuntimeDiagnostics';
 import { RuntimeDiagnosticsSurface } from './runtime-diagnostics/RuntimeDiagnosticsSurface';
 import { useRuntimeDocument } from './runtime/use-automerge-doc';
-import { useFilesystemTreeProjection, useWorkspaceProjection } from './runtime/use-runtime-projection';
+import {
+  useFilesystemTreeProjection,
+  useInstalledAppsProjection,
+  useWorkspaceProjection,
+} from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
 import {
   WindowManager,
@@ -55,7 +57,6 @@ import {
   type WindowManagerDroppedUrl,
 } from './window-manager/WindowManager';
 import {
-  focusedAppId,
   type ContextDropTarget,
   type SplitPath,
 } from './window-manager/window-manager-state';
@@ -119,15 +120,17 @@ function ShellApp({
   }, [runtimeConnection.ack, runtimePlatform, seed]);
 
   const filesystemProjection = useFilesystemTreeProjection(runtime, rootUrl);
+  const installedAppsProjection = useInstalledAppsProjection(runtime);
   const workspaceProjection = useWorkspaceProjection(runtime);
   const installedApps = useMemo(() => (
-    filesystemProjection.status === 'ready'
-      ? installedAppsFromFilesystem({
+    filesystemProjection.status === 'ready' && installedAppsProjection.status === 'ready'
+      ? installedAppsFromProjectionRows({
           getDocument: (url) => runtime.resources.getDocument(url),
           root: filesystemProjection.root,
+          rows: installedAppsProjection.rows,
         })
       : []
-  ), [filesystemProjection, runtime.resources]);
+  ), [filesystemProjection, installedAppsProjection, runtime.resources]);
   const recordRuntimeIssue = (source: RuntimeDiagnosticsIssueEntry['source'], issue: RuntimePanelFailure) => {
     const entry: RuntimeDiagnosticsIssueEntry = {
       id: nextRuntimeIssueId.current++,
@@ -156,9 +159,6 @@ function ShellApp({
     const failure = failureFromUnknownError('Runtime request failed', 'Runtime request failed.', error);
     setRuntimeFault(failure);
     recordRuntimeIssue('runtime', failure);
-  };
-  const launchApp = (input: AppLaunchIntentInput) => {
-    void submitAppLaunchIntent(runtime, input).then(reportIntentResult).catch(reportRuntimeError);
   };
   useEffect(() => {
     const parsed = parseHashLaunchConfig(launchHash);
@@ -219,13 +219,6 @@ function ShellApp({
         });
     },
   };
-  const launchers = launcherItems({
-    focusedAppId: workspaceProjection.status === 'ready'
-      ? focusedAppId(workspaceProjection.workspace)
-      : undefined,
-    installedApps,
-    launchApp,
-  });
   return (
     <main className="standalone-app shell-app" style={themeStyle(theme)}>
       {runtimeFault === undefined ? null : <RuntimeIssueBanner failure={runtimeFault} />}
@@ -239,6 +232,17 @@ function ShellApp({
           title={filesystemProjection.failure.title}
           message={filesystemProjection.failure.message}
           details={filesystemProjection.failure.details}
+        />
+      ) : installedAppsProjection.status === 'initializing' ? (
+        <RuntimeStatusPanel
+          title="Installed apps projection initializing"
+          message="Waiting for the runtime.installedApps snapshot from the runtime."
+        />
+      ) : installedAppsProjection.status === 'failed' ? (
+        <RuntimeStatusPanel
+          title={installedAppsProjection.failure.title}
+          message={installedAppsProjection.failure.message}
+          details={installedAppsProjection.failure.details}
         />
       ) : workspaceProjection.status === 'initializing' ? (
         <RuntimeStatusPanel
@@ -282,7 +286,7 @@ function ShellApp({
               />
             </div>
           ) : null}
-          <LauncherBar items={launchers} onResetSession={onResetSession} />
+          <LauncherBar onResetSession={onResetSession} />
         </>
       )}
     </main>

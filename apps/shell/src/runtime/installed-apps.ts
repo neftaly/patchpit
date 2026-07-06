@@ -1,4 +1,5 @@
 import {
+  findNode,
   SurfaceRole,
   type AppManifestDoc,
   type FilesystemNode,
@@ -35,6 +36,18 @@ export function installedAppsFromFilesystem({
     .flatMap((entry) => installedAppFromNode(entry, `/apps/${entry.name}`, getDocument));
 }
 
+export function installedAppsFromProjectionRows({
+  getDocument,
+  root,
+  rows,
+}: {
+  readonly getDocument: (url: string) => unknown;
+  readonly root: FilesystemNode;
+  readonly rows: readonly InstalledAppRuntimeRow[];
+}): readonly InstalledApp[] {
+  return rows.flatMap((row) => installedAppFromRuntimeRow(row, root, getDocument));
+}
+
 export function installedAppRole(app: InstalledApp): SurfaceRole {
   return app.manifest.surfaces?.[0]?.role ?? SurfaceRole.DocumentSet;
 }
@@ -64,6 +77,41 @@ export function installedAppRuntimeRows(apps: readonly InstalledApp[]): readonly
       version: app.manifest.version,
     };
   });
+}
+
+export function isInstalledAppRuntimeRow(row: unknown): row is InstalledAppRuntimeRow {
+  if (!isRecord(row)) return false;
+  return (
+    typeof row.appId === 'string'
+    && typeof row.entryKind === 'string'
+    && typeof row.entryPath === 'string'
+    && (row.entryStatus === 'resolved' || row.entryStatus === 'missing')
+    && (row.entryUrl === undefined || typeof row.entryUrl === 'string')
+    && Array.isArray(row.handles)
+    && typeof row.hasStatefulLaunch === 'boolean'
+    && typeof row.icon === 'string'
+    && (row.launchRole === SurfaceRole.DocumentSet || row.launchRole === SurfaceRole.WorkspaceView)
+    && typeof row.manifestUrl === 'string'
+    && typeof row.name === 'string'
+    && typeof row.packagePath === 'string'
+    && typeof row.packageUrl === 'string'
+    && Array.isArray(row.surfaces)
+    && typeof row.version === 'string'
+  );
+}
+
+function installedAppFromRuntimeRow(
+  row: InstalledAppRuntimeRow,
+  root: FilesystemNode,
+  getDocument: (url: string) => unknown,
+): readonly InstalledApp[] {
+  const manifest = getDocument(row.manifestUrl);
+  const packageRoot = findNode(root, row.packageUrl);
+  if (!isPackageAppManifestDoc(manifest) || manifest.id !== row.appId) return [];
+  if (packageRoot?.kind !== 'folder') return [];
+
+  const entry = row.entryUrl === undefined ? undefined : findNode(root, row.entryUrl) ?? undefined;
+  return [installedApp(manifest, row.manifestUrl, entry, row.packagePath, packageRoot)];
 }
 
 function installedAppFromNode(
@@ -110,4 +158,8 @@ function childFolder(node: FilesystemNode, name: string): FilesystemFolder | und
 
 function childNode(node: FilesystemNode, name: string): FilesystemNode | undefined {
   return node.kind === 'folder' ? node.entries.find((entry) => entry.name === name) : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
