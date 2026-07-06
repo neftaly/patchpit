@@ -4,6 +4,7 @@ import {
   type RuntimePlatformFeature,
   type RuntimePlatformReport,
 } from '@patchpit/system/runtime';
+import { useEffect, useState } from 'react';
 import type { BootstrapRuntimeDiagnostics, BootstrapRuntimeDocumentUrls } from '../runtime/bootstrap-runtime';
 import './runtime-diagnostics.css';
 
@@ -50,10 +51,39 @@ export function RuntimeDiagnostics({
 }: {
   readonly snapshot: RuntimeDiagnosticsSnapshot;
 }) {
+  const [exportState, setExportState] = useState<RuntimeDiagnosticsExportState>('idle');
+
+  useEffect(() => {
+    if (exportState === 'idle') return undefined;
+
+    const timeout = window.setTimeout(() => setExportState('idle'), 1600);
+    return () => window.clearTimeout(timeout);
+  }, [exportState]);
+
+  const exportSnapshot = () => {
+    const json = formatRuntimeDiagnosticsJson(snapshot);
+
+    void copyRuntimeDiagnosticsJson(json)
+      .then(() => setExportState('copied'))
+      .catch(() => {
+        downloadRuntimeDiagnosticsJson(json);
+        setExportState('downloaded');
+      });
+  };
+
   return (
     <section className="runtime-diagnostics surface-content" aria-label="Runtime Diagnostics">
       <header className="runtime-diagnostics-header">
-        <h1>Runtime Diagnostics</h1>
+        <div className="runtime-diagnostics-titlebar">
+          <h1>Runtime Diagnostics</h1>
+          <button
+            className="runtime-diagnostics-export-button"
+            onClick={exportSnapshot}
+            type="button"
+          >
+            {runtimeDiagnosticsExportLabel(exportState)}
+          </button>
+        </div>
         <p>Transient runtime health and session events. Inspect exported projections at /srv/projections.</p>
       </header>
       <div className="runtime-diagnostics-sections">
@@ -72,6 +102,8 @@ export function RuntimeDiagnostics({
     </section>
   );
 }
+
+type RuntimeDiagnosticsExportState = 'copied' | 'downloaded' | 'idle';
 
 export function createRuntimeDiagnosticsSnapshot(
   input: RuntimeDiagnosticsSnapshotInput,
@@ -208,4 +240,25 @@ function intentLogData(log: BootstrapRuntimeDiagnostics['intentLog']) {
 
 function formatRuntimeDiagnosticsJson(data: unknown): string {
   return JSON.stringify(data, null, 2);
+}
+
+function runtimeDiagnosticsExportLabel(state: RuntimeDiagnosticsExportState): string {
+  if (state === 'copied') return 'Copied';
+  if (state === 'downloaded') return 'Downloaded';
+  return 'Copy JSON';
+}
+
+async function copyRuntimeDiagnosticsJson(json: string): Promise<void> {
+  if (navigator.clipboard === undefined) throw new Error('Clipboard unavailable');
+  await navigator.clipboard.writeText(json);
+}
+
+function downloadRuntimeDiagnosticsJson(json: string): void {
+  const blobUrl = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  const link = document.createElement('a');
+
+  link.download = 'runtime-diagnostics.json';
+  link.href = blobUrl;
+  link.click();
+  URL.revokeObjectURL(blobUrl);
 }

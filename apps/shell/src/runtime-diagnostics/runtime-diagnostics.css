@@ -10,11 +10,41 @@
   background: transparent;
 }
 
+.runtime-diagnostics-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--detail-pad);
+}
+
 .runtime-diagnostics-header h1 {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0;
+}
+
+.runtime-diagnostics-export-button {
+  flex: 0 0 auto;
+  border: var(--app-border) solid var(--color-border);
+  padding: calc(var(--detail-pad) * 0.25) calc(var(--detail-pad) * 0.5);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-code-size);
+}
+
+.runtime-diagnostics-export-button:is(:hover, :focus-visible) {
+  background: var(--color-hover);
+}
+
+.runtime-diagnostics-export-button:focus {
+  outline: none;
+}
+
+.runtime-diagnostics-export-button:focus-visible {
+  outline: var(--app-border) solid currentColor;
+  outline-offset: calc(var(--app-border) * -1);
 }
 
 .runtime-diagnostics-header p {
