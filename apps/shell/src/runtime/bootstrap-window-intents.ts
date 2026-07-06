@@ -50,6 +50,7 @@ import {
   validateSurfaceContext,
 } from './bootstrap-window-topology';
 import { automergeHeadSetForHandle } from './automerge-heads';
+import { manifestRouteHandler } from './manifest-routing';
 
 type RouteIntentName = typeof routeOpenIntent | typeof routePreviewIntent;
 
@@ -77,8 +78,11 @@ export function submitBootstrapRouteIntent(
   const validationError = validateRouteIntent(seed.windowManagerHandle.doc(), intent, route);
   if (validationError !== undefined) return rejected(validationError);
 
+  const routeHandler = manifestRouteHandler(seed, intent, route.url);
+  if (isRuntimeError(routeHandler)) return rejected(routeHandler);
+
   commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-    commitRouteIntent(doc, intent, route, seed.rootUrl);
+    commitRouteIntent(doc, intent, route, seed.rootUrl, routeHandler.app);
   });
 
   return {
@@ -148,8 +152,9 @@ function commitRouteIntent(
   intent: RouteIntentName,
   route: RouteIntentRow,
   defaultRootUrl: string,
+  app: string,
 ): void {
-  const context = viewerContext(route.url, route.title, route.rootUrl ?? defaultRootUrl);
+  const context = routedContext(app, route.url, route.title, route.rootUrl ?? defaultRootUrl);
   const target = contextDropTarget(route.target);
 
   if (target !== undefined) {
@@ -288,11 +293,11 @@ function commitWindowIntent(
   }
 }
 
-function viewerContext(url: string, title: string | undefined, rootUrl: string): WindowContext {
+function routedContext(app: string, url: string, title: string | undefined, rootUrl: string): WindowContext {
   return {
-    app: 'viewer',
+    app,
     container: rootContainer(rootUrl),
-    id: `viewer:${url}`,
+    id: `${app}:${url}`,
     ...(title === undefined ? {} : { title }),
     url,
   };

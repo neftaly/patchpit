@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  relationRows,
-  relationSetNames,
-} from '@tarstate/core/source';
-import {
   appendFolderEntry,
   automergeExtension,
+  automergeFileName,
   automergeMimeType,
   appLaunchIntentBoundary,
   filePickerIntentBoundary,
@@ -40,6 +37,10 @@ import {
   workspaceStateRelation,
   workspaceSurfacesRelation,
 } from '@patchpit/system/runtime';
+import {
+  relationRows,
+  relationSetNames,
+} from '@patchpit/system/runtime/relations';
 import { createBootstrapRuntimeClient } from './bootstrap-runtime.ts';
 
 const fakeApp = 'fake-app';
@@ -240,6 +241,35 @@ void test('bootstrap runtime commits route, file-picker, and window intents', as
       [windowFocusIntent, 'committed'],
     ],
   );
+});
+
+void test('bootstrap runtime routes documents through installed manifest handlers', async () => {
+  const seed = createSeedFilesystem();
+  const runtime = bootstrapRuntime(seed);
+  const target = createFakeRouteResource(seed, 'manifest-route-target', 'text/x-patchpit-test');
+  installFakeAppManifest(seed, {
+    app: 'fake-viewer',
+    handles: [
+      { accepts: ['text/x-patchpit-test'], intent: 'open', port: 'view' },
+    ],
+    stateType: undefined,
+  });
+
+  const result = await submitRuntimeIntent(runtime, {
+    boundary: routeIntentBoundary,
+    intent: routeOpenIntent,
+    row: {
+      id: 'manifest-route-open-test',
+      title: 'Manifest Route Target',
+      url: target.url,
+    },
+  });
+
+  const contextId = `fake-viewer:${target.url}`;
+  assert.equal(result.status, 'committed');
+  assert.equal(seed.windowManagerHandle.doc().surfaces.main.activeContext, contextId);
+  assert.equal(seed.windowManagerHandle.doc().contexts[contextId].app, 'fake-viewer');
+  assert.equal(seed.windowManagerHandle.doc().contexts[contextId].title, 'Manifest Route Target');
 });
 
 void test('bootstrap runtime creates a fresh app instance for each contextless launch', async () => {
@@ -838,26 +868,48 @@ function appInstanceRow(context) {
 
 function installFakeAppManifest(seed, {
   app = fakeApp,
+  handles = [],
   stateType = fakeAppStateType,
 } = {}) {
   const handle = seed.repo.create({
     '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
     entry: `${app}.html`,
     extension: automergeExtension,
-    handles: [],
+    handles,
     icons: [],
     id: app,
     manifestVersion: 1,
     mimeType: automergeMimeType,
     name: app,
     surfaces: [
-      {
-        role: SurfaceRole.DocumentSet,
-        state: { type: stateType },
-      },
+      stateType === undefined
+        ? { role: SurfaceRole.DocumentSet }
+        : {
+            role: SurfaceRole.DocumentSet,
+            state: { type: stateType },
+          },
     ],
   });
   seed.documentHandles[handle.url] = handle;
+  registerFakeInstalledAppManifest(seed, handle, app);
+  return handle;
+}
+
+function registerFakeInstalledAppManifest(seed, handle, app) {
+  const appsHandle = appsFolderHandle(seed);
+  appsHandle.change((doc) => {
+    appendFolderEntry(doc, folderEntry(automergeFileName(app), PatchpitType.AppManifest, handle.url));
+  });
+  syncFilesystemIndexResources(seed.indexHandle, [appsHandle, handle]);
+}
+
+function appsFolderHandle(seed) {
+  const appsEntry = seed.documentHandles[seed.rootUrl].doc().docs.find((entry) => (
+    entry.name === 'apps' && entry.type === PatchpitType.Folder
+  ));
+  assert.ok(appsEntry);
+  const handle = seed.documentHandles[appsEntry.url];
+  assert.ok(handle);
   return handle;
 }
 
@@ -898,6 +950,19 @@ function createFakeAppStateResource(seed, stateId, {
   });
   seed.documentHandles[handle.url] = handle;
   registerFakeSystemAppResource(seed, handle, stateType);
+  return handle;
+}
+
+function createFakeRouteResource(seed, name, mimeType) {
+  const handle = seed.repo.create({
+    '@patchpit': { type: PatchpitType.File },
+    content: name,
+    extension: 'test',
+    mimeType,
+    name: `${name}.test`,
+  });
+  seed.documentHandles[handle.url] = handle;
+  syncFilesystemIndexResources(seed.indexHandle, [handle]);
   return handle;
 }
 

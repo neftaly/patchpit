@@ -1,35 +1,11 @@
-import { automergeMapSource, defineAutomergeMapRelations } from '@tarstate/automerge';
-import {
-  defineSchema,
-  from,
-  relation,
-  stringField,
-} from '@tarstate/core';
-import { evaluate } from '@tarstate/core/evaluate';
 import type { FileType, FileTypesDoc } from '@patchpit/system';
 
 export type FileIcons = readonly FileType[];
 
-const fileIconSchema = defineSchema({
-  fileTypes: relation<FileType>({
-    key: 'match',
-    fields: {
-      emoji: stringField(),
-      match: stringField(),
-    },
-  }),
-});
-const fileIconRelations = defineAutomergeMapRelations<FileTypesDoc>()([
-  { relation: fileIconSchema.fileTypes, path: ['fileTypes'] },
-]);
-const fileIconQuery = from(fileIconSchema.fileTypes);
-
 export function fileIcons(doc: FileTypesDoc): FileIcons {
-  const result = evaluate(
-    automergeMapSource(doc, { relations: fileIconRelations }),
-    fileIconQuery,
-  );
-  return result.diagnostics.length === 0 ? result.rows : [];
+  return Array.isArray(doc.fileTypes)
+    ? doc.fileTypes.filter(isFileType).map((fileType) => ({ ...fileType }))
+    : [];
 }
 
 export function folderIcon(isOpen: boolean): string {
@@ -60,4 +36,14 @@ function matchesMime(pattern: string, mimeType: string): boolean {
 
 function normalizeMimeType(mimeType: string): string {
   return mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+}
+
+function isFileType(value: unknown): value is FileType {
+  return (
+    typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && typeof (value as Partial<FileType>).emoji === 'string'
+    && typeof (value as Partial<FileType>).match === 'string'
+  );
 }

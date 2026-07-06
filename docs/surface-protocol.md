@@ -53,8 +53,8 @@ Automerge-backed filenames. `.automerge` remains readable for compatibility.
 Both map to `application/vnd.automerge`.
 
 State documents should keep the shape that best matches the domain. They do not
-need to be flattened into tables. Tarstate provides typed lenses over those docs
-for reads, views, and writes.
+need to be flattened into tables. Runtime projections may expose relation-shaped
+views over those docs when a stable read or write boundary helps.
 
 Within `/system`:
 
@@ -71,8 +71,8 @@ feature requirements, and the explicit note that the in-process bootstrap
 runtime still owns Automerge handles until that ownership moves into the worker.
 
 The linked Automerge docs are the real filesystem format. `FilesystemIndexDoc`
-is an internal projection/cache used by Tarstate and the runtime to read the
-linked tree efficiently. Runtime clients consume `filesystem.tree` with
+is an internal runtime-maintained projection/cache used to read the linked tree
+efficiently. Runtime clients consume `filesystem.tree` with
 `schemaId: patchpit.filesystem.tree@1` as a public `nodes` relation. The index
 doc should not become the interchange format.
 
@@ -268,8 +268,9 @@ other's local presentation.
 
 ## Tarstate
 
-Tarstate is the lens layer over Automerge docs. It should be used for structured
-reads and writes when a typed projection helps, while Automerge remains the
+Tarstate is the schema and relation vocabulary for projection and intent
+boundaries. It can also provide lenses over Automerge docs when a typed
+projection or write path removes real complexity, while Automerge remains the
 source of truth.
 
 Tarstate schemas can expose:
@@ -286,9 +287,9 @@ manifests advertise schemas for state docs they create. The embedded schema is
 stable document metadata; normal Automerge changes should update state fields,
 not rewrite schema descriptors.
 
-For the window manager, the saved Automerge doc can stay hierarchical while
-Tarstate projects `surfaces`, `contexts`, `layoutNodes`, or `activeContexts` as
-needed.
+For the window manager, the saved Automerge doc can stay hierarchical while the
+runtime exposes relation-shaped `surfaces`, `contexts`, `layoutNodes`, or
+`activeContexts` views as needed.
 
 ## Implementation Target
 
@@ -303,7 +304,7 @@ The first useful implementation should stay small:
 5. Runtime state under `/system/runtime` is diagnostic. Active app/session state
    is derived from workspace sessions and app-host runner diagnostics, not from a
    second app-instance registry.
-6. Tarstate provides projections and write lenses over the durable docs.
+6. Runtime projections expose schema-bound relation views over durable docs.
 7. `/srv` remains reserved for future live services, not persisted app state.
 
 Do not implement permissions, spatial placement, or multiple viewports until the

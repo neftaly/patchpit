@@ -1,5 +1,4 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import { relationRowCounts, relationSetCounts } from '@tarstate/core/source';
 import {
   appLaunchIntentBoundary,
   ContainerMountKind,
@@ -39,6 +38,10 @@ import {
   type WindowIntentRow,
 } from '@patchpit/system/runtime';
 import {
+  relationRowCounts,
+  relationSetCounts,
+} from '@patchpit/system/runtime/relations';
+import {
   commitWindowManagerState,
   ContextLaunchBehavior,
   launchContext,
@@ -63,6 +66,7 @@ import {
   surfaceWithContext,
   targetLaunchSurface,
 } from './bootstrap-window-topology';
+import { installedAppManifests } from './manifest-routing';
 import type { AppInstanceStateHandler } from './app-instance-state';
 import { automergeHeadSetForHandle } from './automerge-heads';
 import { allowAllRuntimePolicy, type RuntimePolicy } from './policy';
@@ -1140,13 +1144,7 @@ function validateAppLaunchCommitted(
 }
 
 function appManifestForApp(seed: SeedFilesystem, app: string): AppManifestDoc | undefined {
-  return Object.values(seed.documentHandles)
-    .map((handle) => handle.doc())
-    .find((doc): doc is AppManifestDoc => isAppManifestDoc(doc) && doc.id === app);
-}
-
-function isAppManifestDoc(doc: FilesystemResource): doc is AppManifestDoc {
-  return doc['@patchpit'].type === PatchpitType.AppManifest;
+  return installedAppManifests(seed).find((manifest) => manifest.id === app);
 }
 
 function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | RuntimeError {

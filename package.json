@@ -16,7 +16,7 @@
     "lint": "oxlint . --deny-warnings --type-aware",
     "smoke": "pnpm build && node scripts/smoke.mjs",
     "smoke:pages": "pnpm build:pages && node scripts/smoke.mjs --base=/patchpit/",
-    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/system/src/schema.test.mjs apps/shell/src/window-manager/window-manager-state.test.mjs apps/shell/src/runtime/route-intents.test.mjs apps/shell/src/runtime/bootstrap-runtime.test.mjs apps/file-picker/src/file-picker-state.test.mjs apps/terminal/src/patchpit-fs.test.mjs",
+    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/system/src/schema.test.mjs apps/shell/src/window-manager/window-manager-state.test.mjs apps/shell/src/launcher/launcher-items.test.mjs apps/shell/src/runtime/route-intents.test.mjs apps/shell/src/runtime/bootstrap-runtime.test.mjs apps/file-picker/src/file-picker-state.test.mjs apps/terminal/src/patchpit-fs.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -33,7 +33,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#fee75be6e75d3138692c4ab44a73702b0e242eba&path:/packages/core"
+      "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#1fb2d130ef6cb01532765962b271f74b5aea82b6&path:/packages/core"
     },
     "patchedDependencies": {
       "@automerge/automerge-repo@2.5.6": "patches/@automerge__automerge-repo@2.5.6.patch"

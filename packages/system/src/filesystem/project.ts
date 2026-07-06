@@ -1,17 +1,5 @@
-import { automergeMapSource, defineAutomergeMapRelations } from '@tarstate/automerge';
-import {
-  as,
-  asc,
-  from,
-  maybe,
-  pipe,
-  project,
-  sort,
-} from '@tarstate/core';
-import { evaluate } from '@tarstate/core/evaluate';
 import { buildFilesystem, type FilesystemNode } from './tree';
 import { mimeTypeFromFileName } from './resources';
-import { filesystemIndexSchema, patchpitSystemRelationRef } from './schemas';
 import {
   PatchpitType,
   type FilesystemIndexDoc,
@@ -43,29 +31,6 @@ export type FilesystemTreeProjectionRelations = Readonly<{
   [filesystemTreeNodesRelation]: readonly FilesystemTreeNodeRow[];
 }>;
 
-const filesystemIndexDocumentsRelation = patchpitSystemRelationRef<FilesystemIndexRow>(
-  filesystemIndexSchema,
-  'documents',
-);
-
-const filesystemRelations = defineAutomergeMapRelations<FilesystemIndexDoc>()([
-  { relation: filesystemIndexDocumentsRelation, path: ['filesystemIndex', 'documents'] },
-]);
-
-const indexedDocument = as(filesystemIndexDocumentsRelation, 'document');
-const filesystemIndexRowsQuery = pipe(
-  from(indexedDocument),
-  sort(asc(indexedDocument.url)),
-  project({
-    content: maybe(indexedDocument.content),
-    entries: maybe(indexedDocument.entries),
-    mimeType: maybe(indexedDocument.mimeType),
-    title: maybe(indexedDocument.title),
-    type: indexedDocument.type,
-    url: indexedDocument.url,
-  }),
-);
-
 export function projectFilesystem(
   indexDoc: FilesystemIndexDoc,
   rootUrl: string,
@@ -78,14 +43,12 @@ export function projectFilesystem(
 }
 
 export function projectFilesystemRows(indexDoc: FilesystemIndexDoc): FilesystemIndexProjection {
-  const evaluation = evaluate(
-    automergeMapSource(indexDoc, { relations: filesystemRelations }),
-    filesystemIndexRowsQuery,
-  );
-
-  return evaluation.diagnostics.length > 0
-    ? { diagnostics: evaluation.diagnostics, rows: [] }
-    : { diagnostics: [], rows: evaluation.rows as readonly FilesystemIndexRow[] };
+  return {
+    diagnostics: [],
+    rows: indexDoc.filesystemIndex.documents
+      .map(projectFilesystemIndexRow)
+      .sort((left, right) => left.url.localeCompare(right.url)),
+  };
 }
 
 export function projectFilesystemTreeRows(
@@ -322,6 +285,17 @@ function filesystemNodeFromTreeRow(
 
 function compareFilesystemTreeRows(left: FilesystemTreeNodeRow, right: FilesystemTreeNodeRow): number {
   return left.position - right.position || left.name.localeCompare(right.name) || left.url.localeCompare(right.url);
+}
+
+function projectFilesystemIndexRow(row: FilesystemIndexRow): FilesystemIndexRow {
+  return {
+    ...(row.content === undefined ? {} : { content: row.content }),
+    ...(row.entries === undefined ? {} : { entries: structuredClone(row.entries) }),
+    ...(row.mimeType === undefined ? {} : { mimeType: row.mimeType }),
+    ...(row.title === undefined ? {} : { title: row.title }),
+    type: row.type,
+    url: row.url,
+  };
 }
 
 function mapIndexRowsByUrl(indexRows: readonly FilesystemIndexRow[]) {

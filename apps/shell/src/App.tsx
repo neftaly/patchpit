@@ -57,6 +57,11 @@ import {
 } from '@patchpit/system/runtime';
 import { LauncherBar } from './launcher/LauncherBar';
 import { launcherItems } from './launcher/launch-router';
+import {
+  installedAppsFromFilesystem,
+  type InstalledApp,
+} from './app-host/installed-apps';
+import { SandboxedFilesystemApp } from './app-host/SandboxedFilesystemApp';
 import { createBootstrapRuntimeClient } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
 import { detailFromUnknown, metadataDetails } from './runtime/runtime-error-details';
@@ -152,6 +157,14 @@ function ShellApp({
 
   const filesystemProjection = useFilesystemTreeProjection(runtime, rootUrl);
   const workspaceProjection = useWorkspaceProjection(runtime);
+  const installedApps = useMemo(() => (
+    filesystemProjection.status === 'ready'
+      ? installedAppsFromFilesystem({
+          getDocument: (url) => runtime.resources.getDocument(url),
+          root: filesystemProjection.root,
+        })
+      : []
+  ), [filesystemProjection, runtime.resources]);
   const recordRuntimeIssue = (source: StateBrowserRuntimeIssueEntry['source'], issue: RuntimePanelFailure) => {
     const entry: StateBrowserRuntimeIssueEntry = {
       id: nextRuntimeIssueId.current++,
@@ -247,6 +260,7 @@ function ShellApp({
       ? focusedAppId(workspaceProjection.workspace)
       : undefined,
     filePickerStateUrl: documentUrls.filePickerState,
+    installedApps,
     launchApp,
     rootUrl,
     runtimeStateUrl: documentUrls.runtimeState,
@@ -288,6 +302,7 @@ function ShellApp({
                 url: documentUrls.filePickerState,
               },
               filesystemRoot: filesystemProjection.root,
+              installedApps,
               stateBrowser: (
                 <StateBrowserSurface
                   filesystemProjection={filesystemProjection}
@@ -315,6 +330,7 @@ function ShellApp({
 function shellAppHost({
   filePicker,
   filesystemRoot,
+  installedApps,
   stateBrowser,
   terminalSessions,
   theme,
@@ -326,10 +342,12 @@ function shellAppHost({
     readonly url: string;
   };
   readonly filesystemRoot: FilesystemNode;
+  readonly installedApps: readonly InstalledApp[];
   readonly stateBrowser: ReactNode;
   readonly terminalSessions: Readonly<Record<string, TerminalAppSession>>;
   readonly theme: ThemeDoc;
 }): WindowManagerAppHost {
+  const appsById = new Map(installedApps.map((app) => [app.manifest.id, app]));
   return {
     acceptsDroppedUrl(event) {
       return event.dataTransfer.types.includes(filePickerDragType);
@@ -338,7 +356,7 @@ function shellAppHost({
     contextLabel(context) {
       if (context.app === 'terminal') return terminalAppContextLabel(terminalSessions[context.url]);
       if (context.app === 'state-browser') return context.title ?? 'State Browser';
-      return nodePath(filesystemRoot, context.url);
+      return nodePath(filesystemRoot, context.url) ?? context.title ?? appsById.get(context.app)?.manifest.name;
     },
 
     droppedUrl(event) {
@@ -347,6 +365,16 @@ function shellAppHost({
 
     renderSurface({ context, surfaceId }) {
       if (context === undefined) return <Viewer filesystemRoot={filesystemRoot} url={undefined} />;
+      const installedApp = appsById.get(context.app);
+      if (installedApp === undefined) {
+        return (
+          <SurfaceNotice
+            message={`No installed app manifest was found for ${context.app}.`}
+            role="alert"
+            title="App not installed"
+          />
+        );
+      }
 
       if (context.app === 'file-picker') {
         if (context.url !== filePicker.url) {
@@ -392,9 +420,7 @@ function shellAppHost({
 
       if (context.app === 'viewer') return <Viewer filesystemRoot={filesystemRoot} url={context.url} />;
 
-      return (
-        <SurfaceNotice message={`No renderer registered for ${context.app}.`} />
-      );
+      return <SandboxedFilesystemApp app={installedApp} context={context} surfaceId={surfaceId} />;
     },
   };
 }

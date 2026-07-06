@@ -7,12 +7,13 @@ implementation slice.
 The surface protocol defines Patchpit's user-visible runtime objects: app
 manifests, intents, contexts, surfaces, layouts, and viewports. This document
 defines how clients talk to the live runtime that owns the underlying Automerge
-repo and Tarstate projections.
+repo and relation-shaped projections.
 
 ## Goals
 
 - Keep Automerge docs as canonical durable state.
-- Use Tarstate for named projections, shared IVM, indexes, and write lenses.
+- Use Tarstate schemas and relation sets as the compatibility boundary for
+  named projections, intents, and write lenses.
 - Let tabs, sandboxed apps, agents, and device adapters share one runtime.
 - Expose a small app/client API for views, actions, and ports instead of raw
   `Repo` or `DocHandle` access.
@@ -44,7 +45,7 @@ repo and Tarstate projections.
 ## Invariants
 
 - Automerge docs are the only canonical durable document state.
-- Tarstate projections, indexes, materialized views, and policy indexes are
+- Runtime projections, indexes, materialized views, and policy indexes are
   derived state.
 - Apps, compositor surfaces, and sandboxed code never receive raw `Repo`,
   unrestricted `DocHandle`, or broad storage authority.
@@ -125,7 +126,8 @@ Use Patchpit's existing surface vocabulary where possible.
 - `Context`: a running/session object for one app around one primary URL.
 - `Surface`: a compositor-visible container for contexts and tabs.
 - `Viewport`: one client's local presentation of a surface.
-- `Projection`: a Tarstate-derived read model over Automerge docs.
+- `Projection`: a relation-shaped read model over Automerge docs or runtime
+  state.
 - `Intent`: a request for the runtime to do something.
 - `Capability`: scoped authority granted to an app, context, or client.
 
@@ -154,7 +156,7 @@ type RuntimeClient = {
 These names are intentionally not generic RPC terms, but they are also not the
 preferred app SDK vocabulary.
 
-- `subscribeProjection` says the read side is Tarstate-derived.
+- `subscribeProjection` says the read side is relation-shaped and schema-bound.
 - `submitIntent` matches Patchpit's surface protocol and runtime routing model.
 - `openCapability` says the returned port carries authority, not just messages.
 
@@ -595,7 +597,7 @@ Use cases:
 
 - rewind a workspace or file tree to past heads for analysis,
 - compare two historical states,
-- run Tarstate projections on a fork in a worker,
+- run relation projections on a fork in a worker,
 - let an agent or classifier inspect a speculative branch,
 - test a write lens or migration before committing anything durable.
 
@@ -1208,7 +1210,7 @@ landed the handshake gate and the first shell extraction scaffold:
 Next work:
 
 - Move the bootstrap runtime implementation into the SharedWorker so tabs share
-  the same Automerge repo and Tarstate IVM.
+  the same Automerge repo and runtime projection engine.
 - Keep window-manager desktop state behind one V0 workspace projection,
   `subscribeProjection('workspace.layout')`, with state, contexts, and surfaces.
 - Add `appManifests.handlers` as the installed-app projection used by Launcher,
@@ -1223,7 +1225,7 @@ worker handshakes.
 
 These are capability milestones, not release promises.
 
-- V1: shared Automerge networking, Tarstate IVM, app contexts, workspace-scoped
+- V1: shared Automerge networking, runtime projections, app contexts, workspace-scoped
   layouts, and sandbox capability ports in the runtime.
 - V2: policy and sharing hardening, quarantine, classifier workers, redacted
   projections, audit, and cache purge obligations.

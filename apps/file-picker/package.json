@@ -11,8 +11,6 @@
   "dependencies": {
     "@automerge/automerge-repo": "^2.5.6",
     "@patchpit/system": "workspace:*",
-    "@tarstate/automerge": "catalog:",
-    "@tarstate/core": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   }

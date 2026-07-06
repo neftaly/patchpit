@@ -1,6 +1,6 @@
 import type { DocHandle, Repo } from '@automerge/automerge-repo';
-import type { JsonValue } from '@tarstate/core';
 import type {
+  PatchpitJson,
   PatchpitRelationSchemaDescriptor,
   PatchpitSchemaId,
   PatchpitSchemaRef,
@@ -129,7 +129,7 @@ export type FilesystemIndexDoc = PatchpitDoc<PatchpitType.FilesystemIndex> & {
 export type FilesystemIndexRow = {
   url: string;
   type: string;
-  entries?: JsonValue;
+  entries?: PatchpitJson;
   title?: string;
   mimeType?: string;
   content?: string;

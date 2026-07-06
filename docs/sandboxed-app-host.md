@@ -48,21 +48,29 @@ other way around.
 
 ## Current Slice
 
-Current apps are registered as app manifest docs with `entry`, `handles`,
-`surfaces`, and `schemas`, but shell rendering still switches directly on
-`context.app` and imports React app components in-process. The SharedWorker is
-currently the boot gate, not the owner of Automerge handles or runtime
-operations. The in-process bootstrap runtime still owns the first runtime slice.
+Current apps are installed as package folders under `/apps`. Each package
+contains a manifest doc plus entry resources. The shell derives launcher items
+from those installed manifests, and both `app.launch` and document routing
+resolve installed manifests before creating sessions.
 
-The first implementation target is therefore a host boundary, not a new app:
+`WindowManagerAppHost.renderSurface` is now a manifest-driven host boundary:
+the host resolves `context.app` through `/apps`, renders first-party React apps
+through compatibility adapters, and runs filesystem JavaScript entries through
+`SandboxAppHost`. The seeded `hello-world` app proves the file-backed sandbox
+path with an iframe runner using `sandbox="allow-scripts"` and no same-origin
+authority.
 
-- keep `WindowManagerAppHost.renderSurface` as the current compositor content
-  slot;
-- replace the direct app switch with a `SandboxAppHost`;
-- resolve the launched context to its app manifest entry;
-- bootstrap the app through a scoped runtime proxy;
-- preserve viewer, file picker, and terminal behavior while removing raw state
-  props from their app boundary.
+The SharedWorker is still the boot gate, not the owner of Automerge handles or
+runtime operations. The in-process bootstrap runtime still owns the first
+runtime slice.
+
+Remaining app-host work:
+
+- move first-party app UI from compatibility adapters into sandboxed app
+  entries;
+- wire scoped `view`, `act`, and `open` services behind the sandbox bridge;
+- move runtime ownership from the in-process bootstrap client into the worker;
+- add local OS runner placement for command runners and later app hosts.
 
 ## UX Principles
 

@@ -93,53 +93,72 @@ export function createSeedFilesystem(): SeedFilesystem {
     mode: ThemeMode.System,
     name: automergeFileName('appearance'),
   });
-  const filePickerApp = createAppManifest(repo, {
-    entry: 'apps/file-picker/index.html',
-    handles: [],
-    icon: '📁',
-    id: 'file-picker',
-    name: 'File Picker',
-    surfaces: [stateSurface(SurfaceRole.WorkspaceView, PatchpitType.FilePickerState)],
-    schemas: [filePickerStateSchema],
-  });
-  const viewerApp = createAppManifest(repo, {
-    entry: 'apps/viewer/index.html',
-    handles: [
-      { accepts: ['*/*'], intent: 'preview', port: 'view' },
-      { accepts: ['*/*'], intent: 'open', port: 'view' },
-      { accepts: ['*/*'], intent: 'reveal', port: 'view' },
-      { accepts: ['*/*'], intent: 'activate', port: 'view' },
-    ],
-    icon: '📄',
-    id: 'viewer',
-    name: 'Viewer',
-    surfaces: [
-      {
-        role: SurfaceRole.DocumentSet,
-      },
-    ],
-  });
-  const terminalApp = createAppManifest(repo, {
-    entry: 'apps/terminal/index.html',
-    handles: [],
-    icon: '💬',
-    id: 'terminal',
-    name: 'Terminal',
-    surfaces: [stateSurface(SurfaceRole.DocumentSet, PatchpitType.TerminalState)],
-    schemas: [terminalStateSchema],
-  });
-  const stateBrowserApp = createAppManifest(repo, {
-    entry: 'index.html',
-    handles: [],
-    icon: '🧭',
-    id: 'state-browser',
-    name: 'State Browser',
-    surfaces: [
-      {
-        role: SurfaceRole.DocumentSet,
-      },
-    ],
-  });
+  const appPackages = [
+    installSeedAppPackage(repo, {
+      entry: 'index.html',
+      files: [firstPartyShellEntryFile('File Picker')],
+      handles: [],
+      icon: '📁',
+      id: 'file-picker',
+      name: 'File Picker',
+      surfaces: [stateSurface(SurfaceRole.WorkspaceView, PatchpitType.FilePickerState)],
+      schemas: [filePickerStateSchema],
+    }),
+    installSeedAppPackage(repo, {
+      entry: 'index.html',
+      files: [firstPartyShellEntryFile('State Browser')],
+      handles: [],
+      icon: '🧭',
+      id: 'state-browser',
+      name: 'State Browser',
+      surfaces: [
+        {
+          role: SurfaceRole.DocumentSet,
+        },
+      ],
+    }),
+    installSeedAppPackage(repo, {
+      entry: 'index.html',
+      files: [firstPartyShellEntryFile('Terminal')],
+      handles: [],
+      icon: '💬',
+      id: 'terminal',
+      name: 'Terminal',
+      surfaces: [stateSurface(SurfaceRole.DocumentSet, PatchpitType.TerminalState)],
+      schemas: [terminalStateSchema],
+    }),
+    installSeedAppPackage(repo, {
+      entry: 'index.html',
+      files: [firstPartyShellEntryFile('Viewer')],
+      handles: [
+        { accepts: ['*/*'], intent: 'preview', port: 'view' },
+        { accepts: ['*/*'], intent: 'open', port: 'view' },
+        { accepts: ['*/*'], intent: 'reveal', port: 'view' },
+        { accepts: ['*/*'], intent: 'activate', port: 'view' },
+      ],
+      icon: '📄',
+      id: 'viewer',
+      name: 'Viewer',
+      surfaces: [
+        {
+          role: SurfaceRole.DocumentSet,
+        },
+      ],
+    }),
+    installSeedAppPackage(repo, {
+      entry: 'app.js',
+      files: helloWorldAppFiles,
+      handles: [],
+      icon: '👋',
+      id: 'hello-world',
+      name: 'Hello World',
+      surfaces: [
+        {
+          role: SurfaceRole.DocumentSet,
+        },
+      ],
+    }),
+  ];
   const fileTypesHandle = repo.create<FileTypesDoc>({
     '@patchpit': patchpitDocMetadata(PatchpitType.FileTypes),
     extension: automergeExtension,
@@ -183,12 +202,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     },
   });
   const runtimeStateHandle = createRuntimeStateHandle(repo, 'runtime-boot-gate');
-  const apps = createFolder(repo, 'apps', [
-    folderEntry(automergeFileName('file-picker'), PatchpitType.AppManifest, filePickerApp.url),
-    folderEntry(automergeFileName('state-browser'), PatchpitType.AppManifest, stateBrowserApp.url),
-    folderEntry(automergeFileName('terminal'), PatchpitType.AppManifest, terminalApp.url),
-    folderEntry(automergeFileName('viewer'), PatchpitType.AppManifest, viewerApp.url),
-  ]);
+  const apps = createFolder(repo, 'apps', appPackages.map((appPackage) => appPackage.entry));
   const systemApps = createFolder(repo, 'apps', [
     folderEntry(automergeFileName(filePickerStateId), PatchpitType.FilePickerState, filePickerStateHandle.url),
   ]);
@@ -228,10 +242,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     systemConfig,
     systemRuntime,
     systemThemes,
-    filePickerApp,
-    stateBrowserApp,
-    terminalApp,
-    viewerApp,
+    ...appPackages.flatMap((appPackage) => appPackage.handles),
     fileTypesHandle,
     appearanceHandle,
     darkThemeHandle,
@@ -583,6 +594,51 @@ function createFixtureNode(repo: Repo, node: SeedNode): {
   };
 }
 
+type SeedAppPackageFile = {
+  readonly content: string;
+  readonly name: string;
+};
+
+type SeedAppPackageInput = {
+  readonly entry: string;
+  readonly files: readonly SeedAppPackageFile[];
+  readonly handles: AppManifestHandler[];
+  readonly icon: string;
+  readonly id: string;
+  readonly name: string;
+  readonly schemas?: readonly PatchpitRelationSchemaDescriptor[];
+  readonly surfaces: SurfaceSpec[];
+};
+
+type SeedAppPackage = {
+  readonly entry: FolderEntry;
+  readonly handles: Array<DocHandle<AppManifestDoc | FileDoc | FolderDoc>>;
+};
+
+function installSeedAppPackage(repo: Repo, input: SeedAppPackageInput): SeedAppPackage {
+  const manifestHandle = createAppManifest(repo, input);
+  const fileHandles = input.files.map((file) => createFile(repo, file.name, file.content));
+  const entryFileName = packageEntryFileName(input.entry);
+  if (!input.files.some((file) => file.name === entryFileName)) {
+    throw new Error(`Seed app ${input.id} is missing entry resource ${entryFileName}.`);
+  }
+
+  const packageHandle = createFolder(repo, input.id, [
+    folderEntry(automergeFileName('manifest'), PatchpitType.AppManifest, manifestHandle.url),
+    ...fileHandles.map((handle) => folderEntry(handle.doc().name, PatchpitType.File, handle.url)),
+  ]);
+
+  return {
+    entry: folderEntry(input.id, PatchpitType.Folder, packageHandle.url),
+    handles: [packageHandle, manifestHandle, ...fileHandles],
+  };
+}
+
+function packageEntryFileName(entry: string): string {
+  const lastSlash = entry.lastIndexOf('/');
+  return lastSlash === -1 ? entry : entry.slice(lastSlash + 1);
+}
+
 function createAppManifest(
   repo: Repo,
   input: {
@@ -625,3 +681,64 @@ function createFile(
 ): DocHandle<FileDoc> {
   return repo.create<FileDoc>(createPatchpitFileDoc(name, content));
 }
+
+function firstPartyShellEntryFile(name: string): SeedAppPackageFile {
+  return {
+    content: firstPartyShellEntryHtml(name),
+    name: 'index.html',
+  };
+}
+
+function firstPartyShellEntryHtml(name: string): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>${name}</title>
+</head>
+<body>
+  <main>
+    <h1>${name}</h1>
+    <p>This first-party app is served by the Patchpit shell compatibility host.</p>
+  </main>
+</body>
+</html>
+`;
+}
+
+const helloWorldAppFiles = [
+  {
+    content: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hello World</title>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Hello World</h1>
+    <p>This sandbox example was loaded from /apps/hello-world.</p>
+  </main>
+</body>
+</html>
+`,
+    name: 'index.html',
+  },
+  {
+    content: `export default function activate(env) {
+  const root = document.getElementById('patchpit-root') ?? document.body;
+  root.innerHTML = '';
+  const main = document.createElement('main');
+  main.style.cssText = 'display:grid;place-content:center;min-height:100%;gap:0.5rem;font:16px system-ui,sans-serif;text-align:center;';
+  const heading = document.createElement('h1');
+  heading.textContent = 'Hello from /apps/hello-world';
+  const detail = document.createElement('p');
+  detail.textContent = 'Sandboxed session ' + env.session.id;
+  main.append(heading, detail);
+  root.append(main);
+}
+`,
+    name: 'app.js',
+  },
+] as const satisfies readonly SeedAppPackageFile[];

@@ -1,4 +1,3 @@
-import { relationSetFromRows } from '@tarstate/core/source';
 import {
   filesystemTreeProjectionRelations,
   filesystemTreeSchema,
@@ -25,6 +24,7 @@ import {
   type RuntimeClient,
   type RuntimeError,
 } from '@patchpit/system/runtime';
+import { relationSetFromRows } from '@patchpit/system/runtime/relations';
 import { automergeHeadSetForHandle } from './automerge-heads';
 
 type ProjectionDiagnosticsRecorder = {

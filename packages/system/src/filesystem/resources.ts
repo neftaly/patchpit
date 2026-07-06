@@ -1,6 +1,6 @@
 import type { DocHandle } from '@automerge/automerge-repo';
-import type { JsonValue } from '@tarstate/core';
 import { patchpitDocMetadata } from './schemas';
+import type { PatchpitJson } from '../schema';
 import {
   automergeMimeType,
   isAutomergeFileName,
@@ -191,6 +191,8 @@ export function fileExtensionFromName(name: string): string {
 
 export function mimeTypeFromFileName(name: string): string {
   if (isAutomergeFileName(name)) return automergeMimeType;
+  if (name.endsWith('.html')) return 'text/html';
+  if (name.endsWith('.js')) return 'text/javascript';
   if (name.endsWith('.json')) return 'application/json';
   if (name.endsWith('.md')) return 'text/markdown';
   if (name.endsWith('.svg')) return 'image/svg+xml';
@@ -198,16 +200,16 @@ export function mimeTypeFromFileName(name: string): string {
   return 'application/octet-stream';
 }
 
-function cloneJsonValue(value: JsonValue): JsonValue {
+function cloneJsonValue(value: PatchpitJson): PatchpitJson {
   if (Array.isArray(value)) return value.map(cloneJsonValue);
   if (isJsonRecord(value)) {
-    const clone: Record<string, JsonValue> = {};
+    const clone: Record<string, PatchpitJson> = {};
     for (const [key, nestedValue] of Object.entries(value)) clone[key] = cloneJsonValue(nestedValue);
     return clone;
   }
   return value;
 }
 
-function isJsonRecord(value: JsonValue): value is Readonly<Record<string, JsonValue>> {
+function isJsonRecord(value: PatchpitJson): value is Readonly<Record<string, PatchpitJson>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

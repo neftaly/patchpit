@@ -1,4 +1,3 @@
-import { relationRows, relationSetFromRows } from '@tarstate/core/source';
 import {
   ContainerMountKind,
   RuntimeMountProvider,
@@ -19,6 +18,7 @@ import {
   type WorkspaceProjectionRelations,
   type WorkspaceProjectionStateRow,
 } from './protocol';
+import { relationRows, relationSetFromRows } from './relations';
 
 export type WorkspaceProjection = {
   readonly contexts: Readonly<Record<string, WindowContext>>;

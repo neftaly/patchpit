@@ -1,23 +1,5 @@
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
-  as,
-  defineSchema,
-  eq,
-  from,
-  leftJoin,
-  maybe,
-  opaqueField,
-  optional,
-  pipe,
-  project,
-  relation,
-  stringField,
-  value,
-  where,
-} from '@tarstate/core';
-import { evaluate } from '@tarstate/core/evaluate';
-import { fromObjectSource } from '@tarstate/core/source';
-import {
   SplitDirection,
   type WindowContext,
   type WindowLayoutNode,
@@ -58,52 +40,7 @@ export type ContextLaunch = {
   readonly role: SurfaceRole;
 };
 
-type WindowManagerStateRow = {
-  contexts: Record<string, WindowContext>;
-  focus: string;
-  id: string;
-  layout: WindowLayoutNode;
-  surfaces: Record<string, WindowSurface>;
-};
-type WindowContextRow = WindowContext;
-type WindowSurfaceRow = WindowSurface;
-
-const stateId = 'window-manager';
 const workspaceSurfaceRatio = 0.2;
-const windowManagerSchema = defineSchema({
-  contexts: relation<WindowContextRow>({
-    key: 'id',
-    fields: {
-      app: stringField(),
-      container: opaqueField<WindowContext['container']>(),
-      id: stringField(),
-      title: optional(stringField()),
-      url: stringField(),
-    },
-  }),
-  state: relation<WindowManagerStateRow>({
-    key: 'id',
-    fields: {
-      contexts: opaqueField<Record<string, WindowContext>>(),
-      focus: stringField(),
-      id: stringField(),
-      layout: opaqueField<WindowLayoutNode>(),
-      surfaces: opaqueField<Record<string, WindowSurface>>(),
-    },
-  }),
-  surfaces: relation<WindowSurfaceRow>({
-    key: 'id',
-    fields: {
-      activeContext: optional(stringField()),
-      contexts: opaqueField<string[]>(),
-      id: stringField(),
-      previewContext: optional(stringField()),
-      role: stringField(),
-    },
-  }),
-});
-const focusedSurface = as(windowManagerSchema.surfaces, 'surface');
-const focusedContext = as(windowManagerSchema.contexts, 'context');
 
 export function commitWindowManagerState(
   handle: DocHandle<WindowManagerStateDoc>,
@@ -122,11 +59,13 @@ export function commitWindowManagerState(
   });
 }
 
-function windowManagerStateRow(state: WindowManagerStateDoc): WindowManagerStateRow {
+function windowManagerStateRow(state: WindowManagerStateDoc): Pick<
+  WindowManagerStateDoc,
+  'contexts' | 'focus' | 'layout' | 'surfaces'
+> {
   return {
     contexts: structuredClone(state.contexts),
     focus: state.focus,
-    id: stateId,
     layout: structuredClone(state.layout),
     surfaces: structuredClone(state.surfaces),
   };
@@ -143,19 +82,10 @@ export function normalizeWindowManagerState(state: WindowManagerStateDoc): Windo
 export function focusedAppId(
   state: Pick<WindowManagerStateDoc, 'contexts' | 'focus' | 'surfaces'>,
 ): string | undefined {
-  const result = evaluate(
-    fromObjectSource({
-      contexts: Object.values(state.contexts),
-      surfaces: Object.values(state.surfaces),
-    }),
-    pipe(
-      from(focusedSurface),
-      where(eq(focusedSurface.id, value(state.focus))),
-      leftJoin(from(focusedContext), eq(focusedSurface.activeContext, focusedContext.id)),
-      project({ app: maybe(focusedContext.app) }),
-    ),
-  );
-  return result.rows[0]?.app;
+  const surface = state.surfaces[state.focus];
+  return surface?.activeContext === undefined
+    ? undefined
+    : state.contexts[surface.activeContext]?.app;
 }
 
 export function focusContext(

@@ -9,9 +9,6 @@ catalogs:
     '@automerge/automerge':
       specifier: ^3.2.6
       version: 3.2.6
-    '@tarstate/automerge':
-      specifier: git+https://github.com/neftaly/tarstate.git#d57e196e2cff4de4ec20fce3960fd6ff9c1452a8&path:/packages/automerge
-      version: 0.0.0
     '@types/node':
       specifier: ^24.10.3
       version: 24.13.2
@@ -50,7 +47,7 @@ catalogs:
       version: 3.6.0
 
 overrides:
-  '@tarstate/core': git+https://github.com/neftaly/tarstate.git#fee75be6e75d3138692c4ab44a73702b0e242eba&path:/packages/core
+  '@tarstate/core': git+https://github.com/neftaly/tarstate.git#1fb2d130ef6cb01532765962b271f74b5aea82b6&path:/packages/core
 
 patchedDependencies:
   '@automerge/automerge-repo@2.5.6':
@@ -100,12 +97,6 @@ importers:
       '@patchpit/system':
         specifier: workspace:*
         version: link:../../packages/system
-      '@tarstate/automerge':
-        specifier: 'catalog:'
-        version: https://codeload.github.com/neftaly/tarstate/tar.gz/d57e196e2cff4de4ec20fce3960fd6ff9c1452a8#path:/packages/automerge
-      '@tarstate/core':
-        specifier: git+https://github.com/neftaly/tarstate.git#fee75be6e75d3138692c4ab44a73702b0e242eba&path:/packages/core
-        version: https://codeload.github.com/neftaly/tarstate/tar.gz/fee75be6e75d3138692c4ab44a73702b0e242eba#path:/packages/core
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -130,9 +121,6 @@ importers:
       '@patchpit/viewer':
         specifier: workspace:*
         version: link:../viewer
-      '@tarstate/core':
-        specifier: git+https://github.com/neftaly/tarstate.git#fee75be6e75d3138692c4ab44a73702b0e242eba&path:/packages/core
-        version: https://codeload.github.com/neftaly/tarstate/tar.gz/fee75be6e75d3138692c4ab44a73702b0e242eba#path:/packages/core
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -148,9 +136,6 @@ importers:
       '@patchpit/system':
         specifier: workspace:*
         version: link:../../packages/system
-      '@tarstate/core':
-        specifier: git+https://github.com/neftaly/tarstate.git#fee75be6e75d3138692c4ab44a73702b0e242eba&path:/packages/core
-        version: https://codeload.github.com/neftaly/tarstate/tar.gz/fee75be6e75d3138692c4ab44a73702b0e242eba#path:/packages/core
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -187,12 +172,9 @@ importers:
       '@automerge/automerge-repo':
         specifier: ^2.5.6
         version: 2.5.6(patch_hash=082ddd3138c4c9beae6e3742a875341e0bc45b068af7d265df66addc3eec2960)
-      '@tarstate/automerge':
-        specifier: 'catalog:'
-        version: https://codeload.github.com/neftaly/tarstate/tar.gz/d57e196e2cff4de4ec20fce3960fd6ff9c1452a8#path:/packages/automerge
       '@tarstate/core':
-        specifier: git+https://github.com/neftaly/tarstate.git#fee75be6e75d3138692c4ab44a73702b0e242eba&path:/packages/core
-        version: https://codeload.github.com/neftaly/tarstate/tar.gz/fee75be6e75d3138692c4ab44a73702b0e242eba#path:/packages/core
+        specifier: git+https://github.com/neftaly/tarstate.git#1fb2d130ef6cb01532765962b271f74b5aea82b6&path:/packages/core
+        version: https://codeload.github.com/neftaly/tarstate/tar.gz/1fb2d130ef6cb01532765962b271f74b5aea82b6#path:/packages/core
 
 packages:
 
@@ -917,12 +899,8 @@ packages:
   '@swc/wasm@1.15.43':
     resolution: {integrity: sha512-jYqeckrzZGAU+9OSfmL15MWfhkKWRCC8QMssL/MZu/MaIP76mU3VHjzqxlwKIz9DOSR/9jCqi1+QlWE0ILNehA==}
 
-  '@tarstate/automerge@https://codeload.github.com/neftaly/tarstate/tar.gz/d57e196e2cff4de4ec20fce3960fd6ff9c1452a8#path:/packages/automerge':
-    resolution: {path: /packages/automerge, tarball: https://codeload.github.com/neftaly/tarstate/tar.gz/d57e196e2cff4de4ec20fce3960fd6ff9c1452a8}
-    version: 0.0.0
-
-  '@tarstate/core@https://codeload.github.com/neftaly/tarstate/tar.gz/fee75be6e75d3138692c4ab44a73702b0e242eba#path:/packages/core':
-    resolution: {path: /packages/core, tarball: https://codeload.github.com/neftaly/tarstate/tar.gz/fee75be6e75d3138692c4ab44a73702b0e242eba}
+  '@tarstate/core@https://codeload.github.com/neftaly/tarstate/tar.gz/1fb2d130ef6cb01532765962b271f74b5aea82b6#path:/packages/core':
+    resolution: {path: /packages/core, tarball: https://codeload.github.com/neftaly/tarstate/tar.gz/1fb2d130ef6cb01532765962b271f74b5aea82b6}
     version: 0.0.0
 
   '@tokenizer/inflate@0.4.1':
@@ -2032,15 +2010,7 @@ snapshots:
 
   '@swc/wasm@1.15.43': {}
 
-  '@tarstate/automerge@https://codeload.github.com/neftaly/tarstate/tar.gz/d57e196e2cff4de4ec20fce3960fd6ff9c1452a8#path:/packages/automerge':
-    dependencies:
-      '@automerge/automerge': 3.2.6
-      '@automerge/automerge-repo': 2.5.6(patch_hash=082ddd3138c4c9beae6e3742a875341e0bc45b068af7d265df66addc3eec2960)
-      '@tarstate/core': https://codeload.github.com/neftaly/tarstate/tar.gz/fee75be6e75d3138692c4ab44a73702b0e242eba#path:/packages/core
-    transitivePeerDependencies:
-      - supports-color
-
-  '@tarstate/core@https://codeload.github.com/neftaly/tarstate/tar.gz/fee75be6e75d3138692c4ab44a73702b0e242eba#path:/packages/core': {}
+  '@tarstate/core@https://codeload.github.com/neftaly/tarstate/tar.gz/1fb2d130ef6cb01532765962b271f74b5aea82b6#path:/packages/core': {}
 
   '@tokenizer/inflate@0.4.1':
     dependencies:

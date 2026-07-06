@@ -11,7 +11,7 @@ Current specs:
 
 Architecture notes:
 
-- [`planned-architecture.md`](planned-architecture.md)
+- [`architecture.md`](architecture.md)
 - [`sandboxed-app-host.md`](sandboxed-app-host.md)
 
 Capability notes:

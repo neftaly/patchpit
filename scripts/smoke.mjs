@@ -60,8 +60,7 @@ async function smokeTerminalLauncher() {
 const launcherReadyExpression = `
 (() => {
   const alert = document.querySelector('[role="alert"]');
-  const terminalButton = [...document.querySelectorAll('button')]
-    .find((button) => button.textContent.includes('Terminal'));
+  const terminalButton = document.querySelector('button[data-app-id="terminal"]');
   if (alert !== null) {
     return {
       status: 'failed',
@@ -70,10 +69,10 @@ const launcherReadyExpression = `
       body: document.body.innerText,
     };
   }
-  if (terminalButton !== undefined) return { status: 'passed' };
+  if (terminalButton !== null) return { status: 'passed' };
   return {
     status: 'pending',
-    reason: 'Waiting for Terminal launcher button',
+    reason: 'Waiting for manifest-derived Terminal launcher button',
     body: document.body.innerText,
   };
 })()
@@ -81,16 +80,32 @@ const launcherReadyExpression = `
 
 const clickTerminalExpression = `
 (() => {
-  const terminalButton = [...document.querySelectorAll('button')]
-    .find((button) => button.textContent.includes('Terminal'));
-  if (terminalButton === undefined) {
+  const terminalButton = document.querySelector('button[data-app-id="terminal"]');
+  if (terminalButton === null) {
     return {
       status: 'failed',
-      reason: 'Terminal launcher button is missing',
+      reason: 'Manifest-derived Terminal launcher button is missing',
       body: document.body.innerText,
     };
   }
-  terminalButton.click();
+  if (typeof terminalButton.click !== 'function') {
+    return {
+      status: 'failed',
+      reason: 'Terminal launcher target is not clickable',
+      tag: terminalButton.tagName,
+      body: document.body.innerText,
+    };
+  }
+  try {
+    terminalButton.click();
+  } catch (error) {
+    return {
+      status: 'failed',
+      reason: 'Terminal launcher click threw',
+      error: error instanceof Error ? error.stack : String(error),
+      body: document.body.innerText,
+    };
+  }
   return { status: 'passed' };
 })()
 `;
@@ -282,7 +297,10 @@ async function evaluate(cdp, expression) {
     userGesture: true,
   });
   if (evaluation.exceptionDetails !== undefined) {
-    throw new Error(`Browser evaluation failed: ${evaluation.exceptionDetails.text}`);
+    throw new Error(`Browser evaluation failed: ${
+      evaluation.exceptionDetails.exception?.description
+      ?? evaluation.exceptionDetails.text
+    }`);
   }
   return evaluation.result.value;
 }

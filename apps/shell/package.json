@@ -9,7 +9,6 @@
     "@patchpit/terminal": "workspace:*",
     "@patchpit/viewer": "workspace:*",
     "@patchpit/system": "workspace:*",
-    "@tarstate/core": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   }

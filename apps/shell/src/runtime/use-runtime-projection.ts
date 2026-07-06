@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { relationRows } from '@tarstate/core/source';
 import {
   projectFilesystemTreeFromRows,
   type FilesystemNode,
@@ -19,6 +18,7 @@ import {
   type WorkspaceProjection,
   type WorkspaceProjectionState,
 } from '@patchpit/system/runtime';
+import { relationRows } from '@patchpit/system/runtime/relations';
 import {
   runtimeProjectionFailureFromRuntimeError,
   runtimeProjectionFailureFromUnknownError,

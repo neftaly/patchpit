@@ -19,6 +19,7 @@ export function LauncherBar({
           <button
             className="launcher-bar-button"
             data-active={launcherItem.active ? '' : undefined}
+            data-app-id={launcherItem.app}
             key={launcherItem.app}
             onClick={launcherItem.launch}
             type="button"

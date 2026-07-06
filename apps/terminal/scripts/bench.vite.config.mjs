@@ -18,7 +18,7 @@ export default defineConfig({
     target: 'esnext',
   },
   ssr: {
-    noExternal: [/^@patchpit\//, /^@tarstate\//],
+    noExternal: [/^@patchpit\//],
   },
   resolve: {
     alias: {
