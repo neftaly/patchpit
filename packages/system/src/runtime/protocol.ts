@@ -176,63 +176,16 @@ export type RuntimeEvent =
 
 export type ProjectionName =
   | 'filesystem.tree'
-  | 'runtime.installedApps'
-  | 'runtime.projections'
   | 'workspace.layout';
 
 export const filesystemTreeProjection = 'filesystem.tree' as const satisfies ProjectionName;
 export const filesystemTreeSchemaId = 'patchpit.filesystem.tree@1' as const;
 export const filesystemTreeNodesRelation = 'nodes' as const;
-export const installedAppsProjection = 'runtime.installedApps' as const satisfies ProjectionName;
-export const installedAppsSchemaId = 'patchpit.runtime.installedApps@1' as const;
-export const installedAppsRelation = 'apps' as const;
-export const runtimeProjectionsProjection = 'runtime.projections' as const satisfies ProjectionName;
-export const runtimeProjectionsSchemaId = 'patchpit.runtime.projections@1' as const;
-export const runtimeProjectionsRelation = 'projections' as const;
 export const workspaceLayoutProjection = 'workspace.layout' as const satisfies ProjectionName;
 export const workspaceProjectionSchemaId = 'patchpit.system.windowManager.state@1' as const;
 export const workspaceStateRelation = 'state' as const;
 export const workspaceContextsRelation = 'contexts' as const;
 export const workspaceSurfacesRelation = 'surfaces' as const;
-
-export type ProjectionVirtualFileName = 'meta.json' | 'schema.json' | 'summary.json';
-export const projectionVirtualServiceRootUrl = 'patchpit-srv:/' as const;
-export const projectionVirtualRootUrl = 'patchpit-srv:/projections' as const;
-const projectionNames = [
-  filesystemTreeProjection,
-  installedAppsProjection,
-  runtimeProjectionsProjection,
-  workspaceLayoutProjection,
-] as const satisfies readonly ProjectionName[];
-
-export function projectionVirtualDirectoryUrl(projection: ProjectionName): string {
-  return `${projectionVirtualRootUrl}/${projection}`;
-}
-
-export function projectionVirtualFileUrl(projection: ProjectionName, file: ProjectionVirtualFileName): string {
-  return `${projectionVirtualDirectoryUrl(projection)}/${file}`;
-}
-
-export function parseProjectionVirtualFileUrl(
-  url: string,
-): { readonly projection: ProjectionName; readonly file: ProjectionVirtualFileName } | undefined {
-  if (!url.startsWith(`${projectionVirtualRootUrl}/`)) return undefined;
-  const parts = url.slice(projectionVirtualRootUrl.length + 1).split('/');
-  if (parts.length !== 2) return undefined;
-  const projection = projectionNameFromVirtualPathComponent(parts[0] ?? '');
-  const file = parts[1];
-  return projection !== undefined && isProjectionVirtualFileName(file)
-    ? { projection, file }
-    : undefined;
-}
-
-function projectionNameFromVirtualPathComponent(pathComponent: string): ProjectionName | undefined {
-  return projectionNames.find((projection) => projection === pathComponent);
-}
-
-function isProjectionVirtualFileName(value: string | undefined): value is ProjectionVirtualFileName {
-  return value === 'meta.json' || value === 'schema.json' || value === 'summary.json';
-}
 
 export type FilesystemTreeNodeKind = 'folder' | 'file';
 export type FilesystemTreeNodeRow = {
@@ -260,35 +213,6 @@ export type WorkspaceProjectionRelations = Readonly<{
   [workspaceContextsRelation]: readonly WindowContext[];
   [workspaceSurfacesRelation]: readonly WindowSurface[];
 }>;
-
-export type RuntimeProjectionCatalogRow = {
-  readonly basisKinds: readonly ProjectionBasis['kind'][];
-  readonly description?: string;
-  readonly name: ProjectionName;
-  readonly owner?: string;
-  readonly readOnly: true;
-  readonly schemaHash: PatchpitSchemaHash;
-  readonly schemaId: TarstateSchemaId;
-  readonly schemaUrl?: string;
-};
-
-export type InstalledAppRuntimeRow = {
-  readonly appId: string;
-  readonly entryKind: string;
-  readonly entryPath: string;
-  readonly entryStatus: 'resolved' | 'missing';
-  readonly entryUrl?: string;
-  readonly handles: Json;
-  readonly hasStatefulLaunch: boolean;
-  readonly icon: string;
-  readonly launchRole: string;
-  readonly manifestUrl: string;
-  readonly name: string;
-  readonly packagePath: string;
-  readonly packageUrl: string;
-  readonly surfaces: Json;
-  readonly version: string;
-};
 
 export type ProjectionSubscriptionRequest = {
   readonly projection: ProjectionName;

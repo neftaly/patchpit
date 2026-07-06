@@ -1,4 +1,4 @@
-import type { CSSProperties, DragEvent, PointerEvent } from 'react';
+import type { CSSProperties, PointerEvent } from 'react';
 import type { FilePickerStateDoc, FilesystemNode } from '@patchpit/system';
 import {
   filePickerSelectionRange,
@@ -16,7 +16,6 @@ export type FilePickerActions = {
   readonly toggleFolder: (url: string) => void;
 };
 
-export const filePickerDragType = 'application/x.patchpit-file';
 const doublePointerActivationMs = 500;
 
 let lastPrimaryPointerActivation: {
@@ -25,11 +24,6 @@ let lastPrimaryPointerActivation: {
   readonly pointerType: string;
   readonly url: string;
 } | undefined;
-
-export type DraggedFilePickerUrl = {
-  readonly title: string;
-  readonly url: string;
-};
 
 type FilePickerItemStyle = CSSProperties & {
   readonly '--tree-depth-size': string;
@@ -96,7 +90,6 @@ function TreeItem({
       <button
         aria-pressed={isSelected}
         className="tree-item"
-        draggable
         onPointerUp={(event) => {
           const activationCount = primaryPointerActivationCount(event, node.url);
           if (activationCount === 0) return;
@@ -109,9 +102,6 @@ function TreeItem({
             if (node.kind === 'folder') actions.toggleFolder(node.url);
             actions.previewUrl(node.url, displayName);
           }
-        }}
-        onDragStart={(event) => {
-          beginFileDrag(event, { title: displayName, url: node.url });
         }}
         style={depthStyle(depth)}
         type="button"
@@ -136,11 +126,6 @@ function TreeItem({
       )}
     </li>
   );
-}
-
-function beginFileDrag(event: DragEvent, draggedFile: DraggedFilePickerUrl): void {
-  event.dataTransfer.effectAllowed = 'copyMove';
-  event.dataTransfer.setData(filePickerDragType, JSON.stringify(draggedFile));
 }
 
 function selectUrlFromPointer(

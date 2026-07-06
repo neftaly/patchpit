@@ -43,7 +43,6 @@ export {
   routeIntentBoundary,
   routeIntentSchema,
   runtimeStateSchema,
-  runtimeProjectionsSchema,
   themeSchema,
   windowIntentBoundary,
   windowIntentSchema,

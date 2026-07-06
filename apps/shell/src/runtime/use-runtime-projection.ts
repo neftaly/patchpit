@@ -11,19 +11,11 @@ import {
   workspaceLayoutProjection,
   workspaceProjectionFromRelationSet,
   workspaceProjectionSchemaId,
-  runtimeProjectionsProjection,
-  runtimeProjectionsRelation,
-  runtimeProjectionsSchemaId,
-  installedAppsProjection,
-  installedAppsRelation,
-  installedAppsSchemaId,
-  type InstalledAppRuntimeRow,
   type ProjectionEvent,
   type ProjectionSnapshot,
   type ProjectionSubscription,
   type ProjectionSubscriptionRequest,
   type RelationSet,
-  type RuntimeProjectionCatalogRow,
   type RuntimeClient,
   type WorkspaceProjection,
   type WorkspaceProjectionState,
@@ -34,7 +26,6 @@ import {
   runtimeProjectionFailureFromUnknownError,
   type RuntimeProjectionFailure,
 } from './runtime-projection-failure';
-import { isInstalledAppRuntimeRow } from './installed-apps';
 
 export type { RuntimeProjectionFailure } from './runtime-projection-failure';
 export type { WorkspaceProjection, WorkspaceProjectionState };
@@ -42,24 +33,6 @@ export type { WorkspaceProjection, WorkspaceProjectionState };
 export type RuntimeProjectionSnapshotState =
   | { readonly status: 'initializing' }
   | { readonly status: 'ready'; readonly snapshot: ProjectionSnapshot }
-  | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
-
-export type RuntimeProjectionCatalogState =
-  | { readonly status: 'initializing' }
-  | {
-      readonly status: 'ready';
-      readonly rows: readonly RuntimeProjectionCatalogRow[];
-      readonly snapshot: ProjectionSnapshot;
-    }
-  | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
-
-export type InstalledAppsProjectionState =
-  | { readonly status: 'initializing' }
-  | {
-      readonly status: 'ready';
-      readonly rows: readonly InstalledAppRuntimeRow[];
-      readonly snapshot: ProjectionSnapshot;
-    }
   | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
 
 export type FilesystemTreeProjectionState =
@@ -70,42 +43,6 @@ export type FilesystemTreeProjectionState =
       readonly root: FilesystemNode;
     }
   | { readonly status: 'failed'; readonly failure: RuntimeProjectionFailure };
-
-export function useRuntimeProjectionCatalog(runtime: RuntimeClient): RuntimeProjectionCatalogState {
-  const projection = useRuntimeProjectionSnapshot(runtime, {
-    projection: runtimeProjectionsProjection,
-    schemaId: runtimeProjectionsSchemaId,
-  });
-
-  if (projection.status !== 'ready') return projection;
-
-  return {
-    status: 'ready',
-    rows: relationRows<unknown>(
-      projection.snapshot.relations,
-      runtimeProjectionsRelation,
-    ).filter(isRuntimeProjectionCatalogRow),
-    snapshot: projection.snapshot,
-  };
-}
-
-export function useInstalledAppsProjection(runtime: RuntimeClient): InstalledAppsProjectionState {
-  const projection = useRuntimeProjectionSnapshot(runtime, {
-    projection: installedAppsProjection,
-    schemaId: installedAppsSchemaId,
-  });
-
-  if (projection.status !== 'ready') return projection;
-
-  return {
-    status: 'ready',
-    rows: relationRows<unknown>(
-      projection.snapshot.relations,
-      installedAppsRelation,
-    ).filter(isInstalledAppRuntimeRow),
-    snapshot: projection.snapshot,
-  };
-}
 
 export function useRuntimeProjectionSnapshot(
   runtime: RuntimeClient,
@@ -245,21 +182,4 @@ function workspaceProjectionFromProjectionEvent(event: ProjectionEvent): Workspa
     event.snapshot.schemaHash,
     event.snapshot.storageHeads,
   );
-}
-
-function isRuntimeProjectionCatalogRow(row: unknown): row is RuntimeProjectionCatalogRow {
-  if (row === null || typeof row !== 'object') return false;
-  const candidate = row as {
-    readonly basisKinds?: unknown;
-    readonly name?: unknown;
-    readonly readOnly?: unknown;
-    readonly schemaHash?: unknown;
-    readonly schemaId?: unknown;
-  };
-  return typeof candidate.name === 'string'
-    && typeof candidate.schemaId === 'string'
-    && typeof candidate.schemaHash === 'string'
-    && candidate.readOnly === true
-    && Array.isArray(candidate.basisKinds)
-    && candidate.basisKinds.every((kind) => typeof kind === 'string');
 }

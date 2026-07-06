@@ -8,7 +8,7 @@ import {
 import { useMemo } from 'react';
 import type { RuntimeClient } from '@patchpit/system/runtime';
 import { SandboxAppHost, type SandboxAppHostSessionEvent } from './SandboxAppHost';
-import type { InstalledApp } from './installed-apps';
+import type { FilesystemApp } from '../runtime/installed-apps';
 import { sandboxFilesystemAppEntry } from './sandbox-package-loader';
 import type { SandboxAppFilePickerType, SandboxFilePickerServiceScope } from './sandbox-service-bridge';
 
@@ -20,7 +20,7 @@ export function SandboxedFilesystemApp({
   onSessionEvent,
   surfaceId,
 }: {
-  readonly app: InstalledApp;
+  readonly app: FilesystemApp;
   readonly context: WindowContext;
   readonly filePicker?: SandboxFilePickerHostScope | undefined;
   readonly filesystemRoot: FilesystemNode;
@@ -30,15 +30,15 @@ export function SandboxedFilesystemApp({
   const entry = useMemo(() => (app.entry?.kind === 'file'
     ? sandboxFilesystemAppEntry({
         entry: app.entry,
-        entryKind: app.manifest.entryKind,
-        entryPath: app.manifest.entry,
+        entryKind: app.entryKind,
+        entryPath: app.entryPath,
         packageRoot: app.packageRoot,
       })
-    : undefined), [app.entry, app.manifest.entry, app.manifest.entryKind, app.packageRoot]);
+    : undefined), [app.entry, app.entryKind, app.entryPath, app.packageRoot]);
 
   return (
     <SandboxAppHost
-      appId={app.manifest.id}
+      appId={app.id}
       entry={entry}
       filePicker={sandboxFilePickerServiceScope({ app, context, filePicker, filesystemRoot, surfaceId })}
       onSessionEvent={onSessionEvent}
@@ -49,7 +49,7 @@ export function SandboxedFilesystemApp({
         id: context.id,
         url: context.url,
       }}
-      title={app.manifest.name}
+      title={app.name}
     />
   );
 }
@@ -68,13 +68,13 @@ function sandboxFilePickerServiceScope({
   filesystemRoot,
   surfaceId,
 }: {
-  readonly app: InstalledApp;
+  readonly app: FilesystemApp;
   readonly context: WindowContext;
   readonly filePicker?: SandboxFilePickerHostScope | undefined;
   readonly filesystemRoot: FilesystemNode;
   readonly surfaceId: string;
 }): SandboxFilePickerServiceScope | undefined {
-  if (app.manifest.id !== 'file-picker' || context.app !== 'file-picker') return undefined;
+  if (app.id !== 'file-picker' || context.app !== 'file-picker') return undefined;
   if (filePicker === undefined) return undefined;
   const mountedRootUrl = containerRootUrl(context.container) ?? filePicker.state.rootUrl;
   const root = findNode(filesystemRoot, mountedRootUrl);

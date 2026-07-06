@@ -14,7 +14,7 @@ import {
   type RuntimePlatformReport,
 } from '../runtime/platform';
 import { runtimeProtocol, type RuntimeHelloAck } from '../runtime/protocol';
-import { relationSchemaRegistry, type PatchpitRelationSchemaDescriptor } from '../schema';
+import type { PatchpitRelationSchemaDescriptor } from '../schema';
 import { rootContainer } from './container';
 import {
   patchpitDocMetadata,
@@ -36,7 +36,6 @@ import {
   automergeExtension,
   automergeFileName,
   PatchpitType,
-  SplitDirection,
   SurfaceRole,
   WindowManagerNodeKind,
   type AppManifestDoc,
@@ -127,13 +126,7 @@ export function createSeedFilesystem(): SeedFilesystem {
     },
     extension: automergeExtension,
     focus: 'files',
-    layout: {
-      direction: SplitDirection.Row,
-      first: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
-      kind: WindowManagerNodeKind.Split,
-      ratio: 0.32,
-      second: { kind: WindowManagerNodeKind.Surface, surfaceId: 'main' },
-    },
+    layout: { kind: WindowManagerNodeKind.Surface, surfaceId: 'files' },
     mimeType: automergeMimeType,
     name: automergeFileName('window-manager'),
     surfaces: {
@@ -142,11 +135,6 @@ export function createSeedFilesystem(): SeedFilesystem {
         contexts: ['file-picker'],
         id: 'files',
         role: SurfaceRole.WorkspaceView,
-      },
-      main: {
-        contexts: [],
-        id: 'main',
-        role: SurfaceRole.DocumentSet,
       },
     },
   });
@@ -493,24 +481,20 @@ type SeedAppPackageInput = {
 
 type InstalledSeedAppPackage = {
   readonly entry: FolderEntry;
-  readonly handles: Array<DocHandle<AppManifestDoc | FileDoc | FolderDoc>>;
+  readonly handles: Array<DocHandle<FileDoc | FolderDoc>>;
 };
 
 function installSeedAppPackage(repo: Repo, input: SeedAppPackageInput): InstalledSeedAppPackage {
-  const manifestHandle = createAppManifest(repo, input);
   const packageFiles = createPackageFileEntries(repo, input.files);
   if (!input.files.some((file) => file.name === input.entry)) {
     throw new Error(`Seed app ${input.id} is missing entry resource ${input.entry}.`);
   }
 
-  const packageHandle = createFolder(repo, input.id, [
-    folderEntry(automergeFileName('manifest'), PatchpitType.AppManifest, manifestHandle.url),
-    ...packageFiles.entries,
-  ]);
+  const packageHandle = createFolder(repo, input.id, packageFiles.entries);
 
   return {
     entry: folderEntry(input.id, PatchpitType.Folder, packageHandle.url),
-    handles: [packageHandle, manifestHandle, ...packageFiles.handles],
+    handles: [packageHandle, ...packageFiles.handles],
   };
 }
 
@@ -559,41 +543,6 @@ function createPackageFileEntries(
   }
 
   return { entries, handles };
-}
-
-function createAppManifest(
-  repo: Repo,
-  input: {
-    entry: string;
-    entryKind: AppManifestDoc['entryKind'];
-    handles: readonly AppManifestHandler[];
-    icon: string;
-    id: string;
-    name: string;
-    schemas?: readonly PatchpitRelationSchemaDescriptor[];
-    surfaces: readonly SurfaceSpec[];
-    version: string;
-  },
-): DocHandle<AppManifestDoc> {
-  return repo.create<AppManifestDoc>({
-    '@patchpit': patchpitDocMetadata(PatchpitType.AppManifest),
-    entry: input.entry,
-    entryKind: input.entryKind,
-    extension: automergeExtension,
-    handles: input.handles.map((handle) => ({ ...handle, accepts: [...handle.accepts] })),
-    icons: [{ emoji: input.icon }],
-    id: input.id,
-    manifestVersion: 1,
-    mimeType: automergeMimeType,
-    name: input.name,
-    ...(input.schemas === undefined ? {} : { schemas: relationSchemaRegistry(...input.schemas) }),
-    surfaces: input.surfaces.map((surface) => (
-      surface.state === undefined
-        ? { role: surface.role }
-        : { role: surface.role, state: { ...surface.state } }
-    )),
-    version: input.version,
-  });
 }
 
 function createFolder(

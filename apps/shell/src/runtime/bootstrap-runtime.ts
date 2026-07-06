@@ -6,13 +6,11 @@ import {
   RuntimeMountProvider,
   rootContainer,
   SurfaceRole,
-  type AppManifestDoc,
   type AppContainer,
   type ContainerMount,
   type FilesystemResource,
   type FolderDoc,
   type SeedFilesystem,
-  type SurfaceSpec,
   type WindowContext,
   type WindowManagerStateDoc,
 } from '@patchpit/system';
@@ -64,11 +62,8 @@ import {
   surfaceWithContext,
   targetLaunchSurface,
 } from './bootstrap-window-topology';
-import { installedAppManifests } from './manifest-routing';
 import { automergeHeadSetForHandle } from './automerge-heads';
 import { allowAllRuntimePolicy, type RuntimePolicy } from './policy';
-import { isPackageAppManifestDoc } from './app-manifest-discovery';
-import { resolvePackageEntry } from './package-entry';
 
 export type BootstrapRuntimeOptions = {
   readonly capabilityProviders?: readonly BootstrapCapabilityProvider[];
@@ -189,6 +184,35 @@ type AppLaunchRequest = {
 type AppLaunchCommit = {
   readonly context: WindowContext;
 };
+
+type CoreLaunchSpec = {
+  readonly entryPath?: string;
+  readonly id: string;
+  readonly role: SurfaceRole;
+  readonly stateUrl?: (seed: SeedFilesystem) => string;
+  readonly title: string;
+};
+
+const coreLaunchSpecs: readonly CoreLaunchSpec[] = [
+  {
+    id: 'file-picker',
+    role: SurfaceRole.WorkspaceView,
+    stateUrl: (seed) => seed.filePickerStateHandle.url,
+    title: 'File Picker',
+  },
+  {
+    entryPath: '/apps/viewer/index.html',
+    id: 'viewer',
+    role: SurfaceRole.DocumentSet,
+    title: 'Viewer',
+  },
+  {
+    entryPath: '/apps/hello-world/index.html',
+    id: 'hello-world',
+    role: SurfaceRole.DocumentSet,
+    title: 'Hello World',
+  },
+];
 
 export type BootstrapCapabilityProvider = {
   readonly capability: CapabilityName;
@@ -626,24 +650,30 @@ function appLaunchCommit(launch: AppLaunchRequest): AppLaunchCommit | RuntimeErr
 function resolveAppLaunchContext(seed: SeedFilesystem, launch: AppLaunchRequest): AppLaunchRequest | RuntimeError {
   if (launch.context !== undefined) return launch;
 
-  const manifest = appManifestForApp(seed, launch.app);
-  if (manifest === undefined) {
-    return runtimeError('missing_handler', `No installed app.launch handler was found for ${launch.app}.`);
+  const spec = coreLaunchSpecs.find((candidate) => candidate.id === launch.app);
+  if (spec === undefined) return runtimeError('missing_handler', `No core app.launch handler was found for ${launch.app}.`);
+
+  if (spec.role !== launch.role) return runtimeError('missing_handler', `App ${launch.app} has no ${launch.role} launch surface.`);
+
+  if (spec.stateUrl !== undefined) {
+    const stateUrl = spec.stateUrl(seed);
+    const existing = existingLaunchContext(seed, launch.app, stateUrl);
+    return {
+      ...launch,
+      context: existing ?? {
+        app: launch.app,
+        container: rootContainer(seed.rootUrl),
+        ...(launch.delegation === undefined ? {} : { delegation: launch.delegation }),
+        id: launch.app,
+        title: spec.title,
+        url: stateUrl,
+      },
+    };
   }
 
-  const surface = manifest.surfaces?.find((spec) => spec.role === launch.role);
-  if (surface === undefined) {
-    return runtimeError('missing_handler', `App ${launch.app} has no ${launch.role} launch surface.`);
-  }
-
-  if (surface.state !== undefined) {
-    const existing = existingStatefulLaunchContext(seed, launch.app, surface.state);
-    return existing === undefined ? launch : { ...launch, context: existing };
-  }
-
-  const entryUrl = installedAppEntryUrl(seed, manifest);
+  const entryUrl = spec.entryPath === undefined ? undefined : filesystemEntryUrl(seed, spec.entryPath);
   if (entryUrl === undefined) {
-    return runtimeError('missing_handler', `App ${launch.app} entry ${manifest.entry} is not installed.`);
+    return runtimeError('missing_handler', `App ${launch.app} entry ${spec.entryPath ?? '<state>'} is not installed.`);
   }
 
   return {
@@ -653,90 +683,36 @@ function resolveAppLaunchContext(seed: SeedFilesystem, launch: AppLaunchRequest)
       container: rootContainer(seed.rootUrl),
       ...(launch.delegation === undefined ? {} : { delegation: launch.delegation }),
       id: `${launch.app}:${entryUrl}`,
-      title: manifest.name,
+      title: spec.title,
       url: entryUrl,
     },
   };
 }
 
-function existingStatefulLaunchContext(
+function existingLaunchContext(
   seed: SeedFilesystem,
   app: string,
-  state: NonNullable<SurfaceSpec['state']>,
+  url: string,
 ): WindowContext | undefined {
   return Object.values(seed.windowManagerHandle.doc().contexts).find((context) => {
-    if (context.app !== app) return false;
-    return documentMatchesStateSpec(seed.documentHandles[context.url]?.doc(), state);
+    return context.app === app && context.url === url;
   });
 }
 
-function documentMatchesStateSpec(
-  doc: FilesystemResource | undefined,
-  state: NonNullable<SurfaceSpec['state']>,
-): boolean {
-  const metadata = doc?.['@patchpit'];
-  if (metadata?.type !== state.type) return false;
-  if (state.schema === undefined) return true;
-
-  const schema = metadata.schema;
-  if (schema?.id !== state.schema.id) return false;
-  if (state.schema.hash !== undefined && schema.hash !== state.schema.hash) return false;
-  if (state.schema.url !== undefined && schema.url !== state.schema.url) return false;
-  return true;
-}
-
-function installedAppEntryUrl(seed: SeedFilesystem, manifest: AppManifestDoc): string | undefined {
+function filesystemEntryUrl(seed: SeedFilesystem, path: string): string | undefined {
   const root = seed.documentHandles[seed.rootUrl]?.doc();
   if (!isFolderDoc(root)) return undefined;
-
-  const appsEntry = root.docs.find((entry) => entry.name === 'apps' && entry.type === PatchpitType.Folder);
-  const appsFolder = appsEntry === undefined ? undefined : seed.documentHandles[appsEntry.url]?.doc();
-  if (!isFolderDoc(appsFolder)) return undefined;
-
-  for (const appEntry of appsFolder.docs) {
-    const packageFolder = seed.documentHandles[appEntry.url]?.doc();
-    if (!isFolderDoc(packageFolder)) continue;
-    if (!packageContainsManifest(seed, packageFolder, manifest.id)) continue;
-    const entryUrl = folderEntryUrl(seed, packageFolder, manifest.entry);
-    if (entryUrl !== undefined) return entryUrl;
+  const parts = path.split('/').filter((part) => part !== '');
+  let current: FilesystemResource | undefined = root;
+  let currentUrl: string | undefined = seed.rootUrl;
+  for (const part of parts) {
+    if (!isFolderDoc(current)) return undefined;
+    const entry: FolderDoc['docs'][number] | undefined = current.docs.find((candidate) => candidate.name === part);
+    if (entry === undefined) return undefined;
+    currentUrl = entry.url;
+    current = seed.documentHandles[entry.url]?.doc();
   }
-
-  return undefined;
-}
-
-function packageContainsManifest(seed: SeedFilesystem, folder: FolderDoc, app: string): boolean {
-  return folder.docs.some((entry) => {
-    const doc = seed.documentHandles[entry.url]?.doc();
-    return isPackageAppManifestDoc(doc) && doc.id === app;
-  });
-}
-
-type PackageEntryUrlNode = {
-  readonly folder: FolderDoc | undefined;
-  readonly url: string | undefined;
-};
-
-function folderEntryUrl(seed: SeedFilesystem, folder: FolderDoc, path: string): string | undefined {
-  const packageRoot: PackageEntryUrlNode = { folder, url: undefined };
-  return resolvePackageEntry(
-    packageRoot,
-    path,
-    (node, name) => folderEntryNode(seed, node, name),
-  )?.url;
-}
-
-function folderEntryNode(
-  seed: SeedFilesystem,
-  node: PackageEntryUrlNode,
-  name: string,
-): PackageEntryUrlNode | undefined {
-  const entry = node.folder?.docs.find((candidate) => candidate.name === name);
-  if (entry === undefined) return undefined;
-  const doc: FilesystemResource | undefined = seed.documentHandles[entry.url]?.doc();
-  return {
-    folder: isFolderDoc(doc) ? doc : undefined,
-    url: entry.url,
-  };
+  return currentUrl;
 }
 
 function isFolderDoc(doc: FilesystemResource | undefined): doc is FolderDoc {
@@ -867,10 +843,6 @@ function validateAppLaunchCommitted(
   }
 
   return runtimeError('commit_error', `app.launch commit did not attach context ${context.id}.`);
-}
-
-function appManifestForApp(seed: SeedFilesystem, app: string): AppManifestDoc | undefined {
-  return installedAppManifests(seed).find((manifest) => manifest.id === app);
 }
 
 function appLaunchIntentRequest(request: IntentRequest): AppLaunchRequest | RuntimeError {

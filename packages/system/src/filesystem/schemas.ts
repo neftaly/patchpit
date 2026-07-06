@@ -19,15 +19,10 @@ import {
   filePickerToggleFolderIntent,
   filesystemTreeNodesRelation,
   filesystemTreeSchemaId,
-  installedAppsProjection,
-  installedAppsRelation,
-  installedAppsSchemaId,
   routeIntentSchemaId,
   routeOpenIntent,
   routePreviewIntent,
   routeRequestsRelation,
-  runtimeProjectionsRelation,
-  runtimeProjectionsSchemaId,
   windowCloseContextIntent,
   windowFocusIntent,
   windowIntentSchemaId,
@@ -417,92 +412,6 @@ export const runtimeStateSchema = defineRelationSchema({
   },
 });
 
-export const runtimeProjectionsSchema = defineRelationSchema({
-  kind: 'tarstate.schema',
-  formatVersion: 1,
-  schemaId: runtimeProjectionsSchemaId,
-  description: 'Runtime projection catalog advertised by the active Patchpit runtime.',
-  metadata: schemaMetadata('runtime.projections', {
-    lifecycle: 'derived-projection',
-    projectionOwner: '@patchpit/system/runtime',
-  }),
-  relations: {
-    [runtimeProjectionsRelation]: {
-      key: 'name',
-      metadata: relationMetadata({
-        lifecycle: 'derived-projection',
-      }),
-      fields: {
-        basisKinds: {
-          type: 'json',
-          description: 'Projection basis kinds accepted by this runtime for the projection.',
-        },
-        description: { type: 'string', optional: true },
-        name: idField('runtimeProjection'),
-        owner: { type: 'string', optional: true },
-        readOnly: {
-          type: 'boolean',
-          description: 'Whether the projection export is read-only; V0 projections do not accept writes.',
-        },
-        schemaHash: { type: 'string' },
-        schemaId: { type: 'string' },
-        schemaUrl: { type: 'string', optional: true },
-      },
-    },
-  },
-});
-
-export const installedAppsSchema = defineRelationSchema({
-  kind: 'tarstate.schema',
-  formatVersion: 1,
-  schemaId: installedAppsSchemaId,
-  description: 'Read-only runtime projection of installed app packages discovered under /apps.',
-  metadata: schemaMetadata(installedAppsProjection, {
-    lifecycle: 'derived-projection',
-    projectionOwner: '@patchpit/system/runtime',
-  }),
-  relations: {
-    [installedAppsRelation]: {
-      key: 'appId',
-      metadata: relationMetadata({
-        lifecycle: 'derived-projection',
-      }),
-      fields: {
-        appId: idField('app'),
-        entryKind: {
-          type: 'string',
-          metadata: enumMetadata(['module', 'html']),
-        },
-        entryPath: { type: 'string' },
-        entryStatus: {
-          type: 'string',
-          metadata: enumMetadata(['resolved', 'missing']),
-        },
-        entryUrl: { type: 'string', optional: true },
-        handles: {
-          type: 'json',
-          description: 'Manifest handlers in manifest order.',
-        },
-        hasStatefulLaunch: { type: 'boolean' },
-        icon: { type: 'string' },
-        launchRole: {
-          type: 'string',
-          metadata: enumMetadata(['document-set', 'workspace-view']),
-        },
-        manifestUrl: { type: 'string' },
-        name: { type: 'string' },
-        packagePath: { type: 'string' },
-        packageUrl: { type: 'string' },
-        surfaces: {
-          type: 'json',
-          description: 'Manifest surfaces in manifest order.',
-        },
-        version: { type: 'string' },
-      },
-    },
-  },
-});
-
 export const appLaunchIntentSchema = defineRelationSchema({
   kind: 'tarstate.schema',
   formatVersion: 1,
@@ -724,10 +633,8 @@ export const patchpitSystemSchemas = [
   fileTypesSchema,
   filePickerStateSchema,
   filesystemTreeSchema,
-  installedAppsSchema,
   windowManagerStateSchema,
   runtimeStateSchema,
-  runtimeProjectionsSchema,
   appLaunchIntentSchema,
   routeIntentSchema,
   filePickerIntentSchema,
@@ -751,8 +658,6 @@ const patchpitSystemSchemaHashes = {
   'patchpit.intent.filePicker@1': 'sha256:9d22ea794acb16f21159f3a41ee2f7b5085579d4d91b168cbd20af465dffc970',
   'patchpit.intent.route@1': 'sha256:b788b4f922f50dc25d36141190ec1872e8d1ec24cc0cbc205235c6a88f2bbf85',
   'patchpit.intent.window@1': 'sha256:f6fc795ee96f61af948e486b88765757967171387ac641bbfb9ad25b69f205e0',
-  'patchpit.runtime.installedApps@1': 'sha256:d131e2e4cece3598f7f6f0aa27955694fc2cdce58238920ea949589c6893addc',
-  'patchpit.runtime.projections@1': 'sha256:eec2da731e157cdfe2f02b9c3a3adb273e3454c9e73ab5fad015dd1cd6fa7903',
   'patchpit.runtime.state@1': 'sha256:af7929434c05cc236c47e6284362b775362ae198e8a7b2068251a5c015f636cf',
   'patchpit.system.appManifest@1': 'sha256:d669fe4c41059f3897dc736a6c5265af06992ee80be805b980acfd75a91344ad',
   'patchpit.system.appearance@1': 'sha256:a3a297b433293a35d1380c666821e6883016adbaab760ed3b8e898f77dad46d4',
@@ -819,7 +724,10 @@ export function patchpitSystemRelationRef<Row extends object>(
 }
 
 export function patchpitDocSchemaRef(type: PatchpitType): PatchpitSchemaRef {
-  return patchpitSystemSchemaRef(patchpitSystemSchemaByDocType[type]);
+  const descriptor = patchpitSystemSchemaByDocType[type];
+  return relationSchemaRef(descriptor, {
+    url: patchpitSystemSchemaLocation(descriptor.schemaId),
+  });
 }
 
 export function patchpitDocMetadata<T extends PatchpitType>(type: T): PatchpitDocMetadata<T> {

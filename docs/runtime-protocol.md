@@ -543,18 +543,8 @@ Current served projections:
 
 ```txt
 filesystem.tree
-runtime.projections
 workspace.layout
 ```
-
-`runtime.projections` with `schemaId: patchpit.runtime.projections@1` is the
-live projection catalog. It advertises the projections the active runtime can
-serve, their schema ids, schema hashes, owners, descriptions, and supported
-basis kinds. Catalog rows include `readOnly: true`; V0 exposes no writable
-projection files or projection write schemas. The filesystem tree exposes
-read-only virtual service files for each served projection under
-`/srv/projections/<projection>/`: `meta.json`, `schema.json`, and
-`summary.json`.
 
 `workspace.layout` carries the V0 workspace relation set: state, contexts, and
 surfaces. Split `workspace.surfaces`, `workspace.contexts`,
@@ -565,8 +555,7 @@ Target projection names such as `appManifests.handlers`,
 `workspace.surfaces`, `workspace.contexts`, `workspace.viewports`,
 `policy.effectiveGrants`, and `presence.clients` are not current requestable
 protocol names. The active runtime must reject their projection subscriptions
-and `/srv/projections/<projection>/...` service URLs until it actually serves
-them and advertises them through `runtime.projections`.
+until it actually serves them.
 
 `filesystem.tree` with `schemaId: patchpit.filesystem.tree@1` returns one
 relation:
@@ -591,11 +580,6 @@ type FilesystemTreeNodeRow = {
 
 `url` identifies the backing resource. `parentUrl`, `isRoot`, and `position`
 describe the projected tree shape without exposing folder `entries` blobs.
-Projection export URLs use the `patchpit-srv:` service scheme, such as
-`patchpit-srv:/projections/runtime.projections/summary.json`; they are not
-Automerge document handles. Projection files are read-only exports. Writes must
-go through the owning intent/canonical writer rather than editing generated
-projection JSON.
 `kind` is the UI tree kind; `type` is the Patchpit document/resource type.
 `mediaType`, `sourceUrl`, and `text` carry the current viewer metadata. A
 runtime may derive this relation from `FilesystemIndexDoc`, but must not expose

@@ -1,4 +1,3 @@
-const filePickerDragType = 'application/x.patchpit-file';
 const selectAction = 'filePicker.selectUrl';
 const toggleFolderAction = 'filePicker.toggleFolder';
 const previewAction = 'route.preview';
@@ -82,7 +81,6 @@ function treeItem(node, view, depth) {
 
   const button = document.createElement('button');
   button.className = 'tree-item';
-  button.draggable = true;
   button.type = 'button';
   button.style.setProperty('--tree-depth-size', depth + 'rem');
   button.setAttribute('aria-pressed', String(isSelected));
@@ -100,10 +98,6 @@ function treeItem(node, view, depth) {
 
   button.addEventListener('pointerup', (event) => {
     void selectFromPointer(event, node, view, displayName, primaryPointerActivationCount(event, node.url));
-  });
-  button.addEventListener('dragstart', (event) => {
-    event.dataTransfer.effectAllowed = 'copyMove';
-    event.dataTransfer.setData(filePickerDragType, JSON.stringify({ title: displayName, url: node.url }));
   });
 
   item.append(button);

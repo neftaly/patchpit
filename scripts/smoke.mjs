@@ -54,17 +54,6 @@ async function smokeSandboxApps() {
       const filePicker = await waitForSandboxState(pageCdp, targets, mainFrameId, filePickerTreeExpression, 10_000);
       if (filePicker.status !== 'passed') throw smokeError('File Picker sandbox did not render cleanly', filePicker);
 
-      const filePickerMarked = await waitForSandboxState(
-        pageCdp,
-        targets,
-        mainFrameId,
-        markFilePickerAliveExpression,
-        5_000,
-      );
-      if (filePickerMarked.status !== 'passed') {
-        throw smokeError('File Picker sandbox could not be marked before preview clicks', filePickerMarked);
-      }
-
       const homeClicked = await waitForSandboxState(
         pageCdp,
         targets,
@@ -73,6 +62,9 @@ async function smokeSandboxApps() {
         5_000,
       );
       if (homeClicked.status !== 'passed') throw smokeError('File Picker home folder could not be clicked', homeClicked);
+
+      const viewerHome = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerHomeExpression, 5_000);
+      if (viewerHome.status !== 'passed') throw smokeError('Viewer did not render the home folder preview', viewerHome);
 
       const docsClicked = await waitForSandboxState(
         pageCdp,
@@ -86,17 +78,6 @@ async function smokeSandboxApps() {
       const viewerFolder = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerFolderExpression, 5_000);
       if (viewerFolder.status !== 'passed') throw smokeError('Viewer did not render the docs folder preview', viewerFolder);
 
-      const filePickerAfterFolderPreview = await waitForSandboxState(
-        pageCdp,
-        targets,
-        mainFrameId,
-        filePickerAliveAfterPreviewExpression,
-        5_000,
-      );
-      if (filePickerAfterFolderPreview.status !== 'passed') {
-        throw smokeError('File Picker sandbox did not stay alive after folder preview', filePickerAfterFolderPreview);
-      }
-
       const readmeClicked = await waitForSandboxState(
         pageCdp,
         targets,
@@ -109,15 +90,34 @@ async function smokeSandboxApps() {
       const viewerReadme = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerReadmeExpression, 5_000);
       if (viewerReadme.status !== 'passed') throw smokeError('Viewer did not render the seeded README.md text', viewerReadme);
 
-      const filePickerAfterReadmePreview = await waitForSandboxState(
+      const tigerClicked = await waitForSandboxState(
         pageCdp,
         targets,
         mainFrameId,
-        filePickerAliveAfterPreviewExpression,
+        clickFilePickerTreeItemExpression({ name: 'ghostscript-tiger.svg' }),
         5_000,
       );
-      if (filePickerAfterReadmePreview.status !== 'passed') {
-        throw smokeError('File Picker sandbox did not stay alive after file preview', filePickerAfterReadmePreview);
+      if (tigerClicked.status !== 'passed') {
+        throw smokeError('File Picker ghostscript-tiger.svg could not be clicked', tigerClicked);
+      }
+
+      const viewerTiger = await waitForSandboxState(pageCdp, targets, mainFrameId, viewerTigerExpression, 5_000);
+      if (viewerTiger.status !== 'passed') throw smokeError('Viewer did not render ghostscript-tiger.svg', viewerTiger);
+
+      for (const name of ['apps', 'hello-world', 'index.html']) {
+        const clicked = await waitForSandboxState(
+          pageCdp,
+          targets,
+          mainFrameId,
+          clickFilePickerTreeItemExpression({ name }),
+          5_000,
+        );
+        if (clicked.status !== 'passed') throw smokeError(`File Picker ${name} could not be clicked`, clicked);
+      }
+
+      const helloWorld = await waitForSandboxState(pageCdp, targets, mainFrameId, helloWorldExpression, 5_000);
+      if (helloWorld.status !== 'passed') {
+        throw smokeError('Hello World sandbox did not render from /apps/hello-world/index.html', helloWorld);
       }
 
     } finally {
@@ -141,14 +141,14 @@ const shellReadyExpression = `
       status: 'failed',
       reason: 'Runtime issue banner is visible before shell ready',
       alert: alert.innerText,
-      body: document.body.innerText,
+      body: document.body?.innerText ?? '',
     };
   }
   if (footer !== null) return { status: 'passed' };
   return {
     status: 'pending',
     reason: 'Waiting for shell footer',
-    body: document.body.innerText,
+    body: document.body?.innerText ?? '',
   };
 })()
 `;
@@ -168,7 +168,7 @@ const filePickerHostExpression = `
       alert: alert.innerText,
       hasHost,
       hasFrame,
-      body: document.body.innerText,
+      body: document.body?.innerText ?? '',
     };
   }
   if (hasHost && hasFrame) {
@@ -183,7 +183,7 @@ const filePickerHostExpression = `
     reason: 'Waiting for File Picker sandbox host',
     hasHost,
     hasFrame,
-    body: document.body.innerText,
+    body: document.body?.innerText ?? '',
   };
 })()
 `;
@@ -198,7 +198,7 @@ const filePickerTreeExpression = `
     return {
       status: 'passed',
       names,
-      body: document.body.innerText,
+      body: document.body?.innerText ?? '',
     };
   }
 
@@ -206,61 +206,7 @@ const filePickerTreeExpression = `
     status: 'pending',
     reason: 'Waiting for File Picker tree from view("file-picker")',
     names,
-    body: document.body.innerText,
-  };
-})()
-`;
-
-const markFilePickerAliveExpression = `
-(() => {
-  const tree = document.querySelector('[role="tree"][aria-label="project files"]');
-  if (tree === null) {
-    return {
-      status: 'pending',
-      reason: 'Waiting for File Picker tree before marking sandbox document',
-      body: document.body.innerText,
-    };
-  }
-
-  document.documentElement.dataset.patchpitSmokeFilePickerAlive = 'before-preview-click';
-  return {
-    status: 'passed',
-    body: document.body.innerText,
-  };
-})()
-`;
-
-const filePickerAliveAfterPreviewExpression = `
-(() => {
-  const tree = document.querySelector('[role="tree"][aria-label="project files"]');
-  const names = [...document.querySelectorAll('.tree-name')]
-    .map((node) => node.textContent?.trim() ?? '')
-    .filter((name) => name !== '');
-  if (tree === null) {
-    return {
-      status: 'pending',
-      reason: 'Waiting for File Picker tree after preview click',
-      names,
-      body: document.body.innerText,
-    };
-  }
-
-  const marker = document.documentElement.dataset.patchpitSmokeFilePickerAlive;
-  if (marker === 'before-preview-click') {
-    return {
-      status: 'passed',
-      marker,
-      names,
-      body: document.body.innerText,
-    };
-  }
-
-  return {
-    status: 'failed',
-    reason: 'File Picker sandbox document was replaced after preview click',
-    marker,
-    names,
-    body: document.body.innerText,
+    body: document.body?.innerText ?? '',
   };
 })()
 `;
@@ -277,7 +223,7 @@ function clickFilePickerTreeItemExpression({ name, occurrence = 0 }) {
       status: 'pending',
       reason: 'Waiting for File Picker tree before clicking ${name}',
       names,
-      body: document.body.innerText,
+      body: document.body?.innerText ?? '',
     };
   }
 
@@ -290,7 +236,7 @@ function clickFilePickerTreeItemExpression({ name, occurrence = 0 }) {
       status: 'pending',
       reason: ${JSON.stringify(`Waiting for File Picker item ${name}`)},
       names,
-      body: document.body.innerText,
+      body: document.body?.innerText ?? '',
     };
   }
 
@@ -322,13 +268,16 @@ function clickFilePickerTreeItemExpression({ name, occurrence = 0 }) {
 
 const viewerFolderExpression = `
 (() => {
-  const body = document.body.innerText;
+  const body = document.body?.innerText ?? '';
   const title = document.title;
-  const items = [...document.querySelectorAll('li')].map((item) => item.textContent.trim());
-  if (title === 'docs' && items.includes('File: README.md') && items.includes('File: architecture.md')) {
+  if (
+    title === 'docs'
+    && body.includes('"type": "folder"')
+    && body.includes('"name": "README.md"')
+    && body.includes('"name": "architecture.md"')
+  ) {
     return {
       status: 'passed',
-      items,
       title,
       body,
     };
@@ -337,16 +286,68 @@ const viewerFolderExpression = `
   return {
     status: 'pending',
     reason: 'Waiting for Viewer folder resource output',
-    items,
     title,
     body,
   };
 })()
 `;
 
+const viewerHomeExpression = `
+(() => {
+  const body = document.body?.innerText ?? '';
+  const title = document.title;
+  if (
+    title === 'home'
+    && body.includes('"type": "folder"')
+    && body.includes('"name": "docs"')
+    && body.includes('"name": "ghostscript-tiger.svg"')
+  ) {
+    return {
+      status: 'passed',
+      title,
+      body,
+    };
+  }
+
+  return {
+    status: 'pending',
+    reason: 'Waiting for Viewer home folder resource output',
+    title,
+    body,
+  };
+})()
+`;
+
+const viewerTigerExpression = `
+(() => {
+  const title = document.title;
+  const image = document.querySelector('img');
+  const imageSource = image?.getAttribute('src') ?? '';
+  if (
+    title === 'ghostscript-tiger.svg'
+    && imageSource === 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg'
+  ) {
+    return {
+      status: 'passed',
+      title,
+      imageSource,
+      body: document.body?.innerText ?? '',
+    };
+  }
+
+  return {
+    status: 'pending',
+    reason: 'Waiting for Viewer Ghostscript tiger image output',
+    title,
+    imageSource,
+    body: document.body?.innerText ?? '',
+  };
+})()
+`;
+
 const viewerReadmeExpression = `
 (() => {
-  const body = document.body.innerText;
+  const body = document.body?.innerText ?? '';
   const title = document.title;
   if (
     title === 'README.md'
@@ -364,6 +365,27 @@ const viewerReadmeExpression = `
   return {
     status: 'pending',
     reason: 'Waiting for Viewer README.md resource text',
+    title,
+    body,
+  };
+})()
+`;
+
+const helloWorldExpression = `
+(() => {
+  const body = document.body?.innerText ?? '';
+  const title = document.title;
+  if (title === 'Hello World' && body.includes('Hello from /apps/hello-world')) {
+    return {
+      status: 'passed',
+      title,
+      body,
+    };
+  }
+
+  return {
+    status: 'pending',
+    reason: 'Waiting for Hello World sandbox output',
     title,
     body,
   };

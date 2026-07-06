@@ -1,7 +1,8 @@
-import type { AppManifestDoc, FilesystemNode } from '@patchpit/system';
+import type { FilesystemNode } from '@patchpit/system';
 
 type FilesystemFile = Extract<FilesystemNode, { readonly kind: 'file' }>;
 type FilesystemFolder = Extract<FilesystemNode, { readonly kind: 'folder' }>;
+type SandboxEntryKind = 'html' | 'module';
 
 export type SandboxFilesystemAppResource = {
   readonly mediaType: string;
@@ -11,7 +12,7 @@ export type SandboxFilesystemAppResource = {
 };
 
 export type SandboxFilesystemAppEntry = SandboxFilesystemAppResource & {
-  readonly entryKind: AppManifestDoc['entryKind'];
+  readonly entryKind: SandboxEntryKind;
   readonly resources: readonly SandboxFilesystemAppResource[];
 };
 
@@ -36,7 +37,7 @@ export function sandboxFilesystemAppEntry({
   packageRoot,
 }: {
   readonly entry: FilesystemFile;
-  readonly entryKind: AppManifestDoc['entryKind'];
+  readonly entryKind: SandboxEntryKind;
   readonly entryPath: string;
   readonly packageRoot: FilesystemFolder;
 }): SandboxFilesystemAppEntry {

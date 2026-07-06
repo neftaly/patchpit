@@ -1,12 +1,8 @@
 import {
   filesystemTreeProjectionRelations,
   filesystemTreeSchema,
-  patchpitSystemSchemaCatalog,
   patchpitSystemSchemaRef,
-  PatchpitType,
-  projectFilesystem,
   projectFilesystemTreeRows,
-  runtimeProjectionsSchema,
   windowManagerStateSchema,
   type PatchpitSchemaRef,
   type SeedFilesystem,
@@ -14,44 +10,25 @@ import {
 import {
   filesystemTreeProjection,
   filesystemTreeSchemaId,
-  installedAppsProjection,
-  installedAppsRelation,
-  installedAppsSchemaId,
-  projectionVirtualDirectoryUrl,
-  projectionVirtualFileUrl,
-  projectionVirtualRootUrl,
-  projectionVirtualServiceRootUrl,
-  runtimeProjectionsProjection,
-  runtimeProjectionsRelation,
-  runtimeProjectionsSchemaId,
   runtimeError,
   workspaceProjectionRelationSet,
   type AutomergeHeadSet,
   type FilesystemTreeNodeRow,
-  type InstalledAppRuntimeRow,
   type ProjectionName,
   workspaceLayoutProjection,
   workspaceProjectionSchemaId,
   type ProjectionBasis,
   type ProjectionEvent,
-  type ProjectionVirtualFileName,
   type ProjectionSnapshot,
   type ProjectionSubscription,
   type ProjectionSubscriptionRequest,
   type RelationSet,
-  type RuntimeProjectionCatalogRow,
   type RuntimeClient,
   type RuntimeError,
 } from '@patchpit/system/runtime';
 import {
-  relationRows,
   relationSetFromRows,
-  relationSetNames,
 } from '@patchpit/system/runtime/relations';
-import {
-  installedAppRuntimeRows,
-  installedAppsFromFilesystem,
-} from './installed-apps';
 import { automergeHeadSetForHandle } from './automerge-heads';
 
 type ProjectionDiagnosticsRecorder = {
@@ -97,19 +74,6 @@ const filesystemTreeSnapshotSchema = {
   ...(filesystemTreeSchemaRef.hash === undefined ? {} : { schemaHash: filesystemTreeSchemaRef.hash }),
 } as const;
 
-const runtimeProjectionsSchemaRef = patchpitSystemSchemaRef(runtimeProjectionsSchema);
-const runtimeProjectionsSnapshotSchema = {
-  schema: runtimeProjectionsSchema,
-  ...(runtimeProjectionsSchemaRef.hash === undefined ? {} : { schemaHash: runtimeProjectionsSchemaRef.hash }),
-} as const;
-
-const installedAppsSchema = requiredSystemSchema(installedAppsSchemaId);
-const installedAppsSchemaRef = patchpitSystemSchemaRef(installedAppsSchemaId);
-const installedAppsSnapshotSchema = {
-  schema: installedAppsSchema,
-  ...(installedAppsSchemaRef.hash === undefined ? {} : { schemaHash: installedAppsSchemaRef.hash }),
-} as const;
-
 const workspaceProjectionSchemaRef = patchpitSystemSchemaRef(windowManagerStateSchema);
 const workspaceProjectionSnapshotSchema = {
   schema: windowManagerStateSchema,
@@ -130,29 +94,6 @@ const bootstrapProjectionDefinitions: Partial<Record<ProjectionName, BootstrapPr
     },
     payload: filesystemTreePayload,
   },
-  [runtimeProjectionsProjection]: {
-    projection: runtimeProjectionsProjection,
-    description: 'Runtime projection catalog advertised by the active Patchpit runtime.',
-    owner: '@patchpit/system/runtime',
-    schemaId: runtimeProjectionsSchemaId,
-    schema: runtimeProjectionsSnapshotSchema,
-    schemaRef: runtimeProjectionsSchemaRef,
-    subscribe: () => () => {},
-    payload: projectionCatalogPayload,
-  },
-  [installedAppsProjection]: {
-    projection: installedAppsProjection,
-    description: 'Read-only runtime projection of installed app packages discovered under /apps.',
-    owner: '@patchpit/system/runtime',
-    schemaId: installedAppsSchemaId,
-    schema: installedAppsSnapshotSchema,
-    schemaRef: installedAppsSchemaRef,
-    subscribe: (seed, update) => {
-      seed.indexHandle.on('change', update);
-      return () => seed.indexHandle.off('change', update);
-    },
-    payload: installedAppsPayload,
-  },
   [workspaceLayoutProjection]: {
     projection: workspaceLayoutProjection,
     description: 'Shared Patchpit window-manager state projected as runtime layout relations.',
@@ -169,12 +110,6 @@ const bootstrapProjectionDefinitions: Partial<Record<ProjectionName, BootstrapPr
 } as const satisfies Partial<Record<ProjectionName, BootstrapProjectionDefinition>>;
 
 assertProjectionDefinitionsShipSchemas(bootstrapProjectionDefinitions);
-
-function requiredSystemSchema(schemaId: string) {
-  const schema = patchpitSystemSchemaCatalog[schemaId];
-  if (schema === undefined) throw new Error(`Unknown Patchpit system schema: ${schemaId}`);
-  return schema;
-}
 
 export function createBootstrapProjectionSubscriber({
   diagnostics,
@@ -299,21 +234,6 @@ function filesystemTreePayload(seed: SeedFilesystem): ProjectionPayload | Runtim
   const projection = filesystemTreeBaseRows(seed);
   if (isRuntimeError(projection)) return projection;
 
-  const rows = [
-    ...projection.rows,
-    ...projectionVirtualTreeRows(seed, projection.rows.length),
-  ];
-
-  return {
-    storageHeads: automergeHeadSetForHandle(seed.indexHandle),
-    relations: relationSetFromRows(filesystemTreeProjectionRelations(rows)),
-  };
-}
-
-function filesystemTreeBasePayload(seed: SeedFilesystem): ProjectionPayload | RuntimeError {
-  const projection = filesystemTreeBaseRows(seed);
-  if (isRuntimeError(projection)) return projection;
-
   return {
     storageHeads: automergeHeadSetForHandle(seed.indexHandle),
     relations: relationSetFromRows(filesystemTreeProjectionRelations(projection.rows)),
@@ -338,196 +258,6 @@ function workspaceLayoutPayload(seed: SeedFilesystem): ProjectionPayload {
     storageHeads: automergeHeadSetForHandle(seed.windowManagerHandle),
     relations: workspaceProjectionRelationSet(seed.windowManagerHandle.doc()),
   };
-}
-
-function installedAppsPayload(seed: SeedFilesystem): ProjectionPayload | RuntimeError {
-  const projection = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
-  if (projection.diagnostics.length > 0) {
-    return {
-      code: 'internal_error',
-      message: 'Installed apps projection failed.',
-      metadata: { diagnostics: projection.diagnostics.map((diagnostic) => String(diagnostic)) },
-    };
-  }
-  if (projection.root === null) {
-    return runtimeError('not_found', `Filesystem root ${seed.rootUrl} is not available.`);
-  }
-
-  const rows = installedAppRuntimeRows(installedAppsFromFilesystem({
-    getDocument: (url) => seed.documentHandles[url]?.doc(),
-    root: projection.root,
-  })) satisfies readonly InstalledAppRuntimeRow[];
-
-  return {
-    storageHeads: automergeHeadSetForHandle(seed.indexHandle),
-    relations: relationSetFromRows({ [installedAppsRelation]: rows }),
-  };
-}
-
-function projectionCatalogPayload(): ProjectionPayload {
-  const rows = Object.values(bootstrapProjectionDefinitions)
-    .map((definition) => projectionCatalogRow(assertProjectionDefinition(definition)))
-    .sort((left, right) => left.name.localeCompare(right.name));
-
-  return {
-    storageHeads: {},
-    relations: relationSetFromRows({ [runtimeProjectionsRelation]: rows }),
-  };
-}
-
-function projectionVirtualTreeRows(seed: SeedFilesystem, position: number): readonly FilesystemTreeNodeRow[] {
-  const projectionDefinitions = Object.values(bootstrapProjectionDefinitions)
-    .map((definition) => assertProjectionDefinition(definition))
-    .sort((left, right) => left.projection.localeCompare(right.projection));
-  const rows: FilesystemTreeNodeRow[] = [
-    projectionVirtualFolderRow({
-      name: 'srv',
-      parentUrl: seed.rootUrl,
-      position,
-      title: 'srv',
-      url: projectionVirtualServiceRootUrl,
-    }),
-    projectionVirtualFolderRow({
-      name: 'projections',
-      parentUrl: projectionVirtualServiceRootUrl,
-      position: 0,
-      title: 'projections',
-      url: projectionVirtualRootUrl,
-    }),
-  ];
-
-  projectionDefinitions.forEach((definition, projectionPosition) => {
-    const projectionUrl = projectionVirtualDirectoryUrl(definition.projection);
-    rows.push(projectionVirtualFolderRow({
-      name: definition.projection,
-      parentUrl: projectionVirtualRootUrl,
-      position: projectionPosition,
-      title: definition.projection,
-      url: projectionUrl,
-    }));
-    projectionVirtualFileNames.forEach((file, filePosition) => {
-      rows.push(projectionVirtualFileRow({
-        name: file,
-        parentUrl: projectionUrl,
-        position: filePosition,
-        text: projectionVirtualFileText(seed, definition, file),
-        title: file,
-        url: projectionVirtualFileUrl(definition.projection, file),
-      }));
-    });
-  });
-
-  return rows;
-}
-
-const projectionVirtualFileNames: readonly ProjectionVirtualFileName[] = ['meta.json', 'schema.json', 'summary.json'];
-
-function projectionVirtualFolderRow(input: {
-  readonly name: string;
-  readonly parentUrl: string;
-  readonly position: number;
-  readonly title: string;
-  readonly url: string;
-}): FilesystemTreeNodeRow {
-  return {
-    isRoot: false,
-    kind: 'folder',
-    mediaType: null,
-    name: input.name,
-    parentUrl: input.parentUrl,
-    position: input.position,
-    sourceUrl: null,
-    text: '',
-    title: input.title,
-    type: PatchpitType.Folder,
-    url: input.url,
-  };
-}
-
-function projectionVirtualFileRow(input: {
-  readonly name: string;
-  readonly parentUrl: string;
-  readonly position: number;
-  readonly text: string;
-  readonly title: string;
-  readonly url: string;
-}): FilesystemTreeNodeRow {
-  return {
-    isRoot: false,
-    kind: 'file',
-    mediaType: 'application/json',
-    name: input.name,
-    parentUrl: input.parentUrl,
-    position: input.position,
-    sourceUrl: null,
-    text: input.text,
-    title: input.title,
-    type: PatchpitType.File,
-    url: input.url,
-  };
-}
-
-function projectionVirtualFileText(
-  seed: SeedFilesystem,
-  definition: BootstrapProjectionDefinition,
-  file: ProjectionVirtualFileName,
-): string {
-  const value = file === 'meta.json'
-    ? projectionMetaExport(definition)
-    : file === 'schema.json'
-      ? definition.schema.schema
-      : projectionSummaryExport(seed, definition);
-  return `${JSON.stringify(value, null, 2)}\n`;
-}
-
-function projectionMetaExport(definition: BootstrapProjectionDefinition) {
-  return projectionCatalogRow(definition);
-}
-
-function projectionSummaryExport(seed: SeedFilesystem, definition: BootstrapProjectionDefinition) {
-  const payload = definition.projection === filesystemTreeProjection
-    ? filesystemTreeBasePayload(seed)
-    : definition.payload(seed);
-  if (isRuntimeError(payload)) {
-    return {
-      basis: { kind: 'live' },
-      error: payload,
-      projection: definition.projection,
-      schemaHash: projectionSchemaHash(definition),
-      schemaId: definition.schemaId,
-    };
-  }
-
-  return {
-    basis: { kind: 'live' },
-    projection: definition.projection,
-    relationCounts: Object.fromEntries(relationSetNames(payload.relations)
-      .map((relation) => [relation, relationRows(payload.relations, relation).length])),
-    schemaHash: projectionSchemaHash(definition),
-    schemaId: definition.schemaId,
-    storageHeads: payload.storageHeads,
-  };
-}
-
-function projectionCatalogRow(definition: BootstrapProjectionDefinition): RuntimeProjectionCatalogRow {
-  return {
-    basisKinds: ['live'],
-    description: definition.description,
-    name: definition.projection,
-    owner: definition.owner,
-    readOnly: true,
-    schemaHash: projectionSchemaHash(definition),
-    schemaId: definition.schemaId,
-    ...(definition.schemaRef.url === undefined ? {} : { schemaUrl: definition.schemaRef.url }),
-  };
-}
-
-function projectionSchemaHash(definition: BootstrapProjectionDefinition): NonNullable<ProjectionSnapshot['schemaHash']> {
-  const schemaHash = definition.schemaRef.hash ?? definition.schema.schemaHash;
-  if (schemaHash === undefined) {
-    throw new Error(`Projection ${definition.projection} must ship a schema hash.`);
-  }
-  return schemaHash;
 }
 
 function assertProjectionDefinitionsShipSchemas(

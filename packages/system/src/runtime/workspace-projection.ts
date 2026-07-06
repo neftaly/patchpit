@@ -161,6 +161,10 @@ function workspaceProjectionInvariantDiagnostics(
   collectMissingLayoutSurfaces(state.layout, surfaces, diagnostics, new Set());
 
   for (const surface of Object.values(surfaces)) {
+    if (!surfaceHasContent(surface)) {
+      diagnostics.push(`Surface "${surface.id}" has no pinned or preview context.`);
+    }
+
     for (const contextId of surface.contexts) {
       if (contexts[contextId] === undefined) {
         diagnostics.push(`Surface "${surface.id}" pinned context "${contextId}" is missing from contexts.`);
@@ -204,6 +208,10 @@ function collectMissingLayoutSurfaces(
 
 function surfaceHasContext(surface: WindowSurface, contextId: string): boolean {
   return surface.previewContext === contextId || surface.contexts.includes(contextId);
+}
+
+function surfaceHasContent(surface: WindowSurface): boolean {
+  return surface.previewContext !== undefined || surface.contexts.length > 0;
 }
 
 function recordRowsById<Row extends { readonly id: string }>(

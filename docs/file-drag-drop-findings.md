@@ -8,14 +8,14 @@ many ownership boundaries without producing a passing browser smoke test.
 
 - File Picker could start a sandbox drag offer for a filesystem URL.
 - `SandboxAppHost` could receive structured frame messages for drag start/end.
-- WindowManager already has a usable placement model for tab and URL drops.
+- WindowManager has a usable placement model for tab drops.
 - Existing click and double-click file actions remain the reliable path for
   previewing and opening files.
 
 ## What Failed
 
 - Cross-iframe release was unreliable. The shell could show a drag shield under
-  the pointer, but the final release did not consistently commit `dropUrl`.
+  the pointer, but the final release did not consistently commit an open intent.
 - Browser HTML drag/drop does not give the parent shell a reliable way to own or
   complete a real drag that originated inside a sandboxed iframe.
 - Native drag/drop, iframe pointer events, shell overlays, and sandbox messages
@@ -40,17 +40,9 @@ many ownership boundaries without producing a passing browser smoke test.
 
 ## Recommended Direction
 
-- Keep WindowManager as the only owner of placement, drop zones, and context
-  creation.
-- Keep File Picker focused on semantic actions: select, preview, open, and
-  eventually "offer this URL".
-- Do not reintroduce cross-iframe dragging until the shell owns the full gesture
-  from pointerdown through release.
-- If sandboxed apps need draggable resources, expose a shell-owned drag service
-  for URL offers. The app may declare the resource and initial pointer position,
-  but the shell should own overlays, hit testing, cancellation, and final route
-  intent submission.
-- Keep native HTML drag/drop only for same-document or non-sandbox surfaces
-  where `DataTransfer` is actually available to the owner of the drop.
-- Preserve source-surface exclusion: dragging from inside an app must not place
-  a drop shield over that same app surface.
+- Keep WindowManager tab drag/drop as compositor-owned behavior.
+- Keep File Picker focused on semantic actions: select, preview, and open.
+- Do not expose File Picker URL drags or URL drop zones until a shell-owned drag
+  service can own the full gesture from pointerdown through release.
+- Keep native HTML drag/drop only for same-document behavior where
+  `DataTransfer` is available to the owner of the drop.

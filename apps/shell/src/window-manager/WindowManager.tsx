@@ -28,26 +28,18 @@ import './window-manager.css';
 type WindowManagerActions = {
   readonly closeContext: (surfaceId: string, contextId: string) => void;
   readonly dropContext: (sourceSurfaceId: string, contextId: string, target: ContextDropTarget) => void;
-  readonly dropUrl: (url: string, title: string, target: ContextDropTarget) => void;
   readonly focusContext: (surfaceId: string, contextId: string) => void;
   readonly pinContext: (surfaceId: string, contextId: string) => void;
   readonly resizeSplit: (path: SplitPath, ratio: number) => Promise<boolean>;
 };
 
 export type WindowManagerAppHost = {
-  acceptsDroppedUrl(event: DragEvent): boolean;
   contextLabel(context: WindowContext): string | undefined;
   contextTooltip(context: WindowContext): string | undefined;
-  droppedUrl(event: DragEvent): WindowManagerDroppedUrl | undefined;
   renderSurface(input: {
     readonly context: WindowContext | undefined;
     readonly surfaceId: string;
   }): ReactNode;
-};
-
-export type WindowManagerDroppedUrl = {
-  readonly title: string;
-  readonly url: string;
 };
 
 export type WindowManagerWorkspace = Pick<WindowManagerStateDoc, 'contexts' | 'focus' | 'layout' | 'surfaces'>;
@@ -118,9 +110,7 @@ export function WindowManager({
       className="window-manager"
       aria-label="window manager"
       onDragEnter={(event) => {
-        if (event.dataTransfer.types.includes(tabDragType) || appHost.acceptsDroppedUrl(event)) {
-          setDragShieldActive(true);
-        }
+        if (event.dataTransfer.types.includes(tabDragType)) setDragShieldActive(true);
       }}
       onDragLeave={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
@@ -475,7 +465,7 @@ function acceptDrag(
   target: DropTarget,
   stopPropagation = false,
 ): void {
-  if (!allowDrop(event, runtime)) return;
+  if (!allowDrop(event)) return;
   if (!canDrop(runtime.draggedTab, target)) {
     runtime.setDropTarget(undefined);
     return;
@@ -485,8 +475,8 @@ function acceptDrag(
   runtime.setDropTarget(target);
 }
 
-function allowDrop(event: DragEvent, runtime: WindowManagerRuntime): boolean {
-  if (!event.dataTransfer.types.includes(tabDragType) && !runtime.appHost.acceptsDroppedUrl(event)) return false;
+function allowDrop(event: DragEvent): boolean {
+  if (!event.dataTransfer.types.includes(tabDragType)) return false;
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
   return true;
@@ -498,7 +488,7 @@ function dropDraggedItem(
   handleDrop: (dragged: DraggedItem) => void,
   stopPropagation = false,
 ): void {
-  const dragged = draggedItemFromEvent(event, runtime);
+  const dragged = draggedItemFromEvent(event);
   if (dragged === undefined) return;
 
   event.preventDefault();
@@ -510,24 +500,15 @@ function dropDraggedItem(
 }
 
 type DraggedTab = { contextId: string; surfaceId: string };
-type DraggedItem =
-  | ({ kind: 'tab' } & DraggedTab)
-  | ({ kind: 'url' } & WindowManagerDroppedUrl);
+type DraggedItem = { kind: 'tab' } & DraggedTab;
 
 function dropItem(runtime: WindowManagerRuntime, dragged: DraggedItem, target: ContextDropTarget): void {
-  if (dragged.kind === 'tab') {
-    runtime.actions.dropContext(dragged.surfaceId, dragged.contextId, target);
-  } else {
-    runtime.actions.dropUrl(dragged.url, dragged.title, target);
-  }
+  runtime.actions.dropContext(dragged.surfaceId, dragged.contextId, target);
 }
 
-function draggedItemFromEvent(event: DragEvent, runtime: WindowManagerRuntime): DraggedItem | undefined {
+function draggedItemFromEvent(event: DragEvent): DraggedItem | undefined {
   const tab = dragDataFromEvent<DraggedTab>(event, tabDragType);
-  if (tab !== undefined) return { kind: 'tab', ...tab };
-
-  const url = runtime.appHost.droppedUrl(event);
-  return url === undefined ? undefined : { kind: 'url', ...url };
+  return tab === undefined ? undefined : { kind: 'tab', ...tab };
 }
 
 function dragDataFromEvent<T>(event: DragEvent, type: string): T | undefined {

@@ -53,24 +53,20 @@ export default async function activate(env) {
     document.title = resource.title ?? resource.name ?? 'Viewer';
     main.innerHTML = '';
 
-    if (resource.kind === 'folder') {
-      const list = document.createElement('ul');
-      list.style.cssText = 'display:grid;gap:0.25rem;margin:0;padding:0;list-style:none;';
-      for (const child of resource.children ?? []) {
-        const item = document.createElement('li');
-        item.textContent = (child.kind === 'folder' ? 'Folder: ' : 'File: ') + child.name;
-        item.style.cssText = 'padding:0.4rem 0.5rem;border:1px solid #d7d7d9;background:transparent;';
-        list.append(item);
-      }
-      main.append(list);
-      return;
-    }
-
-    if (typeof resource.sourceUrl === 'string' && resource.mediaType?.startsWith('image/')) {
+    const imageSourceUrl = imagePreviewSourceUrl(resource);
+    if (imageSourceUrl !== null) {
       const image = document.createElement('img');
-      image.src = resource.sourceUrl;
+      image.src = imageSourceUrl;
       image.alt = resource.name ?? '';
       image.style.cssText = 'display:block;max-width:100%;height:auto;margin:auto;';
+      if (imageSourceUrl === resource.sourceUrl) {
+        image.addEventListener('error', () => {
+          const link = document.createElement('a');
+          link.href = resource.sourceUrl;
+          link.textContent = resource.sourceUrl;
+          image.replaceWith(link);
+        }, { once: true });
+      }
       main.append(image);
       return;
     }
@@ -84,10 +80,44 @@ export default async function activate(env) {
     }
 
     const preview = document.createElement('pre');
-    preview.textContent = resource.text ?? '';
+    preview.textContent = resource.text ?? JSON.stringify(resource, null, 2);
     preview.style.cssText = 'box-sizing:border-box;min-height:100%;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,Liberation Mono,monospace;';
     main.append(preview);
   } catch (error) {
     showNotice('Resource view unavailable', error instanceof Error ? error.message : String(error));
   }
+}
+
+function imagePreviewSourceUrl(resource) {
+  const mediaType = normalizedMediaType(resource.mediaType);
+  if (!mediaType.startsWith('image/')) return null;
+  if (mediaType === 'image/svg+xml' && typeof resource.text === 'string' && resource.text !== '') {
+    return textDataUrl(mediaType, resource.text);
+  }
+  return isDisplayableImageUrl(resource.sourceUrl) ? resource.sourceUrl : null;
+}
+
+function normalizedMediaType(mediaType) {
+  return typeof mediaType === 'string'
+    ? mediaType.split(';', 1)[0].trim().toLowerCase()
+    : '';
+}
+
+function textDataUrl(mediaType, text) {
+  return `data:${safeMediaType(mediaType)};charset=utf-8,${encodeDataUrlText(text)}`;
+}
+
+function safeMediaType(mediaType) {
+  return /^[a-z]+\/[a-z0-9.+-]+$/i.test(mediaType) ? mediaType : 'text/plain';
+}
+
+function encodeDataUrlText(text) {
+  return encodeURIComponent(text).replace(/[!'()*]/g, (character) => (
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  ));
+}
+
+function isDisplayableImageUrl(sourceUrl) {
+  return typeof sourceUrl === 'string'
+    && (sourceUrl.startsWith('data:') || sourceUrl.startsWith('https:'));
 }

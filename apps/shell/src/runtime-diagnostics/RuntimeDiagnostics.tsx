@@ -93,7 +93,7 @@ export function RuntimeDiagnostics({
             {runtimeDiagnosticsExportLabel(exportState)}
           </button>
         </div>
-        <p>Transient runtime health and session events. Inspect exported projections at /srv/projections.</p>
+        <p>Transient runtime health, projection status, and session events.</p>
       </header>
       <div className="runtime-diagnostics-toolbar" aria-label="Diagnostics filters">
         {runtimeDiagnosticsFilters.map((candidate) => (

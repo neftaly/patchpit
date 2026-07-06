@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   createSeedFilesystem,
   nodePath,
@@ -32,9 +32,10 @@ import {
 } from '@patchpit/system/runtime';
 import { LauncherBar } from './launcher/LauncherBar';
 import {
-  installedAppsFromProjectionRows,
-  type InstalledApp,
-} from './app-host/installed-apps';
+  coreAppsFromFilesystem,
+  webBrowserAppId,
+  type FilesystemApp,
+} from './runtime/installed-apps';
 import { SandboxedFilesystemApp, type SandboxFilePickerHostScope } from './app-host/SandboxedFilesystemApp';
 import { createBootstrapRuntimeClient, type BootstrapSessionEventInput } from './runtime/bootstrap-runtime';
 import { patchpitRuntimeBuildId } from './runtime/build-id';
@@ -47,14 +48,12 @@ import { RuntimeDiagnosticsSurface } from './runtime-diagnostics/RuntimeDiagnost
 import { useRuntimeDocument } from './runtime/use-automerge-doc';
 import {
   useFilesystemTreeProjection,
-  useInstalledAppsProjection,
   useWorkspaceProjection,
 } from './runtime/use-runtime-projection';
 import { submitWindowIntent, type WindowIntentInput, type WindowIntentName } from './runtime/window-intents';
 import {
   WindowManager,
   type WindowManagerAppHost,
-  type WindowManagerDroppedUrl,
 } from './window-manager/WindowManager';
 import {
   type ContextDropTarget,
@@ -120,17 +119,10 @@ function ShellApp({
   }, [runtimeConnection.ack, runtimePlatform, seed]);
 
   const filesystemProjection = useFilesystemTreeProjection(runtime, rootUrl);
-  const installedAppsProjection = useInstalledAppsProjection(runtime);
   const workspaceProjection = useWorkspaceProjection(runtime);
-  const installedApps = useMemo(() => (
-    filesystemProjection.status === 'ready' && installedAppsProjection.status === 'ready'
-      ? installedAppsFromProjectionRows({
-          getDocument: (url) => runtime.resources.getDocument(url),
-          root: filesystemProjection.root,
-          rows: installedAppsProjection.rows,
-        })
-      : []
-  ), [filesystemProjection, installedAppsProjection, runtime.resources]);
+  const coreApps = useMemo(() => (
+    filesystemProjection.status === 'ready' ? coreAppsFromFilesystem(filesystemProjection.root) : []
+  ), [filesystemProjection]);
   const recordRuntimeIssue = (source: RuntimeDiagnosticsIssueEntry['source'], issue: RuntimePanelFailure) => {
     const entry: RuntimeDiagnosticsIssueEntry = {
       id: nextRuntimeIssueId.current++,
@@ -204,9 +196,6 @@ function ShellApp({
     dropContext: (sourceSurfaceId: string, contextId: string, target: ContextDropTarget) => {
       void windowIntent(windowMoveTabIntent, { contextId, sourceSurfaceId, target }).catch(reportRuntimeError);
     },
-    dropUrl: (url: string, title: string, target: ContextDropTarget) => {
-      routeUrl(routeOpenIntent, { rootUrl, target, title, url });
-    },
     pinContext: (surfaceId: string, contextId: string) => {
       void windowIntent(windowPinPreviewIntent, { contextId, surfaceId }).catch(reportRuntimeError);
     },
@@ -233,17 +222,6 @@ function ShellApp({
           message={filesystemProjection.failure.message}
           details={filesystemProjection.failure.details}
         />
-      ) : installedAppsProjection.status === 'initializing' ? (
-        <RuntimeStatusPanel
-          title="Installed apps projection initializing"
-          message="Waiting for the runtime.installedApps snapshot from the runtime."
-        />
-      ) : installedAppsProjection.status === 'failed' ? (
-        <RuntimeStatusPanel
-          title={installedAppsProjection.failure.title}
-          message={installedAppsProjection.failure.message}
-          details={installedAppsProjection.failure.details}
-        />
       ) : workspaceProjection.status === 'initializing' ? (
         <RuntimeStatusPanel
           title="Workspace projection initializing"
@@ -267,7 +245,7 @@ function ShellApp({
                 state: filePickerState,
               },
               filesystemRoot: filesystemProjection.root,
-              installedApps,
+              apps: coreApps,
               recordSessionEvent: (event) => runtime.diagnostics.recordSessionEvent({
                 ...event,
                 source: 'sandbox',
@@ -294,11 +272,12 @@ function ShellApp({
 }
 
 function shellAppHost({
+  apps,
   filePicker,
   filesystemRoot,
-  installedApps,
   recordSessionEvent,
 }: {
+  readonly apps: readonly FilesystemApp[];
   readonly filePicker: {
     readonly fileTypes: SandboxFilePickerHostScope['fileTypes'];
     readonly rootUrl: string;
@@ -306,43 +285,34 @@ function shellAppHost({
     readonly state: FilePickerStateDoc;
   };
   readonly filesystemRoot: FilesystemNode;
-  readonly installedApps: readonly InstalledApp[];
   readonly recordSessionEvent: (event: Omit<BootstrapSessionEventInput, 'source'>) => void;
 }): WindowManagerAppHost {
-  const appsById = new Map(installedApps.map((app) => [app.manifest.id, app]));
+  const appsById = new Map(apps.map((app) => [app.id, app]));
   return {
-    acceptsDroppedUrl(event) {
-      return event.dataTransfer.types.includes(filePickerDragType);
-    },
-
     contextLabel(context) {
-      return nodePath(filesystemRoot, context.url) ?? context.title ?? appsById.get(context.app)?.manifest.name;
+      return nodePath(filesystemRoot, context.url) ?? context.title ?? appsById.get(context.app)?.name;
     },
 
     contextTooltip(context) {
-      return contextLaunchUrl(filesystemRoot, appsById.get(context.app), context);
-    },
-
-    droppedUrl(event) {
-      return filePickerDroppedUrl(event);
+      return contextLaunchUrl(filesystemRoot, appForContext(filesystemRoot, appsById, context), context);
     },
 
     renderSurface({ context, surfaceId }) {
       if (context === undefined) return <SurfaceNotice message="No active app session." />;
-      const installedApp = appsById.get(context.app);
-      if (installedApp === undefined) {
+      const app = appForContext(filesystemRoot, appsById, context);
+      if (app === undefined) {
         return (
           <SurfaceNotice
-            message={`No installed app manifest was found for ${context.app}.`}
+            message={`No core app bundle was found for ${context.app}.`}
             role="alert"
-            title="App not installed"
+            title="App bundle unavailable"
           />
         );
       }
 
       return (
         <SandboxedFilesystemApp
-          app={installedApp}
+          app={app}
           context={context}
           filePicker={{
             fileTypes: filePicker.fileTypes,
@@ -359,9 +329,62 @@ function shellAppHost({
   };
 }
 
+function appForContext(
+  filesystemRoot: FilesystemNode,
+  appsById: ReadonlyMap<string, FilesystemApp>,
+  context: { readonly app: string; readonly url: string },
+): FilesystemApp | undefined {
+  return context.app === webBrowserAppId
+    ? webBrowserAppForHtmlFile(filesystemRoot, context.url)
+    : appsById.get(context.app);
+}
+
+function webBrowserAppForHtmlFile(root: FilesystemNode, url: string): FilesystemApp | undefined {
+  const target = fileWithParent(root, url);
+  if (target === undefined || !isHtmlMediaType(target.file.mediaType)) return undefined;
+  return {
+    entry: target.file,
+    entryKind: 'html',
+    entryPath: target.file.name,
+    icon: '',
+    id: webBrowserAppId,
+    name: 'Web Browser',
+    packagePath: target.parentPath,
+    packageRoot: target.parent,
+  };
+}
+
+function fileWithParent(
+  root: FilesystemNode,
+  url: string,
+): { readonly file: Extract<FilesystemNode, { readonly kind: 'file' }>; readonly parent: Extract<FilesystemNode, { readonly kind: 'folder' }>; readonly parentPath: string } | undefined {
+  if (root.kind !== 'folder') return undefined;
+
+  const visit = (
+    folder: Extract<FilesystemNode, { readonly kind: 'folder' }>,
+    parentPath: string,
+  ): ReturnType<typeof fileWithParent> => {
+    for (const entry of folder.entries) {
+      if (entry.kind === 'file' && entry.url === url) return { file: entry, parent: folder, parentPath };
+      if (entry.kind === 'folder') {
+        const childPath = parentPath === '/' ? `/${entry.name}` : `${parentPath}/${entry.name}`;
+        const found = visit(entry, childPath);
+        if (found !== undefined) return found;
+      }
+    }
+    return undefined;
+  };
+
+  return visit(root, '/');
+}
+
+function isHtmlMediaType(mediaType: string): boolean {
+  return mediaType.split(';', 1)[0]?.trim().toLowerCase() === 'text/html';
+}
+
 function contextLaunchUrl(
   filesystemRoot: FilesystemNode,
-  app: InstalledApp | undefined,
+  app: FilesystemApp | undefined,
   context: { readonly url: string },
 ): string | undefined {
   const entryPath = app?.entry === undefined ? undefined : nodePath(filesystemRoot, app.entry.url);
@@ -389,11 +412,6 @@ function SurfaceNotice({
       )}
     </section>
   );
-}
-
-function filePickerDroppedUrl(event: DragEvent): WindowManagerDroppedUrl | undefined {
-  const data = dragDataFromEvent(event, filePickerDragType);
-  return isDraggedFilePickerUrl(data) ? data : undefined;
 }
 
 function resolveHashLaunchTarget({
@@ -481,22 +499,6 @@ function runtimeDiagnosticsEnabled(): boolean {
   return new URLSearchParams(window.location.search).has('runtimeDiagnostics');
 }
 
-function dragDataFromEvent(event: DragEvent, type: string): unknown {
-  const serializedDragData = event.dataTransfer.getData(type);
-  if (serializedDragData === '') return undefined;
-  try {
-    return JSON.parse(serializedDragData);
-  } catch {
-    return undefined;
-  }
-}
-
-function isDraggedFilePickerUrl(data: unknown): data is DraggedFilePickerUrl {
-  if (typeof data !== 'object' || data === null) return false;
-  const candidate = data as Partial<Record<keyof DraggedFilePickerUrl, unknown>>;
-  return typeof candidate.title === 'string' && typeof candidate.url === 'string';
-}
-
 function normalizedFileTypes(doc: FileTypesDoc): readonly Pick<FileType, 'emoji' | 'match'>[] {
   return Array.isArray(doc.fileTypes)
     ? doc.fileTypes.filter(isFileType).map((fileType) => ({ emoji: fileType.emoji, match: fileType.match }))
@@ -512,13 +514,6 @@ function isFileType(value: unknown): value is FileType {
     && typeof (value as Partial<FileType>).match === 'string'
   );
 }
-
-const filePickerDragType = 'application/x.patchpit-file';
-
-type DraggedFilePickerUrl = {
-  readonly title: string;
-  readonly url: string;
-};
 
 const runtimeIssueHistoryLimit = 50;
 

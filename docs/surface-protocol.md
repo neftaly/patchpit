@@ -10,17 +10,16 @@ notes at the end, but the model here is Patchpit's own runtime contract.
 
 ## System Model
 
-Patchpit currently seeds three durable roots and exposes one live-service root:
+Patchpit currently seeds three durable roots:
 
 - `/apps` contains installed app package folders
 - `/home` contains user and workspace documents
 - `/system` contains runtime/compositor-owned persistent state
-- `/srv` contains read-only virtual service exports such as projection metadata
 
 The bootloader creates only the initial filesystem, the minimal runtime state
 needed to boot, and the compositor/window-manager state needed to display
 surfaces. The active seed installs File Picker, Viewer, and Hello World as
-module app packages under `/apps`; Terminal is archived under
+filesystem app packages under `/apps`; Terminal is archived under
 `archive/terminal-shell-compat` and is not part of the active architecture.
 Future first-party apps should use the same installer path rather than seed a
 second app registry.
@@ -81,13 +80,10 @@ efficiently. Runtime clients consume `filesystem.tree` with
 `schemaId: patchpit.filesystem.tree@1` as a public `nodes` relation. The index
 doc should not become the interchange format.
 
-The active runtime also serves `runtime.projections` with
-`schemaId: patchpit.runtime.projections@1` as a catalog of projections and their
-schemas. The filesystem tree includes read-only virtual service exports under
-`/srv/projections/<projection>/` for `meta.json`, `schema.json`, and
-`summary.json`. These `patchpit-srv:` URLs are inspection views, not Automerge
-documents or canonical filesystem storage. Writes go through intents and the
-owning canonical state layer, not through editable projection files.
+The active runtime serves named projections through the runtime client. It does
+not automatically materialize projection metadata, schemas, or snapshots as
+filesystem files. Writes go through intents and the owning canonical state layer,
+not through editable projection exports.
 
 ## App Manifests
 
@@ -326,7 +322,7 @@ runtime exposes relation-shaped `surfaces`, `contexts`, `layoutNodes`, or
 The first useful implementation should stay small:
 
 1. App packages live under `/apps`.
-2. File Picker, Viewer, and Hello World are active seeded module apps; runtime
+2. File Picker, Viewer, and Hello World are active seeded filesystem apps; runtime
    diagnostics are shell/dev tooling, not an installed app.
 3. The window-manager doc owns surfaces, tabs, focus, reserved slots, and split
    layout.
@@ -337,7 +333,6 @@ The first useful implementation should stay small:
    second app-instance registry.
 6. Runtime projections expose schema-bound relation views over durable docs and
    live runtime state.
-7. `/srv` remains live service state, not persisted app state.
 
 Do not implement permissions, spatial placement, or multiple viewports until the
 basic desktop projection is stable.

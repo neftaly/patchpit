@@ -1,5 +1,7 @@
 import {
   rootContainer,
+  findNode,
+  projectFilesystem,
   routeIntentBoundary,
   type SeedFilesystem,
   windowIntentBoundary,
@@ -50,7 +52,7 @@ import {
   validateSurfaceContext,
 } from './bootstrap-window-topology';
 import { automergeHeadSetForHandle } from './automerge-heads';
-import { manifestRouteHandler } from './manifest-routing';
+import { webBrowserAppId } from './installed-apps';
 
 type RouteIntentName = typeof routeOpenIntent | typeof routePreviewIntent;
 
@@ -78,11 +80,11 @@ export function submitBootstrapRouteIntent(
   const validationError = validateRouteIntent(seed.windowManagerHandle.doc(), intent, route);
   if (validationError !== undefined) return rejected(validationError);
 
-  const routeHandler = manifestRouteHandler(seed, intent, route.url);
-  if (isRuntimeError(routeHandler)) return rejected(routeHandler);
+  const routeTargetError = validateRouteTarget(seed, route.url);
+  if (routeTargetError !== undefined) return rejected(routeTargetError);
 
   commitWindowManagerState(seed.windowManagerHandle, (doc) => {
-    commitRouteIntent(doc, intent, route, seed.rootUrl, routeHandler.app);
+    commitRouteIntent(doc, intent, route, seed.rootUrl, routeTargetApp(seed, route.url));
   });
 
   return {
@@ -147,6 +149,17 @@ function validateRouteIntent(
   return runtimeError('conflict', `No document surface can accept ${intent}.`);
 }
 
+function validateRouteTarget(seed: SeedFilesystem, url: string): RuntimeError | undefined {
+  if (seed.documentHandles[url] !== undefined) return undefined;
+
+  const filesystem = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
+  if (filesystem.root !== null && findNode(filesystem.root, url) !== null) return undefined;
+
+  return seed.documentHandles[url] === undefined
+    ? runtimeError('not_found', `Route target ${url} is not in the filesystem.`)
+    : undefined;
+}
+
 function commitRouteIntent(
   doc: WindowManagerStateDoc,
   intent: RouteIntentName,
@@ -166,6 +179,16 @@ function commitRouteIntent(
   } else {
     previewContext(doc, context, route.sourceSurfaceId);
   }
+}
+
+function routeTargetApp(seed: SeedFilesystem, url: string): string {
+  const filesystem = projectFilesystem(seed.indexHandle.doc(), seed.rootUrl);
+  const node = filesystem.root === null ? null : findNode(filesystem.root, url);
+  return node?.kind === 'file' && isHtmlMediaType(node.mediaType) ? webBrowserAppId : 'viewer';
+}
+
+function isHtmlMediaType(mediaType: string): boolean {
+  return String(mediaType).split(';', 1)[0]?.trim().toLowerCase() === 'text/html';
 }
 
 function windowIntentName(intent: IntentRequest['intent']): WindowIntentName | undefined {

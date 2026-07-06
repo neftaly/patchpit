@@ -29,30 +29,12 @@ export type SandboxAppServiceErrorCode = 'bad_request' | 'missing_scope' | 'not_
 
 export type SandboxAppServiceCapabilities = Readonly<Record<SandboxAppServiceName, boolean>>;
 
-export type SandboxAppResourceView =
-  | {
-      readonly kind: 'file';
-      readonly mediaType: string;
-      readonly name: string;
-      readonly sourceUrl: string | null;
-      readonly text?: string;
-      readonly title: string;
-      readonly url: string;
-    }
-  | {
-      readonly children: readonly SandboxAppResourceChild[];
-      readonly kind: 'folder';
-      readonly mediaType: null;
-      readonly name: string;
-      readonly text?: string;
-      readonly title: string;
-      readonly url: string;
-    };
-
-export type SandboxAppResourceChild = {
-  readonly kind: FilesystemNode['kind'];
-  readonly mediaType: string | null;
+export type SandboxAppResourceView = {
+  readonly kind: 'file';
+  readonly mediaType: string;
   readonly name: string;
+  readonly sourceUrl: string | null;
+  readonly text?: string;
   readonly title: string;
   readonly url: string;
 };
@@ -624,13 +606,13 @@ function sandboxResourceViewData(node: FilesystemNode): SandboxAppResourceView {
     url: node.url,
   };
 
-  if (node.kind === 'folder') {
+  if (node.kind !== 'file') {
     return {
       ...base,
-      children: node.entries.map(sandboxResourceChild),
-      kind: 'folder',
-      mediaType: null,
-      ...(node.text === '' ? {} : { text: node.text }),
+      kind: 'file',
+      mediaType: automergeMimeType,
+      sourceUrl: null,
+      text: node.text,
     };
   }
 
@@ -643,19 +625,10 @@ function sandboxResourceViewData(node: FilesystemNode): SandboxAppResourceView {
   };
 }
 
-function sandboxResourceChild(node: FilesystemNode): SandboxAppResourceChild {
-  return {
-    kind: node.kind,
-    mediaType: node.kind === 'file' ? node.mediaType : null,
-    name: node.name,
-    title: node.name,
-    url: node.url,
-  };
-}
-
 function isTextMediaType(mediaType: string): boolean {
   const normalized = mediaType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
   return normalized.startsWith('text/')
+    || normalized === 'image/svg+xml'
     || normalized === 'application/json'
     || normalized === 'application/javascript'
     || normalized === 'application/ecmascript'

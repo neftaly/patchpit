@@ -189,7 +189,7 @@ export function SandboxAppHost({
   if (entry === undefined || loadPlan === undefined) {
     return (
       <SandboxNotice
-        message="The app manifest points at an entry that is not available in the filesystem."
+        message="The app bundle entry is not available in the filesystem."
         title="App entry missing"
       />
     );
@@ -208,7 +208,7 @@ export function SandboxAppHost({
   if (srcDoc === undefined) {
     return (
       <SandboxNotice
-        message="The app manifest entry could not be prepared for the sandbox."
+        message="The app bundle entry could not be prepared for the sandbox."
         role="alert"
         title="App entry failed"
       />
@@ -370,7 +370,7 @@ function sandboxSrcDoc({
 
   if (loadPlan.kind === 'html') {
     return injectSandboxHead(loadPlan.html, [
-      sandboxCspMeta(),
+      sandboxCspMeta(appId),
       `<script>${bridgeScript}</script>`,
       `<script>${htmlReadyScript()}</script>`,
     ]);
@@ -380,7 +380,7 @@ function sandboxSrcDoc({
 <html>
 <head>
   <meta charset="utf-8">
-  ${sandboxCspMeta()}
+  ${sandboxCspMeta(appId)}
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     html,
@@ -536,8 +536,8 @@ function sandboxBridgeScript({
   `;
 }
 
-function sandboxCspMeta(): string {
-  return `<meta http-equiv="Content-Security-Policy" content="${sandboxCspContent}">`;
+function sandboxCspMeta(appId: string): string {
+  return `<meta http-equiv="Content-Security-Policy" content="${sandboxCspContent(appId)}">`;
 }
 
 function injectSandboxHead(html: string, headEntries: readonly string[]): string {
@@ -573,19 +573,21 @@ function scriptJson(value: unknown): string {
   return JSON.stringify(value).replaceAll('<', '\\u003C');
 }
 
-const sandboxCspContent = [
-  "default-src 'none'",
-  "base-uri 'none'",
-  "connect-src 'none'",
-  "font-src data:",
-  "form-action 'none'",
-  "frame-src 'none'",
-  "img-src data:",
-  "media-src data:",
-  "object-src 'none'",
-  "script-src 'unsafe-inline' data:",
-  "style-src 'unsafe-inline' data:",
-  "worker-src 'none'",
-].join('; ');
+function sandboxCspContent(appId: string): string {
+  return [
+    "default-src 'none'",
+    "base-uri 'none'",
+    "connect-src 'none'",
+    "font-src data:",
+    "form-action 'none'",
+    "frame-src 'none'",
+    appId === 'viewer' ? 'img-src data: https:' : 'img-src data:',
+    "media-src data:",
+    "object-src 'none'",
+    "script-src 'unsafe-inline' data:",
+    "style-src 'unsafe-inline' data:",
+    "worker-src 'none'",
+  ].join('; ');
+}
 
 const cspMetaPattern = /<meta\b(?=[^>]*\bhttp-equiv\s*=\s*(?:"content-security-policy"|'content-security-policy'|content-security-policy\b))[^>]*>/gi;

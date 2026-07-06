@@ -13,10 +13,14 @@ await rm(buildRoot, { force: true, recursive: true });
 const packages = [];
 
 for (const app of seedApps) {
-  const sourceRoot = resolve(buildRoot, '__sources', app.id);
-  const outDir = resolve(buildRoot, app.id);
-  await mkdir(sourceRoot, { recursive: true });
-  await writeFile(resolve(sourceRoot, 'index.html'), seedAppHtml(app));
+  const sourceRoot = app.source === 'vite'
+    ? resolve(repoRoot, app.root)
+    : resolve(buildRoot, '__sources', app.id);
+  const outDir = resolve(buildRoot, app.id, 'dist');
+  if (app.source !== 'vite') {
+    await mkdir(sourceRoot, { recursive: true });
+    await writeFile(resolve(sourceRoot, 'index.html'), seedAppHtml(app));
+  }
   await build({
     base: './',
     build: {
@@ -93,7 +97,7 @@ await writeFile(generatedFixturePath, fixtureSource);
 async function seedAppPackages() {
   const appsRoot = resolve(repoRoot, 'apps');
   const entries = await readdir(appsRoot, { withFileTypes: true });
-  const packages = [];
+  const packages = [helloWorldSeedAppPackage()];
 
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     if (!entry.isDirectory()) continue;
@@ -131,10 +135,29 @@ async function seedAppPackages() {
         version: metadata.version ?? '0.0.0',
       },
       root,
+      source: 'patchpit-module',
     });
   }
 
-  return packages;
+  return packages.sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function helloWorldSeedAppPackage() {
+  return {
+    id: 'hello-world',
+    manifest: {
+      entry: 'index.html',
+      entryKind: 'html',
+      handles: [],
+      icon: '👋',
+      id: 'hello-world',
+      name: 'Hello World',
+      surfaces: [{ role: 'document-set' }],
+      version: '0.0.0',
+    },
+    root: 'seed-apps/hello-world',
+    source: 'vite',
+  };
 }
 
 function seedAppHtml(app) {

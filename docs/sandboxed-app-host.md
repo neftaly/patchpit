@@ -59,10 +59,10 @@ manifests before creating sessions.
 the host resolves `context.app` through `/apps` and runs filesystem JavaScript
 module and HTML document entries through `SandboxAppHost` when `entryKind` is
 `module` or `html`. The seeded `hello-world` app is the canonical minimal real
-file-backed sandbox package: its manifest points at `app.js`, and the iframe
-runner uses `sandbox="allow-scripts"` with no same-origin authority. The seeded
-File Picker and Viewer packages are runnable filesystem module apps whose
-manifests point at `app.js`.
+Vite-built sandbox package: its built `dist` files are inserted under
+`/apps/hello-world`, and the iframe runner uses `sandbox="allow-scripts"` with
+no same-origin authority. The seeded File Picker and Viewer packages are
+runnable filesystem HTML packages built from their app entry modules.
 
 The active seeded app set is File Picker, Viewer, and Hello World. Terminal is
 archived under `archive/terminal-shell-compat`; it is no longer an active
@@ -104,7 +104,7 @@ of executable documents.
   other first-party apps.
 - Document work belongs in file/document surfaces.
 - Deep runtime inspection belongs in trusted runtime diagnostics and
-  `/srv/projections`, not in the installed app model.
+  `/system/runtime`, not in the installed app model.
 - Users should not need to know `/apps`, `/system/apps`, or capability protocol
   details to answer normal questions such as "what can this app access?".
 - Paths, manifests, schemas, and grants should remain inspectable for advanced
@@ -726,10 +726,10 @@ conflict, quarantine, capability timeout, and backpressure. Capability mocks
 must use the same request/response and revocation protocol as real capability
 providers.
 
-Runtime diagnostics, `/system/runtime`, and `/srv/projections` should make app
-development observable: installed manifest, schema refs, effective grants,
-projection subscriptions, intent logs, capability events, runner lifecycle, SES
-timings, first paint, crash reasons, and schema hash mismatches.
+Runtime diagnostics and `/system/runtime` should make app development
+observable: installed manifest, schema refs, effective grants, projection
+subscriptions, intent logs, capability events, runner lifecycle, SES timings,
+first paint, crash reasons, and schema hash mismatches.
 
 Version fields must stay separate:
 
@@ -745,7 +745,7 @@ It should not be moved into the untrusted sandbox path.
 
 ### Viewer
 
-Viewer is migrated to a sandboxed module app and remains a useful read-only
+Viewer is migrated to a sandboxed app and remains a useful read-only
 pressure test.
 
 Needs:
@@ -770,7 +770,7 @@ enough.
 
 ### File Picker
 
-File Picker is migrated to a sandboxed module app and proves view and action
+File Picker is migrated to a sandboxed app and proves view and action
 pressure.
 
 Needs:
@@ -855,8 +855,8 @@ placement does not change app semantics.
 
 The first app-host boundary is in place for the active seeded apps.
 
-1. Manifest-driven rendering, installed-app projection, and sandboxed module
-   entries are on the same app-host path.
+1. Manifest-driven rendering and sandboxed HTML entries are on the same app-host
+   path.
 2. File Picker uses scoped `file-picker` views plus file-picker and route
    actions.
 3. Viewer uses the scoped `resource` view for file and folder output.
