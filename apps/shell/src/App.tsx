@@ -111,7 +111,7 @@ function ShellApp({
   const launchHash = useLocationHash();
   const processedLaunchHash = useRef<string | undefined>(undefined);
   const nextRuntimeIssueId = useRef(1);
-  const currentSandboxDragOffer = useRef<SandboxSurfaceDragOffer | undefined>(undefined);
+  const [sandboxDragOffer, setSandboxDragOffer] = useState<SandboxSurfaceDragOffer>();
   const [runtimeIssueHistory, setRuntimeIssueHistory] = useState<readonly RuntimeDiagnosticsIssueEntry[]>([]);
   const filePickerState = useRuntimeDocument<FilePickerStateDoc>(runtime.resources, documentUrls.filePickerState);
   const prefersDark = usePrefersDark();
@@ -268,14 +268,16 @@ function ShellApp({
                 runtime,
                 state: filePickerState,
               },
-              currentSandboxDragOffer,
               filesystemRoot: filesystemProjection.root,
               installedApps,
               recordSessionEvent: (event) => runtime.diagnostics.recordSessionEvent({
                 ...event,
                 source: 'sandbox',
               }),
+              sandboxDragOffer,
+              setSandboxDragOffer,
             })}
+            externalUrlDragActive={sandboxDragOffer !== undefined}
             workspace={workspaceProjection.workspace}
           />
           {runtimeDiagnosticsEnabled() ? (
@@ -297,13 +299,13 @@ function ShellApp({
 }
 
 function shellAppHost({
-  currentSandboxDragOffer,
   filePicker,
   filesystemRoot,
   installedApps,
   recordSessionEvent,
+  sandboxDragOffer,
+  setSandboxDragOffer,
 }: {
-  readonly currentSandboxDragOffer: { current: SandboxSurfaceDragOffer | undefined };
   readonly filePicker: {
     readonly fileTypes: SandboxFilePickerHostScope['fileTypes'];
     readonly rootUrl: string;
@@ -313,12 +315,14 @@ function shellAppHost({
   readonly filesystemRoot: FilesystemNode;
   readonly installedApps: readonly InstalledApp[];
   readonly recordSessionEvent: (event: Omit<BootstrapSessionEventInput, 'source'>) => void;
+  readonly sandboxDragOffer: SandboxSurfaceDragOffer | undefined;
+  readonly setSandboxDragOffer: (offer: SandboxSurfaceDragOffer | undefined) => void;
 }): WindowManagerAppHost {
   const appsById = new Map(installedApps.map((app) => [app.manifest.id, app]));
   return {
     acceptsDroppedUrl(event) {
       return event.dataTransfer.types.includes(filePickerDragType)
-        || currentSandboxDragOffer.current?.type === 'patchpit.url';
+        || sandboxDragOffer?.type === 'patchpit.url';
     },
 
     contextLabel(context) {
@@ -333,8 +337,8 @@ function shellAppHost({
       const nativeDrop = filePickerDroppedUrl(event);
       if (nativeDrop !== undefined) return nativeDrop;
 
-      const sandboxDrop = sandboxDroppedUrl(currentSandboxDragOffer.current);
-      if (sandboxDrop !== undefined) currentSandboxDragOffer.current = undefined;
+      const sandboxDrop = sandboxDroppedUrl(sandboxDragOffer);
+      if (sandboxDrop !== undefined) setSandboxDragOffer(undefined);
       return sandboxDrop;
     },
 
@@ -365,12 +369,12 @@ function shellAppHost({
           filesystemRoot={filesystemRoot}
           onDragOfferEnd={canOfferFileDrag
             ? (offer) => {
-              if (currentSandboxDragOffer.current === offer) currentSandboxDragOffer.current = undefined;
+              if (sandboxDragOffer === offer) setSandboxDragOffer(undefined);
             }
             : undefined}
           onDragOfferStart={canOfferFileDrag
             ? (offer) => {
-              currentSandboxDragOffer.current = offer;
+              setSandboxDragOffer(offer);
             }
             : undefined}
           onSessionEvent={(event) => recordSessionEvent({ ...event, surfaceId })}

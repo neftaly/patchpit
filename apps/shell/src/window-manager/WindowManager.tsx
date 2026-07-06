@@ -88,10 +88,12 @@ let lastPrimaryPointerActivation: {
 export function WindowManager({
   actions,
   appHost,
+  externalUrlDragActive = false,
   workspace,
 }: {
   readonly actions: WindowManagerActions;
   readonly appHost: WindowManagerAppHost;
+  readonly externalUrlDragActive?: boolean;
   readonly workspace: WindowManagerWorkspace;
 }) {
   const [draggedTab, setDraggedTab] = useState<DraggedTab>();
@@ -100,6 +102,18 @@ export function WindowManager({
   const setDropTarget = (target: DropTarget | undefined) => {
     setDropTargetState((current) => sameDropTarget(current, target) ? current : target);
   };
+
+  useEffect(() => {
+    if (externalUrlDragActive) {
+      setDragShieldActive(true);
+      return;
+    }
+    if (draggedTab === undefined) {
+      setDragShieldActive(false);
+      setDropTarget(undefined);
+    }
+  }, [draggedTab, externalUrlDragActive]);
+
   const runtime = {
     actions,
     appHost,
