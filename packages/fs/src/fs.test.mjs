@@ -6,10 +6,10 @@ import { fsChildrenOfPath, fsNodeByPath, fsRowsFromTree } from './index.ts';
 void test('tree ingestion uses Pushwork path keys and keeps src as data', () => {
   const src = 'https://example.test/tiger.svg';
   const rows = fsRowsFromTree({
-    entries: {
-      nested: { entries: { 'tiger.svg': { kind: 'file', src } }, kind: 'dir' },
-      'tiger.svg': { kind: 'file', src },
-    },
+    entries: new Map([
+      ['nested', { entries: new Map([['tiger.svg', { kind: 'file', src }]]), kind: 'dir' }],
+      ['tiger.svg', { kind: 'file', src }],
+    ]),
     kind: 'dir',
   });
 
@@ -21,10 +21,10 @@ void test('tree ingestion uses Pushwork path keys and keeps src as data', () => 
 
 void test('tree ingestion passes src through without policy validation', () => {
   assert.deepEqual(fsRowsFromTree({
-    entries: {
-      'empty-src.txt': { kind: 'file', src: '' },
-      'not-url.txt': { kind: 'file', src: 'not-a-url' },
-    },
+    entries: new Map([
+      ['empty-src.txt', { kind: 'file', src: '' }],
+      ['not-url.txt', { kind: 'file', src: 'not-a-url' }],
+    ]),
     kind: 'dir',
   }), [
     { id: '/', kind: 'dir', name: '/', parentId: null, position: 0 },
@@ -33,31 +33,31 @@ void test('tree ingestion passes src through without policy validation', () => {
   ]);
 });
 
-void test('tree ingestion accepts Pushwork map entries', () => {
+void test('tree ingestion encodes keys into unambiguous paths', () => {
   assert.deepEqual(fsRowsFromTree({
     entries: new Map([
-      ['src', { entries: new Map([['main.ts', { kind: 'file', src: 'automerge:main' }]]), kind: 'dir' }],
+      ['a/b', { kind: 'file', src: 'automerge:slash' }],
+      ['a', { entries: new Map([['b', { kind: 'file', src: 'automerge:nested' }]]), kind: 'dir' }],
+      ['', { kind: 'file', src: 'automerge:empty' }],
     ]),
     kind: 'dir',
-  }), [
-    { id: '/', kind: 'dir', name: '/', parentId: null, position: 0 },
-    { id: '/src', kind: 'dir', name: 'src', parentId: '/', position: 0 },
-    { id: '/src/main.ts', kind: 'file', name: 'main.ts', parentId: '/src', position: 0, src: 'automerge:main' },
-  ]);
+  }).map((row) => row.id), ['/', '/a%2Fb', '/a', '/a/b', '/%00']);
 });
 
 void test('path identity changes on move while src can remain stable', () => {
   const src = 'automerge:file-doc#head1|head2';
 
   assert.deepEqual(fsRowsFromTree({
-    entries: { 'before.txt': { kind: 'file', src } },
+    entries: new Map([['before.txt', { kind: 'file', src }]]),
     kind: 'dir',
   }).filter((row) => row.src), [
     { id: '/before.txt', kind: 'file', name: 'before.txt', parentId: '/', position: 0, src },
   ]);
 
   assert.deepEqual(fsRowsFromTree({
-    entries: { folder: { entries: { 'after.txt': { kind: 'file', src } }, kind: 'dir' } },
+    entries: new Map([
+      ['folder', { entries: new Map([['after.txt', { kind: 'file', src }]]), kind: 'dir' }],
+    ]),
     kind: 'dir',
   }).filter((row) => row.src), [
     { id: '/folder/after.txt', kind: 'file', name: 'after.txt', parentId: '/folder', position: 0, src },

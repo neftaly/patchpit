@@ -11,4 +11,5 @@ export {
 
 export {
   fsRowsFromTree,
+  type FsTree,
 } from './tree';
