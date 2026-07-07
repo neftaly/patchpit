@@ -47,7 +47,7 @@ catalogs:
       version: 3.6.0
 
 overrides:
-  '@tarstate/core': link:../tarstate/packages/core
+  '@tarstate/core': git+https://github.com/neftaly/tarstate.git#3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e&path:/packages/core
 
 patchedDependencies:
   '@automerge/automerge-repo@2.5.6':
@@ -150,8 +150,8 @@ importers:
   packages/fs:
     dependencies:
       '@tarstate/core':
-        specifier: link:../../../tarstate/packages/core
-        version: link:../../../tarstate/packages/core
+        specifier: git+https://github.com/neftaly/tarstate.git#3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e&path:/packages/core
+        version: https://codeload.github.com/neftaly/tarstate/tar.gz/3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e#path:/packages/core
 
   packages/sandbox: {}
 
@@ -167,8 +167,8 @@ importers:
         specifier: workspace:*
         version: link:../fs
       '@tarstate/core':
-        specifier: link:../../../tarstate/packages/core
-        version: link:../../../tarstate/packages/core
+        specifier: git+https://github.com/neftaly/tarstate.git#3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e&path:/packages/core
+        version: https://codeload.github.com/neftaly/tarstate/tar.gz/3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e#path:/packages/core
 
 packages:
 
@@ -1356,6 +1356,10 @@ packages:
 
   '@swc/wasm@1.15.43':
     resolution: {integrity: sha512-jYqeckrzZGAU+9OSfmL15MWfhkKWRCC8QMssL/MZu/MaIP76mU3VHjzqxlwKIz9DOSR/9jCqi1+QlWE0ILNehA==}
+
+  '@tarstate/core@https://codeload.github.com/neftaly/tarstate/tar.gz/3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e#path:/packages/core':
+    resolution: {path: /packages/core, tarball: https://codeload.github.com/neftaly/tarstate/tar.gz/3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e}
+    version: 0.0.0
 
   '@trickfilm400/rollup-plugin-off-main-thread@3.0.0-pre1':
     resolution: {integrity: sha512-/67zpWDBLV+oYAEL682s1ktXL0HgqX76f6gaVGkGnVZlBbm1zd0v4Bz8MFF2GGhoX9rvfq3KSQHubFHwa6w6/Q==}
@@ -3585,6 +3589,8 @@ snapshots:
       '@swc/counter': 0.1.3
 
   '@swc/wasm@1.15.43': {}
+
+  '@tarstate/core@https://codeload.github.com/neftaly/tarstate/tar.gz/3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e#path:/packages/core': {}
 
   '@trickfilm400/rollup-plugin-off-main-thread@3.0.0-pre1':
     dependencies:

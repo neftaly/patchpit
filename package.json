@@ -35,7 +35,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@tarstate/core": "link:../tarstate/packages/core"
+      "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#3f1fe92e901ef70eb2a9dccdcfbe3028b422b87e&path:/packages/core"
     },
     "patchedDependencies": {
       "@automerge/automerge-repo@2.5.6": "patches/@automerge__automerge-repo@2.5.6.patch"

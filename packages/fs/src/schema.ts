@@ -1,4 +1,5 @@
 import {
+  customField,
   defineSchema,
   jsonField,
   nullable,
@@ -16,7 +17,10 @@ export type FsPath = readonly string[];
 export type FsNodeKey = readonly number[];
 
 const fsPathField = jsonField() as FieldSpec<FsPath>;
-const fsNodeKeyField = jsonField() as FieldSpec<FsNodeKey>;
+const fsNodeKeyField = customField<FsNodeKey>({
+  codec: 'patchpit.fs.nodeKey',
+  stableKey: (key) => JSON.stringify(key),
+});
 
 export const fsRelations = defineSchema({
   nodes: relation({
