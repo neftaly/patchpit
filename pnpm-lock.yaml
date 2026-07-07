@@ -108,6 +108,10 @@ importers:
         version: 19.2.7(react@19.2.7)
 
   apps/hello-world:
+    dependencies:
+      '@patchpit/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/sandbox
     devDependencies:
       vite:
         specifier: 'catalog:'

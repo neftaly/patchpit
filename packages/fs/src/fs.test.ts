@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDb, q } from '@tarstate/core/db';
-import { fsChildrenOfKey, fsNodeByKey, fsRowsFromTree } from './index.ts';
+import { fsChildrenOfKey, fsNodeByKey, fsRowsFromTree } from './index';
 
 void test('filesystem tree rows use structural keys and keep src as data', () => {
   const src = 'https://example.test/tiger.svg';

@@ -5,15 +5,15 @@ export const fsNodes = as(fsRelations.nodes, 'node');
 
 export const fsNodeByKey = pipe(
   from(fsNodes),
-  where(eq(fsNodes.key, env<FsNodeKey>('key'))),
+  where(eq(fsNodes.row.key, env<FsNodeKey>('key'))),
   limit(1),
 );
 
 export const fsChildrenOfKey = pipe(
   from(fsNodes),
-  where(eq(fsNodes.parentKey, env<FsNodeKey>('key'))),
+  where(eq(fsNodes.row.parentKey, env<FsNodeKey>('key'))),
   sort(
-    asc(fsNodes.position),
-    asc(fsNodes.name),
+    asc(fsNodes.row.position),
+    asc(fsNodes.row.name),
   ),
 );

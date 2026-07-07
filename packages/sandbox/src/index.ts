@@ -1,19 +1,25 @@
 import {
   sandboxUrlMountEntryUrl,
+  sandboxUrlMountDev,
   sandboxUrlMountProtocol,
   sandboxUrlMountScope,
   sandboxUrlMountWorkerUrl,
-  type SandboxUrlMountPath,
   type SandboxUrlMountFile,
+  type SandboxUrlMountPath,
 } from './url-mount';
 
-export type { SandboxUrlMountFile, SandboxUrlMountPath } from './url-mount';
-
 const SERVICE_WORKER_ACK_TIMEOUT_MS = 5000;
+const SANDBOX_DOCUMENT_PATH_BASE = new URL('https://sandbox.local/');
 
-export type SandboxUrlMount = {
-  readonly entryUrl: string;
-  unmount(): void;
+export type SandboxDocument = {
+  readonly url: string;
+  dispose(): void;
+};
+
+export type SandboxDocumentFile = {
+  readonly contentType: string;
+  readonly path: string;
+  readonly text: string;
 };
 
 type SandboxUrlMountMessage =
@@ -29,25 +35,31 @@ type SandboxUrlMountMessage =
       readonly type: 'unmount';
     };
 
-export async function createSandboxUrlMount({
-  entryPath,
+type SandboxUrlMountAck = {
+  readonly error?: string;
+};
+
+export async function createSandboxDocument({
+  entry,
   files,
 }: {
-  readonly entryPath: SandboxUrlMountPath;
-  readonly files: readonly SandboxUrlMountFile[];
-}): Promise<SandboxUrlMount> {
+  readonly entry: string;
+  readonly files: readonly SandboxDocumentFile[];
+}): Promise<SandboxDocument> {
+  const entryMountPath = sandboxDocumentPath(entry);
+  const mountedFiles = files.map(sandboxDocumentMountFile);
   const serviceWorker = await activeSandboxUrlMountWorker();
   const mountId = crypto.randomUUID();
   await postUrlMountMessage(serviceWorker, {
-    files,
+    files: mountedFiles,
     mountId,
     protocol: sandboxUrlMountProtocol,
     type: 'mount',
   });
 
   return {
-    entryUrl: sandboxUrlMountEntryUrl(mountId, entryPath),
-    unmount: () => {
+    url: sandboxUrlMountEntryUrl(mountId, entryMountPath),
+    dispose: () => {
       void postUrlMountMessage(serviceWorker, {
         mountId,
         protocol: sandboxUrlMountProtocol,
@@ -57,21 +69,64 @@ export async function createSandboxUrlMount({
   };
 }
 
-async function activeSandboxUrlMountWorker(): Promise<ServiceWorker> {
-  if (!('serviceWorker' in navigator)) {
-    throw new Error('Sandbox service worker is unavailable.');
+function sandboxDocumentMountFile(file: SandboxDocumentFile): SandboxUrlMountFile {
+  return {
+    contentType: file.contentType,
+    path: sandboxDocumentPath(file.path),
+    text: file.text,
+  };
+}
+
+function sandboxDocumentPath(path: string): SandboxUrlMountPath {
+  if (path.length === 0) throw new Error('Sandbox document paths must not be empty.');
+  if (path.startsWith('/') || path.startsWith('\\')) {
+    throw new Error(`Sandbox document paths must be relative: ${path}`);
   }
-  const registration = await navigator.serviceWorker.register(sandboxUrlMountWorkerUrl, { scope: sandboxUrlMountScope });
-  if (registration.active !== null) return registration.active;
-  const serviceWorker = registration.installing ?? registration.waiting;
+
+  const url = new URL(path, SANDBOX_DOCUMENT_PATH_BASE);
+  if (url.origin !== SANDBOX_DOCUMENT_PATH_BASE.origin) {
+    throw new Error(`Sandbox document paths must be relative: ${path}`);
+  }
+  if (url.search !== '' || url.hash !== '') {
+    throw new Error(`Sandbox document paths must not include a query or fragment: ${path}`);
+  }
+
+  const pathKey = url.pathname.slice(1);
+  if (pathKey === '') throw new Error(`Sandbox document paths must name a file: ${path}`);
+
+  const pathSegments = pathKey.split('/').map((segment) => decodeURIComponent(segment));
+  const [firstSegment, ...remainingSegments] = pathSegments;
+  if (firstSegment === undefined) throw new Error(`Sandbox document paths must name a file: ${path}`);
+
+  return [firstSegment, ...remainingSegments];
+}
+
+async function activeSandboxUrlMountWorker(): Promise<ServiceWorker> {
+  const registration = await sandboxUrlMountWorkerRegistration();
+  if (sandboxUrlMountDev) await registration.update();
+  const serviceWorker = sandboxUrlMountDev
+    ? registration.installing ?? registration.waiting ?? registration.active
+    : registration.active ?? registration.installing ?? registration.waiting;
   if (serviceWorker === null) {
     throw new Error('Sandbox service worker registration did not create a worker.');
   }
+  if (serviceWorker.state === 'activated') return serviceWorker;
+  if (serviceWorker.state === 'redundant') throw new Error('Sandbox service worker became redundant.');
   return new Promise((resolve, reject) => {
     serviceWorker.addEventListener('statechange', () => {
       if (serviceWorker.state === 'activated') resolve(serviceWorker);
       if (serviceWorker.state === 'redundant') reject(new Error('Sandbox service worker became redundant.'));
     });
+  });
+}
+
+async function sandboxUrlMountWorkerRegistration(): Promise<ServiceWorkerRegistration> {
+  if (!('serviceWorker' in navigator)) {
+    throw new Error('Sandbox service worker is unavailable.');
+  }
+  return navigator.serviceWorker.register(sandboxUrlMountWorkerUrl, {
+    scope: sandboxUrlMountScope,
+    type: 'module',
   });
 }
 
@@ -82,10 +137,11 @@ function postUrlMountMessage(serviceWorker: ServiceWorker, message: SandboxUrlMo
       channel.port1.close();
       reject(new Error('Sandbox service worker did not acknowledge the message.'));
     }, SERVICE_WORKER_ACK_TIMEOUT_MS);
-    channel.port1.addEventListener('message', () => {
+    channel.port1.addEventListener('message', (event: MessageEvent<SandboxUrlMountAck>) => {
       clearTimeout(timeout);
       channel.port1.close();
-      resolve();
+      if (event.data?.error !== undefined) reject(new Error(event.data.error));
+      else resolve();
     }, { once: true });
     channel.port1.start();
     try {

@@ -1,9 +1,3 @@
-import {
-  projectRowsTree,
-  projectTreeRows,
-  type FsProjectedTree,
-  type FsTree,
-} from '@patchpit/fs';
 import { buildFilesystem, type FilesystemNode } from './tree';
 import { mimeTypeFromFileName } from './resources';
 import {
@@ -118,13 +112,18 @@ function filesystemTreeRowsFromIndex(
     : { diagnostics: [], rows: projectTreeRows(materialized.node) };
 }
 
-type PatchpitFilesystemTreeNode = FsTree<FolderEntry & {
+type PatchpitFilesystemTreeNode = FolderEntry & {
   readonly kind: FilesystemTreeNodeKind;
   readonly mediaType: string | null;
   readonly sourceUrl: string | null;
   readonly text: string;
   readonly title: string | null;
-}>;
+  readonly entries?: readonly PatchpitFilesystemTreeNode[];
+};
+
+type ProjectedFilesystemTreeRow = FilesystemTreeNodeRow & {
+  readonly entries?: readonly ProjectedFilesystemTreeRow[];
+};
 
 type FilesystemTreeMaterialization = {
   readonly diagnostics: readonly unknown[];
@@ -230,7 +229,7 @@ function isFilesystemTreeNodeRow(value: unknown): value is FilesystemTreeNodeRow
   );
 }
 
-function filesystemNodeFromProjectedTree(tree: FsProjectedTree<FilesystemTreeNodeRow>): FilesystemNode {
+function filesystemNodeFromProjectedTree(tree: ProjectedFilesystemTreeRow): FilesystemNode {
   if (tree.kind === 'file') {
     return {
       id: tree.id,
@@ -293,4 +292,73 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function isAutomergeUrl(url: string): boolean {
   return url.startsWith('automerge:');
+}
+
+function projectTreeRows(
+  root: PatchpitFilesystemTreeNode,
+  id = '/',
+  parentId: string | null = null,
+  position = 0,
+): readonly FilesystemTreeNodeRow[] {
+  const { entries: childNodes = [], ...node } = root;
+  const row = {
+    ...node,
+    id,
+    isRoot: parentId === null,
+    parentId,
+    position,
+  };
+
+  return [
+    row,
+    ...childNodes.flatMap((child, childPosition) =>
+      projectTreeRows(child, legacyTreePath(id, child.name), id, childPosition)),
+  ];
+}
+
+function projectRowsTree(
+  rows: readonly FilesystemTreeNodeRow[],
+  {
+    canHaveChildren,
+    rootId,
+  }: {
+    readonly canHaveChildren: (row: FilesystemTreeNodeRow) => boolean;
+    readonly rootId: string;
+  },
+): { readonly diagnostics: readonly unknown[]; readonly root: ProjectedFilesystemTreeRow | null } {
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const root = rowsById.get(rootId);
+  if (root === undefined) return { diagnostics: [`Missing filesystem tree root ${rootId}.`], root: null };
+
+  const childRowsByParentId = new Map<string, readonly FilesystemTreeNodeRow[]>(
+    rows
+      .filter((row) => row.parentId !== null)
+      .map((row) => row.parentId as string)
+      .map((parentId) => [
+        parentId,
+        rows
+          .filter((row) => row.parentId === parentId)
+          .sort((left, right) => left.position - right.position || left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
+      ]),
+  );
+
+  return { diagnostics: [], root: projectedTreeRow(root, childRowsByParentId, canHaveChildren) };
+}
+
+function projectedTreeRow(
+  row: FilesystemTreeNodeRow,
+  childRowsByParentId: ReadonlyMap<string, readonly FilesystemTreeNodeRow[]>,
+  canHaveChildren: (row: FilesystemTreeNodeRow) => boolean,
+): ProjectedFilesystemTreeRow {
+  return canHaveChildren(row)
+    ? {
+        ...row,
+        entries: (childRowsByParentId.get(row.id) ?? []).map((child) =>
+          projectedTreeRow(child, childRowsByParentId, canHaveChildren)),
+      }
+    : row;
+}
+
+function legacyTreePath(parentId: string, name: string): string {
+  return parentId === '/' ? `/${name}` : `${parentId}/${name}`;
 }

@@ -20,9 +20,9 @@ export default defineConfig({
     wasm(),
     topLevelAwait(),
     VitePWA({
-      devOptions: { enabled: true },
+      devOptions: { enabled: true, type: 'module' },
       filename: 'sandbox-url-mount-sw.ts',
-      injectManifest: { injectionPoint: undefined },
+      injectManifest: { injectionPoint: '' },
       injectRegister: false,
       manifest: false,
       srcDir: 'packages/sandbox/src',

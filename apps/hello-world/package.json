@@ -6,6 +6,9 @@
   "scripts": {
     "build": "vite build"
   },
+  "dependencies": {
+    "@patchpit/sandbox": "workspace:*"
+  },
   "devDependencies": {
     "vite": "catalog:"
   }

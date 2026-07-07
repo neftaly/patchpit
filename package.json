@@ -17,7 +17,7 @@
     "lint": "oxlint . --ignore-pattern archive/** --deny-warnings --type-aware",
     "smoke": "pnpm build && node scripts/smoke.mjs",
     "smoke:pages": "pnpm build:pages && node scripts/smoke.mjs --base=/patchpit/",
-    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/fs/src/fs.test.ts apps/shell/src/runtime/bootstrap-runtime.test.mjs",
+    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/fs/src/fs.test.ts packages/sandbox/src/index.test.ts packages/sandbox/src/url-mount.test.ts packages/sandbox/src/sandbox-url-mount-sw.test.ts apps/shell/src/runtime/bootstrap-runtime.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
