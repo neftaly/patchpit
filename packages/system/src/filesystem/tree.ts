@@ -9,12 +9,14 @@ export type FilesystemNode =
   | {
       readonly kind: 'folder';
       readonly entries: readonly FilesystemNode[];
+      readonly id: string;
       readonly name: string;
       readonly text: string;
       readonly url: string;
     }
   | {
       readonly kind: 'file';
+      readonly id: string;
       readonly mediaType: string;
       readonly name: string;
       readonly sourceUrl: string | null;
@@ -28,6 +30,7 @@ export function buildFilesystem(
 ): FilesystemNode {
   return filesystemNodeFromEntry(
     { name: '/', type: PatchpitType.Folder, url: rootUrl },
+    '/',
     mapIndexRowsByUrl(indexRows),
   );
 }
@@ -54,10 +57,11 @@ export function nodePath(node: FilesystemNode, url: string, path = '/'): string 
 
 function filesystemNodeFromEntry(
   entry: FolderEntry,
+  id: string,
   indexRowsByUrl: ReadonlyMap<string, FilesystemIndexRow>,
 ): FilesystemNode {
   if (entry.type !== PatchpitType.Folder) {
-    return fileNodeFromEntry(entry, indexRowsByUrl.get(entry.url));
+    return fileNodeFromEntry(entry, id, indexRowsByUrl.get(entry.url));
   }
 
   const indexRow = indexRowsByUrl.get(entry.url);
@@ -67,7 +71,8 @@ function filesystemNodeFromEntry(
 
   return {
     entries: folderEntriesFromIndexField(indexRow.entries)
-      .map((childEntry) => filesystemNodeFromEntry(childEntry, indexRowsByUrl)),
+      .map((childEntry) => filesystemNodeFromEntry(childEntry, joinPath(id, childEntry.name), indexRowsByUrl)),
+    id,
     kind: 'folder',
     name: indexRow.title || entry.name,
     text: indexRow.content ?? '',
@@ -75,12 +80,17 @@ function filesystemNodeFromEntry(
   };
 }
 
-function fileNodeFromEntry(entry: FolderEntry, indexRow: FilesystemIndexRow | undefined): FilesystemNode {
+function fileNodeFromEntry(
+  entry: FolderEntry,
+  id: string,
+  indexRow: FilesystemIndexRow | undefined,
+): FilesystemNode {
   return {
+    id,
     kind: 'file',
     mediaType: indexRow?.mimeType ?? mimeTypeFromFileName(entry.name),
     name: entry.name,
-    sourceUrl: isExternalUrl(entry.url) ? entry.url : null,
+    sourceUrl: indexRow === undefined && !isAutomergeUrl(entry.url) ? entry.url : null,
     text: indexRow?.content ?? '',
     url: entry.url,
   };
@@ -105,13 +115,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isExternalUrl(url: string): boolean {
-  try {
-    const protocol = new URL(url).protocol;
-    return protocol === 'https:' || protocol === 'http:';
-  } catch {
-    return false;
-  }
+function isAutomergeUrl(url: string): boolean {
+  return url.startsWith('automerge:');
 }
 
 function joinPath(parent: string, name: string): string {

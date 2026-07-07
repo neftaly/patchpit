@@ -1,3 +1,9 @@
+import {
+  projectRowsTree,
+  projectTreeRows,
+  type FsProjectedTree,
+  type FsTree,
+} from '@patchpit/fs';
 import { buildFilesystem, type FilesystemNode } from './tree';
 import { mimeTypeFromFileName } from './resources';
 import {
@@ -74,60 +80,20 @@ export function projectFilesystemTree(
 
 export function projectFilesystemTreeFromRows(
   treeRowInputs: readonly unknown[],
-  rootUrl: string,
+  rootId = '/',
 ): ProjectedFilesystem {
   const parsedTreeRows = parseFilesystemTreeRows(treeRowInputs);
   if (parsedTreeRows.diagnostics.length > 0) {
     return { diagnostics: parsedTreeRows.diagnostics, root: null };
   }
 
-  const diagnostics: unknown[] = [];
-  const treeRowsByUrl = new Map<string, FilesystemTreeNodeRow>();
-  let rootRowCount = 0;
-  for (const treeRow of parsedTreeRows.rows) {
-    if (treeRowsByUrl.has(treeRow.url)) diagnostics.push(`Duplicate filesystem tree row for ${treeRow.url}.`);
-    if (treeRow.isRoot) rootRowCount += 1;
-    treeRowsByUrl.set(treeRow.url, treeRow);
-  }
-
-  if (rootRowCount !== 1) {
-    diagnostics.push(`Expected exactly one filesystem tree root row, found ${rootRowCount}.`);
-  }
-
-  const rootRow = treeRowsByUrl.get(rootUrl);
-  if (rootRow === undefined) diagnostics.push(`Missing filesystem tree root row for ${rootUrl}.`);
-  else if (!rootRow.isRoot || rootRow.parentUrl !== null) {
-    diagnostics.push(`Filesystem tree root row for ${rootUrl} must be marked as the root.`);
-  }
-
-  const childRowsByParentUrl = new Map<string, FilesystemTreeNodeRow[]>();
-  for (const treeRow of parsedTreeRows.rows) {
-    if (treeRow.isRoot !== (treeRow.parentUrl === null)) {
-      diagnostics.push(`Filesystem tree row ${treeRow.url} has inconsistent root metadata.`);
-    }
-    if (treeRow.parentUrl === null) continue;
-    const parentRow = treeRowsByUrl.get(treeRow.parentUrl);
-    if (parentRow === undefined) {
-      diagnostics.push(`Filesystem tree row ${treeRow.url} references missing parent ${treeRow.parentUrl}.`);
-      continue;
-    }
-    if (parentRow.kind !== 'folder') {
-      diagnostics.push(`Filesystem tree row ${treeRow.url} references non-folder parent ${treeRow.parentUrl}.`);
-      continue;
-    }
-    const childRows = childRowsByParentUrl.get(treeRow.parentUrl) ?? [];
-    childRows.push(treeRow);
-    childRowsByParentUrl.set(treeRow.parentUrl, childRows);
-  }
-
-  if (rootRow === undefined || diagnostics.length > 0) {
-    return { diagnostics, root: null };
-  }
-
-  const projectedRoot = filesystemNodeFromTreeRow(rootRow, childRowsByParentUrl, new Set(), diagnostics);
-  return diagnostics.length > 0
-    ? { diagnostics, root: null }
-    : { diagnostics: [], root: projectedRoot };
+  const projection = projectRowsTree(parsedTreeRows.rows, {
+    canHaveChildren: (row) => row.kind === 'folder',
+    rootId,
+  });
+  return projection.root === null
+    ? { diagnostics: projection.diagnostics, root: null }
+    : { diagnostics: [], root: filesystemNodeFromProjectedTree(projection.root) };
 }
 
 export function filesystemTreeProjectionRelations(
@@ -140,98 +106,116 @@ function filesystemTreeRowsFromIndex(
   indexRows: readonly FilesystemIndexRow[],
   rootUrl: string,
 ): FilesystemTreeProjection {
-  const diagnostics: unknown[] = [];
   const indexRowsByUrl = mapIndexRowsByUrl(indexRows);
-  const treeRows: FilesystemTreeNodeRow[] = [];
-
-  appendFilesystemTreeRows(
+  const materialized = filesystemTreeFromIndexEntry(
     { name: '/', type: PatchpitType.Folder, url: rootUrl },
-    { isRoot: true, parentUrl: null, position: 0 },
     indexRowsByUrl,
-    treeRows,
-    diagnostics,
     new Set(),
   );
 
-  return diagnostics.length > 0
-    ? { diagnostics, rows: [] }
-    : { diagnostics: [], rows: treeRows };
+  return materialized.diagnostics.length > 0
+    ? { diagnostics: materialized.diagnostics, rows: [] }
+    : { diagnostics: [], rows: projectTreeRows(materialized.node) };
 }
 
-function appendFilesystemTreeRows(
+type PatchpitFilesystemTreeNode = FsTree<FolderEntry & {
+  readonly kind: FilesystemTreeNodeKind;
+  readonly mediaType: string | null;
+  readonly sourceUrl: string | null;
+  readonly text: string;
+  readonly title: string | null;
+}>;
+
+type FilesystemTreeMaterialization = {
+  readonly diagnostics: readonly unknown[];
+  readonly node: PatchpitFilesystemTreeNode;
+};
+
+function filesystemTreeFromIndexEntry(
   entry: FolderEntry,
-  placement: { readonly isRoot: boolean; readonly parentUrl: string | null; readonly position: number },
   indexRowsByUrl: ReadonlyMap<string, FilesystemIndexRow>,
-  treeRows: FilesystemTreeNodeRow[],
-  diagnostics: unknown[],
   ancestors: Set<string>,
-): void {
+): FilesystemTreeMaterialization {
   if (ancestors.has(entry.url)) {
-    diagnostics.push(`Filesystem tree contains a cycle at ${entry.url}.`);
-    return;
+    return {
+      diagnostics: [`Filesystem tree contains a cycle at ${entry.url}.`],
+      node: emptyFilesystemTreeNode(entry),
+    };
   }
 
   const indexRow = indexRowsByUrl.get(entry.url);
   const kind = treeNodeKind(entry.type);
   if (kind === 'folder' && indexRow === undefined) {
-    diagnostics.push(`Missing folder document for ${entry.url}.`);
-    return;
+    return {
+      diagnostics: [`Missing folder document for ${entry.url}.`],
+      node: emptyFilesystemTreeNode(entry),
+    };
+  }
+  if (kind === 'file' && indexRow === undefined && isAutomergeUrl(entry.url)) {
+    return {
+      diagnostics: [`Missing file document for ${entry.url}.`],
+      node: emptyFilesystemTreeNode(entry),
+    };
   }
 
-  treeRows.push({
-    isRoot: placement.isRoot,
+  const node = {
     kind,
     mediaType: kind === 'file' ? indexRow?.mimeType ?? mimeTypeFromFileName(entry.name) : null,
     name: kind === 'folder' ? indexRow?.title || entry.name : entry.name,
-    parentUrl: placement.parentUrl,
-    position: placement.position,
-    sourceUrl: kind === 'file' && isExternalUrl(entry.url) ? entry.url : null,
+    sourceUrl: kind === 'file' && indexRow === undefined ? entry.url : null,
     text: indexRow?.content ?? '',
     title: indexRow?.title ?? null,
     type: indexRow?.type ?? entry.type,
     url: entry.url,
-  });
+  };
 
-  if (kind !== 'folder') return;
+  if (kind !== 'folder') return { diagnostics: [], node };
 
-  ancestors.add(entry.url);
-  const childEntries = folderEntriesFromIndexField(indexRow?.entries);
-  childEntries.forEach((childEntry, position) => {
-    appendFilesystemTreeRows(
-      childEntry,
-      { isRoot: false, parentUrl: entry.url, position },
-      indexRowsByUrl,
-      treeRows,
-      diagnostics,
-      ancestors,
-    );
-  });
-  ancestors.delete(entry.url);
+  const childAncestorUrls = new Set([...ancestors, entry.url]);
+  const childMaterializations = folderEntriesFromIndexField(indexRow?.entries)
+    .map((childEntry) => filesystemTreeFromIndexEntry(childEntry, indexRowsByUrl, childAncestorUrls));
+
+  return {
+    diagnostics: childMaterializations.flatMap((child) => child.diagnostics),
+    node: {
+      ...node,
+      entries: childMaterializations.map((child) => child.node),
+    },
+  };
+}
+
+function emptyFilesystemTreeNode(entry: FolderEntry): PatchpitFilesystemTreeNode {
+  const kind = treeNodeKind(entry.type);
+  return {
+    kind,
+    mediaType: kind === 'file' ? mimeTypeFromFileName(entry.name) : null,
+    name: entry.name,
+    sourceUrl: null,
+    text: '',
+    title: null,
+    type: entry.type,
+    url: entry.url,
+  };
 }
 
 function parseFilesystemTreeRows(candidateRows: readonly unknown[]): {
   readonly diagnostics: readonly unknown[];
   readonly rows: readonly FilesystemTreeNodeRow[];
 } {
-  const diagnostics: unknown[] = [];
-  const treeRows: FilesystemTreeNodeRow[] = [];
-
-  candidateRows.forEach((candidateRow, index) => {
-    if (!isFilesystemTreeNodeRow(candidateRow)) {
-      diagnostics.push(`Invalid filesystem tree row at index ${index}.`);
-      return;
-    }
-    treeRows.push(candidateRow);
-  });
-
-  return { diagnostics, rows: treeRows };
+  return {
+    diagnostics: candidateRows.flatMap((candidateRow, index) => (
+      isFilesystemTreeNodeRow(candidateRow) ? [] : [`Invalid filesystem tree row at index ${index}.`]
+    )),
+    rows: candidateRows.filter(isFilesystemTreeNodeRow),
+  };
 }
 
 function isFilesystemTreeNodeRow(value: unknown): value is FilesystemTreeNodeRow {
   if (!isRecord(value)) return false;
   return (
-    typeof value.url === 'string'
-    && (value.parentUrl === null || typeof value.parentUrl === 'string')
+    typeof value.id === 'string'
+    && typeof value.url === 'string'
+    && (value.parentId === null || typeof value.parentId === 'string')
     && typeof value.isRoot === 'boolean'
     && typeof value.position === 'number'
     && Number.isInteger(value.position)
@@ -246,45 +230,27 @@ function isFilesystemTreeNodeRow(value: unknown): value is FilesystemTreeNodeRow
   );
 }
 
-function filesystemNodeFromTreeRow(
-  treeRow: FilesystemTreeNodeRow,
-  childrenByParent: ReadonlyMap<string, readonly FilesystemTreeNodeRow[]>,
-  ancestors: Set<string>,
-  diagnostics: unknown[],
-): FilesystemNode {
-  if (treeRow.kind === 'file') {
+function filesystemNodeFromProjectedTree(tree: FsProjectedTree<FilesystemTreeNodeRow>): FilesystemNode {
+  if (tree.kind === 'file') {
     return {
+      id: tree.id,
       kind: 'file',
-      mediaType: treeRow.mediaType ?? mimeTypeFromFileName(treeRow.name),
-      name: treeRow.name,
-      sourceUrl: treeRow.sourceUrl,
-      text: treeRow.text,
-      url: treeRow.url,
+      mediaType: tree.mediaType ?? mimeTypeFromFileName(tree.name),
+      name: tree.name,
+      sourceUrl: tree.sourceUrl,
+      text: tree.text,
+      url: tree.url,
     };
   }
 
-  if (ancestors.has(treeRow.url)) {
-    diagnostics.push(`Filesystem tree contains a cycle at ${treeRow.url}.`);
-    return { entries: [], kind: 'folder', name: treeRow.name, text: treeRow.text, url: treeRow.url };
-  }
-
-  ancestors.add(treeRow.url);
-  const childNodes = [...(childrenByParent.get(treeRow.url) ?? [])]
-    .sort(compareFilesystemTreeRows)
-    .map((child) => filesystemNodeFromTreeRow(child, childrenByParent, ancestors, diagnostics));
-  ancestors.delete(treeRow.url);
-
   return {
-    entries: childNodes,
+    entries: (tree.entries ?? []).map(filesystemNodeFromProjectedTree),
+    id: tree.id,
     kind: 'folder',
-    name: treeRow.name,
-    text: treeRow.text,
-    url: treeRow.url,
+    name: tree.name,
+    text: tree.text,
+    url: tree.url,
   };
-}
-
-function compareFilesystemTreeRows(left: FilesystemTreeNodeRow, right: FilesystemTreeNodeRow): number {
-  return left.position - right.position || left.name.localeCompare(right.name) || left.url.localeCompare(right.url);
 }
 
 function projectFilesystemIndexRow(row: FilesystemIndexRow): FilesystemIndexRow {
@@ -321,15 +287,10 @@ function isFilesystemTreeNodeKind(value: unknown): value is FilesystemTreeNodeKi
   return value === 'folder' || value === 'file';
 }
 
-function isExternalUrl(url: string): boolean {
-  try {
-    const protocol = new URL(url).protocol;
-    return protocol === 'https:' || protocol === 'http:';
-  } catch {
-    return false;
-  }
-}
-
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isAutomergeUrl(url: string): boolean {
+  return url.startsWith('automerge:');
 }

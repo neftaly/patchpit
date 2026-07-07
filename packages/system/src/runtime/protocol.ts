@@ -189,11 +189,12 @@ export const workspaceSurfacesRelation = 'surfaces' as const;
 
 export type FilesystemTreeNodeKind = 'folder' | 'file';
 export type FilesystemTreeNodeRow = {
+  readonly id: string;
   readonly isRoot: boolean;
   readonly kind: FilesystemTreeNodeKind;
   readonly mediaType: string | null;
   readonly name: string;
-  readonly parentUrl: string | null;
+  readonly parentId: string | null;
   readonly position: number;
   readonly sourceUrl: string | null;
   readonly text: string;

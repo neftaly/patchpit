@@ -3,8 +3,7 @@ import "./style.css";
 const app = document.querySelector("#app");
 
 app.innerHTML = `
-  <section>
-    <h1>Hello World</h1>
-    <p>Hello from ${document.location.href}</p>
-  </section>
+  <p>hello world</p>
+  <img src="./relative-poc.svg" />
+  <img src="./ghostscript-tiger.svg" />
 `;

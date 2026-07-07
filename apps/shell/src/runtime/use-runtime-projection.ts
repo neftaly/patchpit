@@ -53,7 +53,7 @@ export function useFilesystemTreeProjection(
           schemaId: filesystemTreeSchemaId,
           basis: { kind: 'live' },
         },
-        (event) => setProjection(filesystemFromProjectionEvent(event, rootUrl)),
+        (event) => setProjection(filesystemFromProjectionEvent(event)),
       );
     } catch (error) {
       setProjection({ status: 'failed', failure: runtimeProjectionFailureFromUnknownError(error) });
@@ -94,19 +94,16 @@ export function useWorkspaceProjection(runtime: RuntimeClient): WorkspaceProject
   return projection;
 }
 
-function filesystemFromProjectionEvent(
-  event: ProjectionEvent,
-  rootUrl: string,
-): FilesystemTreeProjectionState {
+function filesystemFromProjectionEvent(event: ProjectionEvent): FilesystemTreeProjectionState {
   if (event.type === 'error') {
     return { status: 'failed', failure: runtimeProjectionFailureFromRuntimeError(event.error) };
   }
-  return filesystemFromRelationSet(event.snapshot.relations, rootUrl);
+  return filesystemFromRelationSet(event.snapshot.relations);
 }
 
-function filesystemFromRelationSet(relations: RelationSet, rootUrl: string): FilesystemTreeProjectionState {
+function filesystemFromRelationSet(relations: RelationSet): FilesystemTreeProjectionState {
   const rows = relationRows<unknown>(relations, filesystemTreeNodesRelation);
-  const filesystem = projectFilesystemTreeFromRows(rows, rootUrl);
+  const filesystem = projectFilesystemTreeFromRows(rows);
   if (filesystem.root !== null) return { status: 'ready', filesystem, root: filesystem.root };
 
   return {

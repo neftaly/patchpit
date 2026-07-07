@@ -156,11 +156,12 @@ export const filesystemTreeSchema = defineRelationSchema({
   }),
   relations: {
     [filesystemTreeNodesRelation]: {
-      key: 'url',
+      key: 'id',
       metadata: relationMetadata({
         lifecycle: 'derived-projection',
       }),
       fields: {
+        id: idField('filesystemNodePath'),
         isRoot: { type: 'boolean' },
         kind: {
           type: 'string',
@@ -168,13 +169,13 @@ export const filesystemTreeSchema = defineRelationSchema({
         },
         mediaType: { type: 'string', nullable: true },
         name: { type: 'string' },
-        parentUrl: { ...refField(filesystemTreeNodesRelation, 'url'), nullable: true },
+        parentId: { ...refField(filesystemTreeNodesRelation), nullable: true },
         position: { type: 'number' },
         sourceUrl: { type: 'string', nullable: true },
         text: { type: 'string' },
         title: { type: 'string', nullable: true },
         type: { type: 'string' },
-        url: idField('filesystemNodeUrl'),
+        url: { type: 'string' },
       },
     },
   },
@@ -596,7 +597,7 @@ const patchpitSystemSchemaHashes = {
   'patchpit.filesystem.fileTypes@1': 'sha256:0815c5b29b35282153e5a1db2e97c1c6d0f07772c286076d940a0c03a464cf97',
   'patchpit.filesystem.folder@1': 'sha256:b66316f285cdf8772105be4f6ef9de97eba1f4faf9795c07d8915f5c6f84907d',
   'patchpit.filesystem.index@1': 'sha256:9a4c2b0e876f84c540ab95aa5faddfcd86860754b76fe605338feb04508744a0',
-  'patchpit.filesystem.tree@1': 'sha256:ee3cf0878502927b4b7f90839f8f10cfa8f7d8a4ad740142c6d3d0c5ce9aa168',
+  'patchpit.filesystem.tree@1': 'sha256:22a88782707c57ef1eef6c205a688713e410a0b9e86715560b851eb7867ce8ad',
   'patchpit.intent.appLaunch@1': 'sha256:80a59ccf64319d9f64b6411523ea5097da1fa1f59a017487b4928a32d7b6b19a',
   'patchpit.intent.filePicker@1': 'sha256:9d22ea794acb16f21159f3a41ee2f7b5085579d4d91b168cbd20af465dffc970',
   'patchpit.intent.route@1': 'sha256:b788b4f922f50dc25d36141190ec1872e8d1ec24cc0cbc205235c6a88f2bbf85',

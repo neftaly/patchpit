@@ -4,7 +4,7 @@ packages:
 
 catalog:
   '@automerge/automerge': ^3.2.6
-  '@tarstate/core': git+https://github.com/neftaly/tarstate.git#1fb2d130ef6cb01532765962b271f74b5aea82b6&path:/packages/core
+  '@tarstate/core': link:../tarstate/packages/core
   '@types/node': ^24.10.3
   '@types/react': ^19.2.17
   '@types/react-dom': ^19.2.3

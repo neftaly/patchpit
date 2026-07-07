@@ -17,7 +17,7 @@
     "lint": "oxlint . --ignore-pattern archive/** --deny-warnings --type-aware",
     "smoke": "pnpm build && node scripts/smoke.mjs",
     "smoke:pages": "pnpm build:pages && node scripts/smoke.mjs --base=/patchpit/",
-    "test": "node --import ./scripts/register-ts-loader.mjs --test apps/shell/src/runtime/bootstrap-runtime.test.mjs",
+    "test": "node --import ./scripts/register-ts-loader.mjs --test packages/fs/src/fs.test.mjs apps/shell/src/runtime/bootstrap-runtime.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -34,7 +34,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@tarstate/core": "git+https://github.com/neftaly/tarstate.git#1fb2d130ef6cb01532765962b271f74b5aea82b6&path:/packages/core"
+      "@tarstate/core": "link:../tarstate/packages/core"
     },
     "patchedDependencies": {
       "@automerge/automerge-repo@2.5.6": "patches/@automerge__automerge-repo@2.5.6.patch"

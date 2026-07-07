@@ -1,7 +1,12 @@
-export type SeedAppPackageFile = {
-  readonly content: string;
-  readonly name: string;
-};
+export type SeedAppPackageFile =
+  | {
+      readonly content: string;
+      readonly name: string;
+    }
+  | {
+      readonly name: string;
+      readonly url: string;
+    };
 
 export type SeedAppPackageDefinition = {
   readonly entry: string;
@@ -32,12 +37,20 @@ export const seedAppPackages = [
         "name": "assets/index.css"
       },
       {
-        "content": "true              &&(function polyfill() {\n\tconst relList = document.createElement(\"link\").relList;\n\tif (relList && relList.supports && relList.supports(\"modulepreload\")) return;\n\tfor (const link of document.querySelectorAll(\"link[rel=\\\"modulepreload\\\"]\")) processPreload(link);\n\tnew MutationObserver((mutations) => {\n\t\tfor (const mutation of mutations) {\n\t\t\tif (mutation.type !== \"childList\") continue;\n\t\t\tfor (const node of mutation.addedNodes) if (node.tagName === \"LINK\" && node.rel === \"modulepreload\") processPreload(node);\n\t\t}\n\t}).observe(document, {\n\t\tchildList: true,\n\t\tsubtree: true\n\t});\n\tfunction getFetchOpts(link) {\n\t\tconst fetchOpts = {};\n\t\tif (link.integrity) fetchOpts.integrity = link.integrity;\n\t\tif (link.referrerPolicy) fetchOpts.referrerPolicy = link.referrerPolicy;\n\t\tif (link.crossOrigin === \"use-credentials\") fetchOpts.credentials = \"include\";\n\t\telse if (link.crossOrigin === \"anonymous\") fetchOpts.credentials = \"omit\";\n\t\telse fetchOpts.credentials = \"same-origin\";\n\t\treturn fetchOpts;\n\t}\n\tfunction processPreload(link) {\n\t\tif (link.ep) return;\n\t\tlink.ep = true;\n\t\tconst fetchOpts = getFetchOpts(link);\n\t\tfetch(link.href, fetchOpts);\n\t}\n}());\n\nconst app = document.querySelector(\"#app\");\n\napp.innerHTML = `\n  <section>\n    <h1>Hello World</h1>\n    <p>Hello from ${document.location.href}</p>\n  </section>\n`;\n",
+        "content": "true              &&(function polyfill() {\n\tconst relList = document.createElement(\"link\").relList;\n\tif (relList && relList.supports && relList.supports(\"modulepreload\")) return;\n\tfor (const link of document.querySelectorAll(\"link[rel=\\\"modulepreload\\\"]\")) processPreload(link);\n\tnew MutationObserver((mutations) => {\n\t\tfor (const mutation of mutations) {\n\t\t\tif (mutation.type !== \"childList\") continue;\n\t\t\tfor (const node of mutation.addedNodes) if (node.tagName === \"LINK\" && node.rel === \"modulepreload\") processPreload(node);\n\t\t}\n\t}).observe(document, {\n\t\tchildList: true,\n\t\tsubtree: true\n\t});\n\tfunction getFetchOpts(link) {\n\t\tconst fetchOpts = {};\n\t\tif (link.integrity) fetchOpts.integrity = link.integrity;\n\t\tif (link.referrerPolicy) fetchOpts.referrerPolicy = link.referrerPolicy;\n\t\tif (link.crossOrigin === \"use-credentials\") fetchOpts.credentials = \"include\";\n\t\telse if (link.crossOrigin === \"anonymous\") fetchOpts.credentials = \"omit\";\n\t\telse fetchOpts.credentials = \"same-origin\";\n\t\treturn fetchOpts;\n\t}\n\tfunction processPreload(link) {\n\t\tif (link.ep) return;\n\t\tlink.ep = true;\n\t\tconst fetchOpts = getFetchOpts(link);\n\t\tfetch(link.href, fetchOpts);\n\t}\n}());\n\nconst app = document.querySelector(\"#app\");\n\napp.innerHTML = `\n  <p>hello world</p>\n  <img src=\"./relative-poc.svg\" />\n  <img src=\"./ghostscript-tiger.svg\" />\n`;\n",
         "name": "assets/index.js"
       },
       {
         "content": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Hello World</title>\n    <script type=\"module\" crossorigin src=\"./assets/index.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"./assets/index.css\">\n  </head>\n  <body>\n    <main id=\"app\"></main>\n  </body>\n</html>\n",
         "name": "index.html"
+      },
+      {
+        "content": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 48\"><text x=\"60\" y=\"28\" text-anchor=\"middle\">relative ok</text></svg>\n",
+        "name": "relative-poc.svg"
+      },
+      {
+        "name": "ghostscript-tiger.svg",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg"
       }
     ],
     "id": "hello-world"

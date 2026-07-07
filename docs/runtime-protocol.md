@@ -564,8 +564,9 @@ relation:
 relations.nodes: FilesystemTreeNodeRow[];
 
 type FilesystemTreeNodeRow = {
+  id: string;
   url: string;
-  parentUrl: string | null;
+  parentId: string | null;
   isRoot: boolean;
   position: number;
   name: string;
@@ -578,10 +579,12 @@ type FilesystemTreeNodeRow = {
 };
 ```
 
-`url` identifies the backing resource. `parentUrl`, `isRoot`, and `position`
-describe the projected tree shape without exposing folder `entries` blobs.
-`kind` is the UI tree kind; `type` is the Patchpit document/resource type.
-`mediaType`, `sourceUrl`, and `text` carry the current viewer metadata. A
+`id` identifies this occurrence in the projected tree. `url` identifies the
+backing resource or linked source string, so multiple tree rows may share the
+same `url`. `parentId`, `isRoot`, and `position` describe the projected tree
+shape without exposing folder `entries` blobs. `kind` is the UI tree kind; `type`
+is the Patchpit document/resource type. `mediaType`, `sourceUrl`, and `text`
+carry the current viewer metadata. A
 runtime may derive this relation from `FilesystemIndexDoc`, but must not expose
 `FilesystemIndexRow`, `filesystemIndex.documents`, or a public `documents`
 relation for this projection.

@@ -42,21 +42,26 @@ for (const app of seedApps) {
     },
     configFile: false,
     logLevel: 'warn',
-    publicDir: false,
+    publicDir: app.source === 'vite' ? 'public' : false,
     root: sourceRoot,
   });
 
   packages.push({
     entry: app.entry,
-    files: await bundleFiles(outDir),
+    files: [...(await bundleFiles(outDir)), ...(app.files ?? [])],
     id: app.id,
   });
 }
 
-const fixtureSource = `export type SeedAppPackageFile = {
-  readonly content: string;
-  readonly name: string;
-};
+const fixtureSource = `export type SeedAppPackageFile =
+  | {
+      readonly content: string;
+      readonly name: string;
+    }
+  | {
+      readonly name: string;
+      readonly url: string;
+    };
 
 export type SeedAppPackageDefinition = {
   readonly entry: string;
@@ -117,6 +122,12 @@ function helloWorldSeedAppPackage() {
   return {
     id: 'hello-world',
     entry: 'index.html',
+    files: [
+      {
+        name: 'ghostscript-tiger.svg',
+        url: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg',
+      },
+    ],
     name: 'Hello World',
     root: 'apps/hello-world',
     source: 'vite',

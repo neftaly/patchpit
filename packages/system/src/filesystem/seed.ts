@@ -483,9 +483,13 @@ function createPackageFileEntries(
   const handles: Array<DocHandle<FileDoc | FolderDoc>> = [];
 
   for (const [name, file] of [...directFiles.entries()].sort(([left], [right]) => left.localeCompare(right))) {
-    const handle = createFile(repo, name, file.content);
-    entries.push(folderEntry(name, PatchpitType.File, handle.url));
-    handles.push(handle);
+    if ('url' in file) {
+      entries.push(folderEntry(name, PatchpitType.File, file.url));
+    } else {
+      const handle = createFile(repo, name, file.content);
+      entries.push(folderEntry(name, PatchpitType.File, handle.url));
+      handles.push(handle);
+    }
   }
 
   for (const [name, children] of [...childFiles.entries()].sort(([left], [right]) => left.localeCompare(right))) {
