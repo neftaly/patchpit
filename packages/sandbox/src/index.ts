@@ -4,7 +4,7 @@ import {
   sandboxUrlMountProtocol,
   sandboxUrlMountScope,
   sandboxUrlMountWorkerUrl,
-  type SandboxUrlMountFile,
+  type SandboxUrlMountMessage,
   type SandboxUrlMountPath,
 } from './url-mount';
 
@@ -22,19 +22,6 @@ export type SandboxDocumentFile = {
   readonly text: string;
 };
 
-type SandboxUrlMountMessage =
-  | {
-      readonly files: readonly SandboxUrlMountFile[];
-      readonly mountId: string;
-      readonly protocol: typeof sandboxUrlMountProtocol;
-      readonly type: 'mount';
-    }
-  | {
-      readonly mountId: string;
-      readonly protocol: typeof sandboxUrlMountProtocol;
-      readonly type: 'unmount';
-    };
-
 type SandboxUrlMountAck = {
   readonly error?: string;
 };
@@ -47,11 +34,14 @@ export async function createSandboxDocument({
   readonly files: readonly SandboxDocumentFile[];
 }): Promise<SandboxDocument> {
   const entryMountPath = sandboxDocumentPath(entry);
-  const mountedFiles = files.map(sandboxDocumentMountFile);
   const serviceWorker = await activeSandboxUrlMountWorker();
   const mountId = crypto.randomUUID();
   await postUrlMountMessage(serviceWorker, {
-    files: mountedFiles,
+    files: files.map((file) => ({
+      contentType: file.contentType,
+      path: sandboxDocumentPath(file.path),
+      text: file.text,
+    })),
     mountId,
     protocol: sandboxUrlMountProtocol,
     type: 'mount',
@@ -69,36 +59,21 @@ export async function createSandboxDocument({
   };
 }
 
-function sandboxDocumentMountFile(file: SandboxDocumentFile): SandboxUrlMountFile {
-  return {
-    contentType: file.contentType,
-    path: sandboxDocumentPath(file.path),
-    text: file.text,
-  };
-}
-
 function sandboxDocumentPath(path: string): SandboxUrlMountPath {
-  if (path.length === 0) throw new Error('Sandbox document paths must not be empty.');
-  if (path.startsWith('/') || path.startsWith('\\')) {
-    throw new Error(`Sandbox document paths must be relative: ${path}`);
-  }
-
   const url = new URL(path, SANDBOX_DOCUMENT_PATH_BASE);
-  if (url.origin !== SANDBOX_DOCUMENT_PATH_BASE.origin) {
-    throw new Error(`Sandbox document paths must be relative: ${path}`);
+  const segments = url.pathname.slice(1).split('/').map((segment) => decodeURIComponent(segment));
+  if (
+    path === ''
+    || path.startsWith('/')
+    || path.startsWith('\\')
+    || url.origin !== SANDBOX_DOCUMENT_PATH_BASE.origin
+    || url.search !== ''
+    || url.hash !== ''
+    || segments[0] === ''
+  ) {
+    throw new Error(`Sandbox document paths must be relative file paths: ${path}`);
   }
-  if (url.search !== '' || url.hash !== '') {
-    throw new Error(`Sandbox document paths must not include a query or fragment: ${path}`);
-  }
-
-  const pathKey = url.pathname.slice(1);
-  if (pathKey === '') throw new Error(`Sandbox document paths must name a file: ${path}`);
-
-  const pathSegments = pathKey.split('/').map((segment) => decodeURIComponent(segment));
-  const [firstSegment, ...remainingSegments] = pathSegments;
-  if (firstSegment === undefined) throw new Error(`Sandbox document paths must name a file: ${path}`);
-
-  return [firstSegment, ...remainingSegments];
+  return segments as SandboxUrlMountPath;
 }
 
 async function activeSandboxUrlMountWorker(): Promise<ServiceWorker> {

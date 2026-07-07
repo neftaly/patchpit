@@ -1,6 +1,6 @@
 import {
   sandboxUrlMountCacheName,
-  sandboxUrlMountCacheNamePrefix,
+  sandboxUrlMountCachePrefix,
   sandboxUrlMountDev,
   sandboxUrlMountPrefix,
   sandboxUrlMountProtocol,
@@ -8,22 +8,10 @@ import {
   sandboxUrlMountRequest,
   sandboxUrlMountStoredFiles,
   type SandboxUrlMountFile,
+  type SandboxUrlMountMessage,
 } from './url-mount';
 
 const worker = self as unknown as SandboxWorker;
-
-type SandboxUrlMountMessage =
-  | {
-      readonly files: readonly SandboxUrlMountFile[];
-      readonly mountId: string;
-      readonly protocol: typeof sandboxUrlMountProtocol;
-      readonly type: 'mount';
-    }
-  | {
-      readonly mountId: string;
-      readonly protocol: typeof sandboxUrlMountProtocol;
-      readonly type: 'unmount';
-    };
 
 type SandboxWorker = {
   readonly clients: { claim(): Promise<void> };
@@ -94,7 +82,7 @@ async function mountedFileResponse(request: Request, url: URL): Promise<Response
 async function deleteSandboxUrlMountCaches(): Promise<void> {
   const cacheNames = await caches.keys();
   await Promise.all(cacheNames
-    .filter((cacheName) => cacheName.startsWith(sandboxUrlMountCacheNamePrefix()))
+    .filter((cacheName) => cacheName.startsWith(sandboxUrlMountCachePrefix))
     .map((cacheName) => caches.delete(cacheName)));
 }
 

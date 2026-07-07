@@ -3,6 +3,7 @@ export const sandboxUrlMountPrefix = '/__sandbox__/mounts/';
 export const sandboxUrlMountScope = '/__sandbox__/';
 export const sandboxUrlMountDev = import.meta.env?.DEV === true;
 export const sandboxUrlMountWorkerUrl = sandboxUrlMountDev ? '/dev-sw.js?dev-sw' : '/sandbox-url-mount-sw.mjs';
+export const sandboxUrlMountCachePrefix = `${sandboxUrlMountProtocol}:`;
 
 export type SandboxUrlMountPath = readonly [string, ...string[]];
 
@@ -11,6 +12,19 @@ export type SandboxUrlMountFile = {
   readonly path: SandboxUrlMountPath;
   readonly text: string;
 };
+
+export type SandboxUrlMountMessage =
+  | {
+      readonly files: readonly SandboxUrlMountFile[];
+      readonly mountId: string;
+      readonly protocol: typeof sandboxUrlMountProtocol;
+      readonly type: 'mount';
+    }
+  | {
+      readonly mountId: string;
+      readonly protocol: typeof sandboxUrlMountProtocol;
+      readonly type: 'unmount';
+    };
 
 export type SandboxUrlMountStoredFile = {
   readonly headers: HeadersInit;
@@ -51,11 +65,7 @@ export function sandboxUrlMountRequest(pathname: string): { readonly mountId: st
 }
 
 export function sandboxUrlMountCacheName(mountId: string): string {
-  return `${sandboxUrlMountProtocol}:${mountId}`;
-}
-
-export function sandboxUrlMountCacheNamePrefix(): string {
-  return `${sandboxUrlMountProtocol}:`;
+  return `${sandboxUrlMountCachePrefix}${mountId}`;
 }
 
 export function sandboxUrlMountStoredFiles(
