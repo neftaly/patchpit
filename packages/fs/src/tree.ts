@@ -1,42 +1,42 @@
 import type { FsRow } from './schema';
 
 export function fsRowsFromTree<Extra extends object = {}>(root: FsTree<Extra>): readonly FsRow[] {
-  return nodeToRows(root, { id: '/', name: '/', parentId: null, position: 0 });
+  return treeNodeRows(root, { id: '/', name: '/', parentId: null, position: 0 });
 }
 
-function joinPath(parentId: string, name: string): string {
+function childFsPath(parentId: string, name: string): string {
   const segment = encodePathSegment(name);
   return parentId === '/' ? `/${segment}` : `${parentId}/${segment}`;
 }
 
 export type FsTree<Extra extends object = {}> =
-  | FsTreeDir<Extra>
-  | FsTreeFile<Extra>;
+  | FsDir<Extra>
+  | FsFile<Extra>;
 
-type FsTreeDir<Extra extends object> = Readonly<Extra> & {
+type FsDir<Extra extends object> = Readonly<Extra> & {
   readonly kind: 'dir';
   readonly entries: ReadonlyMap<string, FsTree<Extra>>;
 };
 
-type FsTreeFile<Extra extends object> = Readonly<Extra> & {
+type FsFile<Extra extends object> = Readonly<Extra> & {
   readonly kind: 'file';
   readonly src: string;
 };
 
-function nodeToRows(
+function treeNodeRows(
   node: FsTree,
-  placement: Pick<FsRow, 'id' | 'name' | 'parentId' | 'position'>,
+  fsPosition: Pick<FsRow, 'id' | 'name' | 'parentId' | 'position'>,
 ): readonly FsRow[] {
   const row = node.kind === 'file'
-    ? { ...placement, kind: node.kind, src: node.src }
-    : { ...placement, kind: node.kind };
+    ? { ...fsPosition, kind: node.kind, src: node.src }
+    : { ...fsPosition, kind: node.kind };
   const children = node.kind === 'dir' ? [...node.entries.entries()] : [];
   return [
     row,
-    ...children.flatMap(([name, child], position) => nodeToRows(child, {
-      id: joinPath(placement.id, name),
+    ...children.flatMap(([name, child], position) => treeNodeRows(child, {
+      id: childFsPath(fsPosition.id, name),
       name,
-      parentId: placement.id,
+      parentId: fsPosition.id,
       position,
     })),
   ];

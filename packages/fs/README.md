@@ -7,8 +7,8 @@
 - `fsNodes`: query alias for the `nodes` relation.
 - `fsNodeByPath`: query for one row by namespace path.
 - `fsChildrenOfPath`: query for direct children of a namespace path.
-- `fsRowsFromTree`: parse a Pushwork tree into rows.
-- `FsTree`: Pushwork tree input type.
+- `fsRowsFromTree`: parse a filesystem tree into rows.
+- `FsTree`: filesystem tree input type.
 
 ## Filesystem Shape
 
@@ -54,7 +54,7 @@ Example:
 
 `@patchpit/fs` turns the tree into Tarstate `nodes` rows:
 
-- `id`: Pushwork namespace path.
+- `id`: namespace path.
 - `parentId`: parent namespace path, or `null` for root.
 - `position`: child order from the keyed tree.
 - `name`: entry key/name.
@@ -64,4 +64,4 @@ Example:
 ## Boundaries
 
 This package turns tree metadata into Tarstate rows. It does not fetch, decode,
-or resolve `src`. Behavior examples live in `src/fs.test.mjs`.
+or resolve `src`. Behavior examples live in `src/fs.test.ts`.

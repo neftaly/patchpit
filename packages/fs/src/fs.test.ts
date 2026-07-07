@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createDb, q } from '@tarstate/core/db';
 import { fsChildrenOfPath, fsNodeByPath, fsRowsFromTree } from './index.ts';
 
-void test('tree ingestion uses Pushwork path keys and keeps src as data', () => {
+void test('filesystem tree rows use namespace paths and keep src as data', () => {
   const src = 'https://example.test/tiger.svg';
   const rows = fsRowsFromTree({
     entries: new Map([
@@ -19,7 +19,7 @@ void test('tree ingestion uses Pushwork path keys and keeps src as data', () => 
   ]);
 });
 
-void test('tree ingestion passes src through without policy validation', () => {
+void test('filesystem tree rows pass src through without policy validation', () => {
   assert.deepEqual(fsRowsFromTree({
     entries: new Map([
       ['empty-src.txt', { kind: 'file', src: '' }],
@@ -33,7 +33,7 @@ void test('tree ingestion passes src through without policy validation', () => {
   ]);
 });
 
-void test('tree ingestion encodes keys into unambiguous paths', () => {
+void test('filesystem tree rows encode keys into unambiguous paths', () => {
   assert.deepEqual(fsRowsFromTree({
     entries: new Map([
       ['a/b', { kind: 'file', src: 'automerge:slash' }],

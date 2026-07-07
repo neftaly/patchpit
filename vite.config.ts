@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import topLevelAwait from 'vite-plugin-top-level-await';
+import { VitePWA } from 'vite-plugin-pwa';
 import wasm from 'vite-plugin-wasm';
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
@@ -15,7 +16,20 @@ export default defineConfig({
     __PATCHPIT_RUNTIME_BUILD_ID__: JSON.stringify(process.env.PATCHPIT_RUNTIME_BUILD_ID ?? `${Date.now().toString(36)}`),
   },
   root: repoRoot,
-  plugins: [wasm(), topLevelAwait(), react()],
+  plugins: [
+    wasm(),
+    topLevelAwait(),
+    VitePWA({
+      devOptions: { enabled: true },
+      filename: 'sandbox-url-mount-sw.ts',
+      injectManifest: { injectionPoint: undefined },
+      injectRegister: false,
+      manifest: false,
+      srcDir: 'packages/sandbox/src',
+      strategies: 'injectManifest',
+    }),
+    react(),
+  ],
   build: {
     chunkSizeWarningLimit: 1200,
     cssCodeSplit: true,
