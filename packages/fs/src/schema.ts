@@ -1,11 +1,9 @@
 import {
   defineSchema,
-  idField,
   jsonField,
   nullable,
   numberField,
   optional,
-  refField,
   relation,
   stringEnumField,
   stringField,
@@ -15,27 +13,31 @@ import {
 } from '@tarstate/core/schema';
 
 export type FsPath = readonly string[];
+export type FsNodeKey = readonly number[];
 
 const fsPathField = jsonField() as FieldSpec<FsPath>;
+const fsNodeKeyField = jsonField() as FieldSpec<FsNodeKey>;
 
 export const fsRelations = defineSchema({
   nodes: relation({
-    key: 'id',
+    key: 'key',
     fields: {
-      id: idField('fsNodeAddress'),
+      key: fsNodeKeyField,
       kind: stringEnumField(['dir', 'file'] as const),
       name: stringField(),
       path: fsPathField,
-      parentId: nullable(refField({ relation: 'nodes', field: 'id' })),
+      parentKey: nullable(fsNodeKeyField),
       position: numberField(),
       src: optional(stringField()),
     },
   }),
 });
 
-export const fsSchema = toSchemaManifest(fsRelations, {
-  schemaId: 'patchpit.fs@draft',
-  description: 'Filesystem projection rows. Resource resolution is intentionally out of scope.',
-});
+export function fsSchemaManifest() {
+  return toSchemaManifest(fsRelations, {
+    schemaId: 'patchpit.fs@draft',
+    description: 'Filesystem projection rows.',
+  });
+}
 
 export type FsRow = RelationRefRow<typeof fsRelations.nodes>;

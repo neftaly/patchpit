@@ -1,20 +1,19 @@
 import { as, asc, env, eq, from, limit, pipe, sort, where } from '@tarstate/core/query';
-import { fsRelations } from './schema';
+import { fsRelations, type FsNodeKey } from './schema';
 
 export const fsNodes = as(fsRelations.nodes, 'node');
 
-export const fsNodeById = pipe(
+export const fsNodeByKey = pipe(
   from(fsNodes),
-  where(eq(fsNodes.id, env<string>('id'))),
+  where(eq(fsNodes.key, env<FsNodeKey>('key'))),
   limit(1),
 );
 
-export const fsChildrenOfId = pipe(
+export const fsChildrenOfKey = pipe(
   from(fsNodes),
-  where(eq(fsNodes.parentId, env<string>('id'))),
+  where(eq(fsNodes.parentKey, env<FsNodeKey>('key'))),
   sort(
     asc(fsNodes.position),
     asc(fsNodes.name),
-    asc(fsNodes.id),
   ),
 );

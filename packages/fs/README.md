@@ -2,19 +2,18 @@
 
 ## API
 
-- `fsSchema`: Tarstate schema manifest for the row contract.
+- `fsSchemaManifest`: Tarstate schema manifest for the row contract.
 - `FsRow`: row type inferred from the Tarstate relation.
 - `fsNodes`: query alias for the `nodes` relation.
-- `fsNodeById`: query for one row by structural id.
-- `fsChildrenOfId`: query for direct children of a structural id.
+- `fsNodeByKey`: query for one row by relation key.
+- `fsChildrenOfKey`: query for direct children of a relation key.
 - `fsRowsFromTree`: parse a filesystem tree into rows.
 - `FsTree`: filesystem tree input type.
 
 ## Filesystem Shape
 
 The input tree follows the current [pushwork](https://github.com/inkandswitch/pushwork/)
-folder shape closely, but `src` is an inert resource reference string owned by
-the consumer.
+folder shape closely.
 
 ```ts
 type FsTree =
@@ -56,15 +55,15 @@ Example:
 
 `@patchpit/fs` turns the tree into Tarstate `nodes` rows:
 
-- `id`: structural address serialized for Tarstate keying.
-- `parentId`: parent structural id, or `null` for root.
+- `key`: structural address as ordered child indexes.
+- `parentKey`: parent structural key, or `null` for root.
 - `path`: unencoded path segments.
 - `position`: child order from the keyed tree.
 - `name`: entry key/name.
 - `kind`: `dir` or `file`.
-- `src`: inert file reference string.
+- `src`: file source string.
 
 ## Boundaries
 
-This package turns tree metadata into Tarstate rows. It does not fetch, decode,
-or resolve `src`. Behavior examples live in `src/fs.test.ts`.
+This package turns tree metadata into Tarstate rows. Behavior examples live in
+`src/fs.test.ts`.

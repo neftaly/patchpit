@@ -1,11 +1,13 @@
 export {
-  fsSchema,
+  fsSchemaManifest,
   type FsRow,
+  type FsNodeKey,
+  type FsPath,
 } from './schema';
 
 export {
-  fsChildrenOfId,
-  fsNodeById,
+  fsChildrenOfKey,
+  fsNodeByKey,
   fsNodes,
 } from './queries';
 

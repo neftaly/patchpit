@@ -1,48 +1,33 @@
 import type { FsRow } from './schema';
 
 export function fsRowsFromTree(root: FsTree): readonly FsRow[] {
-  return treeNodeRows(root, { address: [], id: '[]', name: '', parentId: null, path: [], position: 0 });
+  return treeNodeRows(root, { key: [], name: '', parentKey: null, path: [], position: 0 });
 }
 
 export type FsTree =
-  | FsDir
-  | FsFile;
+  | { readonly kind: 'dir'; readonly entries: readonly (readonly [name: string, tree: FsTree])[] }
+  | { readonly kind: 'file'; readonly src: string };
 
-type FsDir = {
-  readonly kind: 'dir';
-  readonly entries: readonly (readonly [name: string, tree: FsTree])[];
-};
-
-type FsFile = {
-  readonly kind: 'file';
-  readonly src: string;
-};
-
-type FsTreePosition = Pick<FsRow, 'id' | 'name' | 'parentId' | 'path' | 'position'> & {
-  readonly address: readonly number[];
-};
+type FsTreePosition = Pick<FsRow, 'key' | 'name' | 'parentKey' | 'path' | 'position'>;
 
 function treeNodeRows(
   node: FsTree,
   fsPosition: FsTreePosition,
 ): readonly FsRow[] {
-  const { address, ...rowPosition } = fsPosition;
   const row = node.kind === 'file'
-    ? { ...rowPosition, kind: node.kind, src: node.src }
-    : { ...rowPosition, kind: node.kind };
-  const children = node.kind === 'dir' ? node.entries : [];
+    ? { ...fsPosition, kind: node.kind, src: node.src }
+    : { ...fsPosition, kind: node.kind };
   return [
     row,
-    ...children.flatMap(([name, child], position) => {
-      const childAddress = [...address, position];
-      return treeNodeRows(child, {
-        address: childAddress,
-        id: JSON.stringify(childAddress),
-        name,
-        parentId: fsPosition.id,
-        path: [...fsPosition.path, name],
-        position,
-      });
-    }),
+    ...(node.kind === 'dir'
+      ? node.entries.flatMap(([name, child], position) =>
+        treeNodeRows(child, {
+          key: [...fsPosition.key, position],
+          name,
+          parentKey: fsPosition.key,
+          path: [...fsPosition.path, name],
+          position,
+        }))
+      : []),
   ];
 }

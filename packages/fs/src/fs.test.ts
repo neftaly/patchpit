@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDb, q } from '@tarstate/core/db';
-import { fsChildrenOfId, fsNodeById, fsRowsFromTree } from './index.ts';
+import { fsChildrenOfKey, fsNodeByKey, fsRowsFromTree } from './index.ts';
 
-void test('filesystem tree rows use structural ids and keep src as data', () => {
+void test('filesystem tree rows use structural keys and keep src as data', () => {
   const src = 'https://example.test/tiger.svg';
   const rows = fsRowsFromTree({
     entries: [
@@ -14,12 +14,12 @@ void test('filesystem tree rows use structural ids and keep src as data', () => 
   });
 
   assert.deepEqual(rows.filter((row) => row.src === src), [
-    { id: '[0,0]', kind: 'file', name: 'tiger.svg', parentId: '[0]', path: ['nested', 'tiger.svg'], position: 0, src },
-    { id: '[1]', kind: 'file', name: 'tiger.svg', parentId: '[]', path: ['tiger.svg'], position: 1, src },
+    { key: [0, 0], kind: 'file', name: 'tiger.svg', parentKey: [0], path: ['nested', 'tiger.svg'], position: 0, src },
+    { key: [1], kind: 'file', name: 'tiger.svg', parentKey: [], path: ['tiger.svg'], position: 1, src },
   ]);
 });
 
-void test('filesystem tree rows pass src through without policy validation', () => {
+void test('filesystem tree rows pass src through unchanged', () => {
   assert.deepEqual(fsRowsFromTree({
     entries: [
       ['empty-src.txt', { kind: 'file', src: '' }],
@@ -27,9 +27,9 @@ void test('filesystem tree rows pass src through without policy validation', () 
     ],
     kind: 'dir',
   }), [
-    { id: '[]', kind: 'dir', name: '', parentId: null, path: [], position: 0 },
-    { id: '[0]', kind: 'file', name: 'empty-src.txt', parentId: '[]', path: ['empty-src.txt'], position: 0, src: '' },
-    { id: '[1]', kind: 'file', name: 'not-url.txt', parentId: '[]', path: ['not-url.txt'], position: 1, src: 'not-a-url' },
+    { key: [], kind: 'dir', name: '', parentKey: null, path: [], position: 0 },
+    { key: [0], kind: 'file', name: 'empty-src.txt', parentKey: [], path: ['empty-src.txt'], position: 0, src: '' },
+    { key: [1], kind: 'file', name: 'not-url.txt', parentKey: [], path: ['not-url.txt'], position: 1, src: 'not-a-url' },
   ]);
 });
 
@@ -44,13 +44,13 @@ void test('filesystem tree rows keep path segments unencoded', () => {
     kind: 'dir',
   });
 
-  assert.deepEqual(rows.map((row) => [row.id, row.path]), [
-    ['[]', []],
-    ['[0]', ['a/b']],
-    ['[1]', ['a']],
-    ['[1,0]', ['a', 'b']],
-    ['[2]', ['']],
-    ['[3]', ['']],
+  assert.deepEqual(rows.map((row) => [row.key, row.path]), [
+    [[], []],
+    [[0], ['a/b']],
+    [[1], ['a']],
+    [[1, 0], ['a', 'b']],
+    [[2], ['']],
+    [[3], ['']],
   ]);
 });
 
@@ -61,7 +61,7 @@ void test('structural identity changes on move while src can remain stable', () 
     entries: [['before.txt', { kind: 'file', src }]],
     kind: 'dir',
   }).filter((row) => row.src), [
-    { id: '[0]', kind: 'file', name: 'before.txt', parentId: '[]', path: ['before.txt'], position: 0, src },
+    { key: [0], kind: 'file', name: 'before.txt', parentKey: [], path: ['before.txt'], position: 0, src },
   ]);
 
   assert.deepEqual(fsRowsFromTree({
@@ -70,19 +70,19 @@ void test('structural identity changes on move while src can remain stable', () 
     ],
     kind: 'dir',
   }).filter((row) => row.src), [
-    { id: '[0,0]', kind: 'file', name: 'after.txt', parentId: '[0]', path: ['folder', 'after.txt'], position: 0, src },
+    { key: [0, 0], kind: 'file', name: 'after.txt', parentKey: [0], path: ['folder', 'after.txt'], position: 0, src },
   ]);
 });
 
 void test('filesystem queries expose live row seams', () => {
   const db = createDb({
     nodes: [
-      { id: '[]', kind: 'dir', name: '', parentId: null, path: [], position: 0 },
-      { id: '[1]', kind: 'file', name: 'b', parentId: '[]', path: ['b'], position: 1, src: 'automerge:b' },
-      { id: '[0]', kind: 'file', name: 'a', parentId: '[]', path: ['a'], position: 0, src: 'automerge:a' },
+      { key: [], kind: 'dir', name: '', parentKey: null, path: [], position: 0 },
+      { key: [1], kind: 'file', name: 'b', parentKey: [], path: ['b'], position: 1, src: 'automerge:b' },
+      { key: [0], kind: 'file', name: 'a', parentKey: [], path: ['a'], position: 0, src: 'automerge:a' },
     ],
   });
 
-  assert.equal(q(db, fsNodeById, { env: { id: '[]' } })[0]?.name, '');
-  assert.deepEqual(q(db, fsChildrenOfId, { env: { id: '[]' } }).map((row) => row.id), ['[0]', '[1]']);
+  assert.equal(q(db, fsNodeByKey, { env: { key: [] } })[0]?.name, '');
+  assert.deepEqual(q(db, fsChildrenOfKey, { env: { key: [] } }).map((row) => row.key), [[0], [1]]);
 });
