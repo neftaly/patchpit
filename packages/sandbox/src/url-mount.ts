@@ -4,8 +4,9 @@ export const sandboxUrlMountScope = '/__sandbox__/';
 export const sandboxUrlMountDev = import.meta.env?.DEV === true;
 export const sandboxUrlMountWorkerUrl = sandboxUrlMountDev ? '/dev-sw.js?dev-sw' : '/sandbox-url-mount-sw.mjs';
 export const sandboxUrlMountCachePrefix = `${sandboxUrlMountProtocol}:`;
+const sandboxDocumentPathBase = new URL('https://sandbox.local/');
 
-export type SandboxUrlMountPath = readonly [string, ...string[]];
+export type SandboxUrlMountPath = readonly string[];
 
 export type SandboxUrlMountFile = {
   readonly contentType: string;
@@ -26,72 +27,71 @@ export type SandboxUrlMountMessage =
       readonly type: 'unmount';
     };
 
-export type SandboxUrlMountStoredFile = {
-  readonly headers: HeadersInit;
-  readonly text: string;
-  readonly url: string;
+export const sandboxDocumentPath = (path: string): SandboxUrlMountPath => {
+  const url = new URL(path, sandboxDocumentPathBase);
+  const segments = url.pathname.slice(1).split('/').map((segment) => decodeURIComponent(segment));
+  if (
+    path === ''
+    || path.startsWith('/')
+    || path.startsWith('\\')
+    || url.origin !== sandboxDocumentPathBase.origin
+    || url.search !== ''
+    || url.hash !== ''
+    || segments[0] === ''
+  ) {
+    throw new Error(`Sandbox document paths must be relative file paths: ${path}`);
+  }
+  return segments;
 };
 
-export function sandboxUrlMountEntryUrl(mountId: string, entry: SandboxUrlMountPath): string {
-  return `${sandboxUrlMountPrefix}${mountId}/${sandboxUrlMountPathKey(entry)}`;
-}
+export const sandboxUrlMountEntryUrl = (mountId: string, entry: SandboxUrlMountPath): string =>
+  `${sandboxUrlMountPrefix}${mountId}/${sandboxUrlMountPathKey(entry)}`;
 
-export function sandboxUrlMountFileUrl(origin: string, mountId: string, path: SandboxUrlMountPath): string {
-  return `${sandboxUrlMountRootUrl(origin, mountId)}${sandboxUrlMountPathKey(path)}`;
-}
+export const sandboxUrlMountFileUrl = (origin: string, mountId: string, path: SandboxUrlMountPath): string =>
+  `${sandboxUrlMountRootUrl(origin, mountId)}${sandboxUrlMountPathKey(path)}`;
 
-export function sandboxUrlMountPathKey(path: readonly string[]): string {
-  return path.map(encodeURIComponent).join('/');
-}
+export const sandboxUrlMountPathKey = (path: readonly string[]): string => path.map(encodeURIComponent).join('/');
 
-export function sandboxUrlMountRequestUrl(
+export const sandboxUrlMountRequestUrl = (
   origin: string,
   request: { readonly mountId: string; readonly pathKey: string },
-): string {
-  return `${sandboxUrlMountRootUrl(origin, request.mountId)}${request.pathKey}`;
-}
+): string => `${sandboxUrlMountRootUrl(origin, request.mountId)}${request.pathKey}`;
 
-export function sandboxUrlMountRootUrl(origin: string, mountId: string): string {
-  return `${origin}${sandboxUrlMountPrefix}${mountId}/`;
-}
+export const sandboxUrlMountRootUrl = (origin: string, mountId: string): string =>
+  `${origin}${sandboxUrlMountPrefix}${mountId}/`;
 
-export function sandboxUrlMountRequest(pathname: string): { readonly mountId: string; readonly pathKey: string } | undefined {
+export const sandboxUrlMountRequest = (pathname: string): { readonly mountId: string; readonly pathKey: string } | undefined => {
   if (!pathname.startsWith(sandboxUrlMountPrefix)) return undefined;
   const target = pathname.slice(sandboxUrlMountPrefix.length);
   const pathStart = target.indexOf('/');
   return pathStart === -1
     ? undefined
     : { mountId: target.slice(0, pathStart), pathKey: target.slice(pathStart + 1) };
-}
+};
 
-export function sandboxUrlMountCacheName(mountId: string): string {
-  return `${sandboxUrlMountCachePrefix}${mountId}`;
-}
+export const sandboxUrlMountCacheName = (mountId: string): string => `${sandboxUrlMountCachePrefix}${mountId}`;
 
-export function sandboxUrlMountStoredFiles(
+export const sandboxUrlMountStoredFiles = (
   origin: string,
   mountId: string,
   files: readonly SandboxUrlMountFile[],
-): readonly SandboxUrlMountStoredFile[] {
-  return files.map((file) => ({
+) =>
+  files.map((file) => ({
     headers: sandboxUrlMountHeaders(file.contentType, mountId, origin),
     text: file.text,
     url: sandboxUrlMountFileUrl(origin, mountId, file.path),
   }));
-}
 
-export function sandboxUrlMountHeaders(contentType: string, mountId: string, origin: string): HeadersInit {
-  return {
-    'Access-Control-Allow-Origin': 'null',
-    'Cache-Control': 'no-store',
-    'Content-Security-Policy': sandboxUrlMountCsp(origin, mountId),
-    'Content-Type': contentType,
-    'Referrer-Policy': 'no-referrer',
-    'X-Content-Type-Options': 'nosniff',
-  };
-}
+export const sandboxUrlMountHeaders = (contentType: string, mountId: string, origin: string): HeadersInit => ({
+  'Access-Control-Allow-Origin': 'null',
+  'Cache-Control': 'no-store',
+  'Content-Security-Policy': sandboxUrlMountCsp(origin, mountId),
+  'Content-Type': contentType,
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+});
 
-function sandboxUrlMountCsp(origin: string, mountId: string): string {
+const sandboxUrlMountCsp = (origin: string, mountId: string): string => {
   const mountRoot = sandboxUrlMountRootUrl(origin, mountId);
   return [
     `default-src 'none'`,
@@ -108,4 +108,4 @@ function sandboxUrlMountCsp(origin: string, mountId: string): string {
     `style-src ${mountRoot} 'unsafe-inline'`,
     `worker-src 'none'`,
   ].join('; ');
-}
+};

@@ -33,11 +33,9 @@ export const fsRelations = defineSchema({
   }),
 });
 
-export function fsSchemaManifest() {
-  return toSchemaManifest(fsRelations, {
-    schemaId: 'patchpit.fs@draft',
-    description: 'Filesystem projection rows.',
-  });
-}
+export const fsSchemaManifest = toSchemaManifest(fsRelations, {
+  schemaId: 'patchpit.fs@draft',
+  description: 'Filesystem projection rows.',
+});
 
 export type FsRow = RelationRefRow<typeof fsRelations.nodes>;
