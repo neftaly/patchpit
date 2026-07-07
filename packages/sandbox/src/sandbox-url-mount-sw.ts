@@ -27,7 +27,6 @@ type SandboxWorker = {
   readonly clients: { claim(): Promise<void> };
   readonly location: { readonly origin: string };
   addEventListener(type: string, listener: (event: SandboxWorkerEvent) => void): void;
-  skipWaiting(): Promise<void>;
 };
 
 type SandboxWorkerEvent = {
@@ -39,7 +38,6 @@ type SandboxWorkerEvent = {
 };
 
 // URL mount server only; runtime owns policy, resolution, and bytes.
-worker.addEventListener('install', (event) => event.waitUntil(worker.skipWaiting()));
 worker.addEventListener('activate', (event) => event.waitUntil(worker.clients.claim()));
 
 worker.addEventListener('message', (event) => {
@@ -66,7 +64,7 @@ worker.addEventListener('fetch', (event) => {
 function mountedFileResponse(request: Request, url: URL): Response {
   const requestTarget = sandboxUrlMountRequest(url.pathname);
   if (requestTarget === undefined) return plainTextResponse(404, 'Invalid sandbox file path');
-  const file = mountedFilesByMountId.get(requestTarget.mountId)?.get(sandboxUrlMountPathKey(requestTarget.path));
+  const file = mountedFilesByMountId.get(requestTarget.mountId)?.get(requestTarget.pathKey);
   if (file === undefined) return plainTextResponse(404, 'Sandbox file not found');
 
   return new Response(request.method === 'HEAD' ? null : file.text, {

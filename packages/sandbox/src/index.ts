@@ -9,10 +9,25 @@ import {
 
 export type { SandboxUrlMountFile, SandboxUrlMountPath } from './url-mount';
 
+const SERVICE_WORKER_ACK_TIMEOUT_MS = 5000;
+
 export type SandboxUrlMount = {
   readonly entryUrl: string;
   unmount(): void;
 };
+
+type SandboxUrlMountMessage =
+  | {
+      readonly files: readonly SandboxUrlMountFile[];
+      readonly mountId: string;
+      readonly protocol: typeof sandboxUrlMountProtocol;
+      readonly type: 'mount';
+    }
+  | {
+      readonly mountId: string;
+      readonly protocol: typeof sandboxUrlMountProtocol;
+      readonly type: 'unmount';
+    };
 
 export async function createSandboxUrlMount({
   entryPath,
@@ -37,7 +52,7 @@ export async function createSandboxUrlMount({
         mountId,
         protocol: sandboxUrlMountProtocol,
         type: 'unmount',
-      });
+      }).catch(() => undefined);
     },
   };
 }
@@ -60,11 +75,26 @@ async function activeSandboxUrlMountWorker(): Promise<ServiceWorker> {
   });
 }
 
-function postUrlMountMessage(serviceWorker: ServiceWorker, message: unknown): Promise<void> {
+function postUrlMountMessage(serviceWorker: ServiceWorker, message: SandboxUrlMountMessage): Promise<void> {
   const channel = new MessageChannel();
-  serviceWorker.postMessage(message, [channel.port2]);
-  return new Promise((resolve) => {
-    channel.port1.addEventListener('message', () => resolve(), { once: true });
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      channel.port1.close();
+      reject(new Error('Sandbox service worker did not acknowledge the message.'));
+    }, SERVICE_WORKER_ACK_TIMEOUT_MS);
+    channel.port1.addEventListener('message', () => {
+      clearTimeout(timeout);
+      channel.port1.close();
+      resolve();
+    }, { once: true });
     channel.port1.start();
+    try {
+      serviceWorker.postMessage(message, [channel.port2]);
+    } catch (error) {
+      clearTimeout(timeout);
+      channel.port1.close();
+      channel.port2.close();
+      reject(error);
+    }
   });
 }

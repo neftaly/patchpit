@@ -12,21 +12,19 @@ export type SandboxUrlMountFile = {
 };
 
 export function sandboxUrlMountEntryUrl(mountId: string, entryPath: SandboxUrlMountPath): string {
-  const path = sandboxUrlPath(entryPath);
-  return `${sandboxUrlMountPrefix}${mountId}/${path}`;
-}
-
-export function sandboxUrlMountRequest(pathname: string): { readonly mountId: string; readonly path: readonly string[] } | undefined {
-  const [mountId, ...path] = pathname.slice(sandboxUrlMountPrefix.length).split('/');
-  try {
-    return { mountId, path: path.map(decodeURIComponent) };
-  } catch {
-    return undefined;
-  }
+  return `${sandboxUrlMountPrefix}${mountId}/${sandboxUrlMountPathKey(entryPath)}`;
 }
 
 export function sandboxUrlMountPathKey(path: readonly string[]): string {
-  return JSON.stringify(path);
+  return path.map(encodeURIComponent).join('/');
+}
+
+export function sandboxUrlMountRequest(pathname: string): { readonly mountId: string; readonly pathKey: string } | undefined {
+  const target = pathname.slice(sandboxUrlMountPrefix.length);
+  const pathStart = target.indexOf('/');
+  return pathStart === -1
+    ? undefined
+    : { mountId: target.slice(0, pathStart), pathKey: target.slice(pathStart + 1) };
 }
 
 export function sandboxUrlMountHeaders(mediaType: string, mountId: string, origin: string): HeadersInit {
@@ -38,10 +36,6 @@ export function sandboxUrlMountHeaders(mediaType: string, mountId: string, origi
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
   };
-}
-
-function sandboxUrlPath(path: readonly string[]): string {
-  return path.map(encodeURIComponent).join('/');
 }
 
 function sandboxUrlMountCsp(origin: string, mountId: string): string {
