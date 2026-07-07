@@ -1,13 +1,27 @@
-const urlMountProtocol = 'sandbox.url-mount@1';
-const urlMountPrefix = '/__sandbox__/mounts/';
-const worker = self as unknown as SandboxWorker;
-const mountedFilesByMountId = new Map<string, Map<string, SandboxMountedFile>>();
+import {
+  sandboxUrlMountHeaders,
+  sandboxUrlMountPathKey,
+  sandboxUrlMountPrefix,
+  sandboxUrlMountProtocol,
+  sandboxUrlMountRequest,
+  type SandboxUrlMountFile,
+} from './url-mount';
 
-type SandboxMountedFile = {
-  readonly mediaType: string;
-  readonly path: string;
-  readonly text: string;
-};
+const worker = self as unknown as SandboxWorker;
+const mountedFilesByMountId = new Map<string, Map<string, SandboxUrlMountFile>>();
+
+type SandboxUrlMountMessage =
+  | {
+      readonly files: readonly SandboxUrlMountFile[];
+      readonly mountId: string;
+      readonly protocol: typeof sandboxUrlMountProtocol;
+      readonly type: 'mount';
+    }
+  | {
+      readonly mountId: string;
+      readonly protocol: typeof sandboxUrlMountProtocol;
+      readonly type: 'unmount';
+    };
 
 type SandboxWorker = {
   readonly clients: { claim(): Promise<void> };
@@ -17,12 +31,7 @@ type SandboxWorker = {
 };
 
 type SandboxWorkerEvent = {
-  readonly data: {
-    readonly files?: readonly SandboxMountedFile[];
-    readonly mountId: string;
-    readonly protocol?: string;
-    readonly type?: string;
-  };
+  readonly data: SandboxUrlMountMessage;
   readonly ports: readonly MessagePort[];
   readonly request: Request;
   respondWith(response: Response | Promise<Response>): void;
@@ -35,77 +44,44 @@ worker.addEventListener('activate', (event) => event.waitUntil(worker.clients.cl
 
 worker.addEventListener('message', (event) => {
   const message = event.data;
-  if (message?.protocol !== urlMountProtocol) return;
+  if (message?.protocol !== sandboxUrlMountProtocol) return;
 
   if (message.type === 'mount') {
-    mountedFilesByMountId.set(message.mountId, new Map(message.files!.map((file) => [file.path, file])));
-    event.ports[0]?.postMessage({ ok: true, protocol: urlMountProtocol, type: 'mounted' });
+    mountedFilesByMountId.set(message.mountId, new Map(message.files.map((file) => [sandboxUrlMountPathKey(file.path), file])));
+    event.ports[0]?.postMessage({ ok: true, protocol: sandboxUrlMountProtocol, type: 'mounted' });
   }
 
   if (message.type === 'unmount') {
     mountedFilesByMountId.delete(message.mountId);
-    event.ports[0]?.postMessage({ ok: true, protocol: urlMountProtocol, type: 'unmounted' });
+    event.ports[0]?.postMessage({ ok: true, protocol: sandboxUrlMountProtocol, type: 'unmounted' });
   }
 });
 
 worker.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (url.origin !== worker.location.origin || !url.pathname.startsWith(urlMountPrefix)) return;
+  if (url.origin !== worker.location.origin || !url.pathname.startsWith(sandboxUrlMountPrefix)) return;
   event.respondWith(mountedFileResponse(event.request, url));
 });
 
 function mountedFileResponse(request: Request, url: URL): Response {
-  const requestTarget = mountedFileRequest(url);
+  const requestTarget = sandboxUrlMountRequest(url.pathname);
   if (requestTarget === undefined) return plainTextResponse(404, 'Invalid sandbox file path');
-  const file = mountedFilesByMountId.get(requestTarget.mountId)?.get(requestTarget.path);
+  const file = mountedFilesByMountId.get(requestTarget.mountId)?.get(sandboxUrlMountPathKey(requestTarget.path));
   if (file === undefined) return plainTextResponse(404, 'Sandbox file not found');
 
   return new Response(request.method === 'HEAD' ? null : file.text, {
-    headers: mountedFileHeaders(file.mediaType, requestTarget.mountId),
+    headers: sandboxUrlMountHeaders(file.mediaType, requestTarget.mountId, worker.location.origin),
   });
-}
-
-function mountedFileRequest(url: URL): { readonly mountId: string; readonly path: string } | undefined {
-  const [mountId, ...path] = url.pathname.slice(urlMountPrefix.length).split('/');
-  try {
-    return { mountId, path: decodeURIComponent(path.join('/')) };
-  } catch {
-    return undefined;
-  }
-}
-
-function mountedFileHeaders(mediaType: string, mountId: string): HeadersInit {
-  return {
-    'Access-Control-Allow-Origin': 'null',
-    'Cache-Control': 'no-store',
-    'Content-Security-Policy': sandboxUrlMountCsp(mountId),
-    'Content-Type': mediaType,
-    'Referrer-Policy': 'no-referrer',
-    'X-Content-Type-Options': 'nosniff',
-  };
-}
-
-function sandboxUrlMountCsp(mountId: string): string {
-  const mountRoot = `${worker.location.origin}${urlMountPrefix}${mountId}/`;
-  return [
-    "default-src 'none'",
-    "base-uri 'none'",
-    "connect-src 'none'",
-    "font-src data:",
-    "form-action 'none'",
-    "frame-src 'none'",
-    `img-src ${mountRoot} data:`,
-    "media-src data:",
-    "object-src 'none'",
-    `script-src ${mountRoot} 'unsafe-inline'`,
-    `style-src ${mountRoot} 'unsafe-inline'`,
-    "worker-src 'none'",
-  ].join('; ');
 }
 
 function plainTextResponse(status: number, text: string): Response {
   return new Response(text, {
-    headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' },
+    headers: {
+      'Cache-Control': 'no-store',
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+    },
     status,
   });
 }

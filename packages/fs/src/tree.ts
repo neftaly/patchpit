@@ -1,47 +1,48 @@
 import type { FsRow } from './schema';
 
-export function fsRowsFromTree<Extra extends object = {}>(root: FsTree<Extra>): readonly FsRow[] {
-  return treeNodeRows(root, { id: '/', name: '/', parentId: null, position: 0 });
+export function fsRowsFromTree(root: FsTree): readonly FsRow[] {
+  return treeNodeRows(root, { address: [], id: '[]', name: '', parentId: null, path: [], position: 0 });
 }
 
-function childFsPath(parentId: string, name: string): string {
-  const segment = encodePathSegment(name);
-  return parentId === '/' ? `/${segment}` : `${parentId}/${segment}`;
-}
+export type FsTree =
+  | FsDir
+  | FsFile;
 
-export type FsTree<Extra extends object = {}> =
-  | FsDir<Extra>
-  | FsFile<Extra>;
-
-type FsDir<Extra extends object> = Readonly<Extra> & {
+type FsDir = {
   readonly kind: 'dir';
-  readonly entries: ReadonlyMap<string, FsTree<Extra>>;
+  readonly entries: readonly (readonly [name: string, tree: FsTree])[];
 };
 
-type FsFile<Extra extends object> = Readonly<Extra> & {
+type FsFile = {
   readonly kind: 'file';
   readonly src: string;
 };
 
+type FsTreePosition = Pick<FsRow, 'id' | 'name' | 'parentId' | 'path' | 'position'> & {
+  readonly address: readonly number[];
+};
+
 function treeNodeRows(
   node: FsTree,
-  fsPosition: Pick<FsRow, 'id' | 'name' | 'parentId' | 'position'>,
+  fsPosition: FsTreePosition,
 ): readonly FsRow[] {
+  const { address, ...rowPosition } = fsPosition;
   const row = node.kind === 'file'
-    ? { ...fsPosition, kind: node.kind, src: node.src }
-    : { ...fsPosition, kind: node.kind };
-  const children = node.kind === 'dir' ? [...node.entries.entries()] : [];
+    ? { ...rowPosition, kind: node.kind, src: node.src }
+    : { ...rowPosition, kind: node.kind };
+  const children = node.kind === 'dir' ? node.entries : [];
   return [
     row,
-    ...children.flatMap(([name, child], position) => treeNodeRows(child, {
-      id: childFsPath(fsPosition.id, name),
-      name,
-      parentId: fsPosition.id,
-      position,
-    })),
+    ...children.flatMap(([name, child], position) => {
+      const childAddress = [...address, position];
+      return treeNodeRows(child, {
+        address: childAddress,
+        id: JSON.stringify(childAddress),
+        name,
+        parentId: fsPosition.id,
+        path: [...fsPosition.path, name],
+        position,
+      });
+    }),
   ];
-}
-
-function encodePathSegment(segment: string): string {
-  return segment.length === 0 ? '%00' : encodeURIComponent(segment);
 }

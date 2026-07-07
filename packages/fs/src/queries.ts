@@ -3,15 +3,15 @@ import { fsRelations } from './schema';
 
 export const fsNodes = as(fsRelations.nodes, 'node');
 
-export const fsNodeByPath = pipe(
+export const fsNodeById = pipe(
   from(fsNodes),
-  where(eq(fsNodes.id, env<string>('path'))),
+  where(eq(fsNodes.id, env<string>('id'))),
   limit(1),
 );
 
-export const fsChildrenOfPath = pipe(
+export const fsChildrenOfId = pipe(
   from(fsNodes),
-  where(eq(fsNodes.parentId, env<string>('path'))),
+  where(eq(fsNodes.parentId, env<string>('id'))),
   sort(
     asc(fsNodes.position),
     asc(fsNodes.name),

@@ -1,13 +1,13 @@
-const sandboxUrlMountProtocol = 'sandbox.url-mount@1';
-const sandboxUrlMountPrefix = '/__sandbox__/mounts/';
-const sandboxUrlMountScope = '/__sandbox__/';
-const sandboxUrlMountWorkerUrl = '/sandbox-url-mount-sw.js';
+import {
+  sandboxUrlMountEntryUrl,
+  sandboxUrlMountProtocol,
+  sandboxUrlMountScope,
+  sandboxUrlMountWorkerUrl,
+  type SandboxUrlMountPath,
+  type SandboxUrlMountFile,
+} from './url-mount';
 
-export type SandboxUrlMountFile = {
-  readonly mediaType: string;
-  readonly path: string;
-  readonly text: string;
-};
+export type { SandboxUrlMountFile, SandboxUrlMountPath } from './url-mount';
 
 export type SandboxUrlMount = {
   readonly entryUrl: string;
@@ -18,7 +18,7 @@ export async function createSandboxUrlMount({
   entryPath,
   files,
 }: {
-  readonly entryPath: string;
+  readonly entryPath: SandboxUrlMountPath;
   readonly files: readonly SandboxUrlMountFile[];
 }): Promise<SandboxUrlMount> {
   const serviceWorker = await activeSandboxUrlMountWorker();
@@ -31,7 +31,7 @@ export async function createSandboxUrlMount({
   });
 
   return {
-    entryUrl: `${sandboxUrlMountPrefix}${mountId}/${sandboxUrlPath(entryPath)}`,
+    entryUrl: sandboxUrlMountEntryUrl(mountId, entryPath),
     unmount: () => {
       void postUrlMountMessage(serviceWorker, {
         mountId,
@@ -67,8 +67,4 @@ function postUrlMountMessage(serviceWorker: ServiceWorker, message: unknown): Pr
     channel.port1.addEventListener('message', () => resolve(), { once: true });
     channel.port1.start();
   });
-}
-
-function sandboxUrlPath(path: string): string {
-  return path.split('/').map(encodeURIComponent).join('/');
 }

@@ -5,14 +5,16 @@
 - `fsSchema`: Tarstate schema manifest for the row contract.
 - `FsRow`: row type inferred from the Tarstate relation.
 - `fsNodes`: query alias for the `nodes` relation.
-- `fsNodeByPath`: query for one row by namespace path.
-- `fsChildrenOfPath`: query for direct children of a namespace path.
+- `fsNodeById`: query for one row by structural id.
+- `fsChildrenOfId`: query for direct children of a structural id.
 - `fsRowsFromTree`: parse a filesystem tree into rows.
 - `FsTree`: filesystem tree input type.
 
 ## Filesystem Shape
 
-We use the filesystem shape from [pushwork](https://github.com/inkandswitch/pushwork/).
+The input tree follows the current [pushwork](https://github.com/inkandswitch/pushwork/)
+folder shape closely, but `src` is an inert resource reference string owned by
+the consumer.
 
 ```ts
 type FsTree =
@@ -26,8 +28,8 @@ type FsTree =
     };
 ```
 
-The root has no name until mounted. `src` is inert; resolution belongs to the
-consumer.
+The root has no name until mounted. Duplicate, empty, and slash-containing names
+are preserved as data.
 
 Example:
 
@@ -54,8 +56,9 @@ Example:
 
 `@patchpit/fs` turns the tree into Tarstate `nodes` rows:
 
-- `id`: namespace path.
-- `parentId`: parent namespace path, or `null` for root.
+- `id`: structural address serialized for Tarstate keying.
+- `parentId`: parent structural id, or `null` for root.
+- `path`: unencoded path segments.
 - `position`: child order from the keyed tree.
 - `name`: entry key/name.
 - `kind`: `dir` or `file`.

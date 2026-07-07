@@ -4,8 +4,8 @@ export {
 } from './schema';
 
 export {
-  fsChildrenOfPath,
-  fsNodeByPath,
+  fsChildrenOfId,
+  fsNodeById,
   fsNodes,
 } from './queries';
 
