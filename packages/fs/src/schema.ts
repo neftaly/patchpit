@@ -17,7 +17,7 @@ export const fsRelations = defineSchema({
     key: 'id',
     fields: {
       id: idField('fsPath'),
-      kind: stringEnumField(['folder', 'file'] as const),
+      kind: stringEnumField(['dir', 'file'] as const),
       name: stringField(),
       parentId: nullable(refField({ relation: 'nodes', field: 'id' })),
       position: numberField(),

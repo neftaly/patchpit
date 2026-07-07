@@ -5,10 +5,10 @@ Owns filesystem namespace shape only.
 ## Owns
 
 - `name`
-- `kind: 'folder' | 'file'`
-- optional `src` reference string
+- `kind: 'dir' | 'file'`
+- file `src` reference string
 - ordered folder entries
-- namespace address identity derived from path
+- Pushwork-compatible namespace path identity
 - reusable Tarstate namespace query refs for live views
 - tree to rows ingestion
 - Tarstate schema for the row/interchange contract
@@ -22,8 +22,14 @@ Owns filesystem namespace shape only.
 - runtime protocol
 - app loading or sandboxing
 
-`id` is the namespace address, not stable object identity. Rename or move
-changes `id`.
+`id` is the Pushwork namespace path. This mirrors `Tree.dir.entries:
+Map<string, Tree>`: sibling names are keys in the parsed input shape, not fields
+to validate after parsing.
+
+Tree ingestion follows the Pushwork model: dirs own keyed entries, files own a
+`src` string. It parses structure into rows; it does not validate URL syntax,
+existence, MIME, or resolver support. Source-specific path/key policy belongs in
+the source parser or resolver, not in this namespace row package.
 
 `src` is inert reference data. When the source has stable identity, such as an
 Automerge document URL, that identity lives in `src`. Pinned versions live in
@@ -39,7 +45,7 @@ and tree ingestion transform.
 - internal relation: `nodes`
 - key: `id`
 - ref: `parentId -> nodes.id`
-- path queries: `fsNodeByPath`, `fsChildrenOfPath`
+- queries: `fsNodeByPath`, `fsChildrenOfPath`
 - ingestion: `fsRowsFromTree`
 - fields: `id`, `parentId`, `position`, `name`, `kind`, `src`
 
