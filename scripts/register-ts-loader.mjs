@@ -1,55 +1,47 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+// Lets Node tests import local TypeScript files without a build step.
+import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerHooks } from 'node:module';
 import ts from 'typescript';
 
+const isFile = (path) => statSync(path, { throwIfNoEntry: false })?.isFile() === true;
+
+const localTypeScriptModulePath = (specifier, parentURL) => {
+  if (!parentURL?.startsWith('file:') || !specifier.startsWith('.')) return undefined;
+  const importPath = resolve(dirname(fileURLToPath(parentURL)), specifier);
+  const candidates = specifier.endsWith('.js')
+    ? [`${importPath.slice(0, -3)}.ts`]
+    : [importPath, `${importPath}.ts`, resolve(importPath, 'index.ts')];
+  return candidates.find(isFile);
+};
+
+const transpileTypeScriptModule = (url) => {
+  const path = fileURLToPath(url);
+  return ts.transpileModule(readFileSync(path, 'utf8'), {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+      verbatimModuleSyntax: true,
+    },
+    fileName: path,
+  }).outputText;
+};
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (context.parentURL?.startsWith('file:') && specifier.startsWith('.')) {
-      const resolvedSpecifierPath = resolve(dirname(fileURLToPath(context.parentURL)), specifier);
-      const candidatePaths = specifier.endsWith('.js')
-        ? [
-            `${resolvedSpecifierPath.slice(0, -3)}.ts`,
-            `${resolvedSpecifierPath.slice(0, -3)}.tsx`,
-          ]
-        : [
-            resolvedSpecifierPath,
-            `${resolvedSpecifierPath}.ts`,
-            `${resolvedSpecifierPath}.tsx`,
-            resolve(resolvedSpecifierPath, 'index.ts'),
-            resolve(resolvedSpecifierPath, 'index.tsx'),
-          ];
-      for (const candidate of candidatePaths) {
-        if (!existsSync(candidate) || !statSync(candidate).isFile()) continue;
-        return {
-          shortCircuit: true,
-          url: pathToFileURL(candidate).href,
-        };
-      }
-    }
-    return nextResolve(specifier, context);
+    const path = localTypeScriptModulePath(specifier, context.parentURL);
+    return path === undefined
+      ? nextResolve(specifier, context)
+      : { shortCircuit: true, url: pathToFileURL(path).href };
   },
   load(url, context, nextLoad) {
-    if (!url.startsWith('file:') || (!url.endsWith('.ts') && !url.endsWith('.tsx'))) {
-      return nextLoad(url, context);
-    }
-
-    const typescriptSource = readFileSync(fileURLToPath(url), 'utf8');
-    const transpiledModule = ts.transpileModule(typescriptSource, {
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2022,
-        jsx: ts.JsxEmit.ReactJSX,
-        verbatimModuleSyntax: true,
-      },
-      fileName: fileURLToPath(url),
-    });
+    if (!url.startsWith('file:') || !url.endsWith('.ts')) return nextLoad(url, context);
 
     return {
       format: 'module',
       shortCircuit: true,
-      source: transpiledModule.outputText,
+      source: transpileTypeScriptModule(url),
     };
   },
 });

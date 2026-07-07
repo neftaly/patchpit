@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM"],
     "skipLibCheck": true,
     "strict": true,
     "exactOptionalPropertyTypes": true,
@@ -18,16 +14,8 @@
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "jsx": "react-jsx",
     "noEmit": true,
-    "types": [
-      "node",
-      "vite/client"
-    ]
+    "types": ["node", "vite/client"]
   },
-  "include": [
-    "apps/*/src",
-    "packages/*/src",
-    "vite.config.ts"
-  ]
+  "include": ["apps/*/src", "packages/*/src", "vite.config.ts"]
 }
