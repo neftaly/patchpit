@@ -7,12 +7,10 @@ void test('creates filesystem-backed sandbox URL mounts from files', async () =>
     body: '<!doctype html>',
     contentType: 'text/html',
     path: ['index.html'],
-    src: 'automerge:index',
   }, {
     body: 'body{}',
     contentType: 'text/css',
     path: ['assets', 'style.css'],
-    src: 'automerge:style',
   }];
 
   const mount = createSandboxUrlMountFromFsFiles(files, {
@@ -30,7 +28,7 @@ void test('creates filesystem-backed sandbox URL mounts from files', async () =>
 
 void test('delegates sandbox mount validation', async () => {
   assert.throws(
-    () => createSandboxUrlMountFromFsFiles([{ body: '', path: ['app.html'], src: '' }], {
+    () => createSandboxUrlMountFromFsFiles([{ body: '', path: ['app.html'] }], {
       baseUrl: 'https://patchpit.test/',
       entry: ['index.html'],
     }),
@@ -38,15 +36,15 @@ void test('delegates sandbox mount validation', async () => {
   );
   assert.throws(
     () => createSandboxUrlMountFromFsFiles([
-      { body: '', path: ['index.html'], src: 'first' },
-      { body: '', path: ['index.html'], src: 'second' },
+      { body: '', path: ['index.html'] },
+      { body: '', path: ['index.html'] },
     ], { baseUrl: 'https://patchpit.test/', entry: ['index.html'] }),
     /Duplicate sandbox document path: index\.html/,
   );
   assert.throws(
     () => createSandboxUrlMountFromFsFiles([
-      { body: '', path: ['index.html'], src: '' },
-      { body: '', path: ['.'], src: '' },
+      { body: '', path: ['index.html'] },
+      { body: '', path: ['.'] },
     ], {
       baseUrl: 'https://patchpit.test/',
       entry: ['index.html'],

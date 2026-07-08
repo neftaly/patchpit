@@ -86,7 +86,7 @@ function caseHash(onlyCase) {
 }
 
 function compareReports(reference, sandbox, onlyCase) {
-  const referenceCases = selectedCases(reference.cases, onlyCase);
+  const referenceCases = onlyCase === undefined ? reference.cases : reference.cases.filter((result) => result.id === onlyCase);
   if (referenceCases.length === 0) throw new Error(`Unknown sandbox compat case: ${onlyCase}`);
   const sandboxCases = new Map(sandbox.cases.map((result) => [result.id, result]));
   const cases = referenceCases.map((referenceCase) => {
@@ -113,17 +113,13 @@ function compareReports(reference, sandbox, onlyCase) {
   };
 }
 
-function selectedCases(cases, onlyCase) {
-  return onlyCase === undefined ? cases : cases.filter((result) => result.id === onlyCase);
-}
-
 function staticServer(files) {
   let mount;
-  const fileByPath = new Map(files.map((file) => [sandboxDocumentPathKey(file.path), file]));
+  const fileByPath = new Map(files.map((file) => [file.path.join('/'), file]));
   const server = createServer(async (request, response) => {
     if (mount !== undefined && await respondWithSandboxUrlMount(mount, request, response)) return;
     const path = requestPath(request.url);
-    const file = fileByPath.get(sandboxDocumentPathKey(path.length === 0 ? ['index.html'] : path));
+    const file = fileByPath.get((path.length === 0 ? ['index.html'] : path).join('/'));
     if (file === undefined) {
       response.writeHead(404).end();
       return;
@@ -153,8 +149,4 @@ function requestPath(url) {
     .split('/')
     .filter((segment) => segment !== '')
     .map(decodeURIComponent);
-}
-
-function sandboxDocumentPathKey(path) {
-  return path.map(encodeURIComponent).join('/');
 }

@@ -5,27 +5,20 @@ type SandboxFsDirectoryFile = {
   readonly body: Uint8Array<ArrayBuffer>;
   readonly contentType: string;
   readonly path: readonly string[];
-  readonly src: string;
-};
-
-type ReadSandboxFsDirectoryOptions = {
-  readonly src: (path: readonly string[]) => string;
 };
 
 export const readSandboxFsDirectory = async (
   root: string,
-  options: ReadSandboxFsDirectoryOptions,
 ): Promise<readonly SandboxFsDirectoryFile[]> =>
-  readSandboxFsDirectoryEntries(root, options, root);
+  readSandboxFsDirectoryEntries(root, root);
 
 const readSandboxFsDirectoryEntries = async (
   root: string,
-  options: ReadSandboxFsDirectoryOptions,
   dir: string,
 ): Promise<readonly SandboxFsDirectoryFile[]> =>
   (await Promise.all((await sortedDirectoryEntries(dir)).map(async (entry) => {
     const file = resolve(dir, entry.name);
-    if (entry.isDirectory()) return readSandboxFsDirectoryEntries(root, options, file);
+    if (entry.isDirectory()) return readSandboxFsDirectoryEntries(root, file);
     if (!entry.isFile()) throw new Error(`Unsupported sandbox filesystem entry: ${file}`);
     const path = relative(root, file).split(sep);
     const body: Uint8Array<ArrayBuffer> = new Uint8Array(await readFile(file));
@@ -33,7 +26,6 @@ const readSandboxFsDirectoryEntries = async (
       body,
       contentType: contentType(file),
       path,
-      src: options.src(path),
     }];
   }))).flat();
 

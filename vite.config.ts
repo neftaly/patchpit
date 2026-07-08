@@ -21,8 +21,7 @@ function sandboxCompatPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const baseUrl = new URL('/', `http://${request.headers.host ?? 'localhost'}`);
-        const requestUrl = new URL(request.url ?? '/', baseUrl);
-        if (!requestUrl.pathname.startsWith(sandboxCompatPathPrefix)) return next();
+        if (!request.url?.startsWith(sandboxCompatPathPrefix)) return next();
         const mount = await sandboxCompatMount(baseUrl);
         if (await respondWithSandboxUrlMount(mount, request, response)) return;
         next();

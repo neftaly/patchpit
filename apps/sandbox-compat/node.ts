@@ -8,25 +8,19 @@ const appPath = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 const appFilesRoot = appPath('files');
 const ghostscriptTigerFile = appPath('url-backed-files/Ghostscript_Tiger.svg');
-const ghostscriptTigerSrc = 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg';
 const { id: sandboxCompatId } = sandboxCompatApp;
 
-export const sandboxCompatPathPrefix = `/__patchpit/sandbox/${sandboxCompatApp.id}/`;
+export const sandboxCompatPathPrefix = `/__patchpit/sandbox/${sandboxCompatId}/`;
 
-export const sandboxCompatFiles = async () => {
-  const files = [
-    ...await readSandboxFsDirectory(appFilesRoot, {
-      src: (path) => `automerge:${sandboxCompatId}/${path.join('/')}`,
-    }),
+export const sandboxCompatFiles = async () =>
+  [
+    ...await readSandboxFsDirectory(appFilesRoot),
     {
       body: await readFile(ghostscriptTigerFile),
       contentType: 'image/svg+xml',
       path: ['ghostscript-tiger.svg'],
-      src: ghostscriptTigerSrc,
     },
   ];
-  return files.sort((left, right) => left.path.join('/').localeCompare(right.path.join('/')));
-};
 
 export const sandboxCompatMount = async (baseUrl: string | URL) =>
   createSandboxUrlMountFromFsFiles(await sandboxCompatFiles(), {
