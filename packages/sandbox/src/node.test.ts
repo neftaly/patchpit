@@ -52,6 +52,33 @@ void test('node sandbox URL mounts leave unrelated non-GET requests unhandled', 
   assert.equal(nodeResponse.status, undefined);
 });
 
+void test('node sandbox URL mounts leave forbidden Fetch methods unhandled', async () => {
+  let reads = 0;
+  const mount = createSandboxUrlMount({
+    baseUrl: 'https://patchpit.test/',
+    entry: ['index.html'],
+    files: [{
+      path: ['index.html'],
+      read: () => {
+        reads += 1;
+        return { body: '', contentType: 'text/html' };
+      },
+    }],
+    mountId: 'mount-1',
+  });
+  const nodeResponse = createNodeResponse();
+
+  const handled = await respondWithSandboxUrlMount(
+    mount,
+    createNodeRequest('/__patchpit/sandbox/mount-1/index.html', 'TRACE'),
+    nodeResponse.response,
+  );
+
+  assert.equal(handled, false);
+  assert.equal(reads, 0);
+  assert.equal(nodeResponse.status, undefined);
+});
+
 const createNodeRequest = (url: string, method: string): IncomingMessage => ({
   headers: { host: 'patchpit.test' },
   method,
