@@ -17,9 +17,11 @@ type AppFile = {
 };
 
 const appFiles: readonly AppFile[] = [
-  ...Object.entries(staticFileModules)
-    .map(([modulePath, body]) => file(fileName(modulePath), contentType(fileName(modulePath)), body)),
-  file('ghostscript-tiger.svg', 'image/svg+xml', ghostscriptTigerSvg, ghostscriptTigerSrc),
+  ...Object.entries(staticFileModules).map(([modulePath, body]) => {
+    const name = modulePath.slice(staticRoot.length);
+    return { body, contentType: contentType(name), name, src: `automerge:sandbox-compat/${name}` };
+  }),
+  { body: ghostscriptTigerSvg, contentType: 'image/svg+xml', name: 'ghostscript-tiger.svg', src: ghostscriptTigerSrc },
 ].sort((left, right) => left.name.localeCompare(right.name));
 
 const appTree = {
@@ -27,26 +29,13 @@ const appTree = {
   kind: 'dir',
 } as const;
 
-export const createInitialSandboxDocument = async () =>
+export const createInitialSandboxMount = () =>
   createSandboxUrlMountFromFsTree(appTree, {
     baseUrl: window.location.href,
     entry: ['index.html'],
     mountId: 'sandbox-compat',
     readFile: (requested) => appFiles.find((item) => item.src === requested.src),
-  }).document;
-
-function file(
-  name: string,
-  contentType: string,
-  body: string,
-  src = `automerge:sandbox-compat/${name}`,
-) {
-  return { body, contentType, name, src };
-}
-
-function fileName(modulePath: string) {
-  return modulePath.slice(staticRoot.length);
-}
+});
 
 function contentType(path: string) {
   const extension = path.slice(path.lastIndexOf('.'));

@@ -1,25 +1,21 @@
 import type { ServerResponse } from 'node:http';
-import { fileURLToPath } from 'node:url';
 import { readdir, readFile } from 'node:fs/promises';
-import { extname, relative, resolve, sep } from 'node:path';
+import { extname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createSandboxUrlMount } from '@patchpit/sandbox';
 import { defineConfig, type Plugin } from 'vite';
 import wasm from 'vite-plugin-wasm';
-import { createSandboxUrlMount } from '@patchpit/sandbox';
 
 const repoPath = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const sandboxCompatRoot = repoPath('apps/sandbox-compat/static');
 const sandboxCompatUrlBackedFile = repoPath('apps/sandbox-compat/url-backed/Ghostscript_Tiger.svg');
 
 export default defineConfig({
-  plugins: [wasm(), sandboxCompatMount()],
   build: {
+    rollupOptions: { input: { index: repoPath('index.html') } },
     target: 'esnext',
-    rollupOptions: {
-      input: {
-        index: repoPath('index.html'),
-      },
-    },
   },
+  plugins: [wasm(), sandboxCompatMount()],
 });
 
 function sandboxCompatMount(): Plugin {
@@ -28,35 +24,29 @@ function sandboxCompatMount(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const requestUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
-        const mount = createSandboxUrlMount({
-          baseUrl: requestUrl,
-          entry: ['index.html'],
-          files: await sandboxCompatFiles(),
-          mountId: 'sandbox-compat',
-        });
-        const mountResponse = await mount.respond(new Request(requestUrl, { method: request.method ?? 'GET' }));
-        if (mountResponse === undefined) {
-          next();
-          return;
-        }
+        const mountResponse = await (await sandboxCompatMountFor(requestUrl)).respond(new Request(requestUrl, { method: request.method ?? 'GET' }));
+        if (mountResponse === undefined) return next();
         await writeWebResponse(response, mountResponse);
       });
     },
   };
 }
 
-const sandboxCompatFiles = async () => [
-  ...await staticFiles(sandboxCompatRoot),
-  sandboxCompatFile(['ghostscript-tiger.svg'], sandboxCompatUrlBackedFile),
-];
+const sandboxCompatMountFor = async (baseUrl: URL) =>
+  createSandboxUrlMount({
+    baseUrl,
+    entry: ['index.html'],
+    files: [
+      ...await sandboxCompatFiles(),
+      sandboxCompatFile(['ghostscript-tiger.svg'], sandboxCompatUrlBackedFile),
+    ],
+    mountId: 'sandbox-compat',
+  });
 
-const staticFiles = async (root: string, dir = root): Promise<readonly ReturnType<typeof sandboxCompatFile>[]> =>
-  (await Promise.all((await readdir(dir, { withFileTypes: true })).map(async (entry) => {
-    const path = resolve(dir, entry.name);
-    return entry.isDirectory()
-      ? staticFiles(root, path)
-      : [sandboxCompatFile(relative(root, path).split(sep), path)];
-  }))).flat();
+const sandboxCompatFiles = async () =>
+  (await readdir(sandboxCompatRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => sandboxCompatFile([entry.name], resolve(sandboxCompatRoot, entry.name)));
 
 const sandboxCompatFile = (path: readonly string[], file: string) => ({
   path,

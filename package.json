@@ -17,13 +17,9 @@
   },
   "dependencies": {
     "@patchpit/sandbox": "workspace:*",
-    "@patchpit/sandbox-fs": "workspace:*",
-    "react": "catalog:",
-    "react-dom": "catalog:"
+    "@patchpit/sandbox-fs": "workspace:*"
   },
   "devDependencies": {
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
     "@types/node": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",

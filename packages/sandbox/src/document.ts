@@ -3,7 +3,6 @@ import { sandboxDocumentPathKey, type SandboxDocumentPath } from './path.ts';
 export type SandboxDocumentBody = string | Blob | BufferSource;
 
 export type SandboxDocument = {
-  readonly dispose?: () => void | Promise<void>;
   readonly referrerPolicy: 'no-referrer';
   readonly sandbox: 'allow-scripts';
   readonly url: string;
@@ -12,6 +11,7 @@ export type SandboxDocument = {
 export type SandboxUrlMount = {
   readonly document: SandboxDocument;
   readonly respond: (request: Request | URL | string) => Promise<Response | undefined>;
+  readonly scopePath: string;
 };
 
 export type SandboxUrlMountFile = {
@@ -42,6 +42,7 @@ export const createSandboxUrlMount = ({
   const plan = planSandboxDocument(entry, files);
   const base = new URL(baseUrl);
   const mountOrigin = base.origin;
+  const scopePath = `${sandboxMountPath(route, mountId, [])}/`;
   const mountFiles = new Map(plan.files.map((file) => [file.path, file.file]));
 
   return {
@@ -64,6 +65,7 @@ export const createSandboxUrlMount = ({
         mountOrigin,
       );
     },
+    scopePath,
   };
 };
 
@@ -95,7 +97,7 @@ const defaultSandboxRoute = ['__patchpit', 'sandbox'] as const;
 const sandboxMountPath = (
   route: readonly string[],
   mountId: string,
-  path: SandboxDocumentPath,
+  path: readonly string[],
 ): string =>
   `/${[...route, mountId, ...path].map(encodeURIComponent).join('/')}`;
 

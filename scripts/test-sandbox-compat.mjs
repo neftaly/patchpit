@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readdir, readFile } from 'node:fs/promises';
-import { extname, relative, resolve, sep } from 'node:path';
+import { extname, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createSandboxUrlMountFromFsTree } from '@patchpit/sandbox-fs';
 
@@ -25,20 +25,18 @@ try {
 }
 
 async function referenceReport(browser, url, onlyCase) {
-  const page = await browser.newPage();
-  try {
+  return pageReport(browser, async (page) => {
     await page.goto(`${url}${caseHash(onlyCase)}`);
-    return await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2000 })
-      .then((handle) => handle.jsonValue());
-  } finally {
-    await page.close();
-  }
+    return compatReport(page);
+  });
 }
 
 async function sandboxReport(browser, files, server, onlyCase) {
-  const page = await browser.newPage();
   const documentBuildStartedAt = performance.now();
-  const sandboxMount = createSandboxUrlMountFromFsTree(fsTree(files), {
+  const sandboxMount = createSandboxUrlMountFromFsTree({
+    entries: files.map((file) => [file.path[0], { kind: 'file', src: file.src }]),
+    kind: 'dir',
+  }, {
     baseUrl: server.url,
     entry: ['index.html'],
     mountId: 'sandbox-compat',
@@ -48,7 +46,7 @@ async function sandboxReport(browser, files, server, onlyCase) {
   const sandboxDocument = sandboxMount.document;
   const documentBuildMs = performance.now() - documentBuildStartedAt;
 
-  try {
+  return pageReport(browser, async (page) => {
     await page.setContent('<!doctype html><body></body>');
     await page.evaluate(({ document, hash }) => {
       window.__sandboxCompatReport = undefined;
@@ -61,16 +59,27 @@ async function sandboxReport(browser, files, server, onlyCase) {
       iframe.src = `${document.url}${hash}`;
       window.document.body.append(iframe);
     }, { document: sandboxDocument, hash: caseHash(onlyCase) });
-    const report = await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2000 })
-      .then((handle) => handle.jsonValue());
+    const report = await compatReport(page);
     return {
       ...report,
       documentBuildMs,
       launchUrlLength: sandboxDocument.url.length,
     };
+  });
+}
+
+async function pageReport(browser, read) {
+  const page = await browser.newPage();
+  try {
+    return await read(page);
   } finally {
     await page.close();
   }
+}
+
+function compatReport(page) {
+  return page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2000 })
+    .then((handle) => handle.jsonValue());
 }
 
 function caseHash(onlyCase) {
@@ -121,45 +130,18 @@ async function mountedFiles() {
   ].toSorted((left, right) => left.path.join('/').localeCompare(right.path.join('/')));
 }
 
-async function staticFiles(root, dir = root) {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const nested = await Promise.all(entries.map(async (entry) => {
-    const path = resolve(dir, entry.name);
-    if (entry.isDirectory()) return staticFiles(root, path);
-    const filePath = relativePath(root, path);
-    return [{
-      body: await readFile(path),
-      contentType: contentType(path),
-      path: filePath,
-      src: `automerge:sandbox-compat/${filePath.join('/')}`,
-    }];
-  }));
-  return nested.flat();
-}
-
-function fsTree(files) {
-  return { entries: treeEntries(files, []), kind: 'dir' };
-}
-
-function treeEntries(files, prefix) {
-  return uniqueNames(files, prefix).map((name) => {
-    const path = [...prefix, name];
-    const exactFile = files.find((file) => samePath(file.path, path));
-    return [
-      name,
-      exactFile === undefined
-        ? { entries: treeEntries(files, path), kind: 'dir' }
-        : { kind: 'file', src: exactFile.src },
-    ];
-  });
-}
-
-function uniqueNames(files, prefix) {
-  return [...new Set(files
-    .map((file) => file.path)
-    .filter((path) => path.length > prefix.length && samePath(path.slice(0, prefix.length), prefix))
-    .map((path) => path[prefix.length]))]
-    .toSorted((left, right) => left.localeCompare(right));
+async function staticFiles(root) {
+  return Promise.all((await readdir(root, { withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map(async (entry) => {
+      const path = resolve(root, entry.name);
+      return {
+        body: await readFile(path),
+        contentType: contentType(path),
+        path: [entry.name],
+        src: `automerge:sandbox-compat/${entry.name}`,
+      };
+    }));
 }
 
 function staticServer(files) {
@@ -171,7 +153,7 @@ function staticServer(files) {
       await writeWebResponse(response, mountResponse);
       return;
     }
-    const file = fileByPath(files, requestPath(request.url));
+    const file = files.find((item) => item.path[0] === requestFileName(request.url));
     if (file === undefined) {
       response.writeHead(404).end();
       return;
@@ -200,25 +182,8 @@ async function writeWebResponse(response, webResponse) {
   response.end(webResponse.body === null ? undefined : new Uint8Array(await webResponse.arrayBuffer()));
 }
 
-function fileByPath(files, path) {
-  const resolvedPath = path.length === 0 ? ['index.html'] : path;
-  return files.find((file) => samePath(file.path, resolvedPath));
-}
-
-function requestPath(url) {
-  return new URL(url ?? '/', 'http://localhost/')
-    .pathname
-    .split('/')
-    .filter((segment) => segment !== '')
-    .map((segment) => decodeURIComponent(segment));
-}
-
-function relativePath(root, path) {
-  return relative(root, path).split(sep).filter((segment) => segment !== '');
-}
-
-function samePath(left, right) {
-  return left.length === right.length && left.every((segment, index) => segment === right[index]);
+function requestFileName(url) {
+  return decodeURIComponent(new URL(url ?? '/', 'http://localhost/').pathname.slice(1)) || 'index.html';
 }
 
 function contentType(path) {
