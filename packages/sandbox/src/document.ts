@@ -14,13 +14,18 @@ export type SandboxDocumentFile = {
   readonly path: SandboxDocumentPath;
 };
 
-type SandboxDocumentPlan = {
-  readonly entryPath: string;
-  readonly files: readonly SandboxDocumentPlannedFile[];
+export type SandboxDocumentFilePath = {
+  readonly path: SandboxDocumentPath;
 };
 
-type SandboxDocumentPlannedFile = {
-  readonly file: SandboxDocumentFile;
+export type SandboxDocumentPlan<TFile extends SandboxDocumentFilePath> = {
+  readonly entryFileIndex: number;
+  readonly entryPath: string;
+  readonly files: readonly SandboxDocumentPlannedFile<TFile>[];
+};
+
+export type SandboxDocumentPlannedFile<TFile extends SandboxDocumentFilePath> = {
+  readonly file: TFile;
   readonly path: string;
 };
 
@@ -31,28 +36,31 @@ export const createSandboxDocument = async ({
   readonly entry: SandboxDocumentPath;
   readonly files: readonly SandboxDocumentFile[];
 }): Promise<SandboxDocument> => {
-  const plan = sandboxDocumentPlan(entry, files);
+  const plan = planSandboxDocument(entry, files);
+  const fileBytes = await Promise.all(plan.files.map(({ file, path }) => sandboxFileBytes(file, path)));
 
   return {
     referrerPolicy: 'no-referrer',
     sandbox: 'allow-scripts',
     url: textDataUrl('text/html;charset=utf-8', sandboxIframeBootstrapHtml(compileSandboxBootstrapPayload(
-      plan.entryPath,
-      await Promise.all(plan.files.map(({ file, path }) => sandboxFileBytes(file, path))),
+      fileBytes[plan.entryFileIndex]!,
+      fileBytes,
     ))),
   };
 };
 
-const sandboxDocumentPlan = (
+export const planSandboxDocument = <TFile extends SandboxDocumentFilePath>(
   entry: SandboxDocumentPath,
-  files: readonly SandboxDocumentFile[],
-): SandboxDocumentPlan => {
+  files: readonly TFile[],
+): SandboxDocumentPlan<TFile> => {
   const entryPath = sandboxDocumentPathKey(entry);
   const plannedFiles = files.map((file) => ({ file, path: sandboxDocumentPathKey(file.path) }));
   const duplicatePath = firstDuplicate(plannedFiles.map((file) => file.path));
   if (duplicatePath !== undefined) throw new Error(`Duplicate sandbox document path: ${duplicatePath}`);
+  const entryFileIndex = plannedFiles.findIndex((file) => file.path === entryPath);
+  if (entryFileIndex === -1) throw new Error(`Sandbox entry file is missing: ${entryPath}`);
 
-  return { entryPath, files: plannedFiles };
+  return { entryFileIndex, entryPath, files: plannedFiles };
 };
 
 const sandboxFileBytes = async (file: SandboxDocumentFile, path: string): Promise<SandboxFileBytes> => ({

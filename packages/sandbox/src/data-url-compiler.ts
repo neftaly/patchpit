@@ -7,21 +7,17 @@ export type SandboxFileBytes = {
 };
 
 export const compileSandboxBootstrapPayload = (
-  entryPath: string,
+  entryFile: SandboxFileBytes,
   files: readonly SandboxFileBytes[],
-): SandboxBootstrapPayload => {
-  const entryFile = files.find((file) => file.path === entryPath);
-  if (entryFile === undefined) throw new Error(`Sandbox entry file is missing: ${entryPath}`);
-  return {
-    contentSecurityPolicy: sandboxContentSecurityPolicy,
-    entryHtml: textDecoder.decode(entryFile.body),
-    entryPath,
-    fileDataUrls: files.map((file) => [file.path, dataUrl(file.contentType, file.body)]),
-    htmlFiles: files
-      .filter((file) => file.contentType.startsWith('text/html'))
-      .map((file) => [file.path, textDecoder.decode(file.body)]),
-  };
-};
+): SandboxBootstrapPayload => ({
+  contentSecurityPolicy: sandboxContentSecurityPolicy,
+  entryHtml: textDecoder.decode(entryFile.body),
+  entryPath: entryFile.path,
+  fileDataUrls: files.map((file) => [file.path, dataUrl(file.contentType, file.body)]),
+  htmlFiles: files
+    .filter((file) => file.contentType.startsWith('text/html'))
+    .map((file) => [file.path, textDecoder.decode(file.body)]),
+});
 
 const textDecoder = new TextDecoder();
 

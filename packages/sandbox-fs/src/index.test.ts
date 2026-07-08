@@ -60,6 +60,21 @@ void test('rejects unresolved file bodies and delegates document validation', as
   );
 });
 
+void test('rejects invalid sandbox mounts before reading file bodies', async () => {
+  let reads = 0;
+  await assert.rejects(
+    createStaticSandboxDocumentFromFsTree(tree([['app.html', { kind: 'file', src: '' }]]), {
+      entry: ['index.html'],
+      readFile: () => {
+        reads += 1;
+        return { body: '', contentType: 'text/html' };
+      },
+    }),
+    /Sandbox entry file is missing: index\.html/,
+  );
+  assert.equal(reads, 0);
+});
+
 const outerHtml = (url: string) =>
   decodeURIComponent(url.slice('data:text/html;charset=utf-8,'.length));
 

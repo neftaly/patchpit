@@ -1,6 +1,7 @@
 import type { FsTree } from '@patchpit/fs';
 import {
   createSandboxDocument,
+  planSandboxDocument,
   type SandboxDocument,
   type SandboxDocumentBody,
   type SandboxDocumentPath,
@@ -30,6 +31,7 @@ export const createStaticSandboxDocumentFromFsTree = async (
   options: CreateSandboxDocumentFromFsTreeOptions,
 ): Promise<SandboxDocument> => {
   const files = sandboxFsFilesFromTree(tree);
+  planSandboxDocument(options.entry, files);
 
   return createSandboxDocument({
     entry: options.entry,
