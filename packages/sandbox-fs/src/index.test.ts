@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { FsTree } from '@patchpit/fs';
-import { createSandboxUrlMountFromFsTree } from './index';
+import type { FsTree } from '@patchpit/fs/tree';
+import { createSandboxUrlMountFromFsTree } from './index.ts';
 
 void test('creates filesystem-backed sandbox URL mounts without eagerly resolving bodies', async () => {
   let reads = 0;

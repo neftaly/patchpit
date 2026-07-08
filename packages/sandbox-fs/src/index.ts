@@ -1,9 +1,10 @@
-import type { FsTree } from '@patchpit/fs';
+import { fsTreeFromFiles, type FsTree } from '@patchpit/fs/tree';
 import {
   createSandboxUrlMount,
   type SandboxDocumentBody,
   type SandboxDocumentPath,
   type SandboxUrlMount,
+  sandboxDocumentPathKey,
 } from '@patchpit/sandbox';
 
 export type SandboxFsFile = {
@@ -26,6 +27,22 @@ export type CreateSandboxUrlMountFromFsTreeOptions = {
   readonly mountId?: string;
   readonly readFile: SandboxFsFileReader;
   readonly route?: readonly string[];
+};
+
+export type CreateSandboxUrlMountFromFsFilesOptions =
+  Omit<CreateSandboxUrlMountFromFsTreeOptions, 'readFile'>;
+
+export type SandboxFsFileWithContent = SandboxFsFile & SandboxFsFileContent;
+
+export const createSandboxUrlMountFromFsFiles = (
+  files: readonly SandboxFsFileWithContent[],
+  options: CreateSandboxUrlMountFromFsFilesOptions,
+): SandboxUrlMount => {
+  const fileByPath = new Map(files.map((file) => [sandboxDocumentPathKey(file.path), file]));
+  return createSandboxUrlMountFromFsTree(fsTreeFromFiles(files), {
+    ...options,
+    readFile: (file) => fileByPath.get(sandboxDocumentPathKey(file.path)),
+  });
 };
 
 export const createSandboxUrlMountFromFsTree = (

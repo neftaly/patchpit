@@ -1,4 +1,4 @@
-import { createInitialSandboxMount } from './initial-sandbox-mount';
+import { createInitialSandboxMount } from './initial-sandbox-mount.ts';
 
 const root = document.querySelector('#root');
 if (root === null) throw new Error('Missing root element.');

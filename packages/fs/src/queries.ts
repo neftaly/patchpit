@@ -1,5 +1,5 @@
 import { as, asc, env, eq, from, limit, pipe, sort, where } from '@tarstate/core/query';
-import { fsRelations, type FsNodeKey } from './schema';
+import { fsRelations, type FsNodeKey } from './schema.ts';
 
 export const fsNodes = as(fsRelations.nodes, 'node');
 

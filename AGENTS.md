@@ -14,9 +14,10 @@ projections, live state views, indexes, queries/tooling, write intents, and
 row/schema validation. This does not decide where canonical state lives; choose
 that separately under State Ownership.
 
-When creating or repairing relation rows, use Tarstate schema tooling and
-generated artifacts (`agent-card.md`, `rows.d.ts`, JSON Schema), regenerating
-them from schema sources instead of hand-editing.
+When creating or repairing relation rows, use Tarstate schema tooling from the
+schema source. Generated artifacts (`agent-card.md`, `rows.d.ts`, JSON Schema)
+are not wired in this repo yet; when they are present, regenerate them instead
+of hand-editing.
 
 ## Automerge Moves
 

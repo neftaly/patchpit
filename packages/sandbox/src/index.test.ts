@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSandboxUrlMount, planSandboxDocument } from './index';
+import { createSandboxUrlMount, planSandboxDocument } from './index.ts';
 
 void test('plans sandbox document paths without reading or serving files', () => {
   const index = { path: ['index.html'], src: 'automerge:index' };

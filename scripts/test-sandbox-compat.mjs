@@ -1,8 +1,12 @@
 import { createServer } from 'node:http';
-import { readdir, readFile } from 'node:fs/promises';
-import { extname, resolve } from 'node:path';
+import { constants } from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { chromium } from 'playwright-core';
-import { createSandboxUrlMountFromFsTree } from '@patchpit/sandbox-fs';
+import { createSandboxUrlMountFromFsFiles } from '@patchpit/sandbox-fs';
+import { readSandboxFsDirectory } from '@patchpit/sandbox-fs/node';
+import { sandboxDocumentPathKey } from '@patchpit/sandbox';
+import { respondWithSandboxUrlMount } from '@patchpit/sandbox/node';
 
 const appRoot = resolve('apps/sandbox-compat/static');
 const ghostscriptTigerPath = resolve('apps/sandbox-compat/url-backed/Ghostscript_Tiger.svg');
@@ -10,6 +14,7 @@ const ghostscriptTigerSrc = 'https://upload.wikimedia.org/wikipedia/commons/f/fd
 const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? '/usr/bin/chromium';
 const selectedCase = process.argv.find((argument) => argument.startsWith('--case='))?.slice('--case='.length);
 
+await assertChromiumExecutable(chromiumPath);
 const files = await mountedFiles();
 const server = await staticServer(files);
 const browser = await chromium.launch({ executablePath: chromiumPath });
@@ -24,6 +29,14 @@ try {
   await server.close();
 }
 
+async function assertChromiumExecutable(path) {
+  try {
+    await access(path, constants.X_OK);
+  } catch {
+    throw new Error(`Chromium executable not found: ${path}\nSet PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium.`);
+  }
+}
+
 async function referenceReport(browser, url, onlyCase) {
   return pageReport(browser, async (page) => {
     await page.goto(`${url}${caseHash(onlyCase)}`);
@@ -33,14 +46,10 @@ async function referenceReport(browser, url, onlyCase) {
 
 async function sandboxReport(browser, files, server, onlyCase) {
   const documentBuildStartedAt = performance.now();
-  const sandboxMount = createSandboxUrlMountFromFsTree({
-    entries: files.map((file) => [file.path[0], { kind: 'file', src: file.src }]),
-    kind: 'dir',
-  }, {
+  const sandboxMount = createSandboxUrlMountFromFsFiles(files, {
     baseUrl: server.url,
     entry: ['index.html'],
     mountId: 'sandbox-compat',
-    readFile: (file) => files.find((item) => item.src === file.src),
   });
   server.addMount(sandboxMount);
   const sandboxDocument = sandboxMount.document;
@@ -120,7 +129,9 @@ function selectedCases(cases, onlyCase) {
 
 async function mountedFiles() {
   return [
-    ...await staticFiles(appRoot),
+    ...await readSandboxFsDirectory(appRoot, {
+      src: (path) => `automerge:sandbox-compat/${path.join('/')}`,
+    }),
     {
       body: await readFile(ghostscriptTigerPath),
       contentType: 'image/svg+xml',
@@ -130,30 +141,13 @@ async function mountedFiles() {
   ].toSorted((left, right) => left.path.join('/').localeCompare(right.path.join('/')));
 }
 
-async function staticFiles(root) {
-  return Promise.all((await readdir(root, { withFileTypes: true }))
-    .filter((entry) => entry.isFile())
-    .map(async (entry) => {
-      const path = resolve(root, entry.name);
-      return {
-        body: await readFile(path),
-        contentType: contentType(path),
-        path: [entry.name],
-        src: `automerge:sandbox-compat/${entry.name}`,
-      };
-    }));
-}
-
 function staticServer(files) {
   let mount;
+  const fileByPath = new Map(files.map((file) => [sandboxDocumentPathKey(file.path), file]));
   const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
-    const mountResponse = await mount?.respond(new Request(url, { method: request.method ?? 'GET' }));
-    if (mountResponse !== undefined) {
-      await writeWebResponse(response, mountResponse);
-      return;
-    }
-    const file = files.find((item) => item.path[0] === requestFileName(request.url));
+    if (mount !== undefined && await respondWithSandboxUrlMount(mount, request, response)) return;
+    const path = requestPath(request.url);
+    const file = fileByPath.get(sandboxDocumentPathKey(path.length === 0 ? ['index.html'] : path));
     if (file === undefined) {
       response.writeHead(404).end();
       return;
@@ -177,23 +171,10 @@ function staticServer(files) {
   });
 }
 
-async function writeWebResponse(response, webResponse) {
-  response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers));
-  response.end(webResponse.body === null ? undefined : new Uint8Array(await webResponse.arrayBuffer()));
-}
-
-function requestFileName(url) {
-  return decodeURIComponent(new URL(url ?? '/', 'http://localhost/').pathname.slice(1)) || 'index.html';
-}
-
-function contentType(path) {
-  const type = ({
-    '.css': 'text/css',
-    '.html': 'text/html',
-    '.js': 'text/javascript',
-    '.json': 'application/json',
-    '.svg': 'image/svg+xml',
-  })[extname(path)];
-  if (type === undefined) throw new Error(`Unknown sandbox compat content type: ${path}`);
-  return type;
+function requestPath(url) {
+  return new URL(url ?? '/', 'http://localhost/')
+    .pathname
+    .split('/')
+    .filter((segment) => segment !== '')
+    .map(decodeURIComponent);
 }

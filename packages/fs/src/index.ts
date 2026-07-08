@@ -3,15 +3,17 @@ export {
   type FsRow,
   type FsNodeKey,
   type FsPath,
-} from './schema';
+} from './schema.ts';
 
 export {
   fsChildrenOfKey,
   fsNodeByKey,
   fsNodes,
-} from './queries';
+} from './queries.ts';
 
 export {
+  fsTreeFromFiles,
   fsRowsFromTree,
   type FsTree,
-} from './tree';
+  type FsTreeFile,
+} from './tree.ts';

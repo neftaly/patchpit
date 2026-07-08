@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDb, q } from '@tarstate/core/db';
 import { validateRelationRow } from '@tarstate/core/relation';
-import { fsChildrenOfKey, fsNodeByKey, fsRowsFromTree } from './index';
-import { fsRelations } from './schema';
+import { fsChildrenOfKey, fsNodeByKey, fsRowsFromTree, fsTreeFromFiles } from './index.ts';
+import { fsRelations } from './schema.ts';
 
 const validNodeRow = {
   key: [0],
@@ -34,6 +34,24 @@ void test('filesystem tree rows use structural keys and keep src as data', () =>
     { key: [0, 0], kind: 'file', name: 'tiger.svg', parentKey: [0], path: ['nested', 'tiger.svg'], position: 0, src },
     { key: [1], kind: 'file', name: 'tiger.svg', parentKey: [], path: ['tiger.svg'], position: 1, src },
   ]);
+});
+
+void test('filesystem tree can be projected from file paths', () => {
+  assert.deepEqual(fsTreeFromFiles([
+    { path: ['assets', 'app.js'], src: 'automerge:app' },
+    { path: ['assets'], src: 'automerge:assets-file' },
+    { path: ['index.html'], src: 'automerge:index' },
+  ]), {
+    entries: [
+      ['assets', {
+        entries: [['app.js', { kind: 'file', src: 'automerge:app' }]],
+        kind: 'dir',
+      }],
+      ['assets', { kind: 'file', src: 'automerge:assets-file' }],
+      ['index.html', { kind: 'file', src: 'automerge:index' }],
+    ],
+    kind: 'dir',
+  });
 });
 
 void test('filesystem tree rows pass src through unchanged', () => {

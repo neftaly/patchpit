@@ -21,10 +21,13 @@ const activeCases = selectedCase === null
 if (activeCases.length === 0) throw new Error(`Unknown sandbox compat case: ${selectedCase}`);
 const startedAt = performance.now();
 
-const results = await Promise.all(activeCases.map(async ({ run, ...definition }) => ({
-  ...definition,
-  ...await run(),
-})));
+const results = await Promise.all(activeCases.map(async ({ run, ...definition }) => {
+  label(definition.id);
+  return {
+    ...definition,
+    ...await run(),
+  };
+}));
 
 const report = {
   cases: results,
@@ -37,6 +40,12 @@ parent.postMessage(report, '*');
 
 function compatCase(id, expectedSandbox, run) {
   return { expectedSandbox, id, run };
+}
+
+function label(id) {
+  const item = document.createElement('p');
+  item.textContent = `${id}:`;
+  document.body.append(item);
 }
 
 async function fetchRelativeJson() {
