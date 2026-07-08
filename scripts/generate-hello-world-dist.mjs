@@ -8,7 +8,7 @@ import {
   urlBackedFixtures,
 } from './hello-world-fixtures/config.mjs';
 import { automergeFixtureAssets, sameContentDoc, sameFolderDoc } from './hello-world-fixtures/automerge-docs.mjs';
-import { distFiles, urlBackedFixtureFiles } from './hello-world-fixtures/files.mjs';
+import { distFiles, urlBackedFixtureFiles } from './hello-world-fixtures/fixture-files.mjs';
 import { generatedModule } from './hello-world-fixtures/generated-module.mjs';
 import { relativePath, sameBytes } from './hello-world-fixtures/paths.mjs';
 

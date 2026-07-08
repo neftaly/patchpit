@@ -1,10 +1,10 @@
-export type OpaqueSandboxPayload = {
-  readonly entry: string;
-  readonly files: readonly (readonly [string, string])[];
-  readonly html: string;
+export type SandboxBootstrapPayload = {
+  readonly entryHtml: string;
+  readonly entryPath: string;
+  readonly fileDataUrls: readonly (readonly [string, string])[];
 };
 
-const sandboxCsp = [
+const sandboxContentSecurityPolicy = [
   `default-src 'none'`,
   `base-uri 'none'`,
   `connect-src data:`,
@@ -19,15 +19,15 @@ const sandboxCsp = [
   `worker-src 'none'`,
 ].join('; ');
 
-export const opaqueBootstrap = (payload: OpaqueSandboxPayload): string => `<!doctype html>
-<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(sandboxCsp)}">
+export const sandboxIframeBootstrapHtml = (payload: SandboxBootstrapPayload): string => `<!doctype html>
+<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(sandboxContentSecurityPolicy)}">
 <script>
-(${bootstrapRuntime.toString()})(${JSON.stringify(payload).replaceAll('<', '\\u003c')});
+(${runSandboxIframeBootstrap.toString()})(${JSON.stringify(payload).replaceAll('<', '\\u003c')});
 </script>`;
 
-function bootstrapRuntime(payload: OpaqueSandboxPayload) {
-  const files = new Map(payload.files);
-  const base = new URL(payload.entry, 'https://sandbox.local/');
+function runSandboxIframeBootstrap(payload: SandboxBootstrapPayload) {
+  const fileDataUrls = new Map(payload.fileDataUrls);
+  const entryUrl = new URL(payload.entryPath, 'https://sandbox.local/');
   const nativeFetch = window.fetch.bind(window);
   const urlAttributes = ['src', 'href'];
   const urlSelector = '[src], [href]';
@@ -42,46 +42,46 @@ function bootstrapRuntime(payload: OpaqueSandboxPayload) {
       && !absoluteUrlPattern.test(trimmed);
   };
 
-  const fileUrl = (value: string | null) => {
+  const fileDataUrl = (value: string | null) => {
     if (value === null || !isRelativeFileReference(value)) return value;
-    const url = new URL(value.trim(), base);
-    const resolved = files.get(url.pathname.slice(1));
-    if (resolved === undefined) throw new Error(`Missing sandbox file referenced from ${payload.entry}: ${value}`);
+    const url = new URL(value.trim(), entryUrl);
+    const resolved = fileDataUrls.get(url.pathname.slice(1));
+    if (resolved === undefined) throw new Error(`Missing sandbox file referenced from ${payload.entryPath}: ${value}`);
     return `${resolved}${url.hash}`;
   };
 
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    const resolved = typeof input === 'string' || input instanceof URL ? fileUrl(input.toString()) : null;
+    const resolved = typeof input === 'string' || input instanceof URL ? fileDataUrl(input.toString()) : null;
     return nativeFetch(resolved ?? input, init);
   };
 
-  const rewrite = (root: ParentNode) => {
+  const rewriteRelativeUrlAttributes = (root: ParentNode) => {
     const elements = root instanceof Element && root.matches(urlSelector)
       ? [root, ...root.querySelectorAll(urlSelector)]
       : root.querySelectorAll(urlSelector);
     for (const element of elements) {
       for (const name of urlAttributes) {
         const value = element.getAttribute(name);
-        const resolved = fileUrl(value);
+        const resolved = fileDataUrl(value);
         if (resolved !== null && resolved !== value) element.setAttribute(name, resolved);
       }
     }
   };
 
-  const parsed = new DOMParser().parseFromString(payload.html, 'text/html');
-  rewrite(parsed);
-  document.documentElement.replaceWith(document.importNode(parsed.documentElement, true));
+  const parsedEntryDocument = new DOMParser().parseFromString(payload.entryHtml, 'text/html');
+  rewriteRelativeUrlAttributes(parsedEntryDocument);
+  document.documentElement.replaceWith(document.importNode(parsedEntryDocument.documentElement, true));
 
   new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      if (mutation.type === 'attributes' && mutation.target instanceof Element) rewrite(mutation.target);
+      if (mutation.type === 'attributes' && mutation.target instanceof Element) rewriteRelativeUrlAttributes(mutation.target);
       for (const node of mutation.addedNodes) {
-        if (node instanceof Element) rewrite(node);
+        if (node instanceof Element) rewriteRelativeUrlAttributes(node);
       }
     }
   }).observe(document, { attributeFilter: ['href', 'src'], attributes: true, childList: true, subtree: true });
 
-  const activateScripts = async () => {
+  const activateEntryScripts = async () => {
     for (const inertScript of Array.from(document.scripts)) {
       const script = document.createElement('script');
       for (const attribute of inertScript.attributes) script.setAttribute(attribute.name, attribute.value);
@@ -103,7 +103,7 @@ function bootstrapRuntime(payload: OpaqueSandboxPayload) {
     }
   };
 
-  void activateScripts().catch((error) => setTimeout(() => { throw error; }));
+  void activateEntryScripts().catch((error) => setTimeout(() => { throw error; }));
 }
 
 const escapeHtmlAttribute = (value: string): string =>

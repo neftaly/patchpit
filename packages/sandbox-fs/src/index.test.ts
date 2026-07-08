@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { FsTree } from '@patchpit/fs';
 import { createSandboxDocumentFromFsTree } from './index';
 
-void test('creates opaque sandbox documents from filesystem trees', async () => {
+void test('creates sandbox documents from filesystem trees', async () => {
   const document = await createSandboxDocumentFromFsTree(tree([
     ['index.html', { kind: 'file', src: '<main></main>' }],
     ['assets', {

@@ -1,25 +1,25 @@
-import { compileOpaqueSandboxPayload, type NormalizedSandboxFile } from './opaque-compiler';
-import { opaqueBootstrap } from './opaque-runtime';
+import { compileSandboxBootstrapPayload, type SandboxFileBytes } from './data-url-compiler';
+import { sandboxIframeBootstrapHtml } from './iframe-bootstrap';
 import { sandboxDocumentPathKey, type SandboxDocumentBody, type SandboxDocumentPath } from './path';
 
-type OpaqueSandboxDocument = {
+export type SandboxDocument = {
   readonly sandbox: 'allow-scripts';
   readonly url: string;
 };
 
-type OpaqueSandboxFile = {
+export type SandboxDocumentFile = {
   readonly body: SandboxDocumentBody;
   readonly contentType: string;
   readonly path: SandboxDocumentPath;
 };
 
-export const createOpaqueSandboxDocument = async ({
+export const createSandboxDocument = async ({
   entry,
   files,
 }: {
   readonly entry: SandboxDocumentPath;
-  readonly files: readonly OpaqueSandboxFile[];
-}): Promise<OpaqueSandboxDocument> => {
+  readonly files: readonly SandboxDocumentFile[];
+}): Promise<SandboxDocument> => {
   const entryPath = sandboxDocumentPathKey(entry);
   const filePaths = files.map((file) => sandboxDocumentPathKey(file.path));
   const duplicatePath = duplicate(filePaths);
@@ -27,14 +27,14 @@ export const createOpaqueSandboxDocument = async ({
 
   return {
     sandbox: 'allow-scripts',
-    url: textDataUrl('text/html; charset=utf-8', opaqueBootstrap(compileOpaqueSandboxPayload(
+    url: textDataUrl('text/html; charset=utf-8', sandboxIframeBootstrapHtml(compileSandboxBootstrapPayload(
       entryPath,
-      await Promise.all(files.map((file, index) => normalizeFile(file, filePaths[index] as string))),
+      await Promise.all(files.map((file, index) => sandboxFileBytes(file, filePaths[index] as string))),
     ))),
   };
 };
 
-const normalizeFile = async (file: OpaqueSandboxFile, path: string): Promise<NormalizedSandboxFile> => ({
+const sandboxFileBytes = async (file: SandboxDocumentFile, path: string): Promise<SandboxFileBytes> => ({
   body: await bodyBytes(file.body),
   contentType: file.contentType,
   path,

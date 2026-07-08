@@ -1,37 +1,37 @@
-import type { OpaqueSandboxPayload } from './opaque-runtime';
+import type { SandboxBootstrapPayload } from './iframe-bootstrap';
 
-export type NormalizedSandboxFile = {
+export type SandboxFileBytes = {
   readonly body: Uint8Array;
   readonly contentType: string;
   readonly path: string;
 };
 
-type RelativeFileUrl = (path: string) => string | undefined;
+type DataUrlForPath = (path: string) => string | undefined;
 
 const sourceMapUrlPrefix = '//# sourceMappingURL=';
 const absoluteUrlPattern = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 
-export const compileOpaqueSandboxPayload = (
-  entry: string,
-  files: readonly NormalizedSandboxFile[],
-): OpaqueSandboxPayload => {
-  const entryFile = files.find((file) => file.path === entry);
-  if (entryFile === undefined) throw new Error(`Sandbox entry file is missing: ${entry}`);
-  const urls = transformedDataUrls(files);
+export const compileSandboxBootstrapPayload = (
+  entryPath: string,
+  files: readonly SandboxFileBytes[],
+): SandboxBootstrapPayload => {
+  const entryFile = files.find((file) => file.path === entryPath);
+  if (entryFile === undefined) throw new Error(`Sandbox entry file is missing: ${entryPath}`);
+  const dataUrlsByPath = sandboxFileDataUrls(files);
   return {
-    entry,
-    files: files.map((file) => [file.path, urls.get(file.path) as string]),
-    html: new TextDecoder().decode(entryFile.body),
+    entryHtml: new TextDecoder().decode(entryFile.body),
+    entryPath,
+    fileDataUrls: files.map((file) => [file.path, dataUrlsByPath.get(file.path) as string]),
   };
 };
 
-const transformedDataUrls = (files: readonly NormalizedSandboxFile[]): ReadonlyMap<string, string> => {
+const sandboxFileDataUrls = (files: readonly SandboxFileBytes[]): ReadonlyMap<string, string> => {
   const filesByPath = new Map(files.map((file) => [file.path, file]));
-  const urls = new Map<string, string>();
+  const dataUrlsByPath = new Map<string, string>();
   const resolving = new Set<string>();
 
-  const fileUrl = (path: string): string | undefined => {
-    const cached = urls.get(path);
+  const dataUrlForPath = (path: string): string | undefined => {
+    const cached = dataUrlsByPath.get(path);
     if (cached !== undefined) return cached;
 
     const file = filesByPath.get(path);
@@ -40,51 +40,51 @@ const transformedDataUrls = (files: readonly NormalizedSandboxFile[]): ReadonlyM
 
     resolving.add(path);
     try {
-      const body = transformedBody(file, fileUrl);
+      const body = sandboxFileBody(file, dataUrlForPath);
       const url = dataUrl(file.contentType, body);
-      urls.set(path, url);
+      dataUrlsByPath.set(path, url);
       return url;
     } finally {
       resolving.delete(path);
     }
   };
 
-  for (const file of files) fileUrl(file.path);
-  return urls;
+  for (const file of files) dataUrlForPath(file.path);
+  return dataUrlsByPath;
 };
 
-const transformedBody = (file: NormalizedSandboxFile, fileUrl: RelativeFileUrl): Uint8Array | string =>
+const sandboxFileBody = (file: SandboxFileBytes, dataUrlForPath: DataUrlForPath): Uint8Array | string =>
   file.contentType.startsWith('text/javascript')
-    ? javascriptUrls(sourceMapUrls(new TextDecoder().decode(file.body), file.path, fileUrl), file.path, fileUrl)
+    ? rewriteJavaScriptFileReferences(rewriteSourceMapUrl(new TextDecoder().decode(file.body), file.path, dataUrlForPath), file.path, dataUrlForPath)
     : file.contentType.startsWith('text/css')
-      ? cssUrls(new TextDecoder().decode(file.body), file.path, fileUrl)
+      ? rewriteCssFileReferences(new TextDecoder().decode(file.body), file.path, dataUrlForPath)
       : file.body;
 
-const sourceMapUrls = (text: string, filePath: string, fileUrl: RelativeFileUrl): string =>
+const rewriteSourceMapUrl = (text: string, filePath: string, dataUrlForPath: DataUrlForPath): string =>
   text.split('\n').map((line) =>
     line.startsWith(sourceMapUrlPrefix)
-      ? `${sourceMapUrlPrefix}${sandboxRelativeFileUrl(line.slice(sourceMapUrlPrefix.length), filePath, fileUrl)}`
+      ? `${sourceMapUrlPrefix}${dataUrlForRelativeFileReference(line.slice(sourceMapUrlPrefix.length), filePath, dataUrlForPath)}`
       : line).join('\n');
 
-const javascriptUrls = (text: string, filePath: string, fileUrl: RelativeFileUrl): string =>
+const rewriteJavaScriptFileReferences = (text: string, filePath: string, dataUrlForPath: DataUrlForPath): string =>
   text
     .replaceAll(
       /\b(import\s+(?:[^'"]*?\s+from\s*)?)(['"])([^'"]+)\2/g,
       (_match, prefix: string, quote: string, value: string) =>
-        `${prefix}${quote}${sandboxRelativeFileUrl(value, filePath, fileUrl, { jsSpecifier: true })}${quote}`,
+        `${prefix}${quote}${dataUrlForRelativeFileReference(value, filePath, dataUrlForPath, { jsSpecifier: true })}${quote}`,
     )
     .replaceAll(
       /\b(export\s+[^'"]*?\s+from\s*)(['"])([^'"]+)\2/g,
       (_match, prefix: string, quote: string, value: string) =>
-        `${prefix}${quote}${sandboxRelativeFileUrl(value, filePath, fileUrl, { jsSpecifier: true })}${quote}`,
+        `${prefix}${quote}${dataUrlForRelativeFileReference(value, filePath, dataUrlForPath, { jsSpecifier: true })}${quote}`,
     )
     .replaceAll(
       /\b(import\s*\(\s*)(['"])([^'"]+)\2/g,
       (_match, prefix: string, quote: string, value: string) =>
-        `${prefix}${quote}${sandboxRelativeFileUrl(value, filePath, fileUrl, { jsSpecifier: true })}${quote}`,
+        `${prefix}${quote}${dataUrlForRelativeFileReference(value, filePath, dataUrlForPath, { jsSpecifier: true })}${quote}`,
     );
 
-const cssUrls = (text: string, filePath: string, fileUrl: RelativeFileUrl): string =>
+const rewriteCssFileReferences = (text: string, filePath: string, dataUrlForPath: DataUrlForPath): string =>
   text
     .replaceAll(
       /(@import\s+)(url\(\s*)?(?:(['"])([^'"]+)\3|([^'"\s)]+))(\s*\)?)/g,
@@ -92,7 +92,7 @@ const cssUrls = (text: string, filePath: string, fileUrl: RelativeFileUrl): stri
         const value = quotedValue ?? unquotedValue;
         if (value === undefined) return match;
         if (!isRelativeFileReference(value)) return match;
-        const resolved = sandboxRelativeFileUrl(value, filePath, fileUrl);
+        const resolved = dataUrlForRelativeFileReference(value, filePath, dataUrlForPath);
         return urlStart === undefined
           ? `${prefix}${quote ?? '"'}${resolved}${quote ?? '"'}${suffix}`
           : `${prefix}${urlStart}${quote ?? '"'}${resolved}${quote ?? '"'}${suffix}`;
@@ -104,19 +104,19 @@ const cssUrls = (text: string, filePath: string, fileUrl: RelativeFileUrl): stri
         const value = quotedValue ?? unquotedValue;
         if (value === undefined) return match;
         if (!isRelativeFileReference(value)) return match;
-        return `url(${quote ?? '"'}${sandboxRelativeFileUrl(value, filePath, fileUrl)}${quote ?? '"'})`;
+        return `url(${quote ?? '"'}${dataUrlForRelativeFileReference(value, filePath, dataUrlForPath)}${quote ?? '"'})`;
       },
     );
 
-const sandboxRelativeFileUrl = (
+const dataUrlForRelativeFileReference = (
   value: string,
   basePath: string,
-  fileUrl: RelativeFileUrl,
+  dataUrlForPath: DataUrlForPath,
   options?: { readonly jsSpecifier?: boolean },
 ): string => {
   if (!isRelativeFileReference(value, options)) return value;
   const url = new URL(value, new URL(basePath, 'https://sandbox.local/'));
-  const resolved = fileUrl(url.pathname.slice(1));
+  const resolved = dataUrlForPath(url.pathname.slice(1));
   if (resolved === undefined) throw new Error(`Missing sandbox file referenced from ${basePath}: ${value}`);
   return `${resolved}${url.hash}`;
 };

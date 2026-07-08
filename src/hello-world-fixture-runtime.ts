@@ -10,33 +10,33 @@ import {
   helloWorldUrlBackedFixtureFiles,
 } from './generated/hello-world-dist';
 
-type FixtureResolution = {
+type FixtureFileContent = {
   readonly body: Uint8Array<ArrayBuffer>;
   readonly contentType: string;
 };
 
-type FixtureResolver = () => Promise<FixtureResolution>;
+type FixtureFileReader = () => Promise<FixtureFileContent>;
 
 export async function createHelloWorldSandboxDocument() {
   const repo = new Repo({ network: [] });
-  const [folder, resolvers] = await Promise.all([
-    importAutomergeFolderDoc(repo, helloWorldFolderDocumentUrl),
-    fixtureResolvers(repo),
+  const [folderDoc, fileReaders] = await Promise.all([
+    importAutomergeFsFolderDoc(repo, helloWorldFolderDocumentUrl),
+    fixtureFileReaders(repo),
   ]);
 
-  return createSandboxDocumentFromFsTree(folder.tree, {
+  return createSandboxDocumentFromFsTree(folderDoc.tree, {
     entry: ['index.html'],
     readFile: (file) => {
-      const resolve = resolvers.get(file.src);
-      if (resolve === undefined) throw new Error(`Missing hello-world fixture content: ${file.src}`);
-      return resolve();
+      const readFile = fileReaders.get(file.src);
+      if (readFile === undefined) throw new Error(`Missing hello-world fixture content: ${file.src}`);
+      return readFile();
     },
   });
 }
 
-async function fixtureResolvers(repo: Repo): Promise<ReadonlyMap<string, FixtureResolver>> {
+async function fixtureFileReaders(repo: Repo): Promise<ReadonlyMap<string, FixtureFileReader>> {
   const automergeEntries = await Promise.all(helloWorldContentDocuments.map(async (file) => {
-    const content = await importAutomergeContentDoc(repo, file.automergeDocumentUrl, file.src);
+    const content = await importAutomergeFileContentDoc(repo, file.automergeDocumentUrl, file.src);
     return [file.src, async () => ({
       body: new Uint8Array(content.bytes),
       contentType: content.contentType,
@@ -54,7 +54,7 @@ async function fixtureResolvers(repo: Repo): Promise<ReadonlyMap<string, Fixture
   return new Map([...automergeEntries, ...urlEntries]);
 }
 
-async function importAutomergeFolderDoc(
+async function importAutomergeFsFolderDoc(
   repo: Repo,
   url: string,
 ): Promise<AutomergeFsFolderDoc> {
@@ -63,7 +63,7 @@ async function importAutomergeFolderDoc(
   return repo.import<AutomergeFsFolderDoc>(new Uint8Array(await response.arrayBuffer())).doc();
 }
 
-async function importAutomergeContentDoc(
+async function importAutomergeFileContentDoc(
   repo: Repo,
   url: string,
   src: string,

@@ -3,12 +3,12 @@ import test from 'node:test';
 import { createSandboxDocument } from './index';
 
 type EmbeddedPayload = {
-  readonly entry: string;
-  readonly files: readonly (readonly [string, string])[];
-  readonly html: string;
+  readonly entryHtml: string;
+  readonly entryPath: string;
+  readonly fileDataUrls: readonly (readonly [string, string])[];
 };
 
-void test('sandbox document API returns an opaque data-backed document', async () => {
+void test('sandbox document API returns a data-backed iframe document', async () => {
   const sandboxDocument = await createSandboxDocument({
     entry: ['index.html'],
     files: [{
@@ -96,7 +96,7 @@ void test('sandbox document API rewrites JavaScript and CSS relative file refere
   });
 
   const payload = embeddedPayload(sandboxDocument.url);
-  const files = new Map(payload.files);
+  const files = new Map(payload.fileDataUrls);
   const app = embeddedFileText(files, 'src/app.js');
   const style = embeddedFileText(files, 'src/style.css');
   const depUrl = embeddedFileUrl(files, 'src/dep.js');
@@ -177,14 +177,14 @@ void test('sandbox document bootstrap recreates scripts in order with external l
 
   const html = outerHtml(sandboxDocument.url);
 
-  assert.equal(html.includes('const activateScripts = async () => {'), true);
+  assert.equal(html.includes('const activateEntryScripts = async () => {'), true);
   assert.equal(html.includes('script.async = false;'), true);
   assert.equal(html.includes(`script.addEventListener('load', () => resolve(), { once: true });`), true);
   assert.equal(html.includes(`script.addEventListener('error', () => reject(new Error(\`Failed to load sandbox script: \${script.src}\`)), { once: true });`), true);
   assert.equal(html.includes('await new Promise((resolve, reject) => {'), true);
   assert.equal(html.includes('window.fetch = (input, init) => {'), true);
   assert.equal(html.includes('return nativeFetch(resolved ?? input, init);'), true);
-  assert.equal(html.includes('throw new Error(`Missing sandbox file referenced from ${payload.entry}: ${value}`);'), true);
+  assert.equal(html.includes('throw new Error(`Missing sandbox file referenced from ${payload.entryPath}: ${value}`);'), true);
 });
 
 void test('sandbox document API only accepts relative file paths', async () => {
