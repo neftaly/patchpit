@@ -2,13 +2,10 @@
 
 ## API
 
-- `fsSchemaManifest`: Tarstate schema manifest for the row contract.
-- `FsRow`: row type inferred from the Tarstate relation.
-- `fsNodes`: query alias for the `nodes` relation.
-- `fsNodeByKey`: query for one row by relation key.
-- `fsChildrenOfKey`: query for direct children of a relation key.
-- `fsRowsFromTree`: parse a filesystem tree into rows.
-- `FsTree`: filesystem tree input type.
+- `@patchpit/fs/tree`: tree shape and tree helpers.
+
+Schema, row, and query modules are package-internal while the filesystem read
+shape settles.
 
 ## Filesystem Shape
 
@@ -53,7 +50,7 @@ Example:
 
 ## Rows
 
-`@patchpit/fs` turns the tree into Tarstate `nodes` rows:
+Internally, `@patchpit/fs` turns the tree into Tarstate `nodes` rows:
 
 - `key`: structural address as ordered child indexes.
 - `parentKey`: parent structural key, or `null` for root.

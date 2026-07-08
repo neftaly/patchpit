@@ -5,7 +5,6 @@ import { resolve } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createSandboxUrlMountFromFsFiles } from '@patchpit/sandbox-fs';
 import { readSandboxFsDirectory } from '@patchpit/sandbox-fs/node';
-import { sandboxDocumentPathKey } from '@patchpit/sandbox';
 import { respondWithSandboxUrlMount } from '@patchpit/sandbox/node';
 
 const appRoot = resolve('apps/sandbox-compat/static');
@@ -45,34 +44,34 @@ async function referenceReport(browser, url, onlyCase) {
 }
 
 async function sandboxReport(browser, files, server, onlyCase) {
-  const documentBuildStartedAt = performance.now();
+  const mountBuildStartedAt = performance.now();
   const sandboxMount = createSandboxUrlMountFromFsFiles(files, {
     baseUrl: server.url,
     entry: ['index.html'],
     mountId: 'sandbox-compat',
   });
   server.addMount(sandboxMount);
-  const sandboxDocument = sandboxMount.document;
-  const documentBuildMs = performance.now() - documentBuildStartedAt;
+  const sandboxFrame = sandboxMount.frame;
+  const mountBuildMs = performance.now() - mountBuildStartedAt;
 
   return pageReport(browser, async (page) => {
     await page.setContent('<!doctype html><body></body>');
-    await page.evaluate(({ document, hash }) => {
+    await page.evaluate(({ frame, hash }) => {
       window.__sandboxCompatReport = undefined;
       window.addEventListener('message', (event) => {
         if (event.data?.type === 'sandbox-compat:report') window.__sandboxCompatReport = event.data;
       });
       const iframe = window.document.createElement('iframe');
-      iframe.referrerPolicy = document.referrerPolicy;
-      iframe.sandbox = document.sandbox;
-      iframe.src = `${document.url}${hash}`;
+      iframe.referrerPolicy = frame.referrerPolicy;
+      iframe.sandbox = frame.sandbox;
+      iframe.src = `${frame.src}${hash}`;
       window.document.body.append(iframe);
-    }, { document: sandboxDocument, hash: caseHash(onlyCase) });
+    }, { frame: sandboxFrame, hash: caseHash(onlyCase) });
     const report = await compatReport(page);
     return {
       ...report,
-      documentBuildMs,
-      launchUrlLength: sandboxDocument.url.length,
+      mountBuildMs,
+      launchUrlLength: sandboxFrame.src.length,
     };
   });
 }
@@ -117,7 +116,7 @@ function compareReports(reference, sandbox, onlyCase) {
   return {
     cases,
     referenceDurationMs: reference.durationMs,
-    sandboxDocumentBuildMs: sandbox.documentBuildMs,
+    sandboxMountBuildMs: sandbox.mountBuildMs,
     sandboxLaunchUrlLength: sandbox.launchUrlLength,
     sandboxDurationMs: sandbox.durationMs,
   };
@@ -177,4 +176,8 @@ function requestPath(url) {
     .split('/')
     .filter((segment) => segment !== '')
     .map(decodeURIComponent);
+}
+
+function sandboxDocumentPathKey(path) {
+  return path.map(encodeURIComponent).join('/');
 }

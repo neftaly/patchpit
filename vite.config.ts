@@ -1,8 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import babel from '@rolldown/plugin-babel';
 import { createSandboxUrlMountFromFsFiles } from '@patchpit/sandbox-fs';
 import { readSandboxFsDirectory } from '@patchpit/sandbox-fs/node';
 import { respondWithSandboxUrlMount } from '@patchpit/sandbox/node';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 import wasm from 'vite-plugin-wasm';
 
@@ -15,7 +17,7 @@ export default defineConfig({
     rollupOptions: { input: { index: repoPath('index.html') } },
     target: 'esnext',
   },
-  plugins: [wasm(), sandboxCompatMount()],
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), wasm(), sandboxCompatMount()],
 });
 
 function sandboxCompatMount(): Plugin {

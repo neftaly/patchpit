@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDb, q } from '@tarstate/core/db';
 import { validateRelationRow } from '@tarstate/core/relation';
-import { fsChildrenOfKey, fsNodeByKey, fsRowsFromTree, fsTreeFromFiles } from './index.ts';
+import { fsChildrenOfKey, fsNodeByKey } from './queries.ts';
 import { fsRelations } from './schema.ts';
+import { fsRowsFromTree, fsTreeFromFiles } from './tree.ts';
 
 const validNodeRow = {
   key: [0],

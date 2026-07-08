@@ -3,9 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./tree": "./src/tree.ts"
-  },
+  "exports": { "./tree": "./src/tree.ts" },
   "dependencies": { "@tarstate/core": "catalog:" }
 }

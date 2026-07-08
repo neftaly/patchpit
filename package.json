@@ -17,10 +17,19 @@
   },
   "dependencies": {
     "@patchpit/sandbox": "workspace:*",
-    "@patchpit/sandbox-fs": "workspace:*"
+    "@patchpit/sandbox-fs": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@babel/core": "catalog:",
+    "@rolldown/plugin-babel": "catalog:",
+    "@types/babel__core": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "babel-plugin-react-compiler": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "playwright-core": "catalog:",

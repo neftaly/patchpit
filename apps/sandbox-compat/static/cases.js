@@ -22,11 +22,13 @@ if (activeCases.length === 0) throw new Error(`Unknown sandbox compat case: ${se
 const startedAt = performance.now();
 
 const results = await Promise.all(activeCases.map(async ({ run, ...definition }) => {
-  label(definition.id);
-  return {
+  const item = label(definition.id);
+  const result = {
     ...definition,
     ...await run(),
   };
+  item.textContent = `${definition.id}: ${result.status.toUpperCase()}${result.detail ? ` - ${result.detail}` : ''}`;
+  return result;
 }));
 
 const report = {
@@ -44,8 +46,9 @@ function compatCase(id, expectedSandbox, run) {
 
 function label(id) {
   const item = document.createElement('p');
-  item.textContent = `${id}:`;
+  item.textContent = `${id}: RUNNING`;
   document.body.append(item);
+  return item;
 }
 
 async function fetchRelativeJson() {
