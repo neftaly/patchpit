@@ -1,4 +1,4 @@
-import type { SandboxBootstrapPayload } from './iframe-bootstrap';
+import { sandboxContentSecurityPolicy, type SandboxBootstrapPayload } from './iframe-bootstrap';
 
 export type SandboxFileBytes = {
   readonly body: Uint8Array;
@@ -9,7 +9,6 @@ export type SandboxFileBytes = {
 type DataUrlForPath = (path: string) => string | undefined;
 
 const sourceMapUrlPrefix = '//# sourceMappingURL=';
-const absoluteUrlPattern = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 
 export const compileSandboxBootstrapPayload = (
   entryPath: string,
@@ -19,9 +18,13 @@ export const compileSandboxBootstrapPayload = (
   if (entryFile === undefined) throw new Error(`Sandbox entry file is missing: ${entryPath}`);
   const dataUrlsByPath = sandboxFileDataUrls(files);
   return {
+    contentSecurityPolicy: sandboxContentSecurityPolicy,
     entryHtml: new TextDecoder().decode(entryFile.body),
     entryPath,
     fileDataUrls: files.map((file) => [file.path, dataUrlsByPath.get(file.path) as string]),
+    htmlFiles: files
+      .filter((file) => file.contentType.startsWith('text/html'))
+      .map((file) => [file.path, new TextDecoder().decode(file.body)]),
   };
 };
 
@@ -128,16 +131,13 @@ const isRelativeFileReference = (value: string, { jsSpecifier = false }: { reado
     || trimmed.startsWith('#')
     || trimmed.startsWith('/')
     || trimmed.startsWith('\\')
-    || absoluteUrlPattern.test(trimmed)
+    || URL.canParse(trimmed)
   ) return false;
   return !jsSpecifier || trimmed.startsWith('./') || trimmed.startsWith('../');
 };
 
 const dataUrl = (contentType: string, body: string | Uint8Array): string =>
-  `data:${dataUrlContentType(contentType)};base64,${bytesBase64(typeof body === 'string' ? new TextEncoder().encode(body) : body)}`;
-
-const dataUrlContentType = (contentType: string): string =>
-  contentType.split(';').map((part) => part.trim()).join(';');
+  `data:${contentType};base64,${bytesBase64(typeof body === 'string' ? new TextEncoder().encode(body) : body)}`;
 
 const bytesBase64 = (bytes: Uint8Array): string => {
   let base64 = '';

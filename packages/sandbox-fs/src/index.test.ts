@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FsTree } from '@patchpit/fs';
-import { createSandboxDocumentFromFsTree } from './index';
+import { createStaticSandboxDocumentFromFsTree } from './index';
 
 void test('creates sandbox documents from filesystem trees', async () => {
-  const document = await createSandboxDocumentFromFsTree(tree([
+  const document = await createStaticSandboxDocumentFromFsTree(tree([
     ['index.html', { kind: 'file', src: '<main></main>' }],
     ['assets', {
       entries: [['style.css', { kind: 'file', src: 'body {}' }]],
@@ -20,7 +20,7 @@ void test('creates sandbox documents from filesystem trees', async () => {
 });
 
 void test('resolves file bodies and custom entry paths', async () => {
-  const document = await createSandboxDocumentFromFsTree(tree([
+  const document = await createStaticSandboxDocumentFromFsTree(tree([
     ['dir name', {
       entries: [['a/b.html', { kind: 'file', src: 'automerge:file' }]],
       kind: 'dir',
@@ -37,29 +37,29 @@ void test('resolves file bodies and custom entry paths', async () => {
 
 void test('rejects missing, duplicate, and unrepresentable sandbox paths', async () => {
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: 'automerge:missing' }]]), {
+    createStaticSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: 'automerge:missing' }]]), {
       entry: ['index.html'],
       readFile: () => undefined,
     }),
     /Sandbox file body is unresolved: index\.html/,
   );
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([['app.html', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
+    createStaticSandboxDocumentFromFsTree(tree([['app.html', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
     /Sandbox entry file is missing: index\.html/,
   );
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([
+    createStaticSandboxDocumentFromFsTree(tree([
       ['index.html', { kind: 'file', src: 'first' }],
       ['index.html', { kind: 'file', src: 'second' }],
     ]), { entry: ['index.html'], readFile }),
     /Duplicate sandbox file path: index\.html/,
   );
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
+    createStaticSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
     /non-empty relative/,
   );
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([
+    createStaticSandboxDocumentFromFsTree(tree([
       ['a.html', { kind: 'file', src: '' }],
       ['a.html', { entries: [['b.html', { kind: 'file', src: '' }]], kind: 'dir' }],
     ]), { entry: ['a.html'], readFile }),

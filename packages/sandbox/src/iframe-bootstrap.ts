@@ -1,10 +1,12 @@
 export type SandboxBootstrapPayload = {
+  readonly contentSecurityPolicy: string;
   readonly entryHtml: string;
   readonly entryPath: string;
   readonly fileDataUrls: readonly (readonly [string, string])[];
+  readonly htmlFiles: readonly (readonly [string, string])[];
 };
 
-const sandboxContentSecurityPolicy = [
+export const sandboxContentSecurityPolicy = [
   `default-src 'none'`,
   `base-uri 'none'`,
   `connect-src data:`,
@@ -20,18 +22,19 @@ const sandboxContentSecurityPolicy = [
 ].join('; ');
 
 export const sandboxIframeBootstrapHtml = (payload: SandboxBootstrapPayload): string => `<!doctype html>
-<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(sandboxContentSecurityPolicy)}">
+<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(payload.contentSecurityPolicy)}">
 <script>
 (${runSandboxIframeBootstrap.toString()})(${JSON.stringify(payload).replaceAll('<', '\\u003c')});
 </script>`;
 
 function runSandboxIframeBootstrap(payload: SandboxBootstrapPayload) {
   const fileDataUrls = new Map(payload.fileDataUrls);
+  const htmlFiles = new Map(payload.htmlFiles);
   const entryUrl = new URL(payload.entryPath, 'https://sandbox.local/');
   const nativeFetch = window.fetch.bind(window);
+  const NativeRequest = window.Request;
   const urlAttributes = ['src', 'href'];
   const urlSelector = '[src], [href]';
-  const absoluteUrlPattern = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 
   const isRelativeFileReference = (value: string) => {
     const trimmed = value.trim();
@@ -39,20 +42,50 @@ function runSandboxIframeBootstrap(payload: SandboxBootstrapPayload) {
       && !trimmed.startsWith('#')
       && !trimmed.startsWith('/')
       && !trimmed.startsWith('\\')
-      && !absoluteUrlPattern.test(trimmed);
+      && !URL.canParse(trimmed);
   };
 
   const fileDataUrl = (value: string | null) => {
     if (value === null || !isRelativeFileReference(value)) return value;
-    const url = new URL(value.trim(), entryUrl);
-    const resolved = fileDataUrls.get(url.pathname.slice(1));
+    const resolved = fileDataUrls.get(relativeFilePath(value));
     if (resolved === undefined) throw new Error(`Missing sandbox file referenced from ${payload.entryPath}: ${value}`);
-    return `${resolved}${url.hash}`;
+    return `${resolved}${new URL(value.trim(), entryUrl).hash}`;
+  };
+
+  const relativeFilePath = (value: string) =>
+    new URL(value.trim(), entryUrl).pathname.slice(1);
+
+  const bootstrapHtml = (entryPath: string, entryHtml: string) => `<!doctype html>
+<meta http-equiv="Content-Security-Policy" content="${payload.contentSecurityPolicy.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}">
+<script>
+(${runSandboxIframeBootstrap.toString()})(${JSON.stringify({ ...payload, entryHtml, entryPath }).replaceAll('<', '\\u003c')});
+</script>`;
+
+  const iframeSrcdoc = (element: Element, value: string | null) => {
+    if (!(element instanceof HTMLIFrameElement) || value === null || !isRelativeFileReference(value)) return false;
+    const path = relativeFilePath(value);
+    const html = htmlFiles.get(path);
+    if (html === undefined) return false;
+    element.srcdoc = bootstrapHtml(path, html);
+    element.removeAttribute('src');
+    return true;
+  };
+
+  window.Request = class SandboxRequest extends NativeRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      const resolved = typeof input === 'string' || input instanceof URL ? fileDataUrl(input.toString()) : null;
+      super(resolved ?? input, init);
+    }
   };
 
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    const resolved = typeof input === 'string' || input instanceof URL ? fileDataUrl(input.toString()) : null;
-    return nativeFetch(resolved ?? input, init);
+    const resolved = typeof input === 'string' || input instanceof URL
+      ? fileDataUrl(input.toString())
+      : input instanceof Request
+        ? fileDataUrl(input.url)
+        : null;
+    if (resolved === null) return nativeFetch(input, init);
+    return nativeFetch(input instanceof Request ? new Request(resolved, input) : resolved, init);
   };
 
   const rewriteRelativeUrlAttributes = (root: ParentNode) => {
@@ -62,6 +95,7 @@ function runSandboxIframeBootstrap(payload: SandboxBootstrapPayload) {
     for (const element of elements) {
       for (const name of urlAttributes) {
         const value = element.getAttribute(name);
+        if (name === 'src' && iframeSrcdoc(element, value)) continue;
         const resolved = fileDataUrl(value);
         if (resolved !== null && resolved !== value) element.setAttribute(name, resolved);
       }

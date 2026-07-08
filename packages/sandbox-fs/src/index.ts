@@ -26,7 +26,7 @@ export type CreateSandboxDocumentFromFsTreeOptions = {
   readonly readFile: SandboxFsFileReader;
 };
 
-export const createSandboxDocumentFromFsTree = async (
+export const createStaticSandboxDocumentFromFsTree = async (
   tree: FsTree,
   options: CreateSandboxDocumentFromFsTreeOptions,
 ): Promise<SandboxDocument> => {

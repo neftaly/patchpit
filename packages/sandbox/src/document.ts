@@ -34,7 +34,7 @@ export const createSandboxDocument = async ({
 
   return {
     sandbox: 'allow-scripts',
-    url: textDataUrl('text/html; charset=utf-8', sandboxIframeBootstrapHtml(compileSandboxBootstrapPayload(
+    url: textDataUrl('text/html;charset=utf-8', sandboxIframeBootstrapHtml(compileSandboxBootstrapPayload(
       plan.entryPath,
       await Promise.all(plan.files.map(({ file, path }) => sandboxFileBytes(file, path))),
     ))),
@@ -69,10 +69,7 @@ const duplicate = (values: readonly string[]): string | undefined => {
 };
 
 const textDataUrl = (contentType: string, body: string): string =>
-  `data:${dataUrlContentType(contentType)},${encodeURIComponent(body)}`;
-
-const dataUrlContentType = (contentType: string): string =>
-  contentType.split(';').map((part) => part.trim()).join(';');
+  `data:${contentType},${encodeURIComponent(body)}`;
 
 const bodyBytes = async (body: SandboxDocumentBody): Promise<Uint8Array> => {
   if (typeof body === 'string') return new TextEncoder().encode(body);

@@ -3,7 +3,7 @@ import type {
   AutomergeFileContentDoc,
   AutomergeFsFolderDoc,
 } from '@patchpit/automerge-fs';
-import { createSandboxDocumentFromFsTree } from '@patchpit/sandbox-fs';
+import { createStaticSandboxDocumentFromFsTree } from '@patchpit/sandbox-fs';
 import {
   helloWorldContentDocuments,
   helloWorldFolderDocumentUrl,
@@ -24,7 +24,7 @@ export async function createHelloWorldSandboxDocument() {
     fixtureFileReaders(repo),
   ]);
 
-  return createSandboxDocumentFromFsTree(folderDoc.tree, {
+  return createStaticSandboxDocumentFromFsTree(folderDoc.tree, {
     entry: ['index.html'],
     readFile: (file) => {
       const readFile = fileReaders.get(file.src);

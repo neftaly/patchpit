@@ -3,18 +3,24 @@ import test from 'node:test';
 import { createSandboxDocument } from './index';
 
 type EmbeddedPayload = {
+  readonly contentSecurityPolicy: string;
   readonly entryHtml: string;
   readonly entryPath: string;
   readonly fileDataUrls: readonly (readonly [string, string])[];
+  readonly htmlFiles: readonly (readonly [string, string])[];
 };
 
 void test('sandbox document API returns a data-backed iframe document', async () => {
   const sandboxDocument = await createSandboxDocument({
     entry: ['index.html'],
     files: [{
-      body: '<!doctype html><img src="./assets/dir%20name/a%2Fb.svg">',
+      body: '<!doctype html><iframe src="./nested.html"></iframe><img src="./assets/dir%20name/a%2Fb.svg">',
       contentType: 'text/html',
       path: ['index.html'],
+    }, {
+      body: '<!doctype html><img src="./assets/dir%20name/a%2Fb.svg">',
+      contentType: 'text/html',
+      path: ['nested.html'],
     }, {
       body: '<svg />',
       contentType: 'image/svg+xml',
@@ -24,7 +30,7 @@ void test('sandbox document API returns a data-backed iframe document', async ()
 
   assert.equal(sandboxDocument.sandbox, 'allow-scripts');
   assert.equal(sandboxDocument.url.startsWith('data:text/html;charset=utf-8,'), true);
-
+  assert.deepEqual(new Map(embeddedPayload(sandboxDocument.url).htmlFiles).get('nested.html'), '<!doctype html><img src="./assets/dir%20name/a%2Fb.svg">');
 });
 
 void test('sandbox document API rewrites JavaScript and CSS relative file references before embedding', async () => {
@@ -183,7 +189,9 @@ void test('sandbox document bootstrap recreates scripts in order with external l
   assert.equal(html.includes(`script.addEventListener('error', () => reject(new Error(\`Failed to load sandbox script: \${script.src}\`)), { once: true });`), true);
   assert.equal(html.includes('await new Promise((resolve, reject) => {'), true);
   assert.equal(html.includes('window.fetch = (input, init) => {'), true);
-  assert.equal(html.includes('return nativeFetch(resolved ?? input, init);'), true);
+  assert.equal(html.includes('input instanceof Request'), true);
+  assert.equal(html.includes('return nativeFetch(input instanceof Request ? new Request(resolved, input) : resolved, init);'), true);
+  assert.equal(html.includes('element.srcdoc = bootstrapHtml(path, html);'), true);
   assert.equal(html.includes('throw new Error(`Missing sandbox file referenced from ${payload.entryPath}: ${value}`);'), true);
 });
 
