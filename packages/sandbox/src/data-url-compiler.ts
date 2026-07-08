@@ -14,14 +14,16 @@ export const compileSandboxBootstrapPayload = (
   if (entryFile === undefined) throw new Error(`Sandbox entry file is missing: ${entryPath}`);
   return {
     contentSecurityPolicy: sandboxContentSecurityPolicy,
-    entryHtml: new TextDecoder().decode(entryFile.body),
+    entryHtml: textDecoder.decode(entryFile.body),
     entryPath,
     fileDataUrls: files.map((file) => [file.path, dataUrl(file.contentType, file.body)]),
     htmlFiles: files
       .filter((file) => file.contentType.startsWith('text/html'))
-      .map((file) => [file.path, new TextDecoder().decode(file.body)]),
+      .map((file) => [file.path, textDecoder.decode(file.body)]),
   };
 };
+
+const textDecoder = new TextDecoder();
 
 const dataUrl = (contentType: string, body: Uint8Array): string =>
   `data:${contentType};base64,${bytesBase64(body)}`;

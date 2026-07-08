@@ -1,10 +1,12 @@
 import { createElement, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createHelloWorldSandboxDocument } from './hello-world-fixture-runtime';
+import { createInitialSandboxDocument } from './initial-sandbox-document';
+
+type InitialSandboxDocument = Awaited<ReturnType<typeof createInitialSandboxDocument>>;
 
 type LaunchState =
   | { readonly status: 'mounting' }
-  | { readonly referrerPolicy: 'no-referrer'; readonly sandbox: string; readonly status: 'ready'; readonly url: string }
+  | { readonly sandboxDocument: InitialSandboxDocument; readonly status: 'ready' }
   | { readonly status: 'failed'; readonly message: string };
 
 function App() {
@@ -14,15 +16,8 @@ function App() {
     let disposed = false;
 
     const launch = async () => {
-      const sandboxDocument = await createHelloWorldSandboxDocument();
-      if (!disposed) {
-        setLaunchState({
-          referrerPolicy: sandboxDocument.referrerPolicy,
-          sandbox: sandboxDocument.sandbox,
-          status: 'ready',
-          url: sandboxDocument.url,
-        });
-      }
+      const sandboxDocument = await createInitialSandboxDocument();
+      if (!disposed) setLaunchState({ sandboxDocument, status: 'ready' });
     };
 
     void launch().catch((error) => {
@@ -38,13 +33,13 @@ function App() {
     launchState.status === 'ready'
       ? createElement('iframe', {
         height: 320,
-        referrerPolicy: launchState.referrerPolicy,
-        sandbox: launchState.sandbox,
-        src: launchState.url,
-        title: 'Hello World',
+        referrerPolicy: launchState.sandboxDocument.referrerPolicy,
+        sandbox: launchState.sandboxDocument.sandbox,
+        src: launchState.sandboxDocument.url,
+        title: 'Sandbox',
         width: 320,
       })
-      : createElement('p', {}, launchState.status === 'failed' ? launchState.message : 'Mounting hello-world...'));
+      : createElement('p', {}, launchState.status === 'failed' ? launchState.message : 'Loading sandbox...'));
 }
 
 const root = document.querySelector('#root');

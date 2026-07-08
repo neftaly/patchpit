@@ -35,7 +35,7 @@ void test('resolves file bodies and custom entry paths', async () => {
   assert.equal(outerHtml(document.url).includes('data:text/html;base64,PG1haW4+cmVzb2x2ZWQ8L21haW4+'), true);
 });
 
-void test('rejects missing, duplicate, and unrepresentable sandbox paths', async () => {
+void test('rejects unresolved file bodies and delegates document validation', async () => {
   await assert.rejects(
     createStaticSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: 'automerge:missing' }]]), {
       entry: ['index.html'],
@@ -52,18 +52,11 @@ void test('rejects missing, duplicate, and unrepresentable sandbox paths', async
       ['index.html', { kind: 'file', src: 'first' }],
       ['index.html', { kind: 'file', src: 'second' }],
     ]), { entry: ['index.html'], readFile }),
-    /Duplicate sandbox file path: index\.html/,
+    /Duplicate sandbox document path: index\.html/,
   );
   await assert.rejects(
     createStaticSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
     /non-empty relative/,
-  );
-  await assert.rejects(
-    createStaticSandboxDocumentFromFsTree(tree([
-      ['a.html', { kind: 'file', src: '' }],
-      ['a.html', { entries: [['b.html', { kind: 'file', src: '' }]], kind: 'dir' }],
-    ]), { entry: ['a.html'], readFile }),
-    /both file and directory/,
   );
 });
 
