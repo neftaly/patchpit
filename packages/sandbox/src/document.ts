@@ -16,6 +16,13 @@ export type SandboxUrlMount = {
   readonly scopePath: string;
 };
 
+const invalidSandboxMountPath = Symbol("invalidSandboxMountPath");
+
+type SandboxMountRequestPath =
+  | string
+  | typeof invalidSandboxMountPath
+  | undefined;
+
 export type SandboxUrlMountFile = {
   readonly path: SandboxDocumentPath;
   readonly read: () =>
@@ -63,6 +70,7 @@ export const createSandboxUrlMount = ({
   const base = new URL(baseUrl);
   const mountOrigin = base.origin;
   const scopePath = sandboxMountScopePath(route, mountId);
+  const mountSource = `${mountOrigin}${scopePath}`;
   const mountFiles = new Map(plan.files.map((file) => [file.path, file.file]));
 
   return {
@@ -70,6 +78,8 @@ export const createSandboxUrlMount = ({
     respond: async (request) => {
       const path = sandboxMountRequestPath(request, route, mountId);
       if (path === undefined) return undefined;
+      if (path === invalidSandboxMountPath)
+        return sandboxResponse("Not found", 404, "text/plain");
       const file = mountFiles.get(path);
       if (file === undefined)
         return sandboxResponse("Not found", 404, "text/plain");
@@ -82,7 +92,7 @@ export const createSandboxUrlMount = ({
           : content.body,
         200,
         content.contentType ?? defaultSandboxContentType,
-        mountOrigin,
+        mountSource,
       );
     },
     scopePath,
@@ -140,16 +150,28 @@ const sandboxMountRequestPath = (
   request: Request | URL | string,
   route: readonly string[],
   mountId: string,
-): string | undefined => {
+): SandboxMountRequestPath => {
   const url = new URL(request instanceof Request ? request.url : request);
-  const segments = url.pathname
-    .split("/")
-    .filter((segment) => segment !== "")
-    .map(decodeURIComponent);
-  const prefix = [...route, mountId];
-  return sameSegments(segments.slice(0, prefix.length), prefix)
-    ? sandboxDocumentPathKey(segments.slice(prefix.length))
-    : undefined;
+  const scopePath = sandboxMountScopePath(route, mountId);
+  if (!url.pathname.startsWith(scopePath)) return undefined;
+  return sandboxPathKeyOrInvalid(url.pathname.slice(scopePath.length));
+};
+
+const decodePath = (pathname: string): readonly string[] | undefined => {
+  try {
+    return pathname.split("/").filter((segment) => segment !== "").map(decodeURIComponent);
+  } catch {
+    return undefined;
+  }
+};
+
+const sandboxPathKeyOrInvalid = (pathname: string): SandboxMountRequestPath => {
+  try {
+    const path = decodePath(pathname);
+    return path === undefined ? invalidSandboxMountPath : sandboxDocumentPathKey(path);
+  } catch {
+    return invalidSandboxMountPath;
+  }
 };
 
 const sandboxResponse = (
@@ -165,40 +187,35 @@ const sandboxResponse = (
 
 export const sandboxUrlMountHeaders = (
   contentType: string,
-  mountOrigin?: string,
+  mountSource?: string,
 ): Record<string, string> => ({
   "Access-Control-Allow-Origin": "*",
-  ...(mountOrigin === undefined
+  ...(mountSource === undefined
     ? {}
     : {
         "Content-Security-Policy":
-          sandboxUrlMountContentSecurityPolicy(mountOrigin),
+          sandboxUrlMountContentSecurityPolicy(mountSource),
       }),
   "Content-Type": contentType,
   "Timing-Allow-Origin": "*",
+  "X-Content-Type-Options": "nosniff",
 });
 
 export const sandboxUrlMountContentSecurityPolicy = (
-  mountOrigin: string,
+  mountSource: string,
 ): string =>
   [
     `default-src 'none'`,
+    `sandbox allow-scripts`,
     `base-uri 'none'`,
-    `connect-src ${mountOrigin}`,
-    `font-src ${mountOrigin} data:`,
+    `connect-src ${mountSource}`,
+    `font-src ${mountSource} data:`,
     `form-action 'none'`,
-    `frame-src ${mountOrigin}`,
-    `img-src ${mountOrigin} data:`,
-    `media-src ${mountOrigin}`,
+    `frame-src ${mountSource}`,
+    `img-src ${mountSource} data:`,
+    `media-src ${mountSource}`,
     `object-src 'none'`,
-    `script-src 'unsafe-inline' ${mountOrigin}`,
-    `style-src 'unsafe-inline' ${mountOrigin}`,
+    `script-src 'unsafe-inline' ${mountSource}`,
+    `style-src 'unsafe-inline' ${mountSource}`,
     `worker-src 'none'`,
   ].join("; ");
-
-const sameSegments = (
-  left: readonly string[],
-  right: readonly string[],
-): boolean =>
-  left.length === right.length &&
-  left.every((segment, index) => segment === right[index]);

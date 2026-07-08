@@ -11,6 +11,8 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
 - The package owns path planning, launch document creation, and URL mount
   request handling.
 - URL mounts serve files with CORS headers for opaque-origin browser loaders.
+- Production URL mount ids are capability URLs and must be unguessable. Fixed
+  ids are only for local compatibility harnesses.
 
 ## Polyfill Rules
 

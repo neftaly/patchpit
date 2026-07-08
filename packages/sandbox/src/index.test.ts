@@ -80,10 +80,31 @@ void test('creates sandbox URL mounts that serve planned files', async () => {
   assert.equal(response?.status, 200);
   assert.equal(response?.headers.get('Access-Control-Allow-Origin'), '*');
   assert.equal(response?.headers.get('Content-Type'), 'image/svg+xml');
+  assert.equal(response?.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.match(response?.headers.get('Content-Security-Policy') ?? '', /sandbox allow-scripts/);
+  assert.doesNotMatch(response?.headers.get('Content-Security-Policy') ?? '', /allow-same-origin/);
+  assert.match(
+    response?.headers.get('Content-Security-Policy') ?? '',
+    /connect-src https:\/\/patchpit\.test\/__patchpit\/sandbox\/mount-1\//,
+  );
   assert.equal(await response?.text(), '<svg />');
 
   const unknown = await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/assets/unknown.bin');
   assert.equal(unknown?.headers.get('Content-Type'), 'application/octet-stream');
+});
+
+void test('sandbox URL mounts 404 in-scope invalid paths', async () => {
+  const mount = createSandboxUrlMount({
+    baseUrl: 'https://patchpit.test/',
+    entry: ['index.html'],
+    files: [{ path: ['index.html'], read: () => ({ body: '', contentType: 'text/html' }) }],
+    mountId: 'mount-1',
+  });
+
+  assert.equal((await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/'))?.status, 404);
+  assert.equal((await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/%zz'))?.status, 404);
+  assert.equal((await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/%2e'))?.status, 404);
+  assert.equal(await mount.respond('https://patchpit.test/not-sandbox/%zz'), undefined);
 });
 
 void test('sandbox URL mounts return undefined for unrelated requests', async () => {
