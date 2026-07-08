@@ -23,7 +23,7 @@ void test('creates filesystem-backed sandbox URL mounts from files', async () =>
 
   assert.equal(mount.frame.src, 'https://patchpit.test/__patchpit/sandbox/mount-1/index.html');
 
-  const response = await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/assets/style.css');
+  const response = await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/assets/style.css'));
   assert.equal(response?.headers.get('Content-Type'), 'text/css');
   assert.equal(await response?.text(), 'body{}');
 });

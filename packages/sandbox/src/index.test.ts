@@ -8,13 +8,12 @@ void test('plans sandbox document paths without reading or serving files', () =>
   const image = { path: ['assets', 'a/b.svg'], src: 'https://example.test/a.svg' };
   const plan = planSandboxDocument(['index.html'], [index, image]);
 
-  assert.equal(plan.entryFileIndex, 0);
-  assert.equal(plan.entryPath, 'index.html');
-  assert.deepEqual(plan.files.map((file) => file.path), [
+  assert.deepEqual([...plan.keys()], [
     'index.html',
     'assets/a%2Fb.svg',
   ]);
-  assert.equal(plan.files[1]?.file, image);
+  assert.equal(plan.get('index.html'), index);
+  assert.equal(plan.get('assets/a%2Fb.svg'), image);
 });
 
 void test('rejects invalid sandbox document mounts', () => {
@@ -76,7 +75,7 @@ void test('creates sandbox URL mounts that serve planned files', async () => {
   assert.equal(mount.frame.sandbox, 'allow-scripts');
   assert.equal(mount.frame.src, 'https://patchpit.test/__patchpit/sandbox/mount-1/index.html');
 
-  const response = await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/assets/a%2Fb.svg');
+  const response = await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/assets/a%2Fb.svg'));
   assert.equal(response?.status, 200);
   assert.equal(response?.headers.get('Access-Control-Allow-Origin'), '*');
   assert.equal(response?.headers.get('Content-Type'), 'image/svg+xml');
@@ -89,8 +88,38 @@ void test('creates sandbox URL mounts that serve planned files', async () => {
   );
   assert.equal(await response?.text(), '<svg />');
 
-  const unknown = await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/assets/unknown.bin');
+  const unknown = await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/assets/unknown.bin'));
   assert.equal(unknown?.headers.get('Content-Type'), 'application/octet-stream');
+});
+
+void test('sandbox URL mounts reject in-scope non-GET and non-HEAD methods', async () => {
+  let reads = 0;
+  const mount = createSandboxUrlMount({
+    baseUrl: 'https://patchpit.test/',
+    entry: ['index.html'],
+    files: [{
+      path: ['index.html'],
+      read: () => {
+        reads += 1;
+        return { body: '', contentType: 'text/html' };
+      },
+    }],
+    mountId: 'mount-1',
+  });
+
+  const response = await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/index.html', {
+    method: 'POST',
+  }));
+
+  assert.equal(reads, 0);
+  assert.equal(response?.status, 405);
+  assert.equal(response?.headers.get('Allow'), 'GET, HEAD');
+  assert.match(response?.headers.get('Content-Security-Policy') ?? '', /sandbox allow-scripts/);
+  assert.equal(await response?.text(), 'Method not allowed');
+  assert.equal(
+    await mount.respond(new Request('https://patchpit.test/not-sandbox/index.html', { method: 'POST' })),
+    undefined,
+  );
 });
 
 void test('sandbox URL mounts 404 in-scope invalid paths', async () => {
@@ -101,10 +130,10 @@ void test('sandbox URL mounts 404 in-scope invalid paths', async () => {
     mountId: 'mount-1',
   });
 
-  assert.equal((await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/'))?.status, 404);
-  assert.equal((await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/%zz'))?.status, 404);
-  assert.equal((await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/%2e'))?.status, 404);
-  assert.equal(await mount.respond('https://patchpit.test/not-sandbox/%zz'), undefined);
+  assert.equal((await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/')))?.status, 404);
+  assert.equal((await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/%zz')))?.status, 404);
+  assert.equal((await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/%2e')))?.status, 404);
+  assert.equal(await mount.respond(new Request('https://patchpit.test/not-sandbox/%zz')), undefined);
 });
 
 void test('sandbox URL mounts return undefined for unrelated requests', async () => {
@@ -115,5 +144,5 @@ void test('sandbox URL mounts return undefined for unrelated requests', async ()
     mountId: 'mount-1',
   });
 
-  assert.equal(await mount.respond('https://patchpit.test/index.html'), undefined);
+  assert.equal(await mount.respond(new Request('https://patchpit.test/index.html')), undefined);
 });
