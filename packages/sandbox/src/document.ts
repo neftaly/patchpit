@@ -13,6 +13,16 @@ export type SandboxDocumentFile = {
   readonly path: SandboxDocumentPath;
 };
 
+type SandboxDocumentPlan = {
+  readonly entryPath: string;
+  readonly files: readonly SandboxDocumentPlannedFile[];
+};
+
+type SandboxDocumentPlannedFile = {
+  readonly file: SandboxDocumentFile;
+  readonly path: string;
+};
+
 export const createSandboxDocument = async ({
   entry,
   files,
@@ -20,18 +30,27 @@ export const createSandboxDocument = async ({
   readonly entry: SandboxDocumentPath;
   readonly files: readonly SandboxDocumentFile[];
 }): Promise<SandboxDocument> => {
-  const entryPath = sandboxDocumentPathKey(entry);
-  const filePaths = files.map((file) => sandboxDocumentPathKey(file.path));
-  const duplicatePath = duplicate(filePaths);
-  if (duplicatePath !== undefined) throw new Error(`Duplicate sandbox document path: ${duplicatePath}`);
+  const plan = sandboxDocumentPlan(entry, files);
 
   return {
     sandbox: 'allow-scripts',
     url: textDataUrl('text/html; charset=utf-8', sandboxIframeBootstrapHtml(compileSandboxBootstrapPayload(
-      entryPath,
-      await Promise.all(files.map((file, index) => sandboxFileBytes(file, filePaths[index] as string))),
+      plan.entryPath,
+      await Promise.all(plan.files.map(({ file, path }) => sandboxFileBytes(file, path))),
     ))),
   };
+};
+
+const sandboxDocumentPlan = (
+  entry: SandboxDocumentPath,
+  files: readonly SandboxDocumentFile[],
+): SandboxDocumentPlan => {
+  const entryPath = sandboxDocumentPathKey(entry);
+  const plannedFiles = files.map((file) => ({ file, path: sandboxDocumentPathKey(file.path) }));
+  const duplicatePath = duplicate(plannedFiles.map((file) => file.path));
+  if (duplicatePath !== undefined) throw new Error(`Duplicate sandbox document path: ${duplicatePath}`);
+
+  return { entryPath, files: plannedFiles };
 };
 
 const sandboxFileBytes = async (file: SandboxDocumentFile, path: string): Promise<SandboxFileBytes> => ({
