@@ -25,7 +25,8 @@ export async function createHelloWorldSandboxDocument() {
   ]);
 
   return createSandboxDocumentFromFsTree(folder.tree, {
-    resolveFile: (file) => {
+    entry: ['index.html'],
+    readFile: (file) => {
       const resolve = resolvers.get(file.src);
       if (resolve === undefined) throw new Error(`Missing hello-world fixture content: ${file.src}`);
       return resolve();

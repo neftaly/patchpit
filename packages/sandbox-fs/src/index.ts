@@ -12,33 +12,30 @@ export type SandboxFsFile = {
   readonly src: string;
 };
 
-export type SandboxFsFileResolution = {
+export type SandboxFsFileContent = {
   readonly body: SandboxDocumentBody;
   readonly contentType: string;
 };
 
-export type SandboxFsFileResolver = (
+export type SandboxFsFileReader = (
   file: SandboxFsFile,
-) => Promise<SandboxFsFileResolution | undefined> | SandboxFsFileResolution | undefined;
+) => Promise<SandboxFsFileContent | undefined> | SandboxFsFileContent | undefined;
 
 export type CreateSandboxDocumentFromFsTreeOptions = {
-  readonly entry?: readonly string[];
-  readonly resolveFile: SandboxFsFileResolver;
+  readonly entry: readonly string[];
+  readonly readFile: SandboxFsFileReader;
 };
-
-const DEFAULT_ENTRY = ['index.html'] as const;
 
 export const createSandboxDocumentFromFsTree = async (
   tree: FsTree,
   options: CreateSandboxDocumentFromFsTreeOptions,
 ): Promise<SandboxDocument> => {
-  const entry = options.entry ?? DEFAULT_ENTRY;
   const files = sandboxFsFilesFromTree(tree);
-  assertSandboxFsMount(files, entry);
+  assertSandboxFsMount(files, options.entry);
 
   return createSandboxDocument({
-    entry,
-    files: await Promise.all(files.map((file) => resolvedSandboxFile(file, options.resolveFile))),
+    entry: options.entry,
+    files: await Promise.all(files.map((file) => readSandboxFile(file, options.readFile))),
   });
 };
 
@@ -68,15 +65,15 @@ const assertSandboxFsMount = (
   if (collision !== undefined) throw new Error(`Sandbox file path is both file and directory: ${collision}`);
 };
 
-const resolvedSandboxFile = async (
+const readSandboxFile = async (
   file: SandboxFsFile,
-  resolveFile: SandboxFsFileResolver,
+  readFile: SandboxFsFileReader,
 ) => {
-  const resolution = await resolveFile(file);
-  if (resolution === undefined) throw new Error(`Sandbox file body is unresolved: ${sandboxDocumentPathKey(file.path)}`);
+  const content = await readFile(file);
+  if (content === undefined) throw new Error(`Sandbox file body is unresolved: ${sandboxDocumentPathKey(file.path)}`);
   return {
-    body: resolution.body,
-    contentType: resolution.contentType,
+    body: content.body,
+    contentType: content.contentType,
     path: file.path,
   };
 };

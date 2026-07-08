@@ -10,7 +10,10 @@ void test('creates opaque sandbox documents from filesystem trees', async () => 
       entries: [['style.css', { kind: 'file', src: 'body {}' }]],
       kind: 'dir',
     }],
-  ]), { resolveFile: (file) => ({ body: file.src, contentType: contentType(file.path) }) });
+  ]), {
+    entry: ['index.html'],
+    readFile: (file) => ({ body: file.src, contentType: contentType(file.path) }),
+  });
 
   assert.equal(document.sandbox, 'allow-scripts');
   assert.equal(document.url.startsWith('data:text/html;charset=utf-8,'), true);
@@ -24,7 +27,7 @@ void test('resolves file bodies and custom entry paths', async () => {
     }],
   ]), {
     entry: ['dir name', 'a/b.html'],
-    resolveFile: (file) => file.src === 'automerge:file'
+    readFile: (file) => file.src === 'automerge:file'
       ? { body: '<main>resolved</main>', contentType: 'text/html' }
       : undefined,
   });
@@ -35,30 +38,31 @@ void test('resolves file bodies and custom entry paths', async () => {
 void test('rejects missing, duplicate, and unrepresentable sandbox paths', async () => {
   await assert.rejects(
     createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: 'automerge:missing' }]]), {
-      resolveFile: () => undefined,
+      entry: ['index.html'],
+      readFile: () => undefined,
     }),
     /Sandbox file body is unresolved: index\.html/,
   );
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([['app.html', { kind: 'file', src: '' }]]), { resolveFile }),
+    createSandboxDocumentFromFsTree(tree([['app.html', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
     /Sandbox entry file is missing: index\.html/,
   );
   await assert.rejects(
     createSandboxDocumentFromFsTree(tree([
       ['index.html', { kind: 'file', src: 'first' }],
       ['index.html', { kind: 'file', src: 'second' }],
-    ]), { resolveFile }),
+    ]), { entry: ['index.html'], readFile }),
     /Duplicate sandbox file path: index\.html/,
   );
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]]), { resolveFile }),
+    createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
     /non-empty relative/,
   );
   await assert.rejects(
     createSandboxDocumentFromFsTree(tree([
       ['a.html', { kind: 'file', src: '' }],
       ['a.html', { entries: [['b.html', { kind: 'file', src: '' }]], kind: 'dir' }],
-    ]), { entry: ['a.html'], resolveFile }),
+    ]), { entry: ['a.html'], readFile }),
     /both file and directory/,
   );
 });
@@ -71,4 +75,4 @@ const tree = (entries: Extract<FsTree, { readonly kind: 'dir' }>['entries']): Fs
 const contentType = (path: readonly string[]) =>
   path.at(-1)?.endsWith('.css') === true ? 'text/css' : 'text/html';
 
-const resolveFile = () => ({ body: '', contentType: 'text/html' });
+const readFile = () => ({ body: '', contentType: 'text/html' });
