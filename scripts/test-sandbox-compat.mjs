@@ -213,8 +213,10 @@ function samePath(left, right) {
 
 function contentType(path) {
   const type = ({
+    '.css': 'text/css',
     '.html': 'text/html',
     '.js': 'text/javascript',
+    '.json': 'application/json',
     '.svg': 'image/svg+xml',
   })[extname(path)];
   if (type === undefined) throw new Error(`Unknown sandbox compat content type: ${path}`);
