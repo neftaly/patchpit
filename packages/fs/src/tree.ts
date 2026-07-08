@@ -21,7 +21,7 @@ const treeNodeRows = (
         treeNodeRows(child, {
           key: [...fsPosition.key, position],
           name,
-          parentKey: fsPosition.key,
+          parentKey: [...fsPosition.key],
           path: [...fsPosition.path, name],
           position,
         })),

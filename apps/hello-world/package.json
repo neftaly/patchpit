@@ -4,10 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "vite build"
-  },
-  "dependencies": {
-    "@patchpit/sandbox": "workspace:*"
+    "build": "vite build --base=./"
   },
   "devDependencies": {
     "vite": "catalog:"

@@ -9,22 +9,29 @@
   },
   "scripts": {
     "build": "vite build",
+    "prebuild": "pnpm generate:hello-world-fixtures",
     "dev": "vite",
-    "lint": "oxlint apps packages scripts vite.config.ts --deny-warnings --type-aware",
+    "generate:hello-world-fixtures": "pnpm --filter @patchpit/hello-world build && node scripts/generate-hello-world-dist.mjs",
+    "check:hello-world-fixtures": "pnpm --filter @patchpit/hello-world build && node scripts/generate-hello-world-dist.mjs --check",
+    "lint": "oxlint apps packages scripts src vite.config.ts --deny-warnings --type-aware",
     "test": "node --import ./scripts/register-ts-loader.mjs --test 'packages/**/*.test.ts'",
     "typecheck": "tsc"
   },
+  "dependencies": {
+    "@automerge/automerge-repo": "catalog:",
+    "@patchpit/automerge-fs": "workspace:*",
+    "@patchpit/sandbox-fs": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
   "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@types/node": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plugin-pwa": "catalog:"
-  },
-  "pnpm": {
-    "overrides": {
-      "@tarstate/core": "link:../tarstate/packages/core"
-    }
+    "vite-plugin-wasm": "catalog:"
   }
 }

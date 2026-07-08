@@ -17,5 +17,5 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["apps/*/src", "packages/*/src", "vite.config.ts"]
+  "include": ["apps/*/src", "packages/*/src", "src", "vite.config.ts"]
 }

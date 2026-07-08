@@ -1,0 +1,11 @@
+{
+  "name": "@patchpit/sandbox-fs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@patchpit/fs": "workspace:*",
+    "@patchpit/sandbox": "workspace:*"
+  }
+}

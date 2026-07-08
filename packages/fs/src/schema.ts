@@ -1,7 +1,6 @@
 import {
   customField,
   defineSchema,
-  jsonField,
   nullable,
   numberField,
   optional,
@@ -9,16 +8,36 @@ import {
   stringEnumField,
   stringField,
   toSchemaManifest,
-  type FieldSpec,
   type RelationRefRow,
 } from '@tarstate/core/schema';
 
 export type FsPath = readonly string[];
 export type FsNodeKey = readonly number[];
 
-const fsPathField = jsonField() as FieldSpec<FsPath>;
+const isFsPath = (value: unknown): value is FsPath => {
+  if (!Array.isArray(value)) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    if (typeof value[index] !== 'string') return false;
+  }
+  return true;
+};
+
+const isFsNodeKey = (value: unknown): value is FsNodeKey => {
+  if (!Array.isArray(value)) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const segment = value[index];
+    if (!Number.isInteger(segment) || segment < 0 || Object.is(segment, -0)) return false;
+  }
+  return true;
+};
+
+const fsPathField = customField<FsPath>({
+  codec: 'patchpit.fs.path',
+  validate: isFsPath,
+});
 const fsNodeKeyField = customField<FsNodeKey>({
   codec: 'patchpit.fs.nodeKey',
+  validate: isFsNodeKey,
   stableKey: (key) => JSON.stringify(key),
 });
 

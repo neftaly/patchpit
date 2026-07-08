@@ -1,7 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDb, q } from '@tarstate/core/db';
+import { validateRelationRow } from '@tarstate/core/relation';
 import { fsChildrenOfKey, fsNodeByKey, fsRowsFromTree } from './index';
+import { fsRelations } from './schema';
+
+const validNodeRow = {
+  key: [0],
+  kind: 'file',
+  name: 'file.txt',
+  parentKey: [],
+  path: ['file.txt'],
+  position: 0,
+  src: 'automerge:file',
+};
+
+const invalidRelationFields = (row: Record<string, unknown>) =>
+  validateRelationRow(fsRelations.nodes, row)
+    .filter((diagnostic) => diagnostic.code === 'field_invalid')
+    .map((diagnostic) => diagnostic.field);
 
 void test('filesystem tree rows use structural keys and keep src as data', () => {
   const src = 'https://example.test/tiger.svg';
@@ -72,6 +89,42 @@ void test('structural identity changes on move while src can remain stable', () 
   }).filter((row) => row.src), [
     { key: [0, 0], kind: 'file', name: 'after.txt', parentKey: [0], path: ['folder', 'after.txt'], position: 0, src },
   ]);
+});
+
+void test('filesystem rows do not share parent key arrays with parent rows', () => {
+  const rows = fsRowsFromTree({
+    entries: [['folder', { entries: [['file.txt', { kind: 'file', src: 'automerge:file' }]], kind: 'dir' }]],
+    kind: 'dir',
+  });
+  const folder = rows.find((row) => row.name === 'folder');
+  const file = rows.find((row) => row.name === 'file.txt');
+  assert.notEqual(file?.parentKey, folder?.key);
+  assert.deepEqual(file?.parentKey, folder?.key);
+});
+
+void test('filesystem relation validates node key arrays', () => {
+  const sparseKey = [0];
+  sparseKey.length = 2;
+
+  assert.deepEqual(validateRelationRow(fsRelations.nodes, validNodeRow), []);
+  assert.deepEqual(validateRelationRow(fsRelations.nodes, fsRowsFromTree({ entries: [], kind: 'dir' })[0] ?? {}), []);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, key: [-1] }), ['key']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, key: [-0] }), ['key']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, key: [1.5] }), ['key']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, key: [Number.POSITIVE_INFINITY] }), ['key']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, key: ['0'] }), ['key']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, key: sparseKey }), ['key']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, key: 0 }), ['key']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, parentKey: [-1] }), ['parentKey']);
+});
+
+void test('filesystem relation validates path string arrays', () => {
+  const sparsePath = ['file.txt'];
+  sparsePath.length = 2;
+
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, path: 'file.txt' }), ['path']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, path: ['folder', 0] }), ['path']);
+  assert.deepEqual(invalidRelationFields({ ...validNodeRow, path: sparsePath }), ['path']);
 });
 
 void test('filesystem queries expose live row seams', () => {
