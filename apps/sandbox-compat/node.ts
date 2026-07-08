@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { createSandboxUrlMountFromFsFiles, type SandboxFsFileWithContent } from '@patchpit/sandbox-fs';
+import { createSandboxUrlMountFromFsFiles } from '@patchpit/sandbox-fs';
 import { readSandboxFsDirectory } from '@patchpit/sandbox-fs/node';
 import { sandboxCompatApp } from './app.ts';
 
@@ -13,8 +13,8 @@ const { id: sandboxCompatId } = sandboxCompatApp;
 
 export const sandboxCompatPathPrefix = `/__patchpit/sandbox/${sandboxCompatApp.id}/`;
 
-export const sandboxCompatFiles = async (): Promise<readonly SandboxFsFileWithContent[]> => {
-  const files: SandboxFsFileWithContent[] = [
+export const sandboxCompatFiles = async () => {
+  const files = [
     ...await readSandboxFsDirectory(appFilesRoot, {
       src: (path) => `automerge:${sandboxCompatId}/${path.join('/')}`,
     }),

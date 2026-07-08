@@ -30,5 +30,10 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
 - `sandbox-compat` records the desired browser behavior and current expected
   failures.
 - Runtime mount lifecycle and cleanup are still owned by the caller.
+- URL mounts currently support only simple `GET`/`HEAD` asset requests. The Node
+  adapter rejects other methods, including `OPTIONS` preflights.
+- Method filtering currently lives only in the Node adapter. Future service
+  worker consumers of `respond()` need equivalent filtering or a shared mount
+  boundary.
 - Native workers need a separate-origin runner profile, not the max opaque
   iframe profile.

@@ -157,18 +157,11 @@ const sandboxMountRequestPath = (
   return sandboxPathKeyOrInvalid(url.pathname.slice(scopePath.length));
 };
 
-const decodePath = (pathname: string): readonly string[] | undefined => {
-  try {
-    return pathname.split("/").filter((segment) => segment !== "").map(decodeURIComponent);
-  } catch {
-    return undefined;
-  }
-};
-
 const sandboxPathKeyOrInvalid = (pathname: string): SandboxMountRequestPath => {
   try {
-    const path = decodePath(pathname);
-    return path === undefined ? invalidSandboxMountPath : sandboxDocumentPathKey(path);
+    return sandboxDocumentPathKey(
+      pathname.split("/").filter((segment) => segment !== "").map(decodeURIComponent),
+    );
   } catch {
     return invalidSandboxMountPath;
   }

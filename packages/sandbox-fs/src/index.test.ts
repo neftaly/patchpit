@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createSandboxUrlMountFromFsFiles } from './index.ts';
 
 void test('creates filesystem-backed sandbox URL mounts from files', async () => {
-  const mount = createSandboxUrlMountFromFsFiles([{
+  const files = [{
     body: '<!doctype html>',
     contentType: 'text/html',
     path: ['index.html'],
@@ -13,7 +13,9 @@ void test('creates filesystem-backed sandbox URL mounts from files', async () =>
     contentType: 'text/css',
     path: ['assets', 'style.css'],
     src: 'automerge:style',
-  }], {
+  }];
+
+  const mount = createSandboxUrlMountFromFsFiles(files, {
     baseUrl: 'https://patchpit.test/',
     entry: ['index.html'],
     mountId: 'mount-1',

@@ -7,7 +7,6 @@ import {
 
 export type SandboxFsFile = {
   readonly path: SandboxDocumentPath;
-  readonly src: string;
 };
 
 export type SandboxFsFileContent = {
@@ -22,16 +21,21 @@ export type CreateSandboxUrlMountFromFsFilesOptions = {
   readonly route?: readonly string[];
 };
 
-export type SandboxFsFileWithContent = SandboxFsFile & SandboxFsFileContent;
-
-export const createSandboxUrlMountFromFsFiles = (
-  files: readonly SandboxFsFileWithContent[],
+export const createSandboxUrlMountFromFsFiles = <
+  const File extends SandboxFsFile & SandboxFsFileContent,
+>(
+  files: readonly File[],
   options: CreateSandboxUrlMountFromFsFilesOptions,
 ): SandboxUrlMount =>
   createSandboxUrlMount({
     baseUrl: options.baseUrl,
     entry: options.entry,
-    files: files.map((file) => ({ path: file.path, read: () => file })),
+    files: files.map((file) => ({
+      path: file.path,
+      read: () => file.contentType === undefined
+        ? { body: file.body }
+        : { body: file.body, contentType: file.contentType },
+    })),
     ...(options.mountId === undefined ? {} : { mountId: options.mountId }),
     ...(options.route === undefined ? {} : { route: options.route }),
   });
