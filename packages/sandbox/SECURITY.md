@@ -2,6 +2,7 @@
 
 The sandbox runs app documents in an opaque-origin iframe with scripts enabled.
 It aims to host a small local-first app profile, not arbitrary websites.
+The `sandbox-compat` browser harness is the executable supported-profile spec.
 
 ## Current Boundary
 

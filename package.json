@@ -15,6 +15,7 @@
     "check:hello-world-fixtures": "pnpm --filter @patchpit/hello-world build && node scripts/generate-hello-world-dist.mjs --check",
     "lint": "oxlint apps packages scripts src vite.config.ts --deny-warnings --type-aware",
     "test": "node --import ./scripts/register-ts-loader.mjs --test 'packages/**/*.test.ts'",
+    "test:browser": "node --import ./scripts/register-ts-loader.mjs scripts/test-sandbox-compat.mjs",
     "typecheck": "tsc"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
     "@types/node": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
+    "playwright-core": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-wasm": "catalog:"

@@ -27,6 +27,9 @@ catalogs:
     oxlint-tsgolint:
       specifier: ^0.23.0
       version: 0.23.0
+    playwright-core:
+      specifier: ^1.57.0
+      version: 1.61.1
     react:
       specifier: ^19.2.7
       version: 19.2.7
@@ -78,6 +81,9 @@ importers:
       oxlint-tsgolint:
         specifier: 'catalog:'
         version: 0.23.0
+      playwright-core:
+        specifier: 'catalog:'
+        version: 1.61.1
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -93,6 +99,8 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 7.3.6(@types/node@24.13.2)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0)
+
+  apps/sandbox-compat: {}
 
   packages/automerge-fs:
     dependencies:
@@ -817,6 +825,11 @@ packages:
     resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
     engines: {node: '>=12'}
 
+  playwright-core@1.61.1:
+    resolution: {integrity: sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   postcss@8.5.15:
     resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
     engines: {node: ^10 || ^12 || >=14}
@@ -1408,6 +1421,8 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.4: {}
+
+  playwright-core@1.61.1: {}
 
   postcss@8.5.15:
     dependencies:
