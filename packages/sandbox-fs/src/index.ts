@@ -1,10 +1,9 @@
-import { fsTreeFromFiles, type FsTree } from '@patchpit/fs/tree';
+import type { FsTree } from '@patchpit/fs/tree';
 import {
   createSandboxUrlMount,
   type SandboxDocumentBody,
   type SandboxDocumentPath,
   type SandboxUrlMount,
-  sandboxDocumentPathKey,
 } from '@patchpit/sandbox';
 
 export type SandboxFsFile = {
@@ -37,31 +36,27 @@ export type SandboxFsFileWithContent = SandboxFsFile & SandboxFsFileContent;
 export const createSandboxUrlMountFromFsFiles = (
   files: readonly SandboxFsFileWithContent[],
   options: CreateSandboxUrlMountFromFsFilesOptions,
-): SandboxUrlMount => {
-  const fileByPath = new Map(files.map((file) => [sandboxDocumentPathKey(file.path), file]));
-  return createSandboxUrlMountFromFsTree(fsTreeFromFiles(files), {
-    ...options,
-    readFile: (file) => fileByPath.get(sandboxDocumentPathKey(file.path)),
-  });
-};
+): SandboxUrlMount =>
+  createSandboxUrlMountFromFsEntries(files, options, (file) => file);
 
 export const createSandboxUrlMountFromFsTree = (
   tree: FsTree,
   options: CreateSandboxUrlMountFromFsTreeOptions,
-): SandboxUrlMount => {
-  const files = sandboxFsFilesFromTree(tree);
+): SandboxUrlMount =>
+  createSandboxUrlMountFromFsEntries(sandboxFsFilesFromTree(tree), options, options.readFile);
 
-  return createSandboxUrlMount({
+const createSandboxUrlMountFromFsEntries = <TFile extends SandboxFsFile>(
+  files: readonly TFile[],
+  options: CreateSandboxUrlMountFromFsFilesOptions,
+  readFile: (file: TFile) => Promise<SandboxFsFileContent | undefined> | SandboxFsFileContent | undefined,
+): SandboxUrlMount =>
+  createSandboxUrlMount({
     baseUrl: options.baseUrl,
     entry: options.entry,
-    files: files.map((file) => ({
-      path: file.path,
-      read: () => options.readFile(file),
-    })),
+    files: files.map((file) => ({ path: file.path, read: () => readFile(file) })),
     ...(options.mountId === undefined ? {} : { mountId: options.mountId }),
     ...(options.route === undefined ? {} : { route: options.route }),
   });
-};
 
 const sandboxFsFilesFromTree = (
   tree: FsTree,
