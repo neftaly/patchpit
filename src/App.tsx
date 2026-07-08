@@ -5,7 +5,7 @@ export function App() {
   const sandboxFrame = createSandboxFrame({
     baseUrl: window.location.href,
     entry: sandboxCompatApp.entry,
-    sandboxId: "sandbox-compat",
+    sandboxId: sandboxCompatApp.id,
   });
 
   return (
@@ -20,7 +20,7 @@ export function App() {
       <iframe
         {...sandboxFrame}
         title="Sandbox"
-        style={{ border: 0, height: "100%", width: "100%" }}
+        style={{ border: 0, flex: 1 }}
       />
     </div>
   );

@@ -127,16 +127,17 @@ function workerRelative() {
 }
 
 function pass() {
-  return { status: 'pass' };
+  return { status: "pass" };
 }
 
 function fail(detail) {
-  return { detail, status: 'fail' };
+  return { detail, status: "fail" };
 }
 
 function imageLoads(src, srcset) {
   return finishWithin((finish) => {
     const image = new Image();
+    image.style.maxHeight = '300px';
     image.addEventListener('load', () => finish(pass()), { once: true });
     image.addEventListener('error', () => finish(fail(`${src ?? srcset} image error`)), { once: true });
     if (srcset !== undefined) image.srcset = srcset;

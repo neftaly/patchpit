@@ -1,26 +1,21 @@
 import { createServer } from 'node:http';
 import { constants } from 'node:fs';
-import { access, readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { access } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
-import { createSandboxUrlMountFromFsFiles } from '@patchpit/sandbox-fs';
-import { readSandboxFsDirectory } from '@patchpit/sandbox-fs/node';
 import { respondWithSandboxUrlMount } from '@patchpit/sandbox/node';
+import { sandboxCompatFiles, sandboxCompatMount } from '../apps/sandbox-compat/node.ts';
 
-const appRoot = resolve('apps/sandbox-compat/static');
-const ghostscriptTigerPath = resolve('apps/sandbox-compat/url-backed/Ghostscript_Tiger.svg');
-const ghostscriptTigerSrc = 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg';
 const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? '/usr/bin/chromium';
 const selectedCase = process.argv.find((argument) => argument.startsWith('--case='))?.slice('--case='.length);
 
 await assertChromiumExecutable(chromiumPath);
-const files = await mountedFiles();
+const files = await sandboxCompatFiles();
 const server = await staticServer(files);
 const browser = await chromium.launch({ executablePath: chromiumPath });
 
 try {
   const reference = await referenceReport(browser, server.url, selectedCase);
-  const sandbox = await sandboxReport(browser, files, server, selectedCase);
+  const sandbox = await sandboxReport(browser, server, selectedCase);
   const comparison = compareReports(reference, sandbox, selectedCase);
   console.log(JSON.stringify(comparison, null, 2));
 } finally {
@@ -43,13 +38,9 @@ async function referenceReport(browser, url, onlyCase) {
   });
 }
 
-async function sandboxReport(browser, files, server, onlyCase) {
+async function sandboxReport(browser, server, onlyCase) {
   const mountBuildStartedAt = performance.now();
-  const sandboxMount = createSandboxUrlMountFromFsFiles(files, {
-    baseUrl: server.url,
-    entry: ['index.html'],
-    mountId: 'sandbox-compat',
-  });
+  const sandboxMount = await sandboxCompatMount(server.url);
   server.addMount(sandboxMount);
   const sandboxFrame = sandboxMount.frame;
   const mountBuildMs = performance.now() - mountBuildStartedAt;
@@ -124,20 +115,6 @@ function compareReports(reference, sandbox, onlyCase) {
 
 function selectedCases(cases, onlyCase) {
   return onlyCase === undefined ? cases : cases.filter((result) => result.id === onlyCase);
-}
-
-async function mountedFiles() {
-  return [
-    ...await readSandboxFsDirectory(appRoot, {
-      src: (path) => `automerge:sandbox-compat/${path.join('/')}`,
-    }),
-    {
-      body: await readFile(ghostscriptTigerPath),
-      contentType: 'image/svg+xml',
-      path: ['ghostscript-tiger.svg'],
-      src: ghostscriptTigerSrc,
-    },
-  ].toSorted((left, right) => left.path.join('/').localeCompare(right.path.join('/')));
 }
 
 function staticServer(files) {

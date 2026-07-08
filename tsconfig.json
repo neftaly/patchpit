@@ -17,7 +17,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-    "types": ["node", "vite/client"]
+    "types": ["node"]
   },
-  "include": ["apps/*/src", "packages/*/src", "src", "vite.config.ts"]
+  "include": ["apps", "packages/*/src", "src", "vite.config.ts"]
 }

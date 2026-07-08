@@ -18,11 +18,11 @@
   },
   "dependencies": {
     "@patchpit/sandbox": "workspace:*",
-    "@patchpit/sandbox-fs": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@patchpit/sandbox-fs": "workspace:*",
     "@babel/core": "catalog:",
     "@rolldown/plugin-babel": "catalog:",
     "@types/babel__core": "catalog:",
@@ -35,7 +35,6 @@
     "oxlint-tsgolint": "catalog:",
     "playwright-core": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
-    "vite-plugin-wasm": "catalog:"
+    "vite": "catalog:"
   }
 }
