@@ -28,3 +28,11 @@ projections without pretending copy/delete preserves object identity.
 
 Prefer smaller state surfaces, clearer ownership, and less incidental coupling.
 Avoid abstractions that only rename existing complexity.
+
+## Testing Ratchet
+
+Existing tests are legacy tripwires. Do not expand them as guard rails for new
+work. New testing should favor fuzzing, behavior fuzzing, browser behavior
+cases, and small benchmarks. Existing tests may be mechanically updated for
+renames/import moves, or deleted once replaced by stronger behavior/fuzz
+coverage.
