@@ -4,13 +4,13 @@ const caseDefinitions = [
   compatCase('image-file-backed', 'pass', () => imageLoads('./relative-file.svg')),
   compatCase('image-url-backed-file', 'pass', () => imageLoads('./ghostscript-tiger.svg')),
   compatCase('fetch-relative-json', 'pass', fetchRelativeJson),
-  compatCase('css-import-relative', 'fail', cssImportRelative),
-  compatCase('css-url-relative', 'fail', cssUrlRelative),
-  compatCase('dynamic-import-relative', 'fail', () =>
+  compatCase('css-import-relative', 'pass', cssImportRelative),
+  compatCase('css-url-relative', 'pass', cssUrlRelative),
+  compatCase('dynamic-import-relative', 'pass', () =>
     import('./module-dep.js').then(() => pass(), () => fail('dynamic import rejected'))),
   compatCase('iframe-relative', 'pass', iframeRelative),
-  compatCase('module-import-relative', 'fail', moduleImportRelative),
-  compatCase('srcset-relative', 'fail', () => imageLoads(undefined, './srcset-file.svg 1x')),
+  compatCase('module-import-relative', 'pass', moduleImportRelative),
+  compatCase('srcset-relative', 'pass', () => imageLoads(undefined, './srcset-file.svg 1x')),
   compatCase('worker-relative', 'fail', workerRelative),
 ];
 
@@ -58,13 +58,14 @@ async function cssImportRelative() {
 }
 
 async function cssUrlRelative() {
-  const before = resourceCount('css-url-file.svg');
+  const target = document.createElement('div');
+  target.id = 'sandbox-compat-css-url';
+  document.body.append(target);
   const loaded = await loadStyle('./css-url.css');
   if (loaded.status === 'fail') return loaded;
-  await delay(200);
-  return resourceCount('css-url-file.svg') > before
+  return getComputedStyle(target).backgroundImage.includes('css-url-file.svg')
     ? pass()
-    : fail('css url resource did not load');
+    : fail('css url did not resolve');
 }
 
 function iframeRelative() {
@@ -154,14 +155,4 @@ function finishWithin(start, timeoutDetail) {
     start(finish);
     window.setTimeout(() => finish(fail(timeoutDetail)), caseTimeoutMs);
   });
-}
-
-function resourceCount(suffix) {
-  return performance.getEntriesByType('resource')
-    .filter((entry) => entry.name.endsWith(suffix))
-    .length;
-}
-
-function delay(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }

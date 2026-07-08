@@ -1,43 +1,56 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FsTree } from '@patchpit/fs';
-import { createStaticSandboxDocumentFromFsTree } from './index';
+import { createSandboxUrlMountFromFsTree } from './index';
 
-void test('plans filesystem-backed sandbox documents without resolving bodies', async () => {
+void test('creates filesystem-backed sandbox URL mounts without eagerly resolving bodies', async () => {
   let reads = 0;
-  await assert.rejects(
-    createStaticSandboxDocumentFromFsTree(tree([
-      ['index.html', { kind: 'file', src: 'automerge:index' }],
-      ['assets', {
-        entries: [['style.css', { kind: 'file', src: 'automerge:style' }]],
-        kind: 'dir',
-      }],
-    ]), {
-      entry: ['index.html'],
-      readFile: () => {
-        reads += 1;
-        return { body: '', contentType: 'text/html' };
-      },
-    }),
-    /Sandbox URL mounts are not implemented yet/,
-  );
+  const mount = createSandboxUrlMountFromFsTree(tree([
+    ['index.html', { kind: 'file', src: 'automerge:index' }],
+    ['assets', {
+      entries: [['style.css', { kind: 'file', src: 'automerge:style' }]],
+      kind: 'dir',
+    }],
+  ]), {
+    baseUrl: 'https://patchpit.test/',
+    entry: ['index.html'],
+    mountId: 'mount-1',
+    readFile: (file) => {
+      reads += 1;
+      return { body: file.src, contentType: file.path.at(-1) === 'style.css' ? 'text/css' : 'text/html' };
+    },
+  });
+
   assert.equal(reads, 0);
+  assert.equal(mount.document.url, 'https://patchpit.test/__patchpit/sandbox/mount-1/index.html');
+
+  const response = await mount.respond('https://patchpit.test/__patchpit/sandbox/mount-1/assets/style.css');
+  assert.equal(reads, 1);
+  assert.equal(await response?.text(), 'automerge:style');
 });
 
 void test('delegates sandbox mount validation', async () => {
-  await assert.rejects(
-    createStaticSandboxDocumentFromFsTree(tree([['app.html', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
+  assert.throws(
+    () => createSandboxUrlMountFromFsTree(tree([['app.html', { kind: 'file', src: '' }]]), {
+      baseUrl: 'https://patchpit.test/',
+      entry: ['index.html'],
+      readFile,
+    }),
     /Sandbox entry file is missing: index\.html/,
   );
-  await assert.rejects(
-    createStaticSandboxDocumentFromFsTree(tree([
+  assert.throws(
+    () => createSandboxUrlMountFromFsTree(tree([
       ['index.html', { kind: 'file', src: 'first' }],
       ['index.html', { kind: 'file', src: 'second' }],
-    ]), { entry: ['index.html'], readFile }),
+    ]), { baseUrl: 'https://patchpit.test/', entry: ['index.html'], readFile }),
     /Duplicate sandbox document path: index\.html/,
   );
-  await assert.rejects(
-    createStaticSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]]), { entry: ['index.html'], readFile }),
+  assert.throws(
+    () => createSandboxUrlMountFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]]), {
+      baseUrl: 'https://patchpit.test/',
+      entry: ['index.html'],
+      readFile,
+    }),
     /non-empty relative/,
   );
 });

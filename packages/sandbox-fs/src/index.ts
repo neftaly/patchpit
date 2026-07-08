@@ -1,8 +1,8 @@
 import type { FsTree } from '@patchpit/fs';
 import {
-  createSandboxDocument,
-  type SandboxDocument,
+  createSandboxUrlMount,
   type SandboxDocumentPath,
+  type SandboxUrlMount,
 } from '@patchpit/sandbox';
 
 export type SandboxFsFileBody = string | Blob | BufferSource;
@@ -21,20 +21,29 @@ export type SandboxFsFileReader = (
   file: SandboxFsFile,
 ) => Promise<SandboxFsFileContent | undefined> | SandboxFsFileContent | undefined;
 
-export type CreateSandboxDocumentFromFsTreeOptions = {
+export type CreateSandboxUrlMountFromFsTreeOptions = {
+  readonly baseUrl: string | URL;
   readonly entry: readonly string[];
+  readonly mountId?: string;
   readonly readFile: SandboxFsFileReader;
+  readonly route?: readonly string[];
 };
 
-export const createStaticSandboxDocumentFromFsTree = async (
+export const createSandboxUrlMountFromFsTree = (
   tree: FsTree,
-  options: CreateSandboxDocumentFromFsTreeOptions,
-): Promise<SandboxDocument> => {
+  options: CreateSandboxUrlMountFromFsTreeOptions,
+): SandboxUrlMount => {
   const files = sandboxFsFilesFromTree(tree);
 
-  return createSandboxDocument({
+  return createSandboxUrlMount({
+    baseUrl: options.baseUrl,
     entry: options.entry,
-    files,
+    files: files.map((file) => ({
+      path: file.path,
+      read: () => options.readFile(file),
+    })),
+    ...(options.mountId === undefined ? {} : { mountId: options.mountId }),
+    ...(options.route === undefined ? {} : { route: options.route }),
   });
 };
 

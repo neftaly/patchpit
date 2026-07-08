@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readdir, readFile } from 'node:fs/promises';
 import { extname, relative, resolve, sep } from 'node:path';
 import { chromium } from 'playwright-core';
-import { createStaticSandboxDocumentFromFsTree } from '@patchpit/sandbox-fs';
+import { createSandboxUrlMountFromFsTree } from '@patchpit/sandbox-fs';
 
 const appRoot = resolve('apps/sandbox-compat/static');
 const ghostscriptTigerPath = resolve('apps/sandbox-compat/url-backed/Ghostscript_Tiger.svg');
@@ -16,7 +16,7 @@ const browser = await chromium.launch({ executablePath: chromiumPath });
 
 try {
   const reference = await referenceReport(browser, server.url, selectedCase);
-  const sandbox = await sandboxReport(browser, files, selectedCase);
+  const sandbox = await sandboxReport(browser, files, server, selectedCase);
   const comparison = compareReports(reference, sandbox, selectedCase);
   console.log(JSON.stringify(comparison, null, 2));
 } finally {
@@ -35,13 +35,17 @@ async function referenceReport(browser, url, onlyCase) {
   }
 }
 
-async function sandboxReport(browser, files, onlyCase) {
+async function sandboxReport(browser, files, server, onlyCase) {
   const page = await browser.newPage();
   const documentBuildStartedAt = performance.now();
-  const sandboxDocument = await createStaticSandboxDocumentFromFsTree(fsTree(files), {
+  const sandboxMount = createSandboxUrlMountFromFsTree(fsTree(files), {
+    baseUrl: server.url,
     entry: ['index.html'],
+    mountId: 'sandbox-compat',
     readFile: (file) => fileContent(files, file.src),
   });
+  server.addMount(sandboxMount);
+  const sandboxDocument = sandboxMount.document;
   const documentBuildMs = performance.now() - documentBuildStartedAt;
 
   try {
@@ -168,7 +172,14 @@ function pathKey(path) {
 }
 
 function staticServer(files) {
+  let mounts = [];
   const server = createServer(async (request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+    const mountResponse = await firstMountResponse(mounts, new Request(url, { method: request.method ?? 'GET' }));
+    if (mountResponse !== undefined) {
+      await writeWebResponse(response, mountResponse);
+      return;
+    }
     const file = fileByPath(files, requestPath(request.url));
     if (file === undefined) {
       response.writeHead(404).end();
@@ -182,12 +193,28 @@ function staticServer(files) {
       const address = server.address();
       if (address === null || typeof address === 'string') reject(new Error('Sandbox compat server did not bind to a TCP port'));
       else resolvePromise({
+        addMount: (mount) => {
+          mounts = [...mounts, mount];
+        },
         close: () => new Promise((resolveClose, rejectClose) =>
           server.close((error) => error === undefined ? resolveClose() : rejectClose(error))),
         url: `http://127.0.0.1:${address.port}/`,
       });
     });
   });
+}
+
+async function firstMountResponse(mounts, request) {
+  for (const mount of mounts) {
+    const response = await mount.respond(request);
+    if (response !== undefined) return response;
+  }
+  return undefined;
+}
+
+async function writeWebResponse(response, webResponse) {
+  response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers));
+  response.end(webResponse.body === null ? undefined : new Uint8Array(await webResponse.arrayBuffer()));
 }
 
 function fileByPath(files, path) {

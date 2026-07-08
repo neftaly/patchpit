@@ -1,3 +1,5 @@
-body {
+#sandbox-compat-css-url {
   background-image: url("./css-url-file.svg");
+  height: 4px;
+  width: 4px;
 }

@@ -1,4 +1,4 @@
-import { createStaticSandboxDocumentFromFsTree } from '@patchpit/sandbox-fs';
+import { createSandboxUrlMountFromFsTree } from '@patchpit/sandbox-fs';
 import ghostscriptTigerSvg from '../apps/sandbox-compat/url-backed/Ghostscript_Tiger.svg?raw';
 
 const staticRoot = '../apps/sandbox-compat/static/';
@@ -27,11 +27,13 @@ const appTree = {
   kind: 'dir',
 } as const;
 
-export const createInitialSandboxDocument = () =>
-  createStaticSandboxDocumentFromFsTree(appTree, {
+export const createInitialSandboxDocument = async () =>
+  createSandboxUrlMountFromFsTree(appTree, {
+    baseUrl: window.location.href,
     entry: ['index.html'],
+    mountId: 'sandbox-compat',
     readFile: (requested) => appFiles.find((item) => item.src === requested.src),
-  });
+  }).document;
 
 function file(
   name: string,
