@@ -1,5 +1,6 @@
 const caseDefinitions = [
-  { expectedSandbox: 'pass', id: 'img-relative' },
+  { expectedSandbox: 'pass', id: 'image-file-backed' },
+  { expectedSandbox: 'pass', id: 'image-url-backed-file' },
   { expectedSandbox: 'fail', id: 'module-import-relative' },
 ];
 
@@ -11,13 +12,8 @@ if (activeCases.length === 0) throw new Error(`Unknown sandbox compat case: ${se
 const startedAt = performance.now();
 
 const caseRunners = {
-  'img-relative': () => new Promise((resolve) => {
-    const image = new Image();
-    image.addEventListener('load', () => resolve(pass()), { once: true });
-    image.addEventListener('error', () => resolve(fail('image error')), { once: true });
-    image.src = './relative-file.svg';
-    document.body.append(image);
-  }),
+  'image-file-backed': () => imageLoads('./relative-file.svg'),
+  'image-url-backed-file': () => imageLoads('./ghostscript-tiger.svg'),
   'module-import-relative': () =>
     window.__sandboxCompatModuleImport === 'pass'
       ? pass()
@@ -50,4 +46,14 @@ function pass() {
 
 function fail(detail) {
   return { detail, status: 'fail' };
+}
+
+function imageLoads(src) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.addEventListener('load', () => resolve(pass()), { once: true });
+    image.addEventListener('error', () => resolve(fail(`${src} image error`)), { once: true });
+    image.src = src;
+    document.body.append(image);
+  });
 }

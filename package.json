@@ -9,18 +9,13 @@
   },
   "scripts": {
     "build": "vite build",
-    "prebuild": "pnpm generate:hello-world-fixtures",
     "dev": "vite",
-    "generate:hello-world-fixtures": "pnpm --filter @patchpit/hello-world build && node scripts/generate-hello-world-dist.mjs",
-    "check:hello-world-fixtures": "pnpm --filter @patchpit/hello-world build && node scripts/generate-hello-world-dist.mjs --check",
     "lint": "oxlint apps packages scripts src vite.config.ts --deny-warnings --type-aware",
     "test": "node --import ./scripts/register-ts-loader.mjs --test 'packages/**/*.test.ts'",
     "test:browser": "node --import ./scripts/register-ts-loader.mjs scripts/test-sandbox-compat.mjs",
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@automerge/automerge-repo": "catalog:",
-    "@patchpit/automerge-fs": "workspace:*",
     "@patchpit/sandbox-fs": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

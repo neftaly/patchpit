@@ -5,11 +5,13 @@ import { chromium } from 'playwright-core';
 import { createStaticSandboxDocumentFromFsTree } from '@patchpit/sandbox-fs';
 
 const appRoot = resolve('apps/sandbox-compat/static');
+const ghostscriptTigerPath = resolve('apps/sandbox-compat/url-backed/Ghostscript_Tiger.svg');
+const ghostscriptTigerSrc = 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg';
 const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? '/usr/bin/chromium';
 const selectedCase = process.argv.find((argument) => argument.startsWith('--case='))?.slice('--case='.length);
 
-const files = await staticFiles(appRoot);
-const server = await staticServer(appRoot);
+const files = await mountedFiles();
+const server = await staticServer(files);
 const browser = await chromium.launch({ executablePath: chromiumPath });
 
 try {
@@ -38,7 +40,7 @@ async function sandboxReport(browser, files, onlyCase) {
   const documentBuildStartedAt = performance.now();
   const sandboxDocument = await createStaticSandboxDocumentFromFsTree(fsTree(files), {
     entry: ['index.html'],
-    readFile: (file) => fileContent(files, file.path),
+    readFile: (file) => fileContent(files, file.src),
   });
   const documentBuildMs = performance.now() - documentBuildStartedAt;
 
@@ -103,19 +105,32 @@ function selectedCases(cases, onlyCase) {
   return onlyCase === undefined ? cases : cases.filter((result) => result.id === onlyCase);
 }
 
+async function mountedFiles() {
+  return [
+    ...await staticFiles(appRoot),
+    {
+      body: await readFile(ghostscriptTigerPath),
+      contentType: 'image/svg+xml',
+      path: ['ghostscript-tiger.svg'],
+      src: ghostscriptTigerSrc,
+    },
+  ].toSorted((left, right) => pathKey(left.path).localeCompare(pathKey(right.path)));
+}
+
 async function staticFiles(root, dir = root) {
   const entries = await readdir(dir, { withFileTypes: true });
   const nested = await Promise.all(entries.map(async (entry) => {
     const path = resolve(dir, entry.name);
-    return entry.isDirectory()
-      ? staticFiles(root, path)
-      : [{
-          body: await readFile(path),
-          contentType: contentType(path),
-          path: relativePath(root, path),
-        }];
+    if (entry.isDirectory()) return staticFiles(root, path);
+    const filePath = relativePath(root, path);
+    return [{
+      body: await readFile(path),
+      contentType: contentType(path),
+      path: filePath,
+      src: `automerge:sandbox-compat/${pathKey(filePath)}`,
+    }];
   }));
-  return nested.flat().toSorted((left, right) => pathKey(left.path).localeCompare(pathKey(right.path)));
+  return nested.flat();
 }
 
 function fsTree(files) {
@@ -130,7 +145,7 @@ function treeEntries(files, prefix) {
       name,
       exactFile === undefined
         ? { entries: treeEntries(files, path), kind: 'dir' }
-        : { kind: 'file', src: exactFile.path.join('/') },
+        : { kind: 'file', src: exactFile.src },
     ];
   });
 }
@@ -143,8 +158,8 @@ function uniqueNames(files, prefix) {
     .toSorted((left, right) => left.localeCompare(right));
 }
 
-function fileContent(files, path) {
-  const file = files.find((item) => samePath(item.path, path));
+function fileContent(files, src) {
+  const file = files.find((item) => item.src === src);
   return file === undefined ? undefined : { body: file.body, contentType: file.contentType };
 }
 
@@ -152,21 +167,14 @@ function pathKey(path) {
   return path.join('/');
 }
 
-function staticServer(root) {
+function staticServer(files) {
   const server = createServer(async (request, response) => {
-    const url = new URL(request.url ?? '/', 'http://localhost/');
-    const path = resolve(root, `.${decodeURIComponent(url.pathname)}`);
-    if (!path.startsWith(`${root}${sep}`) && path !== root) {
+    const file = fileByPath(files, requestPath(request.url));
+    if (file === undefined) {
       response.writeHead(404).end();
       return;
     }
-    const filePath = path === root ? resolve(root, 'index.html') : path;
-    const body = await readFile(filePath).catch(() => undefined);
-    if (body === undefined) {
-      response.writeHead(404).end();
-      return;
-    }
-    response.writeHead(200, { 'Content-Type': contentType(filePath) }).end(body);
+    response.writeHead(200, { 'Content-Type': file.contentType }).end(file.body);
   });
   return new Promise((resolvePromise, reject) => {
     server.once('error', reject);
@@ -180,6 +188,19 @@ function staticServer(root) {
       });
     });
   });
+}
+
+function fileByPath(files, path) {
+  const resolvedPath = path.length === 0 ? ['index.html'] : path;
+  return files.find((file) => samePath(file.path, resolvedPath));
+}
+
+function requestPath(url) {
+  return new URL(url ?? '/', 'http://localhost/')
+    .pathname
+    .split('/')
+    .filter((segment) => segment !== '')
+    .map((segment) => decodeURIComponent(segment));
 }
 
 function relativePath(root, path) {
