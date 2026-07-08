@@ -47,7 +47,7 @@ const sandboxDocumentPlan = (
 ): SandboxDocumentPlan => {
   const entryPath = sandboxDocumentPathKey(entry);
   const plannedFiles = files.map((file) => ({ file, path: sandboxDocumentPathKey(file.path) }));
-  const duplicatePath = duplicate(plannedFiles.map((file) => file.path));
+  const duplicatePath = firstDuplicate(plannedFiles.map((file) => file.path));
   if (duplicatePath !== undefined) throw new Error(`Duplicate sandbox document path: ${duplicatePath}`);
 
   return { entryPath, files: plannedFiles };
@@ -59,7 +59,7 @@ const sandboxFileBytes = async (file: SandboxDocumentFile, path: string): Promis
   path,
 });
 
-const duplicate = (values: readonly string[]): string | undefined => {
+const firstDuplicate = (values: readonly string[]): string | undefined => {
   const seen = new Set<string>();
   return values.find((value) => {
     if (seen.has(value)) return true;

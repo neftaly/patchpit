@@ -43,13 +43,8 @@ const assertSandboxFsMount = (
   files: readonly SandboxFsFile[],
   entry: readonly string[],
 ) => {
-  const seenPaths = new Set<string>();
   const filePaths = files.map((file) => sandboxDocumentPathKey(file.path));
-  const duplicatePath = filePaths.find((path) => {
-    if (seenPaths.has(path)) return true;
-    seenPaths.add(path);
-    return false;
-  });
+  const duplicatePath = firstDuplicate(filePaths);
   if (duplicatePath !== undefined) {
     throw new Error(`Duplicate sandbox file path: ${duplicatePath}`);
   }
@@ -63,6 +58,15 @@ const assertSandboxFsMount = (
     file.path.slice(0, -1).map((_, index) => sandboxDocumentPathKey(file.path.slice(0, index + 1)))));
   const collision = filePaths.find((path) => directoryPaths.has(path));
   if (collision !== undefined) throw new Error(`Sandbox file path is both file and directory: ${collision}`);
+};
+
+const firstDuplicate = (values: readonly string[]): string | undefined => {
+  const seen = new Set<string>();
+  return values.find((value) => {
+    if (seen.has(value)) return true;
+    seen.add(value);
+    return false;
+  });
 };
 
 const readSandboxFile = async (

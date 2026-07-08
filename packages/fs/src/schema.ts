@@ -16,20 +16,24 @@ export type FsNodeKey = readonly number[];
 
 const isFsPath = (value: unknown): value is FsPath => {
   if (!Array.isArray(value)) return false;
-  for (let index = 0; index < value.length; index += 1) {
-    if (typeof value[index] !== 'string') return false;
-  }
-  return true;
+  return isDenseArrayOf(value, (segment) => typeof segment === 'string');
 };
 
 const isFsNodeKey = (value: unknown): value is FsNodeKey => {
   if (!Array.isArray(value)) return false;
-  for (let index = 0; index < value.length; index += 1) {
-    const segment = value[index];
-    if (!Number.isInteger(segment) || segment < 0 || Object.is(segment, -0)) return false;
-  }
-  return true;
+  return isDenseArrayOf(value, (segment) =>
+    typeof segment === 'number'
+    && Number.isInteger(segment)
+    && segment >= 0
+    && !Object.is(segment, -0));
 };
+
+const isDenseArrayOf = (
+  value: readonly unknown[],
+  predicate: (item: unknown) => boolean,
+): boolean =>
+  Array.from({ length: value.length }, (_, index) =>
+    index in value && predicate(value[index])).every(Boolean);
 
 const fsPathField = customField<FsPath>({
   codec: 'patchpit.fs.path',
