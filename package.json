@@ -16,6 +16,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@patchpit/sandbox": "workspace:*",
     "@patchpit/sandbox-fs": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

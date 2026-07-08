@@ -1,11 +1,10 @@
 import type { FsTree } from '@patchpit/fs';
 import {
   createSandboxUrlMount,
+  type SandboxDocumentBody,
   type SandboxDocumentPath,
   type SandboxUrlMount,
 } from '@patchpit/sandbox';
-
-export type SandboxFsFileBody = string | Blob | BufferSource;
 
 export type SandboxFsFile = {
   readonly path: SandboxDocumentPath;
@@ -13,7 +12,7 @@ export type SandboxFsFile = {
 };
 
 export type SandboxFsFileContent = {
-  readonly body: SandboxFsFileBody;
+  readonly body: SandboxDocumentBody;
   readonly contentType: string;
 };
 
@@ -52,10 +51,5 @@ const sandboxFsFilesFromTree = (
   pathSegments: readonly string[] = [],
 ): readonly SandboxFsFile[] =>
   tree.kind === 'file'
-    ? [sandboxFsFile(pathSegments, tree.src)]
+    ? [{ path: pathSegments, src: tree.src }]
     : tree.entries.flatMap(([name, child]) => sandboxFsFilesFromTree(child, [...pathSegments, name]));
-
-const sandboxFsFile = (
-  pathSegments: readonly string[],
-  src: string,
-): SandboxFsFile => ({ path: pathSegments, src });

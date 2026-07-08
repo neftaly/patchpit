@@ -42,7 +42,7 @@ async function sandboxReport(browser, files, server, onlyCase) {
     baseUrl: server.url,
     entry: ['index.html'],
     mountId: 'sandbox-compat',
-    readFile: (file) => fileContent(files, file.src),
+    readFile: (file) => files.find((item) => item.src === file.src),
   });
   server.addMount(sandboxMount);
   const sandboxDocument = sandboxMount.document;
@@ -118,7 +118,7 @@ async function mountedFiles() {
       path: ['ghostscript-tiger.svg'],
       src: ghostscriptTigerSrc,
     },
-  ].toSorted((left, right) => pathKey(left.path).localeCompare(pathKey(right.path)));
+  ].toSorted((left, right) => left.path.join('/').localeCompare(right.path.join('/')));
 }
 
 async function staticFiles(root, dir = root) {
@@ -131,7 +131,7 @@ async function staticFiles(root, dir = root) {
       body: await readFile(path),
       contentType: contentType(path),
       path: filePath,
-      src: `automerge:sandbox-compat/${pathKey(filePath)}`,
+      src: `automerge:sandbox-compat/${filePath.join('/')}`,
     }];
   }));
   return nested.flat();
@@ -162,20 +162,11 @@ function uniqueNames(files, prefix) {
     .toSorted((left, right) => left.localeCompare(right));
 }
 
-function fileContent(files, src) {
-  const file = files.find((item) => item.src === src);
-  return file === undefined ? undefined : { body: file.body, contentType: file.contentType };
-}
-
-function pathKey(path) {
-  return path.join('/');
-}
-
 function staticServer(files) {
-  let mounts = [];
+  let mount;
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
-    const mountResponse = await firstMountResponse(mounts, new Request(url, { method: request.method ?? 'GET' }));
+    const mountResponse = await mount?.respond(new Request(url, { method: request.method ?? 'GET' }));
     if (mountResponse !== undefined) {
       await writeWebResponse(response, mountResponse);
       return;
@@ -193,8 +184,8 @@ function staticServer(files) {
       const address = server.address();
       if (address === null || typeof address === 'string') reject(new Error('Sandbox compat server did not bind to a TCP port'));
       else resolvePromise({
-        addMount: (mount) => {
-          mounts = [...mounts, mount];
+        addMount: (nextMount) => {
+          mount = nextMount;
         },
         close: () => new Promise((resolveClose, rejectClose) =>
           server.close((error) => error === undefined ? resolveClose() : rejectClose(error))),
@@ -202,14 +193,6 @@ function staticServer(files) {
       });
     });
   });
-}
-
-async function firstMountResponse(mounts, request) {
-  for (const mount of mounts) {
-    const response = await mount.respond(request);
-    if (response !== undefined) return response;
-  }
-  return undefined;
 }
 
 async function writeWebResponse(response, webResponse) {

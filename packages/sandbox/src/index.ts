@@ -5,12 +5,8 @@ export {
   sandboxUrlMountHeaders,
   type SandboxDocumentBody,
   type SandboxDocument,
-  type SandboxDocumentPlan,
-  type SandboxDocumentPlannedFile,
-  type SandboxDocumentFilePath,
   type SandboxUrlMount,
   type SandboxUrlMountFile,
   type SandboxUrlMountFileContent,
-  type SandboxUrlMountOptions,
-} from './document';
-export { sandboxDocumentPathKey, type SandboxDocumentPath } from './path';
+} from './document.ts';
+export { sandboxDocumentPathKey, type SandboxDocumentPath } from './path.ts';

@@ -1,4 +1,4 @@
-import { sandboxDocumentPathKey, type SandboxDocumentPath } from './path';
+import { sandboxDocumentPathKey, type SandboxDocumentPath } from './path.ts';
 
 export type SandboxDocumentBody = string | Blob | BufferSource;
 
@@ -9,16 +9,13 @@ export type SandboxDocument = {
   readonly url: string;
 };
 
-export type SandboxDocumentFilePath = {
-  readonly path: SandboxDocumentPath;
-};
-
 export type SandboxUrlMount = {
   readonly document: SandboxDocument;
   readonly respond: (request: Request | URL | string) => Promise<Response | undefined>;
 };
 
-export type SandboxUrlMountFile = SandboxDocumentFilePath & {
+export type SandboxUrlMountFile = {
+  readonly path: SandboxDocumentPath;
   readonly read: () => Promise<SandboxUrlMountFileContent | undefined> | SandboxUrlMountFileContent | undefined;
 };
 
@@ -27,23 +24,12 @@ export type SandboxUrlMountFileContent = {
   readonly contentType: string;
 };
 
-export type SandboxUrlMountOptions = {
+type SandboxUrlMountOptions = {
   readonly baseUrl: string | URL;
   readonly entry: SandboxDocumentPath;
   readonly files: readonly SandboxUrlMountFile[];
   readonly mountId?: string;
   readonly route?: readonly string[];
-};
-
-export type SandboxDocumentPlan<TFile extends SandboxDocumentFilePath> = {
-  readonly entryFileIndex: number;
-  readonly entryPath: string;
-  readonly files: readonly SandboxDocumentPlannedFile<TFile>[];
-};
-
-export type SandboxDocumentPlannedFile<TFile extends SandboxDocumentFilePath> = {
-  readonly file: TFile;
-  readonly path: string;
 };
 
 export const createSandboxUrlMount = ({
@@ -71,15 +57,20 @@ export const createSandboxUrlMount = ({
       if (file === undefined) return sandboxResponse('Not found', 404, 'text/plain');
       const content = await file.read();
       if (content === undefined) return sandboxResponse('Not found', 404, 'text/plain');
-      return sandboxFileResponse(request, content, mountOrigin);
+      return sandboxResponse(
+        request instanceof Request && request.method === 'HEAD' ? null : content.body,
+        200,
+        content.contentType,
+        mountOrigin,
+      );
     },
   };
 };
 
-export const planSandboxDocument = <TFile extends SandboxDocumentFilePath>(
+export const planSandboxDocument = <TFile extends { readonly path: SandboxDocumentPath }>(
   entry: SandboxDocumentPath,
   files: readonly TFile[],
-): SandboxDocumentPlan<TFile> => {
+) => {
   const entryPath = sandboxDocumentPathKey(entry);
   const plannedFiles = files.map((file) => ({ file, path: sandboxDocumentPathKey(file.path) }));
   const duplicatePath = firstDuplicate(plannedFiles.map((file) => file.path));
@@ -120,13 +111,6 @@ const sandboxMountRequestPath = (
     ? sandboxDocumentPathKey(segments.slice(prefix.length))
     : undefined;
 };
-
-const sandboxFileResponse = (
-  request: Request | URL | string,
-  content: SandboxUrlMountFileContent,
-  mountOrigin: string,
-): Response =>
-  sandboxResponse(request instanceof Request && request.method === 'HEAD' ? null : content.body, 200, content.contentType, mountOrigin);
 
 const sandboxResponse = (
   body: BodyInit | null,
