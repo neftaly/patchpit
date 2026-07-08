@@ -34,29 +34,31 @@ void test('resolves file bodies and custom entry paths', async () => {
 
 void test('rejects missing, duplicate, and unrepresentable sandbox paths', async () => {
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: 'automerge:missing' }]])),
+    createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: 'automerge:missing' }]]), {
+      resolveFile: () => undefined,
+    }),
     /Sandbox file body is unresolved: index\.html/,
   );
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([['app.html', { kind: 'file', src: '' }]])),
+    createSandboxDocumentFromFsTree(tree([['app.html', { kind: 'file', src: '' }]]), { resolveFile }),
     /Sandbox entry file is missing: index\.html/,
   );
   await assert.rejects(
     createSandboxDocumentFromFsTree(tree([
       ['index.html', { kind: 'file', src: 'first' }],
       ['index.html', { kind: 'file', src: 'second' }],
-    ])),
+    ]), { resolveFile }),
     /Duplicate sandbox file path: index\.html/,
   );
   await assert.rejects(
-    createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]])),
+    createSandboxDocumentFromFsTree(tree([['index.html', { kind: 'file', src: '' }], ['.', { kind: 'file', src: '' }]]), { resolveFile }),
     /non-empty relative/,
   );
   await assert.rejects(
     createSandboxDocumentFromFsTree(tree([
       ['a.html', { kind: 'file', src: '' }],
       ['a.html', { entries: [['b.html', { kind: 'file', src: '' }]], kind: 'dir' }],
-    ]), { entry: ['a.html'] }),
+    ]), { entry: ['a.html'], resolveFile }),
     /both file and directory/,
   );
 });
@@ -68,3 +70,5 @@ const tree = (entries: Extract<FsTree, { readonly kind: 'dir' }>['entries']): Fs
 
 const contentType = (path: readonly string[]) =>
   path.at(-1)?.endsWith('.css') === true ? 'text/css' : 'text/html';
+
+const resolveFile = () => ({ body: '', contentType: 'text/html' });
