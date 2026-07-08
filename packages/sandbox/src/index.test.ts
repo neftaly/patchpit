@@ -29,7 +29,9 @@ void test('sandbox document API returns a data-backed iframe document', async ()
   });
 
   assert.equal(sandboxDocument.sandbox, 'allow-scripts');
+  assert.equal(sandboxDocument.referrerPolicy, 'no-referrer');
   assert.equal(sandboxDocument.url.startsWith('data:text/html;charset=utf-8,'), true);
+  assert.equal(embeddedPayload(sandboxDocument.url).contentSecurityPolicy.includes(`connect-src 'none'`), true);
   assert.deepEqual(new Map(embeddedPayload(sandboxDocument.url).htmlFiles).get('nested.html'), '<!doctype html><img src="./assets/dir%20name/a%2Fb.svg">');
 });
 
@@ -106,14 +108,18 @@ void test('sandbox document bootstrap recreates scripts in order with external l
 
   const html = outerHtml(sandboxDocument.url);
 
+  assert.equal(html.match(/<\/script>/g)?.length, 1);
   assert.equal(html.includes('const activateEntryScripts = async () => {'), true);
   assert.equal(html.includes('script.async = false;'), true);
   assert.equal(html.includes(`script.addEventListener('load', () => resolve(), { once: true });`), true);
   assert.equal(html.includes(`script.addEventListener('error', () => reject(new Error(\`Failed to load sandbox script: \${script.src}\`)), { once: true });`), true);
   assert.equal(html.includes('await new Promise((resolve, reject) => {'), true);
   assert.equal(html.includes('window.fetch = (input, init) => {'), true);
+  assert.equal(html.includes('script.text = dataUrlText(script.src);'), true);
+  assert.equal(html.includes('await (await fetch(script.src)).text()'), false);
   assert.equal(html.includes('input instanceof Request'), true);
-  assert.equal(html.includes('return nativeFetch(input instanceof Request ? new Request(resolved, input) : resolved, init);'), true);
+  assert.equal(html.includes('Promise.resolve(dataUrlResponse(resolved))'), true);
+  assert.equal(html.includes('nativeFetch(input instanceof Request ? new Request(resolved, input) : resolved, init);'), true);
   assert.equal(html.includes('element.srcdoc = bootstrapHtml(path, html);'), true);
   assert.equal(html.includes('throw new Error(`Missing sandbox file referenced from ${payload.entryPath}: ${value}`);'), true);
 });

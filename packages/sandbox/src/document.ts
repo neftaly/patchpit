@@ -3,6 +3,7 @@ import { sandboxIframeBootstrapHtml } from './iframe-bootstrap';
 import { sandboxDocumentPathKey, type SandboxDocumentBody, type SandboxDocumentPath } from './path';
 
 export type SandboxDocument = {
+  readonly referrerPolicy: 'no-referrer';
   readonly sandbox: 'allow-scripts';
   readonly url: string;
 };
@@ -33,6 +34,7 @@ export const createSandboxDocument = async ({
   const plan = sandboxDocumentPlan(entry, files);
 
   return {
+    referrerPolicy: 'no-referrer',
     sandbox: 'allow-scripts',
     url: textDataUrl('text/html;charset=utf-8', sandboxIframeBootstrapHtml(compileSandboxBootstrapPayload(
       plan.entryPath,

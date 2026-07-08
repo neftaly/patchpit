@@ -9,7 +9,7 @@ export type SandboxBootstrapPayload = {
 export const sandboxContentSecurityPolicy = [
   `default-src 'none'`,
   `base-uri 'none'`,
-  `connect-src data:`,
+  `connect-src 'none'`,
   `font-src data:`,
   `form-action 'none'`,
   `frame-src data:`,
@@ -59,7 +59,7 @@ function runSandboxIframeBootstrap(payload: SandboxBootstrapPayload) {
 <meta http-equiv="Content-Security-Policy" content="${payload.contentSecurityPolicy.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}">
 <script>
 (${runSandboxIframeBootstrap.toString()})(${JSON.stringify({ ...payload, entryHtml, entryPath }).replaceAll('<', '\\u003c')});
-</script>`;
+</scr${'ipt'}>`;
 
   const iframeSrcdoc = (element: Element, value: string | null) => {
     if (!(element instanceof HTMLIFrameElement) || value === null || !isRelativeFileReference(value)) return false;
@@ -85,7 +85,9 @@ function runSandboxIframeBootstrap(payload: SandboxBootstrapPayload) {
         ? fileDataUrl(input.url)
         : null;
     if (resolved === null) return nativeFetch(input, init);
-    return nativeFetch(input instanceof Request ? new Request(resolved, input) : resolved, init);
+    return resolved.startsWith('data:')
+      ? Promise.resolve(dataUrlResponse(resolved))
+      : nativeFetch(input instanceof Request ? new Request(resolved, input) : resolved, init);
   };
 
   const rewriteRelativeUrlAttributes = (root: ParentNode) => {
@@ -122,7 +124,7 @@ function runSandboxIframeBootstrap(payload: SandboxBootstrapPayload) {
       script.async = false;
       script.text = inertScript.text;
       if (script.src.startsWith('data:')) {
-        script.text = await (await fetch(script.src)).text();
+        script.text = dataUrlText(script.src);
         script.removeAttribute('src');
       }
       if (script.src === '') {
@@ -138,6 +140,28 @@ function runSandboxIframeBootstrap(payload: SandboxBootstrapPayload) {
   };
 
   void activateEntryScripts().catch((error) => setTimeout(() => { throw error; }));
+
+  function dataUrlBytes(url: string) {
+    const commaIndex = url.indexOf(',');
+    if (commaIndex === -1) throw new Error(`Invalid sandbox data URL: ${url}`);
+    const metadata = url.slice(0, commaIndex);
+    const body = url.slice(commaIndex + 1);
+    return {
+      bytes: metadata.endsWith(';base64')
+        ? Uint8Array.from(atob(body), (character) => character.charCodeAt(0))
+        : new TextEncoder().encode(decodeURIComponent(body)),
+      contentType: metadata.slice('data:'.length).replace(';base64', ''),
+    };
+  }
+
+  function dataUrlResponse(url: string) {
+    const { bytes, contentType } = dataUrlBytes(url);
+    return new Response(bytes, { headers: { 'Content-Type': contentType } });
+  }
+
+  function dataUrlText(url: string) {
+    return new TextDecoder().decode(dataUrlBytes(url).bytes);
+  }
 }
 
 const escapeHtmlAttribute = (value: string): string =>

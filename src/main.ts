@@ -4,7 +4,7 @@ import { createHelloWorldSandboxDocument } from './hello-world-fixture-runtime';
 
 type LaunchState =
   | { readonly status: 'mounting' }
-  | { readonly sandbox: string; readonly status: 'ready'; readonly url: string }
+  | { readonly referrerPolicy: 'no-referrer'; readonly sandbox: string; readonly status: 'ready'; readonly url: string }
   | { readonly status: 'failed'; readonly message: string };
 
 function App() {
@@ -15,7 +15,14 @@ function App() {
 
     const launch = async () => {
       const sandboxDocument = await createHelloWorldSandboxDocument();
-      if (!disposed) setLaunchState({ sandbox: sandboxDocument.sandbox, status: 'ready', url: sandboxDocument.url });
+      if (!disposed) {
+        setLaunchState({
+          referrerPolicy: sandboxDocument.referrerPolicy,
+          sandbox: sandboxDocument.sandbox,
+          status: 'ready',
+          url: sandboxDocument.url,
+        });
+      }
     };
 
     void launch().catch((error) => {
@@ -29,7 +36,14 @@ function App() {
 
   return createElement('main', { className: 'patchpit-root' },
     launchState.status === 'ready'
-      ? createElement('iframe', { height: 320, sandbox: launchState.sandbox, src: launchState.url, title: 'Hello World', width: 320 })
+      ? createElement('iframe', {
+        height: 320,
+        referrerPolicy: launchState.referrerPolicy,
+        sandbox: launchState.sandbox,
+        src: launchState.url,
+        title: 'Hello World',
+        width: 320,
+      })
       : createElement('p', {}, launchState.status === 'failed' ? launchState.message : 'Mounting hello-world...'));
 }
 
