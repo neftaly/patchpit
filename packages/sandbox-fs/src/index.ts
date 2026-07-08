@@ -1,11 +1,11 @@
 import type { FsTree } from '@patchpit/fs';
 import {
   createSandboxDocument,
-  planSandboxDocument,
   type SandboxDocument,
-  type SandboxDocumentBody,
   type SandboxDocumentPath,
 } from '@patchpit/sandbox';
+
+export type SandboxFsFileBody = string | Blob | BufferSource;
 
 export type SandboxFsFile = {
   readonly path: SandboxDocumentPath;
@@ -13,7 +13,7 @@ export type SandboxFsFile = {
 };
 
 export type SandboxFsFileContent = {
-  readonly body: SandboxDocumentBody;
+  readonly body: SandboxFsFileBody;
   readonly contentType: string;
 };
 
@@ -31,25 +31,11 @@ export const createStaticSandboxDocumentFromFsTree = async (
   options: CreateSandboxDocumentFromFsTreeOptions,
 ): Promise<SandboxDocument> => {
   const files = sandboxFsFilesFromTree(tree);
-  planSandboxDocument(options.entry, files);
 
   return createSandboxDocument({
     entry: options.entry,
-    files: await Promise.all(files.map((file) => readSandboxFile(file, options.readFile))),
+    files,
   });
-};
-
-const readSandboxFile = async (
-  file: SandboxFsFile,
-  readFile: SandboxFsFileReader,
-) => {
-  const content = await readFile(file);
-  if (content === undefined) throw new Error(`Sandbox file body is unresolved: ${file.path.join('/')}`);
-  return {
-    body: content.body,
-    contentType: content.contentType,
-    path: file.path,
-  };
 };
 
 const sandboxFsFilesFromTree = (

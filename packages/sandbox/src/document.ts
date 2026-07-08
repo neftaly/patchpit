@@ -1,17 +1,10 @@
-import { compileSandboxBootstrapPayload, type SandboxFileBytes } from './data-url-compiler';
-import { sandboxIframeBootstrapHtml } from './iframe-bootstrap';
-import { sandboxDocumentPathKey, type SandboxDocumentBody, type SandboxDocumentPath } from './path';
+import { sandboxDocumentPathKey, type SandboxDocumentPath } from './path';
 
 export type SandboxDocument = {
+  readonly dispose?: () => void | Promise<void>;
   readonly referrerPolicy: 'no-referrer';
   readonly sandbox: 'allow-scripts';
   readonly url: string;
-};
-
-export type SandboxDocumentFile = {
-  readonly body: SandboxDocumentBody;
-  readonly contentType: string;
-  readonly path: SandboxDocumentPath;
 };
 
 export type SandboxDocumentFilePath = {
@@ -34,19 +27,10 @@ export const createSandboxDocument = async ({
   files,
 }: {
   readonly entry: SandboxDocumentPath;
-  readonly files: readonly SandboxDocumentFile[];
+  readonly files: readonly SandboxDocumentFilePath[];
 }): Promise<SandboxDocument> => {
-  const plan = planSandboxDocument(entry, files);
-  const fileBytes = await Promise.all(plan.files.map(({ file, path }) => sandboxFileBytes(file, path)));
-
-  return {
-    referrerPolicy: 'no-referrer',
-    sandbox: 'allow-scripts',
-    url: textDataUrl('text/html;charset=utf-8', sandboxIframeBootstrapHtml(compileSandboxBootstrapPayload(
-      fileBytes[plan.entryFileIndex]!,
-      fileBytes,
-    ))),
-  };
+  planSandboxDocument(entry, files);
+  throw new Error('Sandbox URL mounts are not implemented yet.');
 };
 
 export const planSandboxDocument = <TFile extends SandboxDocumentFilePath>(
@@ -63,12 +47,6 @@ export const planSandboxDocument = <TFile extends SandboxDocumentFilePath>(
   return { entryFileIndex, entryPath, files: plannedFiles };
 };
 
-const sandboxFileBytes = async (file: SandboxDocumentFile, path: string): Promise<SandboxFileBytes> => ({
-  body: await bodyBytes(file.body),
-  contentType: file.contentType,
-  path,
-});
-
 const firstDuplicate = (values: readonly string[]): string | undefined => {
   const seen = new Set<string>();
   return values.find((value) => {
@@ -76,15 +54,4 @@ const firstDuplicate = (values: readonly string[]): string | undefined => {
     seen.add(value);
     return false;
   });
-};
-
-const textDataUrl = (contentType: string, body: string): string =>
-  `data:${contentType},${encodeURIComponent(body)}`;
-
-const bodyBytes = async (body: SandboxDocumentBody): Promise<Uint8Array> => {
-  if (typeof body === 'string') return new TextEncoder().encode(body);
-  if (body instanceof Blob) return new Uint8Array(await body.arrayBuffer());
-  return ArrayBuffer.isView(body)
-    ? new Uint8Array(body.buffer, body.byteOffset, body.byteLength)
-    : new Uint8Array(body);
 };

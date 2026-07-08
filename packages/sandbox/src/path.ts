@@ -1,4 +1,3 @@
-export type SandboxDocumentBody = string | Blob | BufferSource;
 export type SandboxDocumentPath = readonly string[];
 
 export const sandboxDocumentPathKey = (path: SandboxDocumentPath): string => {

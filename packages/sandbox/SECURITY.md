@@ -7,12 +7,9 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
 ## Current Boundary
 
 - Host iframe uses `sandbox="allow-scripts"` and `referrerPolicy="no-referrer"`.
-- Sandbox CSP defaults to `default-src 'none'` and only permits data-backed
-  subresources needed by the current model.
-- Relative local files are projected into the iframe; absolute URLs stay
-  browser-owned.
-- The sandbox may still navigate itself. CSP is not treated as total network
-  isolation.
+- The old data-URL bootstrap path has been removed.
+- The package currently owns path planning and the launch document contract.
+- URL-mounted serving is the next runtime boundary; it is not implemented yet.
 
 ## Polyfill Rules
 
@@ -27,7 +24,9 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
 
 ## Known Gaps
 
-- Relative module imports do not work in the current data-URL model.
-- CSS `url()`, CSS `@import`, `srcset`, dynamic imports, and workers are not
-  established as supported.
-- Large app graphs may exceed practical data-URL size or load-time limits.
+- `sandbox-compat` records the desired browser behavior and current expected
+  failures.
+- URL mount lifecycle, request handling, CORS headers, and cleanup are not
+  implemented yet.
+- Native workers need a separate-origin runner profile, not the max opaque
+  iframe profile.

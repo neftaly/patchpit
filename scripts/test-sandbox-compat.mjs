@@ -62,7 +62,7 @@ async function sandboxReport(browser, files, onlyCase) {
     return {
       ...report,
       documentBuildMs,
-      documentUrlLength: sandboxDocument.url.length,
+      launchUrlLength: sandboxDocument.url.length,
     };
   } finally {
     await page.close();
@@ -96,7 +96,7 @@ function compareReports(reference, sandbox, onlyCase) {
     cases,
     referenceDurationMs: reference.durationMs,
     sandboxDocumentBuildMs: sandbox.documentBuildMs,
-    sandboxDocumentUrlLength: sandbox.documentUrlLength,
+    sandboxLaunchUrlLength: sandbox.launchUrlLength,
     sandboxDurationMs: sandbox.durationMs,
   };
 }
