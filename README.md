@@ -2,6 +2,9 @@
 
 Patchpit is a shell for sandboxed HTML apps, sharing an automerge-backed filesystem.
 
+The root prototype is a host-rendered behavior lab for source-scoped previews
+and pinned tabs. The preview harness tests the sandbox boundary independently.
+
 ## Dev
 
 Prerequisites: Node `>=24.12.0`, `pnpm@10.33.2`, and Chromium for the browser

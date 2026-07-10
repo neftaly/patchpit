@@ -1,27 +1,150 @@
-import { createSandboxFrameAttributes } from "@patchpit/sandbox";
-import { sandboxCompatApp } from "../apps/sandbox-compat/app.ts";
+import { useState, type DragEvent, type ReactNode } from 'react';
+import {
+  resourceById,
+  resourceId,
+  resources,
+  type Resource,
+} from './resources.ts';
+import {
+  activateContext,
+  createWorkspace,
+  moveContext,
+  openContext,
+  previewContext,
+  type WorkspacePaneId,
+  type WorkspaceState,
+} from './workspace.ts';
+import './app.css';
+
+const paneIds = ['left', 'right'] as const;
+const resourceListContextId = 'resources';
+const tabDragType = 'application/x-patchpit-context';
 
 export function App() {
-  const frameAttributes = createSandboxFrameAttributes({
-    baseUrl: window.location.href,
-    entry: sandboxCompatApp.entry,
-    mountId: sandboxCompatApp.id,
-  });
+  const [workspace, setWorkspace] = useState(() => createWorkspace(resourceListContextId));
+  const showResource = (resource: Resource, pinned: boolean) => {
+    const contextId = resourceId(resource);
+    setWorkspace((current) => (pinned ? openContext : previewContext)(current, contextId, 'right'));
+  };
+
+  const renderContext = (contextId: string): ReactNode => {
+    if (contextId === resourceListContextId) {
+      return <Resources onOpen={(resource) => showResource(resource, true)} onPreview={(resource) => showResource(resource, false)} />;
+    }
+    const resource = resourceById(contextId);
+    return resource === undefined ? null : <Viewer resource={resource} />;
+  };
 
   return (
-    <div
-      style={{
-        background:
-          "conic-gradient(#ddd 25%, #fff 0 50%, #ddd 0 75%, #fff 0) 0/16px 16px",
-        display: "flex",
-        height: "100vh",
-      }}
-    >
-      <iframe
-        {...frameAttributes}
-        title="Sandbox"
-        style={{ border: 0, flex: 1 }}
-      />
-    </div>
+    <main className="workspace">
+      {paneIds.map((paneId) => (
+        <Pane
+          labelContext={contextLabel}
+          key={paneId}
+          onActivate={(contextId) => setWorkspace((current) => activateContext(current, paneId, contextId))}
+          onMove={(contextId) => setWorkspace((current) => moveContext(current, contextId, paneId))}
+          paneId={paneId}
+          renderContext={renderContext}
+          workspace={workspace}
+        />
+      ))}
+    </main>
   );
 }
+
+function Pane({ labelContext, onActivate, onMove, paneId, renderContext, workspace }: {
+  readonly labelContext: (contextId: string) => string;
+  readonly onActivate: (contextId: string) => void;
+  readonly onMove: (contextId: string) => void;
+  readonly paneId: WorkspacePaneId;
+  readonly renderContext: (contextId: string) => ReactNode;
+  readonly workspace: WorkspaceState;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const pane = workspace[paneId];
+  const acceptDrop = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes(tabDragType)) return;
+    event.preventDefault();
+    setDragOver(true);
+  };
+  const drop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setDragOver(false);
+    onMove(event.dataTransfer.getData(tabDragType));
+  };
+
+  return (
+    <section
+      className="pane"
+      data-drag-over={dragOver || undefined}
+      data-pane={paneId}
+      onDragLeave={(event) => {
+        const related = event.relatedTarget;
+        if (!(related instanceof Node) || !event.currentTarget.contains(related)) setDragOver(false);
+      }}
+      onDragOver={acceptDrop}
+      onDrop={drop}
+    >
+      <div className="tabs">
+        {pane.contexts.map((contextId) => {
+          return (
+            <button
+              className="tab"
+              data-active={pane.activeContext === contextId || undefined}
+              data-context={contextId}
+              data-preview={pane.previewContext === contextId || undefined}
+              draggable
+              key={contextId}
+              onClick={() => onActivate(contextId)}
+              onDragStart={(event) => event.dataTransfer.setData(tabDragType, contextId)}
+              type="button"
+            >
+              {labelContext(contextId)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="pane-content">
+        {pane.contexts.length === 0 ? <p className="empty">No file open.</p> : null}
+        {pane.contexts.map((contextId) => (
+          <div className="app" hidden={pane.activeContext !== contextId} key={contextId}>
+            {renderContext(contextId)}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Resources({ onOpen, onPreview }: {
+  readonly onOpen: (resource: Resource) => void;
+  readonly onPreview: (resource: Resource) => void;
+}) {
+  return (
+    <section className="view">
+      <h1>Resources</h1>
+      {resources.map((resource) => (
+        <button
+          className="resource"
+          key={`${resource.sourceId}:${resource.localId}`}
+          onClick={() => onPreview(resource)}
+          onDoubleClick={() => onOpen(resource)}
+          type="button"
+        >
+          {resource.sourceId} / {resource.name}
+        </button>
+      ))}
+    </section>
+  );
+}
+
+function Viewer({ resource }: {
+  readonly resource: Resource;
+}) {
+  return <pre className="viewer">{resource.content}</pre>;
+}
+
+const contextLabel = (contextId: string) => {
+  const resource = resourceById(contextId);
+  return resource === undefined ? 'Resources' : `${resource.sourceId} / ${resource.name}`;
+};
