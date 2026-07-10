@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { openRootFiles } from '@patchpit/fs';
+import { openFsEntries } from '@patchpit/fs';
 import { automergeFsPackageFromFiles, openAutomergeFsFolder } from './index.ts';
 
 void test('automerge filesystem package keeps bytes separate from folder resource refs', () => {
@@ -43,7 +43,7 @@ void test('automerge filesystem package keeps bytes separate from folder resourc
   assert.deepEqual(firstFile?.[1].bytes, new Uint8Array([60, 104, 49, 62]));
 });
 
-void test('Automerge folder updates flow through the shared filesystem query', async () => {
+void test('Tarstate-coordinated rename flows through the shared filesystem query', async () => {
   const packaged = automergeFsPackageFromFiles([{
     bytes: new Uint8Array(),
     entryId: 'readme',
@@ -53,33 +53,28 @@ void test('Automerge folder updates flow through the shared filesystem query', a
     resourceRef: 'content:readme',
   }]);
   const folder = openAutomergeFsFolder('shared', packaged.folder);
-  const query = openRootFiles([folder.attachment]);
+  const query = openFsEntries([folder.attachment]);
   const before = query.observer.getSnapshot();
   const readmeKey = before.state === 'open' ? before.current.resultKeys[0] : undefined;
 
-  const snapshot = folder.runtime.snapshot();
-  const committed = await folder.runtime.commit({
-    operationEpoch: 'shared:operations:1',
-    operationId: 'add-schedule',
-    intentHash: `sha256:${'a'.repeat(64)}`,
-    expectedBasis: snapshot.basis,
-    commands: [{
-      apply: (draft) => {
-        draft.entries.schedule = {
-          kind: 'file',
-          name: 'schedule.txt',
-          order: 1,
-          parentId: null,
-          resourceRef: 'content:schedule',
-        };
-      },
-    }],
+  const committed = await folder.renameEntry({
+    entryId: 'readme',
+    name: 'notes.md',
+    operationId: 'rename-readme',
   });
   const after = query.observer.getSnapshot();
 
   assert.equal(committed.outcome, 'committed');
   assert.equal(after.state, 'open');
-  assert.deepEqual(after.current.rows.map(({ entryId }) => entryId), ['readme', 'schedule']);
+  assert.deepEqual(after.current.rows, [{
+    entryId: 'readme',
+    kind: 'file',
+    name: 'notes.md',
+    order: 0,
+    parentId: null,
+    resourceRef: 'content:readme',
+    sourceId: 'shared',
+  }]);
   assert.equal(after.current.resultKeys[0], readmeKey);
 
   query.close();

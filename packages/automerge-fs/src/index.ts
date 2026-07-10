@@ -3,7 +3,6 @@ import {
   createFsAttachment,
   fsEntriesRelation,
   parseFsEntry,
-  type FsAttachment,
   type FsEntry,
 } from '@patchpit/fs';
 import {
@@ -11,7 +10,7 @@ import {
   AutomergeMapStorageBinding,
   AutomergeSourceRuntime,
 } from '@tarstate/automerge';
-import type { JsonValue } from '@tarstate/core';
+import { coordinateSourceCommit, sha256Json, type JsonValue } from '@tarstate/core';
 
 export type AutomergeFsFile = {
   readonly bytes: Uint8Array<ArrayBuffer>;
@@ -64,7 +63,7 @@ export const automergeFsPackageFromFiles = (
 export const openAutomergeFsFolder = (
   sourceId: string,
   folder: AutomergeFsFolderDoc,
-): { readonly attachment: FsAttachment; readonly runtime: AutomergeSourceRuntime<AutomergeFsFolderDoc> } => {
+) => {
   const runtime = new AutomergeSourceRuntime({ sourceId, doc: Automerge.from(folder) });
   const source = new AutomergeAtomicSource({
     runtime,
@@ -96,5 +95,36 @@ export const openAutomergeFsFolder = (
       };
     },
   });
-  return { attachment, runtime };
+  const renameEntry = async (input: {
+    readonly entryId: string;
+    readonly name: string;
+    readonly operationId: string;
+  }) => {
+    const snapshot = source.snapshot();
+    const row = binding.project(snapshot).rows.find(({ key }) => key[0] === input.entryId);
+    if (row === undefined) throw new Error(`Filesystem entry not found: ${input.entryId}`);
+    return coordinateSourceCommit({
+      source,
+      bindings: [binding],
+      edits: [{
+        kind: 'replace-fields',
+        relationId: fsEntriesRelation.relationId,
+        key: row.key,
+        locator: row.locator as unknown as JsonValue,
+        fields: { name: input.name },
+      }],
+      commit: {
+        operationEpoch: source.operationEpoch,
+        operationId: input.operationId,
+        intentHash: await sha256Json({
+          kind: 'rename-fs-entry',
+          sourceId,
+          entryId: input.entryId,
+          name: input.name,
+        }),
+        expectedBasis: snapshot.basis,
+      },
+    });
+  };
+  return { attachment, renameEntry, runtime };
 };

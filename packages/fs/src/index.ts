@@ -1,6 +1,6 @@
 export {
   createFsAttachment,
-  openRootFiles,
+  openFsEntries,
   staticFsAttachment,
   type FsAttachment,
   type FsDocument,

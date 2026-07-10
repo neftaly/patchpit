@@ -58,15 +58,18 @@ try {
 }
 
 async function proveWorkspaceBehavior(page) {
-  const resource = (name) => page.locator('.resource', { hasText: name });
+  const resource = (source, name) => page.locator('.resource-group', { hasText: source })
+    .locator('.resource', { hasText: name });
   const tab = (name) => page.locator('.tab', { hasText: name });
-  await resource('shared / readme.md').dblclick();
+  await resource('personal', 'projects').waitFor();
+  await resource('personal', 'notes.md').waitFor();
+  await resource('shared', 'readme.md').dblclick();
   await page.getByText('Shared notes', { exact: true }).waitFor();
-  await resource('personal / readme.md').waitFor();
-  await resource('shared / schedule.txt').click();
+  await resource('personal', 'readme.md').waitFor();
+  await resource('shared', 'schedule.txt').click();
   await tab('shared / readme.md').waitFor();
   await tab('shared / schedule.txt').waitFor();
-  await resource('personal / readme.md').click();
+  await resource('personal', 'readme.md').click();
   assert.equal(await tab('shared / schedule.txt').count(), 0);
 
   const previewTab = tab('personal / readme.md');

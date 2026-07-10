@@ -82,11 +82,20 @@ button {
   text-align: left;
 }
 
+.resource-source {
+  padding: 8px;
+  font-weight: 700;
+}
+
+.resource-folder {
+  font-weight: 600;
+}
+
 .resource:last-child {
   border-bottom: 1px solid #d9dcdf;
 }
 
-.resource:hover {
+.resource:not(.resource-folder):hover {
   background: #eaf2ff;
 }
 

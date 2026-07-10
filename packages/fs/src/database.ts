@@ -15,7 +15,7 @@ import {
   type RelationInput,
   type SourceSnapshot,
 } from '@tarstate/core';
-import { fsRootFilesPlan } from './queries.ts';
+import { fsEntriesPlan } from './queries.ts';
 import { fsEntriesRelation, fsSchemaArtifact, parseFsEntries, type FsEntry } from './schema.ts';
 
 export type FsDocument = {
@@ -97,11 +97,11 @@ export const staticFsAttachment = (input: FsDocument): FsAttachment => {
   });
 };
 
-export const openRootFiles = (inputs: readonly FsAttachment[]) => {
+export const openFsEntries = (inputs: readonly FsAttachment[]) => {
   const catalog = new AttachmentCatalog();
   const leases = inputs.map((input) => input.attach(catalog));
   const dataset = new DatasetMembership({
-    datasetId: fsRootFilesPlan.datasetId,
+    datasetId: fsEntriesPlan.datasetId,
     state: 'settled',
     members: leases.map(({ attachment }) => ({
       attachmentId: attachment.attachmentId,
@@ -112,14 +112,14 @@ export const openRootFiles = (inputs: readonly FsAttachment[]) => {
   });
   const database = new DatabaseView<QueryNode, QueryRecord, readonly RelationInput[]>({
     authorityScope: 'public',
-    authorityFingerprint: fsRootFilesPlan.authorityFingerprint,
-    registryFingerprint: fsRootFilesPlan.registryFingerprint,
+    authorityFingerprint: fsEntriesPlan.authorityFingerprint,
+    registryFingerprint: fsEntriesPlan.registryFingerprint,
     attachments: catalog,
     datasets: [dataset],
     canRead: () => true,
     createQueryMaintenance: createIncrementalDatabaseQueryMaintenance(),
   });
-  const observer = database.observe({ plan: fsRootFilesPlan }) as QueryObserver<PreparedPlanRow<typeof fsRootFilesPlan>>;
+  const observer = database.observe({ plan: fsEntriesPlan }) as QueryObserver<PreparedPlanRow<typeof fsEntriesPlan>>;
 
   return {
     observer,

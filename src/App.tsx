@@ -3,6 +3,7 @@ import {
   openResources,
   resourceById,
   resourceContent,
+  resourceGroups,
   resourceId,
   resourcesFromSnapshot,
   type Resource,
@@ -32,6 +33,7 @@ export function App() {
   const resources = resourcesFromSnapshot(resourceSnapshot);
   const [workspace, setWorkspace] = useState(() => createWorkspace(resourceListContextId));
   const showResource = (resource: Resource, pinned: boolean) => {
+    if (resource.kind !== 'file') return;
     const contextId = resourceId(resource);
     setWorkspace((current) => (pinned ? openContext : previewContext)(current, contextId, 'right'));
   };
@@ -134,16 +136,32 @@ function Resources({ onShow, resources }: {
 }) {
   return (
     <section className="view">
-      {resources.map((resource) => (
-        <button
-          className="resource"
-          key={`${resource.sourceId}:${resource.localId}`}
-          onClick={() => onShow(resource, false)}
-          onDoubleClick={() => onShow(resource, true)}
-          type="button"
-        >
-          {resource.sourceId} / {resource.name}
-        </button>
+      {resourceGroups(resources).map((group) => (
+        <div className="resource-group" key={group.sourceId}>
+          <div className="resource-source">{group.sourceId}</div>
+          {group.rows.map(({ depth, resource }) => resource.kind === 'folder'
+            ? (
+                <div
+                  className="resource resource-folder"
+                  key={resource.localId}
+                  style={{ paddingLeft: 8 + (depth * 18) }}
+                >
+                  {resource.name}
+                </div>
+              )
+            : (
+                <button
+                  className="resource"
+                  key={resource.localId}
+                  onClick={() => onShow(resource, false)}
+                  onDoubleClick={() => onShow(resource, true)}
+                  style={{ paddingLeft: 8 + (depth * 18) }}
+                  type="button"
+                >
+                  {resource.name}
+                </button>
+              ))}
+        </div>
       ))}
     </section>
   );
