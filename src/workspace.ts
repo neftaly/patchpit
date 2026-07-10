@@ -74,20 +74,24 @@ export const moveContext = (
   workspace: WorkspaceState,
   contextId: string,
   targetPaneId: WorkspacePaneId,
+  beforeContext?: string,
 ): WorkspaceState => {
   const sourcePaneId = paneContaining(workspace, contextId);
   if (sourcePaneId === undefined) return workspace;
-  if (sourcePaneId === targetPaneId) return pinContext(workspace, sourcePaneId, contextId);
+  if (contextId === beforeContext) return pinContext(workspace, sourcePaneId, contextId);
 
   const sourcePane = removeContextFromPane(workspace[sourcePaneId], contextId);
-  const targetPane = workspace[targetPaneId];
+  const targetPane = sourcePaneId === targetPaneId ? sourcePane : workspace[targetPaneId];
+  const contexts = [...targetPane.contexts];
+  const targetIndex = beforeContext === undefined ? -1 : contexts.indexOf(beforeContext);
+  contexts.splice(targetIndex < 0 ? contexts.length : targetIndex, 0, contextId);
   return {
     ...workspace,
     [sourcePaneId]: sourcePane,
     [targetPaneId]: {
       ...targetPane,
       activeContext: contextId,
-      contexts: [...targetPane.contexts, contextId],
+      contexts,
     },
   };
 };

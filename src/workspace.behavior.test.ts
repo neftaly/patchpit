@@ -41,6 +41,9 @@ void test('preview replacement, pinning, and movement preserve context ownership
   assert.equal(workspace.right.previewContext, undefined);
   assert.equal(workspace.left.previewContext, undefined);
   assert.equal(workspace.left.contexts.includes(personalContext), true);
+
+  workspace = moveContext(workspace, personalContext, 'right', sharedContext);
+  assert.deepEqual(workspace.right.contexts.slice(0, 2), [personalContext, sharedContext]);
 });
 
 void test('context behavior fuzz preserves workspace invariants', () => {

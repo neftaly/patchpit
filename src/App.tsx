@@ -29,7 +29,7 @@ export function App() {
 
   const renderContext = (contextId: string): ReactNode => {
     if (contextId === resourceListContextId) {
-      return <Resources onOpen={(resource) => showResource(resource, true)} onPreview={(resource) => showResource(resource, false)} />;
+      return <Resources onShow={showResource} />;
     }
     const resource = resourceById(contextId);
     return resource === undefined ? null : <Viewer resource={resource} />;
@@ -42,7 +42,8 @@ export function App() {
           labelContext={contextLabel}
           key={paneId}
           onActivate={(contextId) => setWorkspace((current) => activateContext(current, paneId, contextId))}
-          onMove={(contextId) => setWorkspace((current) => moveContext(current, contextId, paneId))}
+          onMove={(contextId, beforeContext) =>
+            setWorkspace((current) => moveContext(current, contextId, paneId, beforeContext))}
           paneId={paneId}
           renderContext={renderContext}
           workspace={workspace}
@@ -55,7 +56,7 @@ export function App() {
 function Pane({ labelContext, onActivate, onMove, paneId, renderContext, workspace }: {
   readonly labelContext: (contextId: string) => string;
   readonly onActivate: (contextId: string) => void;
-  readonly onMove: (contextId: string) => void;
+  readonly onMove: (contextId: string, beforeContext?: string) => void;
   readonly paneId: WorkspacePaneId;
   readonly renderContext: (contextId: string) => ReactNode;
   readonly workspace: WorkspaceState;
@@ -67,10 +68,11 @@ function Pane({ labelContext, onActivate, onMove, paneId, renderContext, workspa
     event.preventDefault();
     setDragOver(true);
   };
-  const drop = (event: DragEvent<HTMLElement>) => {
+  const drop = (event: DragEvent<HTMLElement>, beforeContext?: string) => {
     event.preventDefault();
+    event.stopPropagation();
     setDragOver(false);
-    onMove(event.dataTransfer.getData(tabDragType));
+    onMove(event.dataTransfer.getData(tabDragType), beforeContext);
   };
 
   return (
@@ -96,7 +98,9 @@ function Pane({ labelContext, onActivate, onMove, paneId, renderContext, workspa
               draggable
               key={contextId}
               onClick={() => onActivate(contextId)}
+              onDragOver={acceptDrop}
               onDragStart={(event) => event.dataTransfer.setData(tabDragType, contextId)}
+              onDrop={(event) => drop(event, contextId)}
               type="button"
             >
               {labelContext(contextId)}
@@ -105,7 +109,6 @@ function Pane({ labelContext, onActivate, onMove, paneId, renderContext, workspa
         })}
       </div>
       <div className="pane-content">
-        {pane.contexts.length === 0 ? <p className="empty">No file open.</p> : null}
         {pane.contexts.map((contextId) => (
           <div className="app" hidden={pane.activeContext !== contextId} key={contextId}>
             {renderContext(contextId)}
@@ -116,19 +119,17 @@ function Pane({ labelContext, onActivate, onMove, paneId, renderContext, workspa
   );
 }
 
-function Resources({ onOpen, onPreview }: {
-  readonly onOpen: (resource: Resource) => void;
-  readonly onPreview: (resource: Resource) => void;
+function Resources({ onShow }: {
+  readonly onShow: (resource: Resource, pinned: boolean) => void;
 }) {
   return (
     <section className="view">
-      <h1>Resources</h1>
       {resources.map((resource) => (
         <button
           className="resource"
           key={`${resource.sourceId}:${resource.localId}`}
-          onClick={() => onPreview(resource)}
-          onDoubleClick={() => onOpen(resource)}
+          onClick={() => onShow(resource, false)}
+          onDoubleClick={() => onShow(resource, true)}
           type="button"
         >
           {resource.sourceId} / {resource.name}

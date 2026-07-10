@@ -75,4 +75,12 @@ async function proveWorkspaceBehavior(page) {
   assert.equal(await leftPane.locator('.tab', { hasText: 'personal / readme.md' }).count(), 1);
   assert.equal(await tab('personal / readme.md').getAttribute('data-preview'), null);
   assert.equal(await page.locator('[data-pane="right"] .tab', { hasText: 'personal / readme.md' }).count(), 0);
+
+  await tab('personal / readme.md').dragTo(leftPane.locator('.tab', { hasText: 'Resources' }));
+  assert.deepEqual(await leftPane.locator('.tab').allTextContents(), ['personal / readme.md', 'Resources']);
+  await tab('personal / readme.md').dragTo(tab('shared / readme.md'));
+  assert.deepEqual(await page.locator('[data-pane="right"] .tab').allTextContents(), [
+    'personal / readme.md',
+    'shared / readme.md',
+  ]);
 }
