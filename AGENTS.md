@@ -7,23 +7,42 @@ canonical storage, Tarstate relational machinery, or Patchpit product/runtime
 semantics. Keep state logic in that layer, using projections or canonical
 writers at boundaries.
 
-## Tarstate / FRelP
+## Tarstate Direction
 
-For React/app state management, reach for Tarstate when building derived state:
-projections, live state views, indexes, queries/tooling, write intents, and
-row/schema validation. This does not decide where canonical state lives; choose
-that separately under State Ownership.
+Tarstate v1 is the target but is not wired here yet. Do not call hypothetical
+APIs or build Patchpit-local substitutes; pause or escalate dependent work.
 
-When creating or repairing relation rows, use Tarstate schema tooling from the
-schema source. Generated artifacts (`agent-card.md`, `rows.d.ts`, JSON Schema)
-are not wired in this repo yet; when they are present, regenerate them instead
-of hand-editing.
+The target boundary keeps application data in canonical Automerge documents or
+explicitly attached stores. Tarstate supplies authority-scoped projections,
+queries, parsing/issues, simulation, and source-routed writes. Sandboxed apps
+must not receive raw foreign handles or iframe state.
+
+In the target model, incomplete sources are not empty relations, one source is
+the atomic write boundary, and cross-source work is explicitly non-atomic.
+
+Schemas describe logical meaning; storage layout, authority, lifecycle, and
+physical indexes belong to mappings, bindings, or runtime. Generic gaps belong
+upstream in Tarstate.
+
+Regenerate generated artifacts from their canonical source rather than
+hand-editing them.
+
+## Identity
+
+Filesystem data uses stable logical entry IDs; path, name, and order are
+mutable facts. Keep source identity separate from local keys.
+
+Treat direct `https:` leaves as resources, not as Automerge documents or
+implicitly executable apps. Keep folder metadata, resource resolution state,
+and fetched bytes separate.
 
 ## Automerge Moves
 
-Until Automerge exposes native object moves, record semantic moves on doc roots
-as `__automergeMoves` keyed by `getObjectId`. This preserves move intent for
-projections without pretending copy/delete preserves object identity.
+Until Automerge exposes native object moves, record semantic moves on document
+roots as `__automergeMoves` keyed by `getObjectId`. Treat this as private
+fallback bookkeeping: schemas, queries, refs, and apps depend on semantic move
+guarantees rather than the journal format. Copy/relocate and identity-preserving
+native moves are distinct capability levels.
 
 ## Decomplection
 
