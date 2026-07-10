@@ -10,9 +10,19 @@ const repoPath = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 
 export default defineConfig({
   build: {
-    rollupOptions: { input: { index: repoPath('index.html') } },
+    rollupOptions: {
+      input: { index: repoPath('index.html') },
+      output: {
+        manualChunks: (id) => id.includes('@automerge')
+          || id.includes('@tarstate+automerge')
+          || id.includes('/@tarstate/automerge/')
+          ? 'automerge'
+          : undefined,
+      },
+    },
     target: 'esnext',
   },
+  optimizeDeps: { exclude: ['@automerge/automerge'] },
   plugins: [react(), babel({ presets: [reactCompilerPreset()] }), sandboxCompatPlugin()],
 });
 

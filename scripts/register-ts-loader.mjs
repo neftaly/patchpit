@@ -1,8 +1,8 @@
 // Lets Node tests import local TypeScript files without a build step.
-import { readFileSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { registerHooks, stripTypeScriptTypes } from 'node:module';
+import { registerHooks } from 'node:module';
 
 const isFile = (path) => statSync(path, { throwIfNoEntry: false })?.isFile() === true;
 
@@ -21,14 +21,5 @@ registerHooks({
     return path === undefined
       ? nextResolve(specifier, context)
       : { shortCircuit: true, url: pathToFileURL(path).href };
-  },
-  load(url, context, nextLoad) {
-    if (!url.startsWith('file:') || !url.endsWith('.ts')) return nextLoad(url, context);
-
-    return {
-      format: 'module',
-      shortCircuit: true,
-      source: stripTypeScriptTypes(readFileSync(fileURLToPath(url), 'utf8'), { mode: 'transform' }),
-    };
   },
 });

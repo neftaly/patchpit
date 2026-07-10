@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { build, preview } from 'vite';
+import { build, createServer, preview } from 'vite';
 import { sandboxCompatPathPrefix } from '../apps/sandbox-compat/node.ts';
 
 const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? '/usr/bin/chromium';
+const development = process.argv.includes('--dev');
 
-await build({ logLevel: 'silent' });
-const server = await preview({
-  logLevel: 'silent',
-  preview: { host: '127.0.0.1', port: 0, strictPort: true },
-});
+if (!development) await build({ logLevel: 'silent' });
+const server = development
+  ? await createServer({ logLevel: 'silent', server: { host: '127.0.0.1', port: 0, strictPort: true } })
+  : await preview({ logLevel: 'silent', preview: { host: '127.0.0.1', port: 0, strictPort: true } });
+if (development) await server.listen();
 let browser;
 
 try {
@@ -50,7 +51,7 @@ try {
   assert.deepEqual(pageErrors, []);
   assert.equal(entryHeaders?.['access-control-allow-origin'], '*');
   assert.match(entryHeaders?.['content-security-policy'] ?? '', /sandbox allow-scripts/);
-  console.log(JSON.stringify({ cases: report.cases.length, entryHeaders: 'pass', workspace: 'pass' }, null, 2));
+  console.log(JSON.stringify({ cases: report.cases.length, entryHeaders: 'pass', mode: development ? 'dev' : 'preview', workspace: 'pass' }, null, 2));
 } finally {
   await browser?.close();
   await server.close();

@@ -1,35 +1,39 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { automergeFsPackageFromFiles } from './index.ts';
+import { openRootFiles } from '@patchpit/fs';
+import { automergeFsPackageFromFiles, openAutomergeFsFolder } from './index.ts';
 
-void test('automerge filesystem package keeps bytes separate from folder srcs', () => {
+void test('automerge filesystem package keeps bytes separate from folder resource refs', () => {
   const htmlBytes = new Uint8Array([60, 104, 49, 62]);
   const packaged = automergeFsPackageFromFiles([
     {
       bytes: htmlBytes,
       contentType: 'text/html',
-      path: ['index.html'],
-      src: 'automerge:index',
+      entryId: 'index',
+      name: 'index.html',
+      order: 0,
+      parentId: null,
+      resourceRef: 'automerge:index',
     },
     {
       bytes: new Uint8Array(),
       contentType: 'image/svg+xml',
-      path: ['ghostscript-tiger.svg'],
-      src: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg',
+      entryId: 'tiger',
+      name: 'ghostscript-tiger.svg',
+      order: 1,
+      parentId: null,
+      resourceRef: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg',
     },
   ]);
 
-  assert.deepEqual(packaged.folder.tree, {
-    entries: [
-      ['index.html', { kind: 'file', src: 'automerge:index' }],
-      ['ghostscript-tiger.svg', {
-        kind: 'file',
-        src: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg',
-      }],
-    ],
-    kind: 'dir',
+  assert.deepEqual(packaged.folder, {
+    entries: {
+      index: { kind: 'file', name: 'index.html', order: 0, parentId: null, resourceRef: 'automerge:index' },
+      tiger: { kind: 'file', name: 'ghostscript-tiger.svg', order: 1, parentId: null, resourceRef: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg' },
+    },
+    kind: 'patchpit.fs-folder@1',
   });
-  assert.deepEqual(packaged.files.map(([src]) => src), [
+  assert.deepEqual(packaged.files.map(([resourceRef]) => resourceRef), [
     'automerge:index',
     'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg',
   ]);
@@ -37,4 +41,47 @@ void test('automerge filesystem package keeps bytes separate from folder srcs', 
   const [firstFile] = packaged.files;
   htmlBytes[0] = 0;
   assert.deepEqual(firstFile?.[1].bytes, new Uint8Array([60, 104, 49, 62]));
+});
+
+void test('Automerge folder updates flow through the shared filesystem query', async () => {
+  const packaged = automergeFsPackageFromFiles([{
+    bytes: new Uint8Array(),
+    entryId: 'readme',
+    name: 'readme.md',
+    order: 0,
+    parentId: null,
+    resourceRef: 'content:readme',
+  }]);
+  const folder = openAutomergeFsFolder('shared', packaged.folder);
+  const query = openRootFiles([folder.attachment]);
+  const before = query.observer.getSnapshot();
+  const readmeKey = before.state === 'open' ? before.current.resultKeys[0] : undefined;
+
+  const snapshot = folder.runtime.snapshot();
+  const committed = await folder.runtime.commit({
+    operationEpoch: 'shared:operations:1',
+    operationId: 'add-schedule',
+    intentHash: `sha256:${'a'.repeat(64)}`,
+    expectedBasis: snapshot.basis,
+    commands: [{
+      apply: (draft) => {
+        draft.entries.schedule = {
+          kind: 'file',
+          name: 'schedule.txt',
+          order: 1,
+          parentId: null,
+          resourceRef: 'content:schedule',
+        };
+      },
+    }],
+  });
+  const after = query.observer.getSnapshot();
+
+  assert.equal(committed.outcome, 'committed');
+  assert.equal(after.state, 'open');
+  assert.deepEqual(after.current.rows.map(({ entryId }) => entryId), ['readme', 'schedule']);
+  assert.equal(after.current.resultKeys[0], readmeKey);
+
+  query.close();
+  assert.throws(() => folder.runtime.snapshot(), /closed/i);
 });

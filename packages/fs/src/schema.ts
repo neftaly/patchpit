@@ -1,53 +1,53 @@
 import {
-  customField,
-  defineSchema,
-  nullable,
-  numberField,
-  optional,
-  relation,
-  stringEnumField,
-  stringField,
-  toSchemaManifest,
-  type RelationRefRow,
-} from '@tarstate/core/schema';
+  parseRelationCandidate,
+  prepareSchema,
+  relationLiteral,
+  schemaLiteral,
+  sealSchema,
+  TarstateParseError,
+  type SchemaRow,
+} from '@tarstate/core';
 
-export type FsNodeKey = readonly number[];
-
-const isFsNodeKey = (value: unknown): value is FsNodeKey => {
-  if (!Array.isArray(value)) return false;
-  return Array.from({ length: value.length }, (_, index) => {
-    const segment = value[index];
-    return index in value
-      && typeof segment === 'number'
-      && Number.isInteger(segment)
-      && segment >= 0
-      && !Object.is(segment, -0);
-  }).every(Boolean);
-};
-
-const fsNodeKeyField = customField<FsNodeKey>({
-  codec: 'patchpit.fs.nodeKey',
-  validate: isFsNodeKey,
-  stableKey: (key) => JSON.stringify(key),
-});
-
-export const fsRelations = defineSchema({
-  nodes: relation({
-    key: 'key',
-    fields: {
-      key: fsNodeKeyField,
-      kind: stringEnumField(['dir', 'file'] as const),
-      name: stringField(),
-      parentKey: nullable(fsNodeKeyField),
-      position: numberField(),
-      src: optional(stringField()),
+export const fsSchemaBody = schemaLiteral({
+  relations: {
+    entries: {
+      relationId: 'patchpit.fs.entry',
+      key: ['entryId'],
+      fields: {
+        entryId: { type: { kind: 'string' } },
+        parentId: { type: { kind: 'string' }, nullable: true },
+        order: { type: { kind: 'integer' } },
+        kind: { type: { kind: 'string', values: ['folder', 'file'] } },
+        name: { type: { kind: 'string' } },
+        resourceRef: { type: { kind: 'string' } },
+      },
     },
-  }),
+  },
 });
 
-export const fsSchemaManifest = toSchemaManifest(fsRelations, {
-  schemaId: 'patchpit.fs@draft',
-  description: 'Filesystem projection rows.',
+export type FsEntry = SchemaRow<typeof fsSchemaBody, 'entries'>;
+
+export const fsSchemaArtifact = await sealSchema({
+  id: 'urn:patchpit:schema:fs-entry@1',
+  body: fsSchemaBody,
 });
 
-export type FsRow = RelationRefRow<typeof fsRelations.nodes>;
+export const fsEntriesRelation = relationLiteral(
+  fsSchemaArtifact,
+  fsSchemaBody,
+  'entries',
+);
+
+const prepared = prepareSchema(fsSchemaBody);
+if (!prepared.success) throw new TarstateParseError(prepared.issues);
+
+export const parseFsEntries = (entries: readonly unknown[]): readonly FsEntry[] =>
+  entries.map((entry, index) => {
+    const result = parseRelationCandidate(prepared.value, fsEntriesRelation.relationId, entry, undefined, {
+      path: [index],
+    });
+    if (!result.success) throw new TarstateParseError(result.issues);
+    return result.value.row as FsEntry;
+  });
+
+export const parseFsEntry = (entry: unknown): FsEntry => parseFsEntries([entry])[0]!;

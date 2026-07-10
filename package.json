@@ -4,6 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@10.33.2",
+  "pnpm": {
+    "overrides": {
+      "@tarstate/core": "file:vendor/tarstate/tarstate-core-0.2.0.tgz"
+    }
+  },
   "engines": {
     "node": ">=24.12.0"
   },
@@ -14,11 +19,14 @@
     "lint": "oxlint apps packages scripts src vite.config.ts --deny-warnings --type-aware",
     "test": "node --import ./scripts/register-ts-loader.mjs --test 'packages/**/*.test.ts' 'src/**/*.test.ts'",
     "test:browser": "node --import ./scripts/register-ts-loader.mjs scripts/test-sandbox-compat.mjs",
+    "test:dev": "node --import ./scripts/register-ts-loader.mjs scripts/test-prototype-preview.mjs --dev",
     "test:preview": "node --import ./scripts/register-ts-loader.mjs scripts/test-prototype-preview.mjs",
     "preview:prototype": "vite preview",
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@patchpit/automerge-fs": "workspace:*",
+    "@patchpit/fs": "workspace:*",
     "@patchpit/sandbox": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

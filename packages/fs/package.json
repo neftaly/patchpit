@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "exports": { "./tree": "./src/tree.ts" },
-  "dependencies": { "@tarstate/core": "catalog:" }
+  "exports": "./src/index.ts",
+  "dependencies": { "@tarstate/core": "file:../../vendor/tarstate/tarstate-core-0.2.0.tgz" }
 }

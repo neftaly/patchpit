@@ -1,8 +1,10 @@
-import { useState, type DragEvent, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react';
 import {
+  openResources,
   resourceById,
+  resourceContent,
   resourceId,
-  resources,
+  resourcesFromSnapshot,
   type Resource,
 } from './resources.ts';
 import {
@@ -19,8 +21,15 @@ import './app.css';
 const paneIds = ['left', 'right'] as const;
 const resourceListContextId = 'resources';
 const tabDragType = 'application/x-patchpit-context';
+const resourceRuntime = openResources();
 
 export function App() {
+  const resourceSnapshot = useSyncExternalStore(
+    (listener) => resourceRuntime.observer.subscribe(listener),
+    () => resourceRuntime.observer.getSnapshot(),
+    () => resourceRuntime.observer.getSnapshot(),
+  );
+  const resources = resourcesFromSnapshot(resourceSnapshot);
   const [workspace, setWorkspace] = useState(() => createWorkspace(resourceListContextId));
   const showResource = (resource: Resource, pinned: boolean) => {
     const contextId = resourceId(resource);
@@ -29,9 +38,9 @@ export function App() {
 
   const renderContext = (contextId: string): ReactNode => {
     if (contextId === resourceListContextId) {
-      return <Resources onShow={showResource} />;
+      return <Resources onShow={showResource} resources={resources} />;
     }
-    const resource = resourceById(contextId);
+    const resource = resourceById(resources, contextId);
     return resource === undefined ? null : <Viewer resource={resource} />;
   };
 
@@ -39,7 +48,7 @@ export function App() {
     <main className="workspace">
       {paneIds.map((paneId) => (
         <Pane
-          labelContext={contextLabel}
+          labelContext={(contextId) => contextLabel(resources, contextId)}
           key={paneId}
           onActivate={(contextId) => setWorkspace((current) => activateContext(current, paneId, contextId))}
           onMove={(contextId, beforeContext) =>
@@ -119,8 +128,9 @@ function Pane({ labelContext, onActivate, onMove, paneId, renderContext, workspa
   );
 }
 
-function Resources({ onShow }: {
+function Resources({ onShow, resources }: {
   readonly onShow: (resource: Resource, pinned: boolean) => void;
+  readonly resources: readonly Resource[];
 }) {
   return (
     <section className="view">
@@ -142,10 +152,10 @@ function Resources({ onShow }: {
 function Viewer({ resource }: {
   readonly resource: Resource;
 }) {
-  return <pre className="viewer">{resource.content}</pre>;
+  return <pre className="viewer">{resourceContent(resource)}</pre>;
 }
 
-const contextLabel = (contextId: string) => {
-  const resource = resourceById(contextId);
+const contextLabel = (resources: readonly Resource[], contextId: string) => {
+  const resource = resourceById(resources, contextId);
   return resource === undefined ? 'Resources' : `${resource.sourceId} / ${resource.name}`;
 };

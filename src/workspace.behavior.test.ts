@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import {
+  openResources,
   resourceId,
-  resources,
+  resourcesFromSnapshot,
 } from './resources.ts';
 import {
   createWorkspace,
@@ -12,6 +13,10 @@ import {
   type WorkspacePaneId,
   type WorkspaceState,
 } from './workspace.ts';
+
+const resourceRuntime = openResources();
+const resources = resourcesFromSnapshot(resourceRuntime.observer.getSnapshot());
+after(() => resourceRuntime.close());
 
 void test('source identity disambiguates matching local IDs', () => {
   const [personal, shared] = resources;

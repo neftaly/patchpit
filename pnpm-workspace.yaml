@@ -5,7 +5,6 @@ packages:
 catalog:
   '@babel/core': ^8.0.1
   '@rolldown/plugin-babel': ^0.2.3
-  '@tarstate/core': git+https://github.com/neftaly/tarstate.git#f26f5038b4703315b98487be715eed4b8e70fb97&path:/packages/core
   '@types/babel__core': ^7.20.5
   '@types/node': ^24.10.3
   '@types/react': ^19.2.17
