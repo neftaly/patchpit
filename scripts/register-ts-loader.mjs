@@ -2,8 +2,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { registerHooks } from 'node:module';
-import ts from 'typescript';
+import { registerHooks, stripTypeScriptTypes } from 'node:module';
 
 const isFile = (path) => statSync(path, { throwIfNoEntry: false })?.isFile() === true;
 
@@ -14,18 +13,6 @@ const localTypeScriptModulePath = (specifier, parentURL) => {
     ? [`${importPath.slice(0, -3)}.ts`]
     : [importPath, `${importPath}.ts`, resolve(importPath, 'index.ts')];
   return candidates.find(isFile);
-};
-
-const transpileTypeScriptModule = (url) => {
-  const path = fileURLToPath(url);
-  return ts.transpileModule(readFileSync(path, 'utf8'), {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
-      verbatimModuleSyntax: true,
-    },
-    fileName: path,
-  }).outputText;
 };
 
 registerHooks({
@@ -41,7 +28,7 @@ registerHooks({
     return {
       format: 'module',
       shortCircuit: true,
-      source: transpileTypeScriptModule(url),
+      source: stripTypeScriptTypes(readFileSync(fileURLToPath(url), 'utf8'), { mode: 'transform' }),
     };
   },
 });
