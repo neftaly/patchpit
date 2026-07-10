@@ -1,5 +1,5 @@
-import { automergeFsPackageFromFiles, openAutomergeFsFolder } from '@patchpit/automerge-fs';
 import { openFsEntries, staticFsAttachment } from '@patchpit/fs';
+import sandboxCompatBundle from 'virtual:patchpit/sandbox-compat-bundle';
 
 export type Resource = {
   readonly kind: 'file' | 'folder';
@@ -16,45 +16,13 @@ export type ResourceGroup = {
   readonly rows: readonly { readonly depth: number; readonly resource: Resource }[];
 };
 
-const shared = automergeFsPackageFromFiles([
-  {
-    bytes: new TextEncoder().encode('Shared notes'),
-    entryId: 'readme',
-    name: 'readme.md',
-    order: 0,
-    parentId: null,
-    resourceRef: 'content:shared-readme',
-  },
-  {
-    bytes: new TextEncoder().encode('Review on Monday'),
-    entryId: 'schedule',
-    name: 'schedule.txt',
-    order: 1,
-    parentId: null,
-    resourceRef: 'content:shared-schedule',
-  },
-]);
-const contents = new Map([
-  ['content:personal-readme', 'Personal notes'],
-  ['content:personal-project-notes', 'Project notes'],
-  ...shared.files.map(([resourceRef, { bytes }]) =>
-    [resourceRef, new TextDecoder().decode(bytes)] as const),
-]);
+const contents = new Map(sandboxCompatBundle.entries
+  .filter(({ kind }) => kind === 'file')
+  .map(({ resourceRef }) => [resourceRef, sandboxCompatBundle.contents[resourceRef] ?? resourceRef] as const));
 
-export const openResources = () => {
-  const sharedFolder = openAutomergeFsFolder('shared', shared.folder);
-  return openFsEntries([
-    staticFsAttachment({
-      sourceId: 'personal',
-      entries: [
-        { entryId: 'readme', parentId: null, order: 0, kind: 'file', name: 'readme.md', resourceRef: 'content:personal-readme' },
-        { entryId: 'projects', parentId: null, order: 1, kind: 'folder', name: 'projects', resourceRef: 'folder:personal-projects' },
-        { entryId: 'project-notes', parentId: 'projects', order: 0, kind: 'file', name: 'notes.md', resourceRef: 'content:personal-project-notes' },
-      ],
-    }),
-    sharedFolder.attachment,
-  ]);
-};
+export const openResources = () => openFsEntries([
+  staticFsAttachment({ sourceId: 'sandbox-compat', entries: sandboxCompatBundle.entries }),
+]);
 
 export const resourceId = ({ localId, sourceId }: Resource) =>
   JSON.stringify([sourceId, localId]);

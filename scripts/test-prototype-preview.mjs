@@ -61,30 +61,32 @@ async function proveWorkspaceBehavior(page) {
   const resource = (source, name) => page.locator('.resource-group', { hasText: source })
     .locator('.resource', { hasText: name });
   const tab = (name) => page.locator('.tab', { hasText: name });
-  await resource('personal', 'projects').waitFor();
-  await resource('personal', 'notes.md').waitFor();
-  await resource('shared', 'readme.md').dblclick();
-  await page.getByText('Shared notes', { exact: true }).waitFor();
-  await resource('personal', 'readme.md').waitFor();
-  await resource('shared', 'schedule.txt').click();
-  await tab('shared / readme.md').waitFor();
-  await tab('shared / schedule.txt').waitFor();
-  await resource('personal', 'readme.md').click();
-  assert.equal(await tab('shared / schedule.txt').count(), 0);
+  await resource('sandbox-compat', 'ghostscript-tiger.svg').waitFor();
+  await resource('sandbox-compat', 'index.html').dblclick();
+  await tab('sandbox-compat / index.html').waitFor();
+  await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
+  await resource('sandbox-compat', 'data.json').dblclick();
+  await page.getByText('{"ok":true}', { exact: true }).waitFor();
+  await resource('sandbox-compat', 'css-url.css').click();
+  await tab('sandbox-compat / data.json').waitFor();
+  await tab('sandbox-compat / css-url.css').waitFor();
+  await resource('sandbox-compat', 'css-import.css').click();
+  assert.equal(await tab('sandbox-compat / css-url.css').count(), 0);
 
-  const previewTab = tab('personal / readme.md');
+  const previewTab = tab('sandbox-compat / css-import.css');
   assert.equal(await previewTab.getAttribute('data-preview'), 'true');
   const leftPane = page.locator('[data-pane="left"]');
   await previewTab.dragTo(leftPane);
-  assert.equal(await leftPane.locator('.tab', { hasText: 'personal / readme.md' }).count(), 1);
-  assert.equal(await tab('personal / readme.md').getAttribute('data-preview'), null);
-  assert.equal(await page.locator('[data-pane="right"] .tab', { hasText: 'personal / readme.md' }).count(), 0);
+  assert.equal(await leftPane.locator('.tab', { hasText: 'sandbox-compat / css-import.css' }).count(), 1);
+  assert.equal(await tab('sandbox-compat / css-import.css').getAttribute('data-preview'), null);
+  assert.equal(await page.locator('[data-pane="right"] .tab', { hasText: 'sandbox-compat / css-import.css' }).count(), 0);
 
-  await tab('personal / readme.md').dragTo(leftPane.locator('.tab', { hasText: 'Resources' }));
-  assert.deepEqual(await leftPane.locator('.tab').allTextContents(), ['personal / readme.md', 'Resources']);
-  await tab('personal / readme.md').dragTo(tab('shared / readme.md'));
+  await tab('sandbox-compat / css-import.css').dragTo(leftPane.locator('.tab', { hasText: 'Resources' }));
+  assert.deepEqual(await leftPane.locator('.tab').allTextContents(), ['sandbox-compat / css-import.css', 'Resources']);
+  await tab('sandbox-compat / css-import.css').dragTo(tab('sandbox-compat / data.json'));
   assert.deepEqual(await page.locator('[data-pane="right"] .tab').allTextContents(), [
-    'personal / readme.md',
-    'shared / readme.md',
+    'sandbox-compat / index.html',
+    'sandbox-compat / css-import.css',
+    'sandbox-compat / data.json',
   ]);
 }

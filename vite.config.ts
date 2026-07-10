@@ -1,12 +1,18 @@
 import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import babel from '@rolldown/plugin-babel';
-import { createSandboxCompatMount, sandboxCompatPathPrefix } from './apps/sandbox-compat/node.ts';
+import {
+  createSandboxCompatMount,
+  readSandboxCompatBundle,
+  sandboxCompatPathPrefix,
+} from './apps/sandbox-compat/node.ts';
 import { respondWithSandboxUrlMount } from '@patchpit/sandbox/node';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
 const repoPath = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+const sandboxCompatBundleId = 'virtual:patchpit/sandbox-compat-bundle';
+const resolvedSandboxCompatBundleId = `\0${sandboxCompatBundleId}`;
 
 export default defineConfig({
   build: {
@@ -29,6 +35,17 @@ export default defineConfig({
 function sandboxCompatPlugin(): Plugin {
   return {
     name: 'patchpit-sandbox-compat-mount',
+    resolveId(id) {
+      return id === sandboxCompatBundleId ? resolvedSandboxCompatBundleId : undefined;
+    },
+    async load(id) {
+      if (id !== resolvedSandboxCompatBundleId) return;
+      const { entries, packageFiles } = await readSandboxCompatBundle();
+      const contents = Object.fromEntries(packageFiles
+        .filter(({ resourceRef }) => !resourceRef.startsWith('http'))
+        .map(({ bytes, resourceRef }) => [resourceRef, new TextDecoder().decode(bytes)]));
+      return `export default ${JSON.stringify({ contents, entries })}`;
+    },
     configureServer(server) {
       server.middlewares.use(sandboxCompatMiddleware);
     },

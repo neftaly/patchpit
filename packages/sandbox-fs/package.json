@@ -8,6 +8,7 @@
     "./node": "./src/node.ts"
   },
   "dependencies": {
+    "@patchpit/fs": "workspace:*",
     "@patchpit/sandbox": "workspace:*"
   }
 }

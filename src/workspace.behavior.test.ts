@@ -1,11 +1,5 @@
 import assert from 'node:assert/strict';
-import test, { after } from 'node:test';
-import {
-  openResources,
-  resourceGroups,
-  resourceId,
-  resourcesFromSnapshot,
-} from './resources.ts';
+import test from 'node:test';
 import {
   createWorkspace,
   moveContext,
@@ -15,34 +9,11 @@ import {
   type WorkspaceState,
 } from './workspace.ts';
 
-const resourceRuntime = openResources();
-const resources = resourcesFromSnapshot(resourceRuntime.observer.getSnapshot());
-const files = resources.filter(({ kind }) => kind === 'file');
-after(() => resourceRuntime.close());
-
-void test('source identity disambiguates matching local IDs', () => {
-  const personal = files.find(({ localId, sourceId }) => localId === 'readme' && sourceId === 'personal');
-  const shared = files.find(({ localId, sourceId }) => localId === 'readme' && sourceId === 'shared');
-  assert(personal !== undefined && shared !== undefined);
-  assert.equal(personal.localId, shared.localId);
-  assert.notEqual(resourceId(personal), resourceId(shared));
-});
-
-void test('filesystem hierarchy includes folders and nested files', () => {
-  const personal = resourceGroups(resources).find(({ sourceId }) => sourceId === 'personal');
-  assert.deepEqual(personal?.rows.map(({ depth, resource }) => [depth, resource.kind, resource.name]), [
-    [0, 'file', 'readme.md'],
-    [0, 'folder', 'projects'],
-    [1, 'file', 'notes.md'],
-  ]);
-});
+const fileContexts = ['personal-readme', 'shared-readme', 'shared-schedule', 'project-notes'] as const;
 
 void test('preview replacement, pinning, and movement preserve context ownership', () => {
-  const personalReadme = files.find(({ localId, sourceId }) => localId === 'readme' && sourceId === 'personal');
-  const sharedReadme = files.find(({ localId, sourceId }) => localId === 'readme' && sourceId === 'shared');
-  assert(personalReadme !== undefined && sharedReadme !== undefined);
-  const personalContext = resourceId(personalReadme);
-  const sharedContext = resourceId(sharedReadme);
+  const personalContext = 'personal-readme';
+  const sharedContext = 'shared-readme';
   let workspace = previewContext(createWorkspace('home'), personalContext, 'right');
 
   assert.equal(workspace.right.previewContext, personalContext);
@@ -69,10 +40,9 @@ void test('context behavior fuzz preserves workspace invariants', () => {
   let workspace = createWorkspace('home');
 
   for (let iteration = 0; iteration < 200; iteration += 1) {
-    const resource = files[(iteration * 17) % files.length];
+    const contextId = fileContexts[(iteration * 17) % fileContexts.length];
     const paneId = paneIds[(iteration * 31) % paneIds.length];
-    if (resource === undefined || paneId === undefined) continue;
-    const contextId = resourceId(resource);
+    if (contextId === undefined || paneId === undefined) continue;
     workspace = iteration % 3 === 0
       ? openContext(workspace, contextId, paneId)
       : previewContext(workspace, contextId, paneId);

@@ -1,4 +1,6 @@
 import { useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react';
+import { sandboxCompatApp } from '../apps/sandbox-compat/app.ts';
+import { createSandboxFrameAttributes } from '@patchpit/sandbox';
 import {
   openResources,
   resourceById,
@@ -21,6 +23,7 @@ import './app.css';
 
 const paneIds = ['left', 'right'] as const;
 const resourceListContextId = 'resources';
+const sandboxCompatEntryId = sandboxCompatApp.entry.join('/');
 const tabDragType = 'application/x-patchpit-context';
 const resourceRuntime = openResources();
 
@@ -43,7 +46,10 @@ export function App() {
       return <Resources onShow={showResource} resources={resources} />;
     }
     const resource = resourceById(resources, contextId);
-    return resource === undefined ? null : <Viewer resource={resource} />;
+    if (resource === undefined) return null;
+    return resource.sourceId === sandboxCompatApp.id && resource.localId === sandboxCompatEntryId
+      ? <SandboxApp />
+      : <Viewer resource={resource} />;
   };
 
   return (
@@ -171,6 +177,15 @@ function Viewer({ resource }: {
   readonly resource: Resource;
 }) {
   return <pre className="viewer">{resourceContent(resource)}</pre>;
+}
+
+function SandboxApp() {
+  const frame = createSandboxFrameAttributes({
+    baseUrl: window.location.href,
+    entry: sandboxCompatApp.entry,
+    mountId: sandboxCompatApp.id,
+  });
+  return <iframe className="sandbox-app" title="Sandbox Compat" {...frame} />;
 }
 
 const contextLabel = (resources: readonly Resource[], contextId: string) => {

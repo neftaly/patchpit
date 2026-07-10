@@ -143,6 +143,9 @@ importers:
 
   packages/sandbox-fs:
     dependencies:
+      '@patchpit/fs':
+        specifier: workspace:*
+        version: link:../fs
       '@patchpit/sandbox':
         specifier: workspace:*
         version: link:../sandbox
