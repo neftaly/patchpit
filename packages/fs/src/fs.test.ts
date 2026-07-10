@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDb, q } from '@tarstate/core/db';
 import { validateRelationRow } from '@tarstate/core/relation';
+import { fsRowsFromTree } from './projection.ts';
 import { fsChildrenOfKey, fsNodeByKey } from './queries.ts';
 import { fsRelations } from './schema.ts';
-import { fsRowsFromTree, fsTreeFromFiles } from './tree.ts';
+import { fsTreeFromFiles } from './tree.ts';
 
 const validNodeRow = {
   key: [0],
   kind: 'file',
   name: 'file.txt',
   parentKey: [],
-  path: ['file.txt'],
   position: 0,
   src: 'automerge:file',
 };
@@ -32,8 +32,8 @@ void test('filesystem tree rows use structural keys and keep src as data', () =>
   });
 
   assert.deepEqual(rows.filter((row) => row.src === src), [
-    { key: [0, 0], kind: 'file', name: 'tiger.svg', parentKey: [0], path: ['nested', 'tiger.svg'], position: 0, src },
-    { key: [1], kind: 'file', name: 'tiger.svg', parentKey: [], path: ['tiger.svg'], position: 1, src },
+    { key: [0, 0], kind: 'file', name: 'tiger.svg', parentKey: [0], position: 0, src },
+    { key: [1], kind: 'file', name: 'tiger.svg', parentKey: [], position: 1, src },
   ]);
 });
 
@@ -63,30 +63,9 @@ void test('filesystem tree rows pass src through unchanged', () => {
     ],
     kind: 'dir',
   }), [
-    { key: [], kind: 'dir', name: '', parentKey: null, path: [], position: 0 },
-    { key: [0], kind: 'file', name: 'empty-src.txt', parentKey: [], path: ['empty-src.txt'], position: 0, src: '' },
-    { key: [1], kind: 'file', name: 'not-url.txt', parentKey: [], path: ['not-url.txt'], position: 1, src: 'not-a-url' },
-  ]);
-});
-
-void test('filesystem tree rows keep path segments unencoded', () => {
-  const rows = fsRowsFromTree({
-    entries: [
-      ['a/b', { kind: 'file', src: 'automerge:slash' }],
-      ['a', { entries: [['b', { kind: 'file', src: 'automerge:nested' }]], kind: 'dir' }],
-      ['', { kind: 'file', src: 'automerge:empty' }],
-      ['', { kind: 'file', src: 'automerge:empty-duplicate' }],
-    ],
-    kind: 'dir',
-  });
-
-  assert.deepEqual(rows.map((row) => [row.key, row.path]), [
-    [[], []],
-    [[0], ['a/b']],
-    [[1], ['a']],
-    [[1, 0], ['a', 'b']],
-    [[2], ['']],
-    [[3], ['']],
+    { key: [], kind: 'dir', name: '', parentKey: null, position: 0 },
+    { key: [0], kind: 'file', name: 'empty-src.txt', parentKey: [], position: 0, src: '' },
+    { key: [1], kind: 'file', name: 'not-url.txt', parentKey: [], position: 1, src: 'not-a-url' },
   ]);
 });
 
@@ -97,7 +76,7 @@ void test('structural identity changes on move while src can remain stable', () 
     entries: [['before.txt', { kind: 'file', src }]],
     kind: 'dir',
   }).filter((row) => row.src), [
-    { key: [0], kind: 'file', name: 'before.txt', parentKey: [], path: ['before.txt'], position: 0, src },
+    { key: [0], kind: 'file', name: 'before.txt', parentKey: [], position: 0, src },
   ]);
 
   assert.deepEqual(fsRowsFromTree({
@@ -106,7 +85,7 @@ void test('structural identity changes on move while src can remain stable', () 
     ],
     kind: 'dir',
   }).filter((row) => row.src), [
-    { key: [0, 0], kind: 'file', name: 'after.txt', parentKey: [0], path: ['folder', 'after.txt'], position: 0, src },
+    { key: [0, 0], kind: 'file', name: 'after.txt', parentKey: [0], position: 0, src },
   ]);
 });
 
@@ -137,21 +116,12 @@ void test('filesystem relation validates node key arrays', () => {
   assert.deepEqual(invalidRelationFields({ ...validNodeRow, parentKey: [-1] }), ['parentKey']);
 });
 
-void test('filesystem relation validates path string arrays', () => {
-  const sparsePath = ['file.txt'];
-  sparsePath.length = 2;
-
-  assert.deepEqual(invalidRelationFields({ ...validNodeRow, path: 'file.txt' }), ['path']);
-  assert.deepEqual(invalidRelationFields({ ...validNodeRow, path: ['folder', 0] }), ['path']);
-  assert.deepEqual(invalidRelationFields({ ...validNodeRow, path: sparsePath }), ['path']);
-});
-
 void test('filesystem queries expose live row seams', () => {
   const db = createDb({
     nodes: [
-      { key: [], kind: 'dir', name: '', parentKey: null, path: [], position: 0 },
-      { key: [1], kind: 'file', name: 'b', parentKey: [], path: ['b'], position: 1, src: 'automerge:b' },
-      { key: [0], kind: 'file', name: 'a', parentKey: [], path: ['a'], position: 0, src: 'automerge:a' },
+      { key: [], kind: 'dir', name: '', parentKey: null, position: 0 },
+      { key: [1], kind: 'file', name: 'b', parentKey: [], position: 1, src: 'automerge:b' },
+      { key: [0], kind: 'file', name: 'a', parentKey: [], position: 0, src: 'automerge:a' },
     ],
   });
 

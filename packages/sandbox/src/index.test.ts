@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSandboxFrame, createSandboxUrlMount } from './index.ts';
-import { planSandboxDocument } from './document.ts';
+import { createSandboxFrameAttributes, createSandboxUrlMount } from './index.ts';
+import { indexSandboxFiles } from './document.ts';
 
 void test('plans sandbox document paths without reading or serving files', () => {
   const index = { path: ['index.html'], src: 'automerge:index' };
   const image = { path: ['assets', 'a/b.svg'], src: 'https://example.test/a.svg' };
-  const plan = planSandboxDocument(['index.html'], [index, image]);
+  const plan = indexSandboxFiles(['index.html'], [index, image]);
 
   assert.deepEqual([...plan.keys()], [
     'index.html',
@@ -18,38 +18,38 @@ void test('plans sandbox document paths without reading or serving files', () =>
 
 void test('rejects invalid sandbox document mounts', () => {
   assert.throws(
-    () => planSandboxDocument(['index.html'], [{ path: ['app.html'] }]),
+    () => indexSandboxFiles(['index.html'], [{ path: ['app.html'] }]),
     /Sandbox entry file is missing: index\.html/,
   );
   assert.throws(
-    () => planSandboxDocument(['index.html'], [
+    () => indexSandboxFiles(['index.html'], [
       { path: ['index.html'] },
       { path: ['index.html'] },
     ]),
     /Duplicate sandbox document path: index\.html/,
   );
   assert.throws(
-    () => planSandboxDocument([], []),
+    () => indexSandboxFiles([], []),
     /non-empty relative/,
   );
   assert.throws(
-    () => planSandboxDocument(['index.html'], [{ path: ['.'] }]),
+    () => indexSandboxFiles(['index.html'], [{ path: ['.'] }]),
     /non-empty relative/,
   );
 });
 
 void test('creates sandbox frame attributes from iframe-shaped launch data', () => {
-  assert.deepEqual(createSandboxFrame({
+  assert.deepEqual(createSandboxFrameAttributes({
     baseUrl: 'https://patchpit.test/base/',
     entry: ['assets', 'a/b.html'],
-    sandboxId: 'mount-1',
+    mountId: 'mount-1',
   }), {
     referrerPolicy: 'no-referrer',
     sandbox: 'allow-scripts',
     src: 'https://patchpit.test/__patchpit/sandbox/mount-1/assets/a%2Fb.html',
   });
   assert.throws(
-    () => createSandboxFrame({ baseUrl: 'https://patchpit.test/', entry: [], sandboxId: 'mount-1' }),
+    () => createSandboxFrameAttributes({ baseUrl: 'https://patchpit.test/', entry: [], mountId: 'mount-1' }),
     /non-empty relative/,
   );
 });
@@ -71,9 +71,9 @@ void test('creates sandbox URL mounts that serve planned files', async () => {
     mountId: 'mount-1',
   });
 
-  assert.equal(mount.frame.referrerPolicy, 'no-referrer');
-  assert.equal(mount.frame.sandbox, 'allow-scripts');
-  assert.equal(mount.frame.src, 'https://patchpit.test/__patchpit/sandbox/mount-1/index.html');
+  assert.equal(mount.frameAttributes.referrerPolicy, 'no-referrer');
+  assert.equal(mount.frameAttributes.sandbox, 'allow-scripts');
+  assert.equal(mount.frameAttributes.src, 'https://patchpit.test/__patchpit/sandbox/mount-1/index.html');
 
   const response = await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/assets/a%2Fb.svg'));
   assert.equal(response?.status, 200);

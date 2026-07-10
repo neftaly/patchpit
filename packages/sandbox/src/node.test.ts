@@ -52,7 +52,7 @@ void test('node sandbox URL mounts leave unrelated non-GET requests unhandled', 
   assert.equal(nodeResponse.status, undefined);
 });
 
-void test('node sandbox URL mounts leave forbidden Fetch methods unhandled', async () => {
+void test('node sandbox URL mounts reject methods forbidden by Fetch', async () => {
   let reads = 0;
   const mount = createSandboxUrlMount({
     baseUrl: 'https://patchpit.test/',
@@ -74,9 +74,11 @@ void test('node sandbox URL mounts leave forbidden Fetch methods unhandled', asy
     nodeResponse.response,
   );
 
-  assert.equal(handled, false);
+  assert.equal(handled, true);
   assert.equal(reads, 0);
-  assert.equal(nodeResponse.status, undefined);
+  assert.equal(nodeResponse.status, 405);
+  assert.equal(nodeResponse.headers.allow, 'GET, HEAD');
+  assert.equal(nodeResponse.body, 'Method not allowed');
 });
 
 const createNodeRequest = (url: string, method: string): IncomingMessage => ({

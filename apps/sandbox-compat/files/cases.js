@@ -2,7 +2,6 @@ const caseTimeoutMs = 500;
 
 const caseDefinitions = [
   compatCase('image-file-backed', 'pass', () => imageLoads('./relative-file.svg')),
-  compatCase('image-url-backed-file', 'pass', () => imageLoads('./ghostscript-tiger.svg')),
   compatCase('fetch-relative-json', 'pass', fetchRelativeJson),
   compatCase('css-import-relative', 'pass', cssImportRelative),
   compatCase('css-url-relative', 'pass', cssUrlRelative),

@@ -1,11 +1,12 @@
 export {
-  createSandboxFrame,
+  createSandboxFrameAttributes,
   createSandboxUrlMount,
   type SandboxDocumentBody,
-  type SandboxFrameOptions,
   type SandboxFrameAttributes,
+  type SandboxFrameAttributesOptions,
   type SandboxUrlMount,
   type SandboxUrlMountFile,
   type SandboxUrlMountFileContent,
+  type SandboxUrlMountRequest,
 } from './document.ts';
 export { type SandboxDocumentPath } from './path.ts';

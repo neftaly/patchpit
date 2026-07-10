@@ -1,11 +1,11 @@
-import { createSandboxFrame } from "@patchpit/sandbox";
+import { createSandboxFrameAttributes } from "@patchpit/sandbox";
 import { sandboxCompatApp } from "../apps/sandbox-compat/app.ts";
 
 export function App() {
-  const sandboxFrame = createSandboxFrame({
+  const frameAttributes = createSandboxFrameAttributes({
     baseUrl: window.location.href,
     entry: sandboxCompatApp.entry,
-    sandboxId: sandboxCompatApp.id,
+    mountId: sandboxCompatApp.id,
   });
 
   return (
@@ -18,7 +18,7 @@ export function App() {
       }}
     >
       <iframe
-        {...sandboxFrame}
+        {...frameAttributes}
         title="Sandbox"
         style={{ border: 0, flex: 1 }}
       />

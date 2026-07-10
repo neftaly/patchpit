@@ -6,18 +6,20 @@ export const respondWithSandboxUrlMount = async (
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<boolean> => {
-  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
-  const webRequest = nodeRequestToWebRequest(url, request.method);
-  if (webRequest === undefined) return false;
-  const mountResponse = await mount.respond(webRequest);
+  const url = nodeRequestUrl(request.url);
+  if (url === undefined) return false;
+  const mountResponse = await mount.respond({
+    method: request.method ?? 'GET',
+    url: url.toString(),
+  });
   if (mountResponse === undefined) return false;
   await writeNodeResponse(response, mountResponse);
   return true;
 };
 
-const nodeRequestToWebRequest = (url: URL, method = 'GET'): Request | undefined => {
+const nodeRequestUrl = (url = '/'): URL | undefined => {
   try {
-    return new Request(url, { method });
+    return new URL(url, 'http://localhost');
   } catch {
     return undefined;
   }

@@ -9,9 +9,14 @@ export type SandboxFrameAttributes = {
 };
 
 export type SandboxUrlMount = {
-  readonly frame: SandboxFrameAttributes;
-  readonly respond: (request: Request) => Promise<Response | undefined>;
+  readonly frameAttributes: SandboxFrameAttributes;
+  readonly respond: (request: SandboxUrlMountRequest) => Promise<Response | undefined>;
   readonly scopePath: string;
+};
+
+export type SandboxUrlMountRequest = {
+  readonly method: string;
+  readonly url: string;
 };
 
 export type SandboxUrlMountFile = {
@@ -35,23 +40,23 @@ type SandboxUrlMountOptions = {
   readonly route?: readonly string[];
 };
 
-export type SandboxFrameOptions = {
+export type SandboxFrameAttributesOptions = {
   readonly baseUrl: string | URL;
   readonly entry: SandboxDocumentPath;
+  readonly mountId: string;
   readonly route?: readonly string[];
-  readonly sandboxId: string;
 };
 
-export const createSandboxFrame = ({
+export const createSandboxFrameAttributes = ({
   baseUrl,
   entry,
-  sandboxId,
+  mountId,
   route = defaultSandboxRoute,
-}: SandboxFrameOptions): SandboxFrameAttributes => ({
+}: SandboxFrameAttributesOptions): SandboxFrameAttributes => ({
   referrerPolicy: "no-referrer",
   sandbox: "allow-scripts",
   src: new URL(
-    `${sandboxMountScopePath(route, sandboxId)}${sandboxDocumentPathKey(entry)}`,
+    `${sandboxMountScopePath(route, mountId)}${sandboxDocumentPathKey(entry)}`,
     baseUrl,
   ).toString(),
 });
@@ -63,14 +68,14 @@ export const createSandboxUrlMount = ({
   mountId = crypto.randomUUID(),
   route = defaultSandboxRoute,
 }: SandboxUrlMountOptions): SandboxUrlMount => {
-  const mountFiles = planSandboxDocument(entry, files);
+  const mountFiles = indexSandboxFiles(entry, files);
   const base = new URL(baseUrl);
   const mountOrigin = base.origin;
   const scopePath = sandboxMountScopePath(route, mountId);
   const mountSource = `${mountOrigin}${scopePath}`;
 
   return {
-    frame: createSandboxFrame({ baseUrl, entry, route, sandboxId: mountId }),
+    frameAttributes: createSandboxFrameAttributes({ baseUrl, entry, mountId, route }),
     respond: async (request) => {
       const url = new URL(request.url);
       if (!url.pathname.startsWith(scopePath)) return undefined;
@@ -93,7 +98,7 @@ export const createSandboxUrlMount = ({
   };
 };
 
-export const planSandboxDocument = <
+export const indexSandboxFiles = <
   TFile extends { readonly path: SandboxDocumentPath },
 >(
   entry: SandboxDocumentPath,
@@ -119,7 +124,12 @@ const defaultSandboxContentType = "application/octet-stream";
 const sandboxMountScopePath = (
   route: readonly string[],
   mountId: string,
-): string => `/${[...route, mountId].map(encodeURIComponent).join("/")}/`;
+): string => {
+  const segments = [...route, mountId];
+  if (segments.some((segment) => segment === "" || segment === "." || segment === ".."))
+    throw new Error(`Sandbox mount routes must use non-empty, non-dot segments: ${segments.join("/")}`);
+  return `/${segments.map(encodeURIComponent).join("/")}/`;
+};
 
 const sandboxPathKey = (pathname: string): string | undefined => {
   try {

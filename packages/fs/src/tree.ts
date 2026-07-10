@@ -1,8 +1,3 @@
-import type { FsRow } from './schema.ts';
-
-export const fsRowsFromTree = (root: FsTree): readonly FsRow[] =>
-  treeNodeRows(root, { key: [], name: '', parentKey: null, path: [], position: 0 });
-
 export const fsTreeFromFiles = (files: readonly FsTreeFile[]): FsTree => ({
   entries: treeEntriesFromFiles(files, 0),
   kind: 'dir',
@@ -17,7 +12,6 @@ export type FsTreeFile = {
   readonly src: string;
 };
 
-type FsTreeNodeLocation = Pick<FsRow, 'key' | 'name' | 'parentKey' | 'path' | 'position'>;
 type FsTreeDirectory = Extract<FsTree, { readonly kind: 'dir' }>;
 type FsTreeEntry = FsTreeDirectory['entries'][number];
 type PendingTreeEntry = readonly [name: string, tree: FsTree | null];
@@ -47,21 +41,3 @@ const treeEntriesFromFiles = (
   return entries.map(([name, tree]): FsTreeEntry =>
     [name, tree ?? { entries: treeEntriesFromFiles(directories.get(name) ?? [], depth + 1), kind: 'dir' }]);
 };
-
-const treeNodeRows = (
-  node: FsTree,
-  location: FsTreeNodeLocation,
-): readonly FsRow[] =>
-  node.kind === 'file'
-    ? [{ ...location, kind: 'file', src: node.src }]
-    : [
-      { ...location, kind: 'dir' },
-      ...node.entries.flatMap(([name, child], position) =>
-        treeNodeRows(child, {
-          key: [...location.key, position],
-          name,
-          parentKey: [...location.key],
-          path: [...location.path, name],
-          position,
-        })),
-    ];

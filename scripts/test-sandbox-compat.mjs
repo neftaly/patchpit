@@ -3,13 +3,13 @@ import { constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 import { respondWithSandboxUrlMount } from '@patchpit/sandbox/node';
-import { sandboxCompatFiles, sandboxCompatMount } from '../apps/sandbox-compat/node.ts';
+import { createSandboxCompatMount, readSandboxCompatFiles } from '../apps/sandbox-compat/node.ts';
 
 const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? '/usr/bin/chromium';
 const selectedCase = process.argv.find((argument) => argument.startsWith('--case='))?.slice('--case='.length);
 
 await assertChromiumExecutable(chromiumPath);
-const files = await sandboxCompatFiles();
+const files = await readSandboxCompatFiles();
 const server = await staticServer(files);
 const browser = await chromium.launch({ executablePath: chromiumPath });
 
@@ -40,29 +40,29 @@ async function referenceReport(browser, url, onlyCase) {
 
 async function sandboxReport(browser, server, onlyCase) {
   const mountBuildStartedAt = performance.now();
-  const sandboxMount = await sandboxCompatMount(server.url);
+  const sandboxMount = await createSandboxCompatMount(server.url);
   server.addMount(sandboxMount);
-  const sandboxFrame = sandboxMount.frame;
+  const frameAttributes = sandboxMount.frameAttributes;
   const mountBuildMs = performance.now() - mountBuildStartedAt;
 
   return pageReport(browser, async (page) => {
     await page.setContent('<!doctype html><body></body>');
-    await page.evaluate(({ frame, hash }) => {
+    await page.evaluate(({ frameAttributes, hash }) => {
       window.__sandboxCompatReport = undefined;
       window.addEventListener('message', (event) => {
         if (event.data?.type === 'sandbox-compat:report') window.__sandboxCompatReport = event.data;
       });
       const iframe = window.document.createElement('iframe');
-      iframe.referrerPolicy = frame.referrerPolicy;
-      iframe.sandbox = frame.sandbox;
-      iframe.src = `${frame.src}${hash}`;
+      iframe.referrerPolicy = frameAttributes.referrerPolicy;
+      iframe.sandbox = frameAttributes.sandbox;
+      iframe.src = `${frameAttributes.src}${hash}`;
       window.document.body.append(iframe);
-    }, { frame: sandboxFrame, hash: caseHash(onlyCase) });
+    }, { frameAttributes, hash: caseHash(onlyCase) });
     const report = await compatReport(page);
     return {
       ...report,
       mountBuildMs,
-      launchUrlLength: sandboxFrame.src.length,
+      launchUrlLength: frameAttributes.src.length,
     };
   });
 }

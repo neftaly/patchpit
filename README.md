@@ -10,15 +10,22 @@ compat harness.
 ```sh
 pnpm install
 pnpm dev
+pnpm build:prototype
+pnpm preview:prototype
 pnpm typecheck
 pnpm test
 pnpm lint
 pnpm test:browser
+pnpm test:preview
 pnpm test:browser -- --case=fetch-relative-json
 ```
 
 Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium` if Chromium is not at
 `/usr/bin/chromium`.
+
+The prototype build requires the Vite preview server so sandbox responses keep
+their per-mount CORS and content-security-policy headers. Static hosting is not
+the production path; `pnpm build` remains blocked until Automerge FS owns it.
 
 Validation scripts are root-owned. Package-filter commands are not wired as
 package-local workflows yet.

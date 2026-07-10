@@ -54,7 +54,6 @@ Internally, `@patchpit/fs` turns the tree into Tarstate `nodes` rows:
 
 - `key`: structural address as ordered child indexes.
 - `parentKey`: parent structural key, or `null` for root.
-- `path`: unencoded path segments.
 - `position`: child order from the keyed tree.
 - `name`: entry key/name.
 - `kind`: `dir` or `file`.
