@@ -34,8 +34,12 @@ export const openWorkspace = (initialContext: string, documentContext?: string) 
     sourceId,
     doc: Automerge.from({ kind: 'patchpit.workspace@1', ...createWorkspace(initialContext, documentContext) }),
   });
-  let revision = 0;
-  runtime.subscribe(() => { revision += 1; });
+  let view = { revision: 0, workspace: runtime.snapshot().storage };
+  const listeners = new Set<() => void>();
+  runtime.subscribe(() => {
+    view = { revision: view.revision + 1, workspace: runtime.snapshot().storage };
+    for (const listener of listeners) listener();
+  });
   let nextOperationId = 0;
   let pending = Promise.resolve();
 
@@ -70,12 +74,16 @@ export const openWorkspace = (initialContext: string, documentContext?: string) 
         resourceRef: workspaceResourceRef,
       }],
     }),
-    close: () => runtime.close(),
-    content: () => JSON.stringify(runtime.snapshot().storage, null, 2),
-    getRevision: () => revision,
-    getSnapshot: () => runtime.snapshot().storage,
+    close: () => {
+      listeners.clear();
+      runtime.close();
+    },
+    getSnapshot: () => view,
     resourceRef: workspaceResourceRef,
-    subscribe: (listener: () => void) => runtime.subscribe(() => listener()),
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
     update,
   };
 };

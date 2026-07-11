@@ -54,7 +54,6 @@ try {
   assert.deepEqual(failed, []);
   assert.deepEqual(pageErrors, []);
   assert.equal(entryHeaders?.['access-control-allow-origin'], '*');
-  assert.match(entryHeaders?.['content-security-policy'] ?? '', /sandbox allow-scripts/);
   console.log(JSON.stringify({ cases: report.cases.length, entryHeaders: 'pass', mode: development ? 'dev' : 'preview', workspace: 'pass' }, null, 2));
 } finally {
   await browser?.close();
@@ -76,6 +75,7 @@ async function proveWorkspaceBehavior(page) {
   assert(rootBounds !== null && leftBounds !== null && frameBounds !== null, 'Initial workspace panes must be visible');
   assert(Math.abs((leftBounds.width / rootBounds.width) - 0.2) < 0.02);
   assert(frameBounds.width > 0);
+  assert.equal(await page.locator('.sandbox-app').getAttribute('sandbox'), 'allow-scripts');
   await tab('sandbox-compat / index.html').waitFor();
   assert.equal(await tab('sandbox-compat / index.html').getAttribute('data-context'), 'sandbox-compat/index.html');
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
@@ -96,8 +96,8 @@ async function proveWorkspaceBehavior(page) {
   await page.waitForFunction(() => Number(
     document.querySelector('[data-node="split-0"]')?.getAttribute('data-ratio'),
   ) > 0.25);
-  await page.waitForFunction(() => JSON.parse(document.querySelector('.viewer')?.textContent ?? '{}')
-    .nodes?.['split-0']?.ratio > 0.25);
+  await page.locator('.viewer', { hasText: '"ratio": 0.3' }).waitFor();
+  assert(JSON.parse(await workspaceViewer.textContent()).nodes['split-0'].ratio > 0.25);
   await page.getByRole('button', { name: 'Close patchpit / workspace.am' }).click();
   await tab('sandbox-compat / index.html').click();
 
@@ -209,32 +209,23 @@ async function dragWithTargetPreview(
   xRatio,
   yRatio = 0.5,
 ) {
-  const sourceBounds = await source.boundingBox();
-  const targetBounds = await target.boundingBox();
-  assert(sourceBounds !== null && targetBounds !== null, 'Drag source and target must be visible');
-  await page.mouse.move(sourceBounds.x + (sourceBounds.width / 2), sourceBounds.y + (sourceBounds.height / 2));
-  await page.mouse.down();
-  await page.mouse.move(sourceBounds.x + sourceBounds.width - 2, sourceBounds.y + (sourceBounds.height / 2));
-  await page.mouse.move(targetBounds.x + (targetBounds.width * xRatio), targetBounds.y + (targetBounds.height * yRatio), {
-    steps: 10,
-  });
-  await page.waitForTimeout(100);
-  assert.equal(await target.getAttribute(attribute), expectedTarget);
-  await page.mouse.up();
-}
-
-async function dragTabWithTargetPreview(page, source, target, expectedTarget) {
   const targetBounds = await target.boundingBox();
   assert(targetBounds !== null, 'Drag target must be visible');
+  const sourceElement = await source.elementHandle();
+  assert(sourceElement !== null, 'Drag source must exist');
   const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
-  await source.dispatchEvent('dragstart', { dataTransfer });
+  await sourceElement.dispatchEvent('dragstart', { dataTransfer });
   const position = {
-    clientX: targetBounds.x + targetBounds.width - 2,
-    clientY: targetBounds.y + (targetBounds.height / 2),
+    clientX: targetBounds.x + (targetBounds.width * xRatio),
+    clientY: targetBounds.y + (targetBounds.height * yRatio),
     dataTransfer,
   };
   await target.dispatchEvent('dragover', position);
-  assert.equal(await target.getAttribute('data-drop-target'), expectedTarget);
+  assert.equal(await target.getAttribute(attribute), expectedTarget);
   await target.dispatchEvent('drop', position);
-  await source.dispatchEvent('dragend', { dataTransfer });
+  await sourceElement.dispatchEvent('dragend', { dataTransfer });
+}
+
+async function dragTabWithTargetPreview(page, source, target, expectedTarget) {
+  await dragWithTargetPreview(page, source, target, 'data-drop-target', expectedTarget, 0.99);
 }

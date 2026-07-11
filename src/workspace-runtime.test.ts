@@ -13,7 +13,8 @@ void test('workspace.am is a live Automerge document exposed through the filesys
   });
 
   try {
-    assert.equal(workspace.getRevision(), 0);
+    const initialSnapshot = workspace.getSnapshot();
+    assert.equal(initialSnapshot.revision, 0);
     const fileSnapshot = files.observer.getSnapshot();
     assert.equal(fileSnapshot.state, 'open');
     assert.deepEqual(fileSnapshot.current.rows.map(({ name, resourceRef }) => ({ name, resourceRef })), [{
@@ -22,19 +23,19 @@ void test('workspace.am is a live Automerge document exposed through the filesys
     }]);
 
     await workspace.update((current) => openContext(current, 'file', 'right'));
-    assert.equal(workspace.getSnapshot().kind, 'patchpit.workspace@1');
-    assert.equal('panes' in workspace.getSnapshot(), false);
-    assert.equal('nextNodeId' in workspace.getSnapshot(), false);
-    const right = workspace.getSnapshot().nodes.right;
+    assert.notEqual(workspace.getSnapshot(), initialSnapshot);
+    assert.equal(workspace.getSnapshot().workspace.kind, 'patchpit.workspace@1');
+    assert.equal('panes' in workspace.getSnapshot().workspace, false);
+    assert.equal('nextNodeId' in workspace.getSnapshot().workspace, false);
+    const right = workspace.getSnapshot().workspace.nodes.right;
     assert.deepEqual(right?.kind === 'pane' ? right.contexts : undefined, ['file']);
     assert.equal(changes, 1);
-    assert.equal(workspace.getRevision(), 1);
-    assert.match(workspace.content(), /"kind": "patchpit\.workspace@1"/);
+    assert.equal(workspace.getSnapshot().revision, 1);
 
     await assert.rejects(workspace.update(() => { throw new Error('failed update'); }), /failed update/);
     await workspace.update((current) => openContext(current, 'next', 'right'));
-    assert.equal(workspace.getRevision(), 2);
-    const recovered = workspace.getSnapshot().nodes.right;
+    assert.equal(workspace.getSnapshot().revision, 2);
+    const recovered = workspace.getSnapshot().workspace.nodes.right;
     assert.deepEqual(recovered?.kind === 'pane' ? recovered.contexts : undefined, ['file', 'next']);
   } finally {
     unsubscribe();

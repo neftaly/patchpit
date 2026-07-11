@@ -49,12 +49,12 @@ export function App() {
     () => resourceRuntime.observer.getSnapshot(),
   );
   const resources = resourcesFromSnapshot(resourceSnapshot);
-  useSyncExternalStore(
+  const { workspace } = useSyncExternalStore(
     workspaceRuntime.subscribe,
-    workspaceRuntime.getRevision,
-    workspaceRuntime.getRevision,
+    workspaceRuntime.getSnapshot,
+    workspaceRuntime.getSnapshot,
   );
-  const workspace = workspaceRuntime.getSnapshot();
+  const workspaceContent = JSON.stringify(workspace, null, 2);
   const [unshieldedPane, setUnshieldedPane] = useState<string | null>();
   const showResource = (resource: Resource, pinned: boolean) => {
     if (resource.kind !== 'file') return;
@@ -73,7 +73,7 @@ export function App() {
     return resource.sourceId === sandboxCompatApp.id && resource.localId === sandboxCompatEntryId
       ? <SandboxApp />
       : <Viewer content={resource.resourceRef === workspaceRuntime.resourceRef
-        ? workspaceRuntime.content()
+        ? workspaceContent
         : resourceContent(resource)} />;
   };
   const dropContext = (
@@ -135,6 +135,7 @@ export function App() {
     <main
       className="workspace"
       onDragEnd={() => setUnshieldedPane(undefined)}
+      onDropCapture={() => setUnshieldedPane(undefined)}
       onDragStart={(event) => {
         const source = event.target instanceof Element ? event.target.closest<HTMLElement>('.pane') : null;
         setUnshieldedPane(event.dataTransfer.types.includes(resourceDragType) ? source?.dataset.pane ?? null : null);
