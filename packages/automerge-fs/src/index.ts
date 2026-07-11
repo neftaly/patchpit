@@ -126,5 +126,5 @@ export const openAutomergeFsFolder = (
       },
     });
   };
-  return { attachment, renameEntry, runtime };
+  return { attachment, renameEntry };
 };

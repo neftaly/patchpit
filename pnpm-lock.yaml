@@ -59,6 +59,9 @@ importers:
 
   .:
     dependencies:
+      '@automerge/automerge':
+        specifier: 3.2.6
+        version: 3.2.6
       '@patchpit/automerge-fs':
         specifier: workspace:*
         version: link:packages/automerge-fs
@@ -68,6 +71,12 @@ importers:
       '@patchpit/sandbox':
         specifier: workspace:*
         version: link:packages/sandbox
+      '@tarstate/automerge':
+        specifier: file:vendor/tarstate/tarstate-automerge-0.2.0.tgz
+        version: file:vendor/tarstate/tarstate-automerge-0.2.0.tgz
+      '@tarstate/core':
+        specifier: file:vendor/tarstate/tarstate-core-0.2.0.tgz
+        version: file:vendor/tarstate/tarstate-core-0.2.0.tgz
       react:
         specifier: 'catalog:'
         version: 19.2.7

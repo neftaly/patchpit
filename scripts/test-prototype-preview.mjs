@@ -61,12 +61,88 @@ async function proveWorkspaceBehavior(page) {
   const resource = (source, name) => page.locator('.resource-group', { hasText: source })
     .locator('.resource', { hasText: name });
   const tab = (name) => page.locator('.tab', { hasText: name });
+  await resource('patchpit', 'workspace.am').waitFor();
   await resource('sandbox-compat', 'ghostscript-tiger.svg').waitFor();
-  await resource('sandbox-compat', 'index.html').dblclick();
+  const leftPane = page.locator('[data-pane="left"]');
+  const rightPane = page.locator('[data-pane="right"]');
+  const rootSplit = page.locator('[data-node="split-0"]');
+  const rootBounds = await rootSplit.boundingBox();
+  const leftBounds = await leftPane.boundingBox();
+  const frameBounds = await page.locator('.sandbox-app').boundingBox();
+  assert(rootBounds !== null && leftBounds !== null && frameBounds !== null, 'Initial workspace panes must be visible');
+  assert(Math.abs((leftBounds.width / rootBounds.width) - 0.2) < 0.02);
+  assert(frameBounds.width > 0);
   await tab('sandbox-compat / index.html').waitFor();
+  assert.equal(await tab('sandbox-compat / index.html').getAttribute('data-context'), 'sandbox-compat/index.html');
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
-  await resource('sandbox-compat', 'data.json').dblclick();
+  await resource('patchpit', 'workspace.am').click();
+  const workspaceViewer = page.locator('.viewer');
+  await workspaceViewer.waitFor();
+  assert.equal(JSON.parse(await workspaceViewer.textContent()).nodes['split-0'].ratio, 0.2);
+
+  const resizeHandle = rootSplit.locator(':scope > .resize-handle');
+  const handleBounds = await resizeHandle.boundingBox();
+  assert(handleBounds !== null, 'Resize handle must be visible');
+  await page.mouse.move(handleBounds.x + (handleBounds.width / 2), handleBounds.y + (handleBounds.height / 2));
+  await page.mouse.down();
+  await page.mouse.move(rootBounds.x + (rootBounds.width * 0.3), handleBounds.y + (handleBounds.height / 2), {
+    steps: 10,
+  });
+  await page.mouse.up();
+  await page.waitForFunction(() => Number(
+    document.querySelector('[data-node="split-0"]')?.getAttribute('data-ratio'),
+  ) > 0.25);
+  await page.waitForFunction(() => JSON.parse(document.querySelector('.viewer')?.textContent ?? '{}')
+    .nodes?.['split-0']?.ratio > 0.25);
+  await page.getByRole('button', { name: 'Close patchpit / workspace.am' }).click();
+  await tab('sandbox-compat / index.html').click();
+
+  await dragWithTargetPreview(
+    page,
+    resource('sandbox-compat', 'data.json'),
+    rightPane.locator('.pane-content'),
+    'data-drop-zone',
+    'center',
+    0.5,
+  );
+  assert.equal(await page.locator('.pane').count(), 2);
+  assert.equal(await tab('sandbox-compat / data.json').getAttribute('data-preview'), null);
   await page.getByText('{"ok":true}', { exact: true }).waitFor();
+  await dragTabWithTargetPreview(
+    page,
+    resource('sandbox-compat', 'worker.js'),
+    tab('sandbox-compat / data.json'),
+    'after',
+  );
+  assert.deepEqual(await rightPane.locator('.tab').allTextContents(), [
+    'sandbox-compat / index.html',
+    'sandbox-compat / data.json',
+    'sandbox-compat / worker.js',
+  ]);
+  await dragWithTargetPreview(
+    page,
+    resource('sandbox-compat', 'frame.html'),
+    rightPane.locator('.pane-content'),
+    'data-drop-zone',
+    'left',
+    0.01,
+  );
+  const splitPane = page.locator('[data-pane="pane-1"]');
+  assert.equal(await page.locator('.pane').count(), 3);
+  assert.deepEqual(await splitPane.locator('.tab').allTextContents(), ['sandbox-compat / frame.html']);
+  await dragWithTargetPreview(
+    page,
+    tab('sandbox-compat / worker.js'),
+    splitPane.locator('.pane-content'),
+    'data-drop-zone',
+    'bottom',
+    0.5,
+    0.99,
+  );
+  assert.equal(await page.locator('.pane').count(), 4);
+  assert.deepEqual(await page.locator('[data-pane="pane-2"] .tab').allTextContents(), [
+    'sandbox-compat / worker.js',
+  ]);
   await resource('sandbox-compat', 'css-url.css').click();
   await tab('sandbox-compat / data.json').waitFor();
   await tab('sandbox-compat / css-url.css').waitFor();
@@ -75,18 +151,86 @@ async function proveWorkspaceBehavior(page) {
 
   const previewTab = tab('sandbox-compat / css-import.css');
   assert.equal(await previewTab.getAttribute('data-preview'), 'true');
-  const leftPane = page.locator('[data-pane="left"]');
-  await previewTab.dragTo(leftPane);
+  await dragWithTargetPreview(
+    page,
+    previewTab,
+    leftPane.locator('.pane-content'),
+    'data-drop-zone',
+    'center',
+    0.5,
+  );
   assert.equal(await leftPane.locator('.tab', { hasText: 'sandbox-compat / css-import.css' }).count(), 1);
   assert.equal(await tab('sandbox-compat / css-import.css').getAttribute('data-preview'), null);
-  assert.equal(await page.locator('[data-pane="right"] .tab', { hasText: 'sandbox-compat / css-import.css' }).count(), 0);
+  assert.equal(await rightPane.locator('.tab', { hasText: 'sandbox-compat / css-import.css' }).count(), 0);
 
-  await tab('sandbox-compat / css-import.css').dragTo(leftPane.locator('.tab', { hasText: 'Resources' }));
+  await tab('sandbox-compat / css-import.css').dragTo(leftPane.locator('.tab', { hasText: 'Resources' }), {
+    targetPosition: { x: 1, y: 15 },
+  });
   assert.deepEqual(await leftPane.locator('.tab').allTextContents(), ['sandbox-compat / css-import.css', 'Resources']);
-  await tab('sandbox-compat / css-import.css').dragTo(tab('sandbox-compat / data.json'));
-  assert.deepEqual(await page.locator('[data-pane="right"] .tab').allTextContents(), [
+  await tab('sandbox-compat / css-import.css').dragTo(tab('sandbox-compat / data.json'), {
+    targetPosition: { x: 1, y: 15 },
+  });
+  assert.deepEqual(await rightPane.locator('.tab').allTextContents(), [
     'sandbox-compat / index.html',
     'sandbox-compat / css-import.css',
     'sandbox-compat / data.json',
   ]);
+  await dragWithTargetPreview(
+    page,
+    page.locator('[data-pane="pane-2"] .tab'),
+    rightPane.locator('.pane-content'),
+    'data-drop-zone',
+    'center',
+    0.5,
+  );
+  assert.equal(await page.locator('.pane').count(), 3);
+  assert.equal(await page.locator('[data-pane="pane-2"]').count(), 0);
+  assert.deepEqual(await rightPane.locator('.tab').allTextContents(), [
+    'sandbox-compat / index.html',
+    'sandbox-compat / css-import.css',
+    'sandbox-compat / data.json',
+    'sandbox-compat / worker.js',
+  ]);
+  await page.getByRole('button', { name: 'Close sandbox-compat / frame.html' }).click();
+  assert.equal(await page.locator('[data-pane="pane-1"]').count(), 0);
+  assert.equal(await page.locator('.pane').count(), 2);
+}
+
+async function dragWithTargetPreview(
+  page,
+  source,
+  target,
+  attribute,
+  expectedTarget,
+  xRatio,
+  yRatio = 0.5,
+) {
+  const sourceBounds = await source.boundingBox();
+  const targetBounds = await target.boundingBox();
+  assert(sourceBounds !== null && targetBounds !== null, 'Drag source and target must be visible');
+  await page.mouse.move(sourceBounds.x + (sourceBounds.width / 2), sourceBounds.y + (sourceBounds.height / 2));
+  await page.mouse.down();
+  await page.mouse.move(sourceBounds.x + sourceBounds.width - 2, sourceBounds.y + (sourceBounds.height / 2));
+  await page.mouse.move(targetBounds.x + (targetBounds.width * xRatio), targetBounds.y + (targetBounds.height * yRatio), {
+    steps: 10,
+  });
+  await page.waitForTimeout(100);
+  assert.equal(await target.getAttribute(attribute), expectedTarget);
+  await page.mouse.up();
+}
+
+async function dragTabWithTargetPreview(page, source, target, expectedTarget) {
+  const targetBounds = await target.boundingBox();
+  assert(targetBounds !== null, 'Drag target must be visible');
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await source.dispatchEvent('dragstart', { dataTransfer });
+  const position = {
+    clientX: targetBounds.x + targetBounds.width - 2,
+    clientY: targetBounds.y + (targetBounds.height / 2),
+    dataTransfer,
+  };
+  await target.dispatchEvent('dragover', position);
+  assert.equal(await target.getAttribute('data-drop-target'), expectedTarget);
+  await target.dispatchEvent('drop', position);
+  await source.dispatchEvent('dragend', { dataTransfer });
 }

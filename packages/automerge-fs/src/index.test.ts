@@ -78,5 +78,4 @@ void test('Tarstate-coordinated rename flows through the shared filesystem query
   assert.equal(after.current.resultKeys[0], readmeKey);
 
   query.close();
-  assert.throws(() => folder.runtime.snapshot(), /closed/i);
 });

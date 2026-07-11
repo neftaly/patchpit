@@ -1,4 +1,4 @@
-import { openFsEntries, staticFsAttachment } from '@patchpit/fs';
+import { openFsEntries, staticFsAttachment, type FsAttachment } from '@patchpit/fs';
 import sandboxCompatBundle from 'virtual:patchpit/sandbox-compat-bundle';
 
 export type Resource = {
@@ -11,7 +11,7 @@ export type Resource = {
   readonly sourceId: string;
 };
 
-export type ResourceGroup = {
+type ResourceGroup = {
   readonly sourceId: string;
   readonly rows: readonly { readonly depth: number; readonly resource: Resource }[];
 };
@@ -20,15 +20,16 @@ const contents = new Map(sandboxCompatBundle.entries
   .filter(({ kind }) => kind === 'file')
   .map(({ resourceRef }) => [resourceRef, sandboxCompatBundle.contents[resourceRef] ?? resourceRef] as const));
 
-export const openResources = () => openFsEntries([
+export const openResources = (attachments: readonly FsAttachment[]) => openFsEntries([
+  ...attachments,
   staticFsAttachment({ sourceId: 'sandbox-compat', entries: sandboxCompatBundle.entries }),
 ]);
 
-export const resourceId = ({ localId, sourceId }: Resource) =>
-  JSON.stringify([sourceId, localId]);
+export const resourceId = (sourceId: string, localId: string) =>
+  `${encodeURIComponent(sourceId)}/${encodeURIComponent(localId)}`;
 
 export const resourceById = (resources: readonly Resource[], id: string) =>
-  resources.find((resource) => resourceId(resource) === id);
+  resources.find((resource) => resourceId(resource.sourceId, resource.localId) === id);
 
 export const resourceContent = ({ resourceRef }: Resource) => contents.get(resourceRef);
 
