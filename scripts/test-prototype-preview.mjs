@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { build, createServer, preview } from 'vite';
 import { sandboxCompatPathPrefix } from '../apps/sandbox-compat/node.ts';
 
-const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? '/usr/bin/chromium';
+const installedChromium = chromium.executablePath();
+const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+  ?? (existsSync(installedChromium) ? installedChromium : '/usr/bin/chromium');
 const development = process.argv.includes('--dev');
 
 if (!development) await build({ logLevel: 'silent' });

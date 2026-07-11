@@ -413,10 +413,12 @@ function Viewer({ content }: {
 }
 
 function SandboxApp() {
+  const baseRoute = import.meta.env.BASE_URL.split('/').filter((segment) => segment !== '');
   const frame = createSandboxFrameAttributes({
     baseUrl: window.location.href,
     entry: sandboxCompatApp.entry,
     mountId: sandboxCompatApp.id,
+    route: [...baseRoute, '__patchpit', 'sandbox'],
   });
   return <iframe className="sandbox-app" title="Sandbox Compat" {...frame} />;
 }

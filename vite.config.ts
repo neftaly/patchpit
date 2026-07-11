@@ -15,6 +15,7 @@ const sandboxCompatBundleId = 'virtual:patchpit/sandbox-compat-bundle';
 const resolvedSandboxCompatBundleId = `\0${sandboxCompatBundleId}`;
 
 export default defineConfig({
+  base: process.env.PATCHPIT_BASE ?? '/',
   build: {
     rollupOptions: {
       input: { index: repoPath('index.html') },
@@ -45,6 +46,16 @@ function sandboxCompatPlugin(): Plugin {
         .filter(({ resourceRef }) => !resourceRef.startsWith('http'))
         .map(({ bytes, resourceRef }) => [resourceRef, new TextDecoder().decode(bytes)]));
       return `export default ${JSON.stringify({ contents, entries })}`;
+    },
+    async generateBundle() {
+      const { packageFiles } = await readSandboxCompatBundle();
+      for (const { bytes, name } of packageFiles) {
+        this.emitFile({
+          type: 'asset',
+          fileName: `${sandboxCompatPathPrefix.slice(1)}${name}`,
+          source: bytes,
+        });
+      }
     },
     configureServer(server) {
       server.middlewares.use(sandboxCompatMiddleware);

@@ -1,11 +1,13 @@
 import { createServer } from 'node:http';
-import { constants } from 'node:fs';
+import { constants, existsSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 import { respondWithSandboxUrlMount } from '@patchpit/sandbox/node';
 import { createSandboxCompatMount, readSandboxCompatFiles } from '../apps/sandbox-compat/node.ts';
 
-const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? '/usr/bin/chromium';
+const installedChromium = chromium.executablePath();
+const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+  ?? (existsSync(installedChromium) ? installedChromium : '/usr/bin/chromium');
 const selectedCase = process.argv.find((argument) => argument.startsWith('--case='))?.slice('--case='.length);
 
 await assertChromiumExecutable(chromiumPath);
