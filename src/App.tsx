@@ -169,15 +169,19 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
       : (event.clientY - bounds.top) / bounds.height;
     return Math.min(0.9, Math.max(0.1, position));
   };
-  const finishResize = (event: PointerEvent<HTMLElement>) => {
+  const commitResize = () => {
     const gesture = resizeGesture.current;
-    if (gesture?.pointerId !== event.pointerId) return;
+    if (gesture === undefined) return;
     resizeGesture.current = undefined;
+    setDraftRatio(undefined);
+    onResize(gesture.ratio);
+  };
+  const finishResize = (event: PointerEvent<HTMLElement>) => {
+    if (resizeGesture.current?.pointerId !== event.pointerId) return;
+    commitResize();
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    setDraftRatio(undefined);
-    onResize(gesture.ratio);
   };
   const updateResize = (event: PointerEvent<HTMLElement>) => {
     if (resizeGesture.current?.pointerId !== event.pointerId) return;
@@ -192,6 +196,7 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
       <div
         className="resize-handle"
         onLostPointerCapture={finishResize}
+        onMouseUp={commitResize}
         onPointerCancel={(event) => {
           if (resizeGesture.current?.pointerId !== event.pointerId) return;
           resizeGesture.current = undefined;
