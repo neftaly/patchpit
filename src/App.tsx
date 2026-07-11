@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -50,11 +49,12 @@ export function App() {
     () => resourceRuntime.observer.getSnapshot(),
   );
   const resources = resourcesFromSnapshot(resourceSnapshot);
-  const workspace = useSyncExternalStore(
+  useSyncExternalStore(
     workspaceRuntime.subscribe,
-    workspaceRuntime.getSnapshot,
-    workspaceRuntime.getSnapshot,
+    workspaceRuntime.getRevision,
+    workspaceRuntime.getRevision,
   );
+  const workspace = workspaceRuntime.getSnapshot();
   const [unshieldedPane, setUnshieldedPane] = useState<string | null>();
   const showResource = (resource: Resource, pinned: boolean) => {
     if (resource.kind !== 'file') return;
@@ -159,7 +159,7 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
   readonly second: ReactNode;
 }) {
   const split = useRef<HTMLDivElement>(null);
-  const resizeGesture = useRef<{ pointerId: number; ratio: number } | undefined>(undefined);
+  const activePointer = useRef<number | undefined>(undefined);
   const [draftRatio, setDraftRatio] = useState<number>();
   const displayedRatio = draftRatio ?? ratio;
   const ratioAtPointer = (event: PointerEvent<HTMLElement>) => {
@@ -170,60 +170,39 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
       : (event.clientY - bounds.top) / bounds.height;
     return Math.min(0.9, Math.max(0.1, position));
   };
-  const commitResize = () => {
-    const gesture = resizeGesture.current;
-    if (gesture === undefined) return;
-    resizeGesture.current = undefined;
-    setDraftRatio(undefined);
-    onResize(gesture.ratio);
-  };
   const finishResize = (event: PointerEvent<HTMLElement>) => {
-    if (resizeGesture.current?.pointerId !== event.pointerId) return;
-    commitResize();
+    if (activePointer.current !== event.pointerId) return;
+    const nextRatio = ratioAtPointer(event);
+    activePointer.current = undefined;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    setDraftRatio(undefined);
+    onResize(nextRatio);
   };
-  const updateResize = (event: PointerEvent<HTMLElement>) => {
-    if (resizeGesture.current?.pointerId !== event.pointerId) return;
-    const ratio = ratioAtPointer(event);
-    resizeGesture.current.ratio = ratio;
-    setDraftRatio(ratio);
-  };
-  useEffect(() => {
-    window.addEventListener('pointerup', commitResize);
-    window.addEventListener('mouseup', commitResize);
-    return () => {
-      window.removeEventListener('pointerup', commitResize);
-      window.removeEventListener('mouseup', commitResize);
-    };
-  });
 
   return (
     <div className="split" data-axis={axis} data-node={nodeId} data-ratio={displayedRatio} ref={split}>
       <div className="split-child" style={{ flexGrow: displayedRatio }}>{first}</div>
       <div
         className="resize-handle"
-        onLostPointerCapture={finishResize}
         onPointerCancel={(event) => {
-          if (resizeGesture.current?.pointerId !== event.pointerId) return;
-          resizeGesture.current = undefined;
+          if (activePointer.current !== event.pointerId) return;
+          activePointer.current = undefined;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) {
             event.currentTarget.releasePointerCapture(event.pointerId);
           }
           setDraftRatio(undefined);
         }}
         onPointerDown={(event) => {
-          const ratio = ratioAtPointer(event);
-          resizeGesture.current = { pointerId: event.pointerId, ratio };
+          activePointer.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
-          setDraftRatio(ratio);
+          setDraftRatio(ratioAtPointer(event));
         }}
-        onPointerMove={updateResize}
-        onPointerUp={(event) => {
-          updateResize(event);
-          finishResize(event);
+        onPointerMove={(event) => {
+          if (activePointer.current === event.pointerId) setDraftRatio(ratioAtPointer(event));
         }}
+        onPointerUp={finishResize}
       />
       <div className="split-child" style={{ flexGrow: 1 - displayedRatio }}>{second}</div>
     </div>

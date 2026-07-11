@@ -34,6 +34,8 @@ export const openWorkspace = (initialContext: string, documentContext?: string) 
     sourceId,
     doc: Automerge.from({ kind: 'patchpit.workspace@1', ...createWorkspace(initialContext, documentContext) }),
   });
+  let revision = 0;
+  runtime.subscribe(() => { revision += 1; });
   let nextOperationId = 0;
   let pending = Promise.resolve();
 
@@ -70,6 +72,7 @@ export const openWorkspace = (initialContext: string, documentContext?: string) 
     }),
     close: () => runtime.close(),
     content: () => JSON.stringify(runtime.snapshot().storage, null, 2),
+    getRevision: () => revision,
     getSnapshot: () => runtime.snapshot().storage,
     resourceRef: workspaceResourceRef,
     subscribe: (listener: () => void) => runtime.subscribe(() => listener()),

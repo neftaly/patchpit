@@ -13,6 +13,7 @@ void test('workspace.am is a live Automerge document exposed through the filesys
   });
 
   try {
+    assert.equal(workspace.getRevision(), 0);
     const fileSnapshot = files.observer.getSnapshot();
     assert.equal(fileSnapshot.state, 'open');
     assert.deepEqual(fileSnapshot.current.rows.map(({ name, resourceRef }) => ({ name, resourceRef })), [{
@@ -27,10 +28,12 @@ void test('workspace.am is a live Automerge document exposed through the filesys
     const right = workspace.getSnapshot().nodes.right;
     assert.deepEqual(right?.kind === 'pane' ? right.contexts : undefined, ['file']);
     assert.equal(changes, 1);
+    assert.equal(workspace.getRevision(), 1);
     assert.match(workspace.content(), /"kind": "patchpit\.workspace@1"/);
 
     await assert.rejects(workspace.update(() => { throw new Error('failed update'); }), /failed update/);
     await workspace.update((current) => openContext(current, 'next', 'right'));
+    assert.equal(workspace.getRevision(), 2);
     const recovered = workspace.getSnapshot().nodes.right;
     assert.deepEqual(recovered?.kind === 'pane' ? recovered.contexts : undefined, ['file', 'next']);
   } finally {
