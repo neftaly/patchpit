@@ -158,7 +158,7 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
   readonly second: ReactNode;
 }) {
   const split = useRef<HTMLDivElement>(null);
-  const activePointer = useRef<number | undefined>(undefined);
+  const resizeGesture = useRef<{ pointerId: number; ratio: number } | undefined>(undefined);
   const [draftRatio, setDraftRatio] = useState<number>();
   const displayedRatio = draftRatio ?? ratio;
   const ratioAtPointer = (event: PointerEvent<HTMLElement>) => {
@@ -170,14 +170,20 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
     return Math.min(0.9, Math.max(0.1, position));
   };
   const finishResize = (event: PointerEvent<HTMLElement>) => {
-    if (activePointer.current !== event.pointerId) return;
-    const nextRatio = ratioAtPointer(event);
-    activePointer.current = undefined;
+    const gesture = resizeGesture.current;
+    if (gesture?.pointerId !== event.pointerId) return;
+    resizeGesture.current = undefined;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     setDraftRatio(undefined);
-    onResize(nextRatio);
+    onResize(gesture.ratio);
+  };
+  const updateResize = (event: PointerEvent<HTMLElement>) => {
+    if (resizeGesture.current?.pointerId !== event.pointerId) return;
+    const ratio = ratioAtPointer(event);
+    resizeGesture.current.ratio = ratio;
+    setDraftRatio(ratio);
   };
 
   return (
@@ -185,23 +191,26 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
       <div className="split-child" style={{ flexGrow: displayedRatio }}>{first}</div>
       <div
         className="resize-handle"
+        onLostPointerCapture={finishResize}
         onPointerCancel={(event) => {
-          if (activePointer.current !== event.pointerId) return;
-          activePointer.current = undefined;
+          if (resizeGesture.current?.pointerId !== event.pointerId) return;
+          resizeGesture.current = undefined;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) {
             event.currentTarget.releasePointerCapture(event.pointerId);
           }
           setDraftRatio(undefined);
         }}
         onPointerDown={(event) => {
-          activePointer.current = event.pointerId;
+          const ratio = ratioAtPointer(event);
+          resizeGesture.current = { pointerId: event.pointerId, ratio };
           event.currentTarget.setPointerCapture(event.pointerId);
-          setDraftRatio(ratioAtPointer(event));
+          setDraftRatio(ratio);
         }}
-        onPointerMove={(event) => {
-          if (activePointer.current === event.pointerId) setDraftRatio(ratioAtPointer(event));
+        onPointerMove={updateResize}
+        onPointerUp={(event) => {
+          updateResize(event);
+          finishResize(event);
         }}
-        onPointerUp={finishResize}
       />
       <div className="split-child" style={{ flexGrow: 1 - displayedRatio }}>{second}</div>
     </div>
