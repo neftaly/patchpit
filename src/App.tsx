@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -189,6 +190,14 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
     resizeGesture.current.ratio = ratio;
     setDraftRatio(ratio);
   };
+  useEffect(() => {
+    window.addEventListener('pointerup', commitResize);
+    window.addEventListener('mouseup', commitResize);
+    return () => {
+      window.removeEventListener('pointerup', commitResize);
+      window.removeEventListener('mouseup', commitResize);
+    };
+  });
 
   return (
     <div className="split" data-axis={axis} data-node={nodeId} data-ratio={displayedRatio} ref={split}>
@@ -196,7 +205,6 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
       <div
         className="resize-handle"
         onLostPointerCapture={finishResize}
-        onMouseUp={commitResize}
         onPointerCancel={(event) => {
           if (resizeGesture.current?.pointerId !== event.pointerId) return;
           resizeGesture.current = undefined;
