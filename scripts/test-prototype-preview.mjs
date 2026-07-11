@@ -8,6 +8,7 @@ const installedChromium = chromium.executablePath();
 const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
   ?? (existsSync(installedChromium) ? installedChromium : '/usr/bin/chromium');
 const development = process.argv.includes('--dev');
+const sandboxEntryPath = `${process.env.PATCHPIT_BASE ?? '/'}${sandboxCompatPathPrefix.slice(1)}index.html`;
 
 if (!development) await build({ logLevel: 'silent' });
 const server = development
@@ -27,7 +28,7 @@ try {
 
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('response', (response) => {
-    if (response.url().endsWith('/__patchpit/sandbox/sandbox-compat/index.html')) {
+    if (new URL(response.url()).pathname === sandboxEntryPath) {
       entryHeaders = response.headers();
     }
   });

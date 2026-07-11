@@ -61,6 +61,11 @@ function sandboxCompatPlugin(): Plugin {
       server.middlewares.use(sandboxCompatMiddleware);
     },
     configurePreviewServer(server) {
+      const staticPrefix = `${server.config.base}${sandboxCompatPathPrefix.slice(1)}`;
+      server.middlewares.use((request, response, next) => {
+        if (request.url?.startsWith(staticPrefix)) response.setHeader('Access-Control-Allow-Origin', '*');
+        next();
+      });
       server.middlewares.use(sandboxCompatMiddleware);
     },
   };
