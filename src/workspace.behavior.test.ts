@@ -43,6 +43,7 @@ void test('preview replacement, pinning, and movement preserve context ownership
 
   workspace = moveContext(workspace, personalContext, 'right', sharedContext);
   assert.deepEqual(pane(workspace, 'right')?.contexts.slice(0, 2), [personalContext, sharedContext]);
+  assert.equal(moveContext(workspace, personalContext, 'right', sharedContext), workspace);
 });
 
 void test('edge drops split panes without duplicating contexts', () => {

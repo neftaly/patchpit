@@ -64,6 +64,8 @@ async function proveWorkspaceBehavior(page) {
   const resource = (source, name) => page.locator('.resource-group', { hasText: source })
     .locator('.resource', { hasText: name });
   const tab = (name) => page.locator('.tab', { hasText: name });
+  const drag = (...args) => dragWithTargetPreview(page, ...args);
+  const dragTab = (source, target, expected) => drag(source, target, 'data-drop-target', expected, 0.99);
   await resource('patchpit', 'workspace.am').waitFor();
   await resource('sandbox-compat', 'ghostscript-tiger.svg').waitFor();
   const leftPane = page.locator('[data-pane="left"]');
@@ -79,6 +81,15 @@ async function proveWorkspaceBehavior(page) {
   await tab('sandbox-compat / index.html').waitFor();
   assert.equal(await tab('sandbox-compat / index.html').getAttribute('data-context'), 'sandbox-compat/index.html');
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
+  await drag(
+    tab('sandbox-compat / index.html'),
+    rightPane.locator('.pane-content'),
+    'data-drop-zone',
+    null,
+    0.5,
+    0.99,
+  );
+  assert.equal(await page.locator('.pane').count(), 2);
   await resource('patchpit', 'workspace.am').click();
   const workspaceViewer = page.locator('.viewer');
   await workspaceViewer.waitFor();
@@ -101,8 +112,7 @@ async function proveWorkspaceBehavior(page) {
   await page.getByRole('button', { name: 'Close patchpit / workspace.am' }).click();
   await tab('sandbox-compat / index.html').click();
 
-  await dragWithTargetPreview(
-    page,
+  await drag(
     resource('sandbox-compat', 'data.json'),
     rightPane.locator('.pane-content'),
     'data-drop-zone',
@@ -112,8 +122,7 @@ async function proveWorkspaceBehavior(page) {
   assert.equal(await page.locator('.pane').count(), 2);
   assert.equal(await tab('sandbox-compat / data.json').getAttribute('data-preview'), null);
   await page.getByText('{"ok":true}', { exact: true }).waitFor();
-  await dragTabWithTargetPreview(
-    page,
+  await dragTab(
     resource('sandbox-compat', 'worker.js'),
     tab('sandbox-compat / data.json'),
     'after',
@@ -123,8 +132,19 @@ async function proveWorkspaceBehavior(page) {
     'sandbox-compat / data.json',
     'sandbox-compat / worker.js',
   ]);
-  await dragWithTargetPreview(
-    page,
+  await drag(
+    tab('sandbox-compat / data.json'),
+    tab('sandbox-compat / worker.js'),
+    'data-drop-target',
+    'after',
+    0.01,
+  );
+  assert.deepEqual(await rightPane.locator('.tab').allTextContents(), [
+    'sandbox-compat / index.html',
+    'sandbox-compat / worker.js',
+    'sandbox-compat / data.json',
+  ]);
+  await drag(
     resource('sandbox-compat', 'frame.html'),
     rightPane.locator('.pane-content'),
     'data-drop-zone',
@@ -134,8 +154,7 @@ async function proveWorkspaceBehavior(page) {
   const splitPane = page.locator('[data-pane="pane-1"]');
   assert.equal(await page.locator('.pane').count(), 3);
   assert.deepEqual(await splitPane.locator('.tab').allTextContents(), ['sandbox-compat / frame.html']);
-  await dragWithTargetPreview(
-    page,
+  await drag(
     tab('sandbox-compat / worker.js'),
     splitPane.locator('.pane-content'),
     'data-drop-zone',
@@ -155,8 +174,7 @@ async function proveWorkspaceBehavior(page) {
 
   const previewTab = tab('sandbox-compat / css-import.css');
   assert.equal(await previewTab.getAttribute('data-preview'), 'true');
-  await dragWithTargetPreview(
-    page,
+  await drag(
     previewTab,
     leftPane.locator('.pane-content'),
     'data-drop-zone',
@@ -179,8 +197,7 @@ async function proveWorkspaceBehavior(page) {
     'sandbox-compat / css-import.css',
     'sandbox-compat / data.json',
   ]);
-  await dragWithTargetPreview(
-    page,
+  await drag(
     page.locator('[data-pane="pane-2"] .tab'),
     rightPane.locator('.pane-content'),
     'data-drop-zone',
@@ -215,17 +232,16 @@ async function dragWithTargetPreview(
   assert(sourceElement !== null, 'Drag source must exist');
   const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
   await sourceElement.dispatchEvent('dragstart', { dataTransfer });
+  await page.locator('.drag-shield').first().waitFor();
+  const shield = target.locator('.drag-shield');
+  const eventTarget = await shield.count() === 0 ? target : shield;
   const position = {
     clientX: targetBounds.x + (targetBounds.width * xRatio),
     clientY: targetBounds.y + (targetBounds.height * yRatio),
     dataTransfer,
   };
-  await target.dispatchEvent('dragover', position);
+  await eventTarget.dispatchEvent('dragover', position);
   assert.equal(await target.getAttribute(attribute), expectedTarget);
-  await target.dispatchEvent('drop', position);
+  await eventTarget.dispatchEvent('drop', position);
   await sourceElement.dispatchEvent('dragend', { dataTransfer });
-}
-
-async function dragTabWithTargetPreview(page, source, target, expectedTarget) {
-  await dragWithTargetPreview(page, source, target, 'data-drop-target', expectedTarget, 0.99);
 }

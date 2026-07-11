@@ -43,7 +43,7 @@ export const activateContext = (
   contextId: string,
 ): WorkspaceState => {
   const pane = paneAt(workspace, paneId);
-  if (pane === undefined || !pane.contexts.includes(contextId)) return workspace;
+  if (pane === undefined || pane.activeContext === contextId || !pane.contexts.includes(contextId)) return workspace;
   return updatePane(workspace, paneId, { ...pane, activeContext: contextId });
 };
 
@@ -99,13 +99,16 @@ export const moveContext = (
   const sourcePane = sourcePaneId === undefined ? undefined : paneAt(workspace, sourcePaneId);
   const target = paneAt(workspace, targetPaneId);
   if (sourcePaneId === undefined || sourcePane === undefined || target === undefined) return workspace;
-  if (contextId === beforeContext) return pinContext(workspace, sourcePaneId, contextId);
+  if (contextId === beforeContext) return workspace;
 
   const source = removeContextFromPane(sourcePane, contextId);
   const targetWithoutContext = sourcePaneId === targetPaneId ? source : target;
   const contexts = [...targetWithoutContext.contexts];
   const targetIndex = beforeContext === undefined ? -1 : contexts.indexOf(beforeContext);
   contexts.splice(targetIndex < 0 ? contexts.length : targetIndex, 0, contextId);
+  if (sourcePaneId === targetPaneId && contexts.every((context, index) => sourcePane.contexts[index] === context)) {
+    return workspace;
+  }
   const moved = {
     ...workspace,
     nodes: {

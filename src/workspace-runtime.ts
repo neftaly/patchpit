@@ -34,10 +34,10 @@ export const openWorkspace = (initialContext: string, documentContext?: string) 
     sourceId,
     doc: Automerge.from({ kind: 'patchpit.workspace@1', ...createWorkspace(initialContext, documentContext) }),
   });
-  let view = { revision: 0, workspace: runtime.snapshot().storage };
+  let view = { workspace: runtime.snapshot().storage };
   const listeners = new Set<() => void>();
   runtime.subscribe(() => {
-    view = { revision: view.revision + 1, workspace: runtime.snapshot().storage };
+    view = { workspace: runtime.snapshot().storage };
     for (const listener of listeners) listener();
   });
   let nextOperationId = 0;

@@ -55,7 +55,7 @@ export function App() {
     workspaceRuntime.getSnapshot,
   );
   const workspaceContent = JSON.stringify(workspace, null, 2);
-  const [unshieldedPane, setUnshieldedPane] = useState<string | null>();
+  const [drag, setDrag] = useState<DraggedContext>();
   const showResource = (resource: Resource, pinned: boolean) => {
     if (resource.kind !== 'file') return;
     const contextId = resourceId(resource.sourceId, resource.localId);
@@ -76,24 +76,10 @@ export function App() {
         ? workspaceContent
         : resourceContent(resource)} />;
   };
-  const dropContext = (
-    paneId: WorkspacePaneId,
-    contextId: string,
-    open: boolean,
-    target: PaneDropTarget,
-  ) => {
-    void workspaceRuntime.update((current) => {
-      if ('zone' in target && target.zone !== 'center') {
-        return splitContext(current, contextId, paneId, target.zone);
-      }
-      const opened = open ? openContext(current, contextId, paneId) : current;
-      return moveContext(
-        opened,
-        contextId,
-        paneId,
-        'beforeContext' in target ? target.beforeContext : undefined,
-      );
-    });
+  const dropContext = (paneId: WorkspacePaneId, target: PaneDropTarget) => {
+    if (drag === undefined) return;
+    setDrag(undefined);
+    void workspaceRuntime.update((current) => applyDrop(current, drag, paneId, target));
   };
   const renderLayout = (nodeId: string): ReactNode => {
     const node = workspace.nodes[nodeId];
@@ -102,7 +88,8 @@ export function App() {
       ? (
         <Pane
           key={nodeId}
-          shielded={unshieldedPane !== undefined && unshieldedPane !== nodeId}
+          canDrop={(target) => drag !== undefined && applyDrop(workspace, drag, nodeId, target) !== workspace}
+          shielded={drag !== undefined && drag.unshieldedPane !== nodeId}
           labelContext={(contextId) => contextLabel(resources, contextId)}
           onActivate={(contextId) => {
             void workspaceRuntime.update((current) => activateContext(current, nodeId, contextId));
@@ -110,7 +97,7 @@ export function App() {
           onClose={(contextId) => {
             void workspaceRuntime.update((current) => closeContext(current, nodeId, contextId));
           }}
-          onDrop={(contextId, open, target) => dropContext(nodeId, contextId, open, target)}
+          onDrop={(target) => dropContext(nodeId, target)}
           pane={node}
           paneId={nodeId}
           renderContext={renderContext}
@@ -134,11 +121,18 @@ export function App() {
   return (
     <main
       className="workspace"
-      onDragEnd={() => setUnshieldedPane(undefined)}
-      onDropCapture={() => setUnshieldedPane(undefined)}
+      onDragEnd={() => setDrag(undefined)}
       onDragStart={(event) => {
         const source = event.target instanceof Element ? event.target.closest<HTMLElement>('.pane') : null;
-        setUnshieldedPane(event.dataTransfer.types.includes(resourceDragType) ? source?.dataset.pane ?? null : null);
+        const resourceContext = event.dataTransfer.getData(resourceDragType);
+        const contextId = resourceContext || event.dataTransfer.getData(tabDragType);
+        if (contextId !== '') {
+          setDrag({
+            contextId,
+            open: resourceContext !== '',
+            unshieldedPane: resourceContext === '' ? null : source?.dataset.pane ?? null,
+          });
+        }
       }}
     >
       {renderLayout(workspace.rootNodeId)}
@@ -147,8 +141,26 @@ export function App() {
 }
 
 type ContentDropZone = WorkspaceSplitEdge | 'center';
+type DraggedContext = {
+  readonly contextId: string;
+  readonly open: boolean;
+  readonly unshieldedPane: string | null;
+};
 type PaneDropTarget = { readonly beforeContext: string | undefined } | {
   readonly zone: ContentDropZone;
+};
+
+const applyDrop = (
+  workspace: WorkspaceState,
+  drag: DraggedContext,
+  paneId: WorkspacePaneId,
+  target: PaneDropTarget,
+) => {
+  if ('zone' in target && target.zone !== 'center') {
+    return splitContext(workspace, drag.contextId, paneId, target.zone);
+  }
+  const opened = drag.open ? openContext(workspace, drag.contextId, paneId) : workspace;
+  return moveContext(opened, drag.contextId, paneId, 'beforeContext' in target ? target.beforeContext : undefined);
 };
 
 function Split({ axis, first, nodeId, onResize, ratio, second }: {
@@ -210,11 +222,12 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
   );
 }
 
-function Pane({ labelContext, onActivate, onClose, onDrop, pane, paneId, renderContext, root, shielded }: {
+function Pane({ canDrop, labelContext, onActivate, onClose, onDrop, pane, paneId, renderContext, root, shielded }: {
+  readonly canDrop: (target: PaneDropTarget) => boolean;
   readonly labelContext: (contextId: string) => string;
   readonly onActivate: (contextId: string) => void;
   readonly onClose: (contextId: string) => void;
-  readonly onDrop: (contextId: string, open: boolean, target: PaneDropTarget) => void;
+  readonly onDrop: (target: PaneDropTarget) => void;
   readonly pane: WorkspacePane;
   readonly paneId: WorkspacePaneId;
   readonly renderContext: (contextId: string) => ReactNode;
@@ -222,10 +235,15 @@ function Pane({ labelContext, onActivate, onClose, onDrop, pane, paneId, renderC
   readonly shielded: boolean;
 }) {
   const [dropTarget, setDropTarget] = useState<number | ContentDropZone>();
-  const acceptsDrop = (event: DragEvent<HTMLElement>) => {
-    if (![tabDragType, resourceDragType].some((type) => event.dataTransfer.types.includes(type))) return;
-    event.preventDefault();
-    return true;
+  const previewDrop = (preview: number | ContentDropZone, target: PaneDropTarget) => {
+    setDropTarget(canDrop(target) ? preview : undefined);
+  };
+  const tabTarget = (event: DragEvent<HTMLElement>, index: number) => {
+    const dropIndex = tabDropIndex(event, index);
+    const target = { beforeContext: pane.contexts[dropIndex] };
+    if (canDrop(target)) return { dropIndex, target };
+    const alternateIndex = dropIndex === index ? index + 1 : index;
+    return { dropIndex: alternateIndex, target: { beforeContext: pane.contexts[alternateIndex] } };
   };
   const drop = (
     event: DragEvent<HTMLElement>,
@@ -234,25 +252,20 @@ function Pane({ labelContext, onActivate, onClose, onDrop, pane, paneId, renderC
     event.preventDefault();
     event.stopPropagation();
     setDropTarget(undefined);
-    const resourceContext = event.dataTransfer.getData(resourceDragType);
-    if (resourceContext !== '') onDrop(resourceContext, true, target);
-    else {
-      const tabContext = event.dataTransfer.getData(tabDragType);
-      if (tabContext !== '') onDrop(tabContext, false, target);
-    }
+    onDrop(target);
   };
 
   return (
     <section
       className="pane"
-      data-drag-over={dropTarget !== undefined || undefined}
       data-pane={paneId}
       onDragLeave={(event) => {
         const related = event.relatedTarget;
         if (!(related instanceof Node) || !event.currentTarget.contains(related)) setDropTarget(undefined);
       }}
       onDragOver={(event) => {
-        if (acceptsDrop(event)) setDropTarget(pane.contexts.length);
+        event.preventDefault();
+        previewDrop(pane.contexts.length, { beforeContext: undefined });
       }}
       onDrop={drop}
     >
@@ -270,17 +283,17 @@ function Pane({ labelContext, onActivate, onClose, onDrop, pane, paneId, renderC
                   ? 'after'
                   : undefined}
               data-preview={pane.previewContext === contextId || undefined}
-              draggable
               key={contextId}
               onDragOver={(event) => {
-                if (!acceptsDrop(event)) return;
+                event.preventDefault();
                 event.stopPropagation();
-                setDropTarget(tabDropIndex(event, index));
+                const { dropIndex, target } = tabTarget(event, index);
+                previewDrop(dropIndex, target);
               }}
               onDragStart={(event) => event.dataTransfer.setData(tabDragType, contextId)}
-              onDrop={(event) => drop(event, { beforeContext: pane.contexts[tabDropIndex(event, index)] })}
+              onDrop={(event) => drop(event, tabTarget(event, index).target)}
             >
-              <button className="tab-label" onClick={() => onActivate(contextId)} type="button">
+              <button className="tab-label" draggable onClick={() => onActivate(contextId)} type="button">
                 {label}
               </button>
               {(pane.contexts.length > 1 || !root) && (
@@ -304,9 +317,10 @@ function Pane({ labelContext, onActivate, onClose, onDrop, pane, paneId, renderC
         className="pane-content"
         data-drop-zone={typeof dropTarget === 'string' ? dropTarget : undefined}
         onDragOver={(event) => {
-          if (!acceptsDrop(event)) return;
+          event.preventDefault();
           event.stopPropagation();
-          setDropTarget(contentDropZone(event));
+          const zone = contentDropZone(event);
+          previewDrop(zone, { zone });
         }}
         onDrop={(event) => drop(event, { zone: contentDropZone(event) })}
       >
