@@ -2,18 +2,17 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { build, createServer, preview } from 'vite';
-import { sandboxCompatPathPrefix } from '../apps/sandbox-compat/node.ts';
 
 const installedChromium = chromium.executablePath();
 const chromiumPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
   ?? (existsSync(installedChromium) ? installedChromium : '/usr/bin/chromium');
 const development = process.argv.includes('--dev');
-const sandboxEntryPath = `${process.env.PATCHPIT_BASE ?? '/'}${sandboxCompatPathPrefix.slice(1)}index.html`;
+const testPort = Number(process.env.PATCHPIT_TEST_PORT ?? (development ? 5174 : 4174));
 
 if (!development) await build({ logLevel: 'silent' });
 const server = development
-  ? await createServer({ logLevel: 'silent', server: { host: '127.0.0.1', port: 0, strictPort: true } })
-  : await preview({ logLevel: 'silent', preview: { host: '127.0.0.1', port: 0, strictPort: true } });
+  ? await createServer({ logLevel: 'silent', server: { host: '127.0.0.1', port: testPort, strictPort: true } })
+  : await preview({ logLevel: 'silent', preview: { host: '127.0.0.1', port: testPort, strictPort: true } });
 if (development) await server.listen();
 let browser;
 
@@ -28,7 +27,7 @@ try {
 
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('response', (response) => {
-    if (new URL(response.url()).pathname === sandboxEntryPath) {
+    if (/\/__patchpit\/sandbox\/[0-9a-f-]{36}\/index\.html$/.test(new URL(response.url()).pathname)) {
       entryHeaders = response.headers();
     }
   });
@@ -38,12 +37,6 @@ try {
     });
   });
   await page.goto(`${url}#${JSON.stringify({ delegation: 'placeholder:beelay' })}`);
-  await page.evaluate((src) => {
-    const iframe = document.createElement('iframe');
-    iframe.hidden = true;
-    iframe.src = src;
-    document.body.append(iframe);
-  }, `${sandboxCompatPathPrefix}index.html`);
   await proveWorkspaceBehavior(page);
   const reportHandle = await page.waitForFunction(() => window.__sandboxCompatReport, undefined, {
     timeout: 2_000,
@@ -54,6 +47,8 @@ try {
   assert.deepEqual(failed, []);
   assert.deepEqual(pageErrors, []);
   assert.equal(entryHeaders?.['access-control-allow-origin'], '*');
+  assert.match(entryHeaders?.['content-security-policy'] ?? '', /sandbox allow-scripts allow-same-origin/);
+  await proveOfflineSandboxReload(page);
   console.log(JSON.stringify({ cases: report.cases.length, entryHeaders: 'pass', mode: development ? 'dev' : 'preview', workspace: 'pass' }, null, 2));
 } finally {
   await browser?.close();
@@ -80,8 +75,9 @@ async function proveWorkspaceBehavior(page) {
   assert(rootBounds !== null && leftBounds !== null && frameBounds !== null, 'Initial workspace panes must be visible');
   assert(Math.abs((leftBounds.width / rootBounds.width) - 0.2) < 0.02);
   assert(frameBounds.width > 0);
-  assert.equal(await page.locator('.sandbox-app').getAttribute('sandbox'), 'allow-scripts');
+  assert.equal(await page.locator('.sandbox-app').getAttribute('sandbox'), 'allow-scripts allow-same-origin');
   const sandboxSrc = await page.locator('.sandbox-app').getAttribute('src');
+  assert.match(sandboxSrc ?? '', /\/__patchpit\/sandbox\/[0-9a-f-]{36}\/index\.html$/);
   assert.equal(sandboxSrc?.includes('placeholder:beelay'), false);
   assert.equal(sandboxSrc?.includes('sync.automerge.org'), false);
   await tab('sandbox-compat / index.html').waitFor();
@@ -235,6 +231,17 @@ async function proveWorkspaceBehavior(page) {
   await page.getByRole('button', { name: 'Close sandbox-compat / frame.html' }).click();
   assert.equal(await page.locator(`[data-pane="${splitPaneId}"]`).count(), 0);
   assert.equal(await page.locator('.pane').count(), 2);
+}
+
+async function proveOfflineSandboxReload(page) {
+  await page.evaluate(() => { window.__sandboxCompatReport = undefined; });
+  await page.context().setOffline(true);
+  try {
+    await page.locator('.sandbox-app').evaluate((frame) => { frame.contentWindow.location.reload(); });
+    await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2_000 });
+  } finally {
+    await page.context().setOffline(false);
+  }
 }
 
 async function dragWithTargetPreview(

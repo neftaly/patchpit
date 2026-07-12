@@ -9,10 +9,12 @@ import {
   automergeFsDocumentMetadata,
   createAutomergeFileContentDocument,
   openAutomergeFsFolder,
+  type AutomergeFileContentDoc,
   type AutomergeFsFolderDoc,
 } from '@patchpit/automerge-fs';
 import { parseFsEntry, type FsEntry } from '@patchpit/fs';
-import { automergeRepoSourceRuntime } from '@tarstate/automerge';
+import { snapshotFilesystemApp, type AppFileContent } from '@patchpit/sandbox-fs';
+import { AutomergeAtomicSource, automergeRepoSourceRuntime } from '@tarstate/automerge';
 import { safeParseArtifactValue, type ArtifactRef } from '@tarstate/core';
 import { openResources } from './resources.ts';
 import {
@@ -119,34 +121,69 @@ const openRootHandle = async (
   const folder = openAutomergeFsFolder(automergeRepoSourceRuntime({ handle: rootHandle }));
   const resources = openResources(folder.attachment);
   const workspace = openWorkspace(workspaceHandle);
+  const findResourceHandle = async (resourceRef: string) => {
+    const current = handles.get(resourceRef);
+    if (current !== undefined) return current;
+    const loading = pendingHandles.get(resourceRef)
+      ?? repo.find<object>(resourceRef as AutomergeUrl, { signal: resolver.signal });
+    pendingHandles.set(resourceRef, loading);
+    try {
+      return await loading;
+    } finally {
+      if (pendingHandles.get(resourceRef) === loading) pendingHandles.delete(resourceRef);
+    }
+  };
   const resolve = async (resourceRef: string) => {
     if (closed) return undefined;
     if (!rootReferences(rootHandle, resourceRef)) {
       handles.delete(resourceRef);
       return undefined;
     }
-    const current = handles.get(resourceRef);
-    if (current !== undefined) return current;
     if (!isValidAutomergeUrl(resourceRef)) return undefined;
-    const loading = pendingHandles.get(resourceRef)
-      ?? repo.find<object>(resourceRef, { signal: resolver.signal });
-    pendingHandles.set(resourceRef, loading);
+    const handle = await findResourceHandle(resourceRef);
+    if (closed || !rootReferences(rootHandle, resourceRef)) return undefined;
+    validateFileContent(rootHandle, resourceRef, handle.doc());
+    handles.set(resourceRef, handle);
+    return handle;
+  };
+  const readAppFileContent = async (resourceRef: string, signal?: AbortSignal) => {
+    if (closed || !isValidAutomergeUrl(resourceRef)) return undefined;
+    const handle = await abortable(findResourceHandle(resourceRef), signal);
+    if (closed) return undefined;
+    const source = new AutomergeAtomicSource({
+      runtime: automergeRepoSourceRuntime({
+        handle: handle as unknown as DocHandle<AppFileContent>,
+      }),
+      operationEpoch: `patchpit:app-read:${crypto.randomUUID()}`,
+      ownsRuntime: true,
+    });
     try {
-      const handle = await loading;
-      if (closed || !rootReferences(rootHandle, resourceRef)) return undefined;
-      validateFileContent(rootHandle, resourceRef, handle.doc());
-      handles.set(resourceRef, handle);
-      return handle;
+      const snapshot = source.snapshot();
+      if (snapshot.storage !== undefined && fileContent(snapshot.storage) !== undefined) {
+        handles.set(resourceRef, handle);
+      }
+      return snapshot;
     } finally {
-      if (pendingHandles.get(resourceRef) === loading) pendingHandles.delete(resourceRef);
+      source.close();
     }
   };
+  const snapshotApp = (rootEntryId: string, signal?: AbortSignal) => snapshotFilesystemApp({
+    filesystem: folder.attachment,
+    rootEntryId,
+    ...(signal === undefined ? {} : { signal }),
+    read: async (resourceRef, readSignal) => {
+      const content = await readAppFileContent(resourceRef, readSignal);
+      if (content === undefined) throw new Error(`App file content is unavailable: ${resourceRef}`);
+      return content;
+    },
+  });
   return {
     rootUrl: rootHandle.url,
     folder,
     resources,
     workspace,
     resolve,
+    snapshotApp,
     close: () => {
       closed = true;
       resolver.abort();
@@ -168,11 +205,17 @@ const validateFileContent = (
   const isSandboxFile = Object.entries(root.doc().entries).some(([entryId, entry]) =>
     entryId.startsWith(`${sandboxEntryId}:`) && entry.kind === 'file'
       && entry.resourceRef === resourceRef);
-  if (isSandboxFile && (!('kind' in doc) || doc.kind !== 'patchpit.file-content@1'
-    || !('bytes' in doc) || !(doc.bytes instanceof Uint8Array))) {
+  if (isSandboxFile && fileContent(doc) === undefined) {
     throw new Error(`Patchpit file content is invalid: ${resourceRef}`);
   }
 };
+
+const fileContent = (doc: object): AutomergeFileContentDoc | undefined =>
+  'kind' in doc && doc.kind === 'patchpit.file-content@1'
+    && 'bytes' in doc && doc.bytes instanceof Uint8Array
+    && (!('contentType' in doc) || doc.contentType === undefined || typeof doc.contentType === 'string')
+    ? doc as AutomergeFileContentDoc
+    : undefined;
 
 const validateRoot = (handle: DocHandle<AutomergeFsFolderDoc>) => {
   const doc = handle.doc();
@@ -235,6 +278,24 @@ const sandboxId = (entryId: string) => `${sandboxEntryId}:${entryId}`;
 const asObjectHandle = <T extends object>(handle: DocHandle<T>) =>
   handle as unknown as DocHandle<object>;
 const findOptions = (signal: AbortSignal | undefined) => signal === undefined ? {} : { signal };
+const abortable = async <Value>(promise: Promise<Value>, signal?: AbortSignal): Promise<Value> => {
+  if (signal === undefined) return promise;
+  signal.throwIfAborted();
+  return new Promise<Value>((resolve, reject) => {
+    const aborted = () => reject(signal.reason);
+    signal.addEventListener('abort', aborted, { once: true });
+    void promise.then(
+      (value) => {
+        signal.removeEventListener('abort', aborted);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', aborted);
+        reject(error);
+      },
+    );
+  });
+};
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 

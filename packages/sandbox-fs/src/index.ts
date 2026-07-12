@@ -7,6 +7,14 @@ import {
 } from '@patchpit/sandbox';
 import type { FsEntry } from '@patchpit/fs';
 
+export {
+  snapshotFilesystemApp,
+  type AppFileContent,
+  type AppFileContentReader,
+  type AppSnapshotResult,
+  type ImmutableAppSnapshot,
+} from './snapshot.ts';
+
 export type SandboxFsFile = {
   readonly body: SandboxDocumentBody;
   readonly contentType?: string;

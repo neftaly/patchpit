@@ -20,8 +20,8 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
   request handling.
 - URL mounts serve files with explicit content types and restrictive response
   policy headers.
-- Production URL mount ids are capability URLs and must be unguessable. Fixed
-  ids are only for local compatibility harnesses.
+- Production mount ids are unguessable UUIDs for routing and lifecycle. They
+  are not authority boundaries while trusted plugins share Patchpit's origin.
 
 ## Polyfill Rules
 
@@ -41,12 +41,14 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
   local-first by caching its bootstrap and receiving app snapshots locally.
 - `sandbox-compat` records the desired browser behavior and current expected
   failures.
-- Its current URL mount serves a build fixture, not live Patchpit filesystem
-  documents. Live launch requires an authority-complete immutable snapshot and
-  a host-owned capability URL mount; debug or development middleware is not
-  that boundary.
+- Patchpit launches an exact authority-scoped filesystem snapshot, records its
+  contributing source bases, and installs immutable responses in Cache Storage.
+  Direct HTTPS resources remain unresolved and cannot enter a launch snapshot.
 - Runtime mount lifecycle and cleanup are still owned by the caller.
+- Normal close removes a mount cache. Abnormal page termination can orphan a
+  current-version cache until browser eviction; cross-tab lease/TTL cleanup is
+  deferred with the distinct-runner design.
 - URL mounts currently support only simple `GET`/`HEAD` asset requests.
   `respond()` rejects other methods, including `OPTIONS` preflights.
-- Native workers need a separate-origin runner profile, not the max opaque
-  iframe profile.
+- Native workers are intentionally unsupported until a runner profile defines
+  their authority and network behavior.

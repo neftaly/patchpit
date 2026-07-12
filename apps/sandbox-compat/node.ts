@@ -13,8 +13,6 @@ const { id: sandboxCompatId } = sandboxCompatApp;
 const ghostscriptTigerUrl = 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg';
 let buildSnapshot: ReturnType<typeof packageSandboxCompatBuild> | undefined;
 
-export const sandboxCompatPathPrefix = `/__patchpit/sandbox/${sandboxCompatId}/`;
-
 export const readSandboxCompatBundle = () => buildSnapshot ??= packageSandboxCompatBuild();
 
 export const readSandboxCompatFiles = async () => (await readSandboxCompatBundle()).files;

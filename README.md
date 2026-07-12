@@ -1,40 +1,50 @@
 # Patchpit
 
-Patchpit is a shell for sandboxed HTML apps, sharing an automerge-backed filesystem.
+Patchpit is a browser shell for trusted HTML apps sharing an
+Automerge-backed filesystem. It projects an app folder into an immutable file
+snapshot, stores that snapshot in Cache Storage, and launches it through a
+same-origin service-worker mount so normal relative HTML, CSS, and module URLs
+work.
 
-The root prototype is a host-rendered behavior lab for source-scoped previews
-and pinned tabs. The preview harness tests the sandbox boundary independently.
+The current same-origin app profile is for trusted plugins. See
+[`packages/sandbox/SECURITY.md`](packages/sandbox/SECURITY.md) for its boundary.
 
-## Dev
+## Development
 
 Prerequisites: Node `>=24.12.0`, `pnpm@10.33.2`, and Chromium for the browser
-compat harness.
+harnesses.
 
 ```sh
 pnpm install
 pnpm dev
-pnpm build:prototype
-pnpm preview:prototype
+pnpm build
+pnpm build:sandbox-compat
+pnpm preview
 pnpm typecheck
-pnpm test
 pnpm lint
+pnpm test
 pnpm test:browser
+pnpm test:dev
 pnpm test:preview
 pnpm test:browser -- --case=fetch-relative-json
 ```
 
-Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium` if Chromium is not at
+Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium` when Chromium is not at
 `/usr/bin/chromium`.
 
-The prototype build requires the Vite preview server so sandbox responses keep
-their per-mount CORS and content-security-policy headers. Static hosting is not
-the production path; `pnpm build` remains blocked until Automerge FS owns it.
+`pnpm build` produces the static site in `dist`, including the sandbox service
+worker. `pnpm build:sandbox-compat` builds the standalone compatibility fixture.
+Set `PATCHPIT_BASE` for a subpath deployment:
 
-Validation scripts are root-owned. Package-filter commands are not wired as
-package-local workflows yet.
+```sh
+PATCHPIT_BASE=/patchpit/ pnpm build
+```
 
-Workspace package source is exported as TypeScript. Direct Node imports need the
-repo loader:
+The Pages workflow runs typecheck, lint, Node tests, both browser harnesses,
+and a `/patchpit/` preview before uploading `dist` to GitHub Pages.
+
+Workspace packages export TypeScript source. Direct Node imports use the repo
+loader:
 
 ```sh
 node --import ./scripts/register-ts-loader.mjs your-script.mjs

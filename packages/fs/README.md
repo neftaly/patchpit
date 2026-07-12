@@ -1,65 +1,58 @@
 # @patchpit/fs
 
-## API
+`@patchpit/fs` exposes filesystem metadata as a Tarstate relation. It does not
+store file bodies or define a nested tree document format.
 
-- `@patchpit/fs/tree`: tree shape and tree helpers.
+## Relation
 
-Schema, row, and query modules are package-internal while the filesystem read
-shape settles.
+The sealed `patchpit.fs.entry` relation has these fields:
 
-## Filesystem Shape
+| Field | Meaning |
+| --- | --- |
+| `entryId` | Stable logical entry ID and relation key |
+| `parentId` | Parent entry ID, or `null` for a root |
+| `order` | Integer order among siblings |
+| `kind` | `folder` or `file` |
+| `name` | Mutable entry name |
+| `resourceRef` | Reference to the folder or file resource |
 
-The input tree follows the current [pushwork](https://github.com/inkandswitch/pushwork/)
-folder shape closely.
+Queries add `sourceId` from Tarstate attachment provenance. Parent traversal is
+restricted to entries from that same source.
+
+## Exports
+
+- `fsSchemaArtifact`, `fsEntriesRelation`, and `parseFsEntry` describe and
+  validate relation rows.
+- `createFsAttachment` adapts an observable source and projection into a
+  filesystem attachment.
+- `staticFsAttachment` creates an exact attachment from a `FsDocument`.
+- `openFsEntries` observes entries across a list of attachments.
+- `openFsSubtree` observes one folder and its recursive descendants within one
+  attachment.
+- `FsAttachment`, `FsDocument`, `FsEntry`, and `FsEntryRow` are the exported
+  public types.
+
+Both query functions return `{ observer, close }`. Consumers read readiness,
+completeness, issues, basis, and rows from `observer.getSnapshot()` and call
+`close()` when finished.
 
 ```ts
-type FsTree =
-  | {
-      kind: 'dir';
-      entries: readonly (readonly [name: string, tree: FsTree])[];
-    }
-  | {
-      kind: 'file';
-      src: string;
-    };
+import { openFsEntries, staticFsAttachment } from '@patchpit/fs';
+
+const attachment = staticFsAttachment({
+  sourceId: 'workspace',
+  entries: [
+    {
+      entryId: 'root',
+      parentId: null,
+      order: 0,
+      kind: 'folder',
+      name: 'workspace',
+      resourceRef: 'automerge:root',
+    },
+  ],
+});
+const query = openFsEntries([attachment]);
+const snapshot = query.observer.getSnapshot();
+query.close();
 ```
-
-The root has no name until mounted. Duplicate, empty, and slash-containing names
-are preserved as data.
-
-Example:
-
-```json
-{
-  "kind": "dir",
-  "entries": [
-    ["README.md", { "kind": "file", "src": "automerge:readme" }],
-    ["ghostscript-tiger.svg", {
-      "kind": "file",
-      "src": "https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg"
-    }],
-    ["src", {
-      "kind": "dir",
-      "entries": [
-        ["main.ts", { "kind": "file", "src": "automerge:main#head1|head2" }]
-      ]
-    }]
-  ]
-}
-```
-
-## Rows
-
-Internally, `@patchpit/fs` turns the tree into Tarstate `nodes` rows:
-
-- `key`: structural address as ordered child indexes.
-- `parentKey`: parent structural key, or `null` for root.
-- `position`: child order from the keyed tree.
-- `name`: entry key/name.
-- `kind`: `dir` or `file`.
-- `src`: file source string.
-
-## Boundaries
-
-This package turns tree metadata into Tarstate rows. Behavior examples live in
-`src/fs.test.ts`.

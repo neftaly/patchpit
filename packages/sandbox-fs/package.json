@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@patchpit/fs": "workspace:*",
-    "@patchpit/sandbox": "workspace:*"
+    "@patchpit/sandbox": "workspace:*",
+    "@tarstate/core": "file:../../vendor/tarstate/tarstate-core-0.2.2.tgz"
   }
 }

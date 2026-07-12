@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { sandboxCompatApp } from '../apps/sandbox-compat/app.ts';
-import { createSandboxFrameAttributes } from '@patchpit/sandbox';
+import type { SandboxFrameAttributes } from '@patchpit/sandbox';
 import {
   resourceByRef,
   resourceRows,
@@ -33,6 +33,7 @@ import {
   type WorkspaceSplitIds,
 } from './workspace.ts';
 import type { PatchpitRuntime } from './patchpit-runtime.ts';
+import type { BrowserSandboxHost } from './browser-sandbox-host.ts';
 import './app.css';
 
 export const filesAppUrl = 'files.html';
@@ -42,7 +43,10 @@ const tabDragType = 'application/x-patchpit-context';
 const resourceDragType = 'application/x-patchpit-resource';
 export const sandboxCompatAppUrl = `${sandboxCompatApp.id}/${sandboxCompatEntryId}`;
 
-export function App({ runtime }: { readonly runtime: PatchpitRuntime }) {
+export function App({ runtime, sandboxHost }: {
+  readonly runtime: PatchpitRuntime;
+  readonly sandboxHost: BrowserSandboxHost;
+}) {
   const resourceRuntime = runtime.resources;
   const workspaceRuntime = runtime.workspace;
   const resourceSnapshot = useSyncExternalStore(
@@ -74,7 +78,9 @@ export function App({ runtime }: { readonly runtime: PatchpitRuntime }) {
     if (appUrl === filesAppUrl) {
       return <Resources onShow={showResource} resources={resources} />;
     }
-    if (appUrl === sandboxCompatAppUrl) return <SandboxApp />;
+    if (appUrl === sandboxCompatAppUrl) {
+      return <SandboxApp host={sandboxHost} runtime={runtime} />;
+    }
     const src = appUrl === undefined ? undefined : viewerSource(appUrl);
     const resource = src === undefined ? undefined : resourceByRef(resources, src);
     if (resource === undefined) return null;
@@ -466,19 +472,42 @@ function Viewer({ resourceRef, runtime }: {
   return <pre className="viewer">{viewerContent(doc, resourceRef)}</pre>;
 }
 
-function SandboxApp() {
-  const runner = new URL(
-    import.meta.env.VITE_PATCHPIT_RUNNER_URL ?? import.meta.env.BASE_URL,
-    window.location.origin,
-  );
-  const baseRoute = runner.pathname.split('/').filter((segment) => segment !== '');
-  const frame = createSandboxFrameAttributes({
-    baseUrl: runner,
-    entry: sandboxCompatApp.entry,
-    mountId: sandboxCompatApp.id,
-    route: [...baseRoute, '__patchpit', 'sandbox'],
-  });
-  return <iframe className="sandbox-app" title="Sandbox Compat" {...frame} />;
+function SandboxApp({ host, runtime }: {
+  readonly host: BrowserSandboxHost;
+  readonly runtime: PatchpitRuntime;
+}) {
+  const [frame, setFrame] = useState<SandboxFrameAttributes>();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    let close: (() => Promise<void>) | undefined;
+    setFrame(undefined);
+    setFailed(false);
+    void runtime.snapshotApp(sandboxCompatApp.id, controller.signal).then(async (snapshot) => {
+      if (snapshot.state !== 'ready') throw new Error('Sandbox app snapshot is unavailable');
+      const mount = await host.install({
+        entry: sandboxCompatApp.entry,
+        files: snapshot.files.map((file) => ({
+          path: file.path,
+          read: () => ({
+            body: file.body,
+            ...(file.contentType === undefined ? {} : { contentType: file.contentType }),
+          }),
+        })),
+      }, controller.signal);
+      close = mount.close;
+      if (!controller.signal.aborted) setFrame(mount.frameAttributes);
+    }).catch(() => {
+      if (!controller.signal.aborted) setFailed(true);
+    });
+    return () => {
+      controller.abort();
+      void close?.();
+    };
+  }, [host, runtime]);
+  return frame === undefined
+    ? failed ? <p role="alert">App unavailable.</p> : null
+    : <iframe className="sandbox-app" title="Sandbox Compat" {...frame} />;
 }
 
 const contextLabel = (resources: readonly Resource[], appUrl: string | undefined) => {

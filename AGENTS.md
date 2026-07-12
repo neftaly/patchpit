@@ -9,7 +9,8 @@ writers at boundaries.
 
 ## Tarstate Direction
 
-Tarstate v1 is the target but is not wired here yet. Do not call hypothetical
+Tarstate v1 is consumed through temporary local package builds while its Repo
+adapter and readiness API remain uncommitted upstream. Do not call hypothetical
 APIs or build Patchpit-local substitutes; pause or escalate dependent work.
 
 The target boundary keeps application data in canonical Automerge documents or

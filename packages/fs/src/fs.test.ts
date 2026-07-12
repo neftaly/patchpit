@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { openFsEntries, staticFsAttachment } from './database.ts';
+import { openFsEntries, openFsSubtree, staticFsAttachment } from './database.ts';
 
 void test('filesystem query keeps stable local IDs scoped by source', () => {
   const runtime = openFsEntries([
@@ -30,5 +30,31 @@ void test('filesystem query keeps stable local IDs scoped by source', () => {
   ]);
   assert.equal(new Set(snapshot.current.resultKeys).size, 5);
 
+  runtime.close();
+});
+
+void test('filesystem subtree query is recursive and source-authority scoped', () => {
+  const selected = staticFsAttachment({
+    sourceId: 'selected',
+    entries: [
+      { entryId: 'app', parentId: null, order: 0, kind: 'folder', name: 'app', resourceRef: 'folder:app' },
+      { entryId: 'index', parentId: 'app', order: 0, kind: 'file', name: 'index.html', resourceRef: 'content:index' },
+      { entryId: 'assets', parentId: 'app', order: 1, kind: 'folder', name: 'assets', resourceRef: 'folder:assets' },
+      { entryId: 'icon', parentId: 'assets', order: 0, kind: 'file', name: 'icon.svg', resourceRef: 'content:icon' },
+      { entryId: 'outside', parentId: null, order: 1, kind: 'file', name: 'outside.txt', resourceRef: 'content:outside' },
+    ],
+  });
+  const runtime = openFsSubtree(selected, 'app');
+  const snapshot = runtime.observer.getSnapshot();
+
+  assert.equal(snapshot.state, 'open');
+  assert.equal(snapshot.current.readiness, 'ready');
+  assert.equal(snapshot.current.completeness, 'exact');
+  assert.deepEqual(snapshot.current.rows.map(({ entryId, sourceId }) => [entryId, sourceId]), [
+    ['app', 'selected'],
+    ['assets', 'selected'],
+    ['icon', 'selected'],
+    ['index', 'selected'],
+  ]);
   runtime.close();
 });

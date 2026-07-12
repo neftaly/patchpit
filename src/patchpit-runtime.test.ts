@@ -128,3 +128,41 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
   );
   await repo.shutdown();
 });
+
+void test('Patchpit runtime snapshots valid app bytes and preserves invalid content evidence', async () => {
+  const repo = new Repo({ network: [] });
+  const runtime = await createRoot({
+    repo,
+    initialContext: 'files.html',
+    files: [{
+      bytes: [1, 2, 3],
+      contentType: 'application/octet-stream',
+      entryId: 'index.html',
+      name: 'index.html',
+      order: 0,
+      parentId: null,
+      resourceRef: 'sandbox-compat:index.html',
+    }],
+  });
+  const ready = await runtime.snapshotApp('sandbox-compat');
+  assert.equal(ready.state, 'ready');
+  if (ready.state !== 'ready') throw new Error('Expected ready app snapshot');
+  assert.deepEqual(
+    [...new Uint8Array(await ready.files[0]!.body.arrayBuffer())],
+    [1, 2, 3],
+  );
+
+  const resources = runtime.resources.observer.getSnapshot();
+  assert.equal(resources.state, 'open');
+  if (resources.state !== 'open') throw new Error('Resource query closed');
+  const resourceRef = resources.current.rows.find(({ entryId }) =>
+    entryId === 'sandbox-compat:index.html')!.resourceRef;
+  const handle = (await runtime.resolve(resourceRef))!;
+  handle.change((doc) => {
+    (doc as unknown as { bytes: unknown }).bytes = [4, 5];
+  });
+  assert.equal((await runtime.snapshotApp('sandbox-compat')).state, 'invalid');
+
+  runtime.close();
+  await repo.shutdown();
+});

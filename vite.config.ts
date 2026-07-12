@@ -1,12 +1,6 @@
 import { fileURLToPath } from 'node:url';
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import babel from '@rolldown/plugin-babel';
-import {
-  createSandboxCompatMount,
-  readSandboxCompatBundle,
-  sandboxCompatPathPrefix,
-} from './apps/sandbox-compat/node.ts';
-import { respondWithSandboxUrlMount } from '@patchpit/sandbox/node';
+import { readSandboxCompatBundle } from './apps/sandbox-compat/node.ts';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
@@ -18,8 +12,14 @@ export default defineConfig({
   base: process.env.PATCHPIT_BASE ?? '/',
   build: {
     rollupOptions: {
-      input: { index: repoPath('index.html') },
+      input: {
+        index: repoPath('index.html'),
+        sandboxServiceWorker: repoPath('src/sandbox-service-worker.ts'),
+      },
       output: {
+        entryFileNames: ({ name }) => name === 'sandboxServiceWorker'
+          ? '__patchpit/sandbox/service-worker.js'
+          : 'assets/[name]-[hash].js',
         manualChunks: (id) => id.includes('@automerge')
           || id.includes('@tarstate+automerge')
           || id.includes('/@tarstate/automerge/')
@@ -30,8 +30,29 @@ export default defineConfig({
     target: 'esnext',
   },
   optimizeDeps: { exclude: ['@automerge/automerge'] },
-  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), sandboxCompatPlugin()],
+  plugins: [
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
+    sandboxServiceWorkerPlugin(),
+    sandboxCompatPlugin(),
+  ],
 });
+
+function sandboxServiceWorkerPlugin(): Plugin {
+  return {
+    name: 'patchpit-sandbox-service-worker',
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const path = `${server.config.base}__patchpit/sandbox/service-worker.js`;
+        if (request.url?.split('?', 1)[0] !== path) return next();
+        const result = await server.transformRequest('/src/sandbox-service-worker.ts');
+        if (result === null) return next();
+        response.setHeader('Content-Type', 'text/javascript');
+        response.end(result.code);
+      });
+    },
+  };
+}
 
 function sandboxCompatPlugin(): Plugin {
   return {
@@ -42,53 +63,12 @@ function sandboxCompatPlugin(): Plugin {
     async load(id) {
       if (id !== resolvedSandboxCompatBundleId) return;
       const { packageFiles } = await readSandboxCompatBundle();
-      const files = packageFiles.map(({ bytes, ...file }) => ({ ...file, bytes: [...bytes] }));
+      const files = packageFiles.map(({ bytes, ...file }) => ({
+        ...file,
+        bytes: [...bytes],
+        resourceRef: `sandbox-compat:${file.entryId}`,
+      }));
       return `export default ${JSON.stringify({ files })}`;
     },
-    async generateBundle() {
-      const { packageFiles } = await readSandboxCompatBundle();
-      for (const { bytes, name } of packageFiles) {
-        this.emitFile({
-          type: 'asset',
-          fileName: `${sandboxCompatPathPrefix.slice(1)}${name}`,
-          source: bytes,
-        });
-      }
-    },
-    configureServer(server) {
-      server.middlewares.use(sandboxCompatMiddleware);
-    },
-    configurePreviewServer(server) {
-      const staticPrefix = `${server.config.base}${sandboxCompatPathPrefix.slice(1)}`;
-      server.middlewares.use((request, response, next) => {
-        if (request.url?.startsWith(staticPrefix)) response.setHeader('Access-Control-Allow-Origin', '*');
-        next();
-      });
-      server.middlewares.use(sandboxCompatMiddleware);
-    },
   };
-}
-
-async function sandboxCompatMiddleware(
-  request: IncomingMessage,
-  response: ServerResponse,
-  next: () => void,
-) {
-  if (!request.url?.startsWith(sandboxCompatPathPrefix)) return next();
-  const baseUrl = requestBaseUrl(request);
-  if (baseUrl === undefined) {
-    response.writeHead(400, { 'Content-Type': 'text/plain' }).end('Invalid Host header');
-    return;
-  }
-  const mount = await createSandboxCompatMount(baseUrl);
-  if (await respondWithSandboxUrlMount(mount, request, response)) return;
-  response.writeHead(404).end();
-}
-
-function requestBaseUrl(request: IncomingMessage): URL | undefined {
-  try {
-    return new URL('/', `http://${request.headers.host ?? 'localhost'}`);
-  } catch {
-    return undefined;
-  }
 }
