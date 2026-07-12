@@ -83,7 +83,7 @@ void test('creates sandbox URL mounts that serve planned files', async () => {
   assert.match(response?.headers.get('Content-Security-Policy') ?? '', /sandbox allow-scripts allow-same-origin/);
   assert.match(
     response?.headers.get('Content-Security-Policy') ?? '',
-    /connect-src https:\/\/patchpit\.test\/__patchpit\/sandbox\/mount-1\//,
+    /connect-src 'self'/,
   );
   assert.equal(await response?.text(), '<svg />');
 

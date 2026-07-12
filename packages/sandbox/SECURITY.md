@@ -20,6 +20,9 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
   request handling.
 - URL mounts serve files with explicit content types and restrictive response
   policy headers.
+- Response CSP uses same-origin sources because Firefox resolves synthesized
+  service-worker responses against the worker URL. This does not weaken the
+  stated trusted-plugin boundary; mount routing remains UUID-scoped.
 - Production mount ids are unguessable UUIDs for routing and lifecycle. They
   are not authority boundaries while trusted plugins share Patchpit's origin.
 

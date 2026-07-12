@@ -73,7 +73,6 @@ export const createSandboxUrlMount = ({
   const base = new URL(baseUrl);
   const mountOrigin = base.origin;
   const scopePath = sandboxMountScopePath(route, mountId);
-  const mountSource = `${mountOrigin}${scopePath}`;
 
   return {
     frameAttributes: createSandboxFrameAttributes({ baseUrl, entry, mountId, route }),
@@ -82,18 +81,17 @@ export const createSandboxUrlMount = ({
       if (url.origin !== mountOrigin) return undefined;
       if (!url.pathname.startsWith(scopePath)) return undefined;
       if (request.method !== "GET" && request.method !== "HEAD")
-        return sandboxResponse("Method not allowed", 405, "text/plain", mountSource, {
+        return sandboxResponse("Method not allowed", 405, "text/plain", {
           Allow: "GET, HEAD",
         });
       const path = sandboxPathKey(url.pathname.slice(scopePath.length));
       const content = path === undefined ? undefined : await mountFiles.get(path)?.read();
       if (content === undefined)
-        return sandboxResponse("Not found", 404, "text/plain", mountSource);
+        return sandboxResponse("Not found", 404, "text/plain");
       return sandboxResponse(
         request.method === "HEAD" ? null : content.body,
         200,
         content.contentType ?? defaultSandboxContentType,
-        mountSource,
       );
     },
     scopePath,
@@ -147,13 +145,12 @@ const sandboxResponse = (
   body: BodyInit | null,
   status: number,
   contentType: string,
-  mountSource: string,
   headers: Record<string, string> = {},
 ): Response =>
   new Response(body, {
     headers: {
       "Access-Control-Allow-Origin": "*",
-      "Content-Security-Policy": sandboxUrlMountContentSecurityPolicy(mountSource),
+      "Content-Security-Policy": sandboxUrlMountContentSecurityPolicy,
       "Content-Type": contentType,
       "Timing-Allow-Origin": "*",
       "X-Content-Type-Options": "nosniff",
@@ -162,21 +159,19 @@ const sandboxResponse = (
     status,
   });
 
-const sandboxUrlMountContentSecurityPolicy = (
-  mountSource: string,
-): string =>
+const sandboxUrlMountContentSecurityPolicy =
   [
     `default-src 'none'`,
     `sandbox allow-scripts allow-same-origin`,
     `base-uri 'none'`,
-    `connect-src ${mountSource}`,
-    `font-src ${mountSource} data:`,
+    `connect-src 'self'`,
+    `font-src 'self' data:`,
     `form-action 'none'`,
-    `frame-src ${mountSource}`,
-    `img-src ${mountSource} data:`,
-    `media-src ${mountSource}`,
+    `frame-src 'self'`,
+    `img-src 'self' data:`,
+    `media-src 'self'`,
     `object-src 'none'`,
-    `script-src 'unsafe-inline' ${mountSource}`,
-    `style-src 'unsafe-inline' ${mountSource}`,
+    `script-src 'unsafe-inline' 'self'`,
+    `style-src 'unsafe-inline' 'self'`,
     `worker-src 'none'`,
   ].join("; ");
