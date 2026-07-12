@@ -37,7 +37,7 @@ try {
       if (event.data?.type === 'sandbox-compat:report') window.__sandboxCompatReport = event.data;
     });
   });
-  await page.goto(url);
+  await page.goto(`${url}#${JSON.stringify({ delegation: 'placeholder:beelay' })}`);
   await page.evaluate((src) => {
     const iframe = document.createElement('iframe');
     iframe.hidden = true;
@@ -61,13 +61,16 @@ try {
 }
 
 async function proveWorkspaceBehavior(page) {
-  const resource = (source, name) => page.locator('.resource-group', { hasText: source })
-    .locator('.resource', { hasText: name });
+  const resource = (_source, name) => page.locator('.resource', { hasText: name });
   const tab = (name) => page.locator('.tab', { hasText: name });
   const drag = (...args) => dragWithTargetPreview(page, ...args);
   const dragTab = (source, target, expected) => drag(source, target, 'data-drop-target', expected, 0.99);
   await resource('patchpit', 'workspace.am').waitFor();
   await resource('sandbox-compat', 'ghostscript-tiger.svg').waitFor();
+  const invocation = JSON.parse(decodeURIComponent(new URL(page.url()).hash.slice(1)));
+  assert.equal(invocation.src.startsWith('automerge:'), true);
+  assert.deepEqual(invocation.sync, ['wss://sync.automerge.org']);
+  assert.equal(invocation.delegation, 'placeholder:beelay');
   const leftPane = page.locator('[data-pane="left"]');
   const rightPane = page.locator('[data-pane="right"]');
   const rootSplit = page.locator('[data-node="split-0"]');
@@ -78,8 +81,11 @@ async function proveWorkspaceBehavior(page) {
   assert(Math.abs((leftBounds.width / rootBounds.width) - 0.2) < 0.02);
   assert(frameBounds.width > 0);
   assert.equal(await page.locator('.sandbox-app').getAttribute('sandbox'), 'allow-scripts');
+  const sandboxSrc = await page.locator('.sandbox-app').getAttribute('src');
+  assert.equal(sandboxSrc?.includes('placeholder:beelay'), false);
+  assert.equal(sandboxSrc?.includes('sync.automerge.org'), false);
   await tab('sandbox-compat / index.html').waitFor();
-  assert.equal(await tab('sandbox-compat / index.html').getAttribute('data-context'), 'sandbox-compat/index.html');
+  assert.notEqual(await tab('sandbox-compat / index.html').getAttribute('data-context'), null);
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
   await drag(
     tab('sandbox-compat / index.html'),
@@ -93,7 +99,16 @@ async function proveWorkspaceBehavior(page) {
   await resource('patchpit', 'workspace.am').click();
   const workspaceViewer = page.locator('.viewer');
   await workspaceViewer.waitFor();
-  assert.equal(JSON.parse(await workspaceViewer.textContent()).nodes['split-0'].ratio, 0.2);
+  const workspaceDocument = JSON.parse(await workspaceViewer.textContent());
+  assert.equal(workspaceDocument.nodes['split-0'].ratio, 0.2);
+  const viewerUrl = Object.values(workspaceDocument.contexts)
+    .map((context) => context.url)
+    .find((url) => url.startsWith('viewer.html#'));
+  assert(viewerUrl !== undefined);
+  assert.equal(JSON.parse(viewerUrl.slice('viewer.html#'.length)).src.startsWith('automerge:'), true);
+  assert(await workspaceViewer.evaluate((viewer) => viewer.scrollHeight > viewer.clientHeight));
+  await workspaceViewer.evaluate((viewer) => { viewer.scrollTop = viewer.scrollHeight; });
+  assert(await workspaceViewer.evaluate((viewer) => viewer.scrollTop > 0));
 
   const resizeHandle = rootSplit.locator(':scope > .resize-handle');
   const handleBounds = await resizeHandle.boundingBox();
@@ -151,7 +166,9 @@ async function proveWorkspaceBehavior(page) {
     'left',
     0.01,
   );
-  const splitPane = page.locator('[data-pane="pane-1"]');
+  const splitPane = page.locator('.pane', { has: tab('sandbox-compat / frame.html') });
+  const splitPaneId = await splitPane.getAttribute('data-pane');
+  assert(splitPaneId !== null);
   assert.equal(await page.locator('.pane').count(), 3);
   assert.deepEqual(await splitPane.locator('.tab').allTextContents(), ['sandbox-compat / frame.html']);
   await drag(
@@ -163,7 +180,10 @@ async function proveWorkspaceBehavior(page) {
     0.99,
   );
   assert.equal(await page.locator('.pane').count(), 4);
-  assert.deepEqual(await page.locator('[data-pane="pane-2"] .tab').allTextContents(), [
+  const workerPane = page.locator('.pane', { has: tab('sandbox-compat / worker.js') });
+  const workerPaneId = await workerPane.getAttribute('data-pane');
+  assert(workerPaneId !== null);
+  assert.deepEqual(await workerPane.locator('.tab').allTextContents(), [
     'sandbox-compat / worker.js',
   ]);
   await resource('sandbox-compat', 'css-url.css').click();
@@ -198,14 +218,14 @@ async function proveWorkspaceBehavior(page) {
     'sandbox-compat / data.json',
   ]);
   await drag(
-    page.locator('[data-pane="pane-2"] .tab'),
+    page.locator(`[data-pane="${workerPaneId}"] .tab`),
     rightPane.locator('.pane-content'),
     'data-drop-zone',
     'center',
     0.5,
   );
   assert.equal(await page.locator('.pane').count(), 3);
-  assert.equal(await page.locator('[data-pane="pane-2"]').count(), 0);
+  assert.equal(await page.locator(`[data-pane="${workerPaneId}"]`).count(), 0);
   assert.deepEqual(await rightPane.locator('.tab').allTextContents(), [
     'sandbox-compat / index.html',
     'sandbox-compat / css-import.css',
@@ -213,7 +233,7 @@ async function proveWorkspaceBehavior(page) {
     'sandbox-compat / worker.js',
   ]);
   await page.getByRole('button', { name: 'Close sandbox-compat / frame.html' }).click();
-  assert.equal(await page.locator('[data-pane="pane-1"]').count(), 0);
+  assert.equal(await page.locator(`[data-pane="${splitPaneId}"]`).count(), 0);
   assert.equal(await page.locator('.pane').count(), 2);
 }
 

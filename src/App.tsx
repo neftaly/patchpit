@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -10,17 +11,16 @@ import {
 import { sandboxCompatApp } from '../apps/sandbox-compat/app.ts';
 import { createSandboxFrameAttributes } from '@patchpit/sandbox';
 import {
-  openResources,
-  resourceById,
-  resourceContent,
-  resourceGroups,
-  resourceId,
+  resourceByRef,
+  resourceRows,
   resourcesFromSnapshot,
   type Resource,
 } from './resources.ts';
 import {
+  addContext,
   activateContext,
   closeContext,
+  contextIdForUrl,
   moveContext,
   openContext,
   previewContext,
@@ -30,51 +30,55 @@ import {
   type WorkspacePane,
   type WorkspaceSplitEdge,
   type WorkspaceState,
+  type WorkspaceSplitIds,
 } from './workspace.ts';
-import { openWorkspace } from './workspace-runtime.ts';
+import type { PatchpitRuntime } from './patchpit-runtime.ts';
 import './app.css';
 
-const resourceListContextId = 'resources';
+export const filesAppUrl = 'files.html';
 const sandboxCompatEntryId = sandboxCompatApp.entry.join('/');
+const sandboxCompatResourceId = `${sandboxCompatApp.id}:${sandboxCompatEntryId}`;
 const tabDragType = 'application/x-patchpit-context';
 const resourceDragType = 'application/x-patchpit-resource';
-const sandboxCompatContextId = resourceId(sandboxCompatApp.id, sandboxCompatEntryId);
-const workspaceRuntime = openWorkspace(resourceListContextId, sandboxCompatContextId);
-const resourceRuntime = openResources([workspaceRuntime.attachment]);
+export const sandboxCompatAppUrl = `${sandboxCompatApp.id}/${sandboxCompatEntryId}`;
 
-export function App() {
+export function App({ runtime }: { readonly runtime: PatchpitRuntime }) {
+  const resourceRuntime = runtime.resources;
+  const workspaceRuntime = runtime.workspace;
   const resourceSnapshot = useSyncExternalStore(
     (listener) => resourceRuntime.observer.subscribe(listener),
     () => resourceRuntime.observer.getSnapshot(),
     () => resourceRuntime.observer.getSnapshot(),
   );
   const resources = resourcesFromSnapshot(resourceSnapshot);
-  const { workspace } = useSyncExternalStore(
+  const workspace = useSyncExternalStore(
     workspaceRuntime.subscribe,
     workspaceRuntime.getSnapshot,
     workspaceRuntime.getSnapshot,
   );
-  const workspaceContent = JSON.stringify(workspace, null, 2);
   const [drag, setDrag] = useState<DraggedContext>();
   const showResource = (resource: Resource, pinned: boolean) => {
     if (resource.kind !== 'file') return;
-    const contextId = resourceId(resource.sourceId, resource.localId);
-    void workspaceRuntime.update((current) => (
-      pinned ? openContext : previewContext
-    )(current, contextId, documentPaneId(current)));
+    const url = appUrlForResource(resource);
+    const allocated = allocateWorkspaceIds();
+    void workspaceRuntime.update((current) => {
+      const paneId = documentPaneId(current) ?? allocated.nodes.paneId;
+      const contextId = contextIdForUrl(current, url, paneId) ?? allocated.contextId;
+      const registered = addContext(current, contextId, url);
+      return (pinned ? openContext : previewContext)(registered, contextId, paneId, allocated.nodes.splitId);
+    });
   };
 
   const renderContext = (contextId: string): ReactNode => {
-    if (contextId === resourceListContextId) {
+    const appUrl = workspace.contexts[contextId]?.url;
+    if (appUrl === filesAppUrl) {
       return <Resources onShow={showResource} resources={resources} />;
     }
-    const resource = resourceById(resources, contextId);
+    if (appUrl === sandboxCompatAppUrl) return <SandboxApp />;
+    const src = appUrl === undefined ? undefined : viewerSource(appUrl);
+    const resource = src === undefined ? undefined : resourceByRef(resources, src);
     if (resource === undefined) return null;
-    return resource.sourceId === sandboxCompatApp.id && resource.localId === sandboxCompatEntryId
-      ? <SandboxApp />
-      : <Viewer content={resource.resourceRef === workspaceRuntime.resourceRef
-        ? workspaceContent
-        : resourceContent(resource)} />;
+    return <Viewer resourceRef={resource.resourceRef} runtime={runtime} />;
   };
   const dropContext = (paneId: WorkspacePaneId, target: PaneDropTarget) => {
     if (drag === undefined) return;
@@ -90,7 +94,7 @@ export function App() {
           key={nodeId}
           canDrop={(target) => drag !== undefined && applyDrop(workspace, drag, nodeId, target) !== workspace}
           shielded={drag !== undefined && drag.unshieldedPane !== nodeId}
-          labelContext={(contextId) => contextLabel(resources, contextId)}
+          labelContext={(contextId) => contextLabel(resources, workspace.contexts[contextId]?.url)}
           onActivate={(contextId) => {
             void workspaceRuntime.update((current) => activateContext(current, nodeId, contextId));
           }}
@@ -124,13 +128,20 @@ export function App() {
       onDragEnd={() => setDrag(undefined)}
       onDragStart={(event) => {
         const source = event.target instanceof Element ? event.target.closest<HTMLElement>('.pane') : null;
-        const resourceContext = event.dataTransfer.getData(resourceDragType);
-        const contextId = resourceContext || event.dataTransfer.getData(tabDragType);
+        const resourceRef = event.dataTransfer.getData(resourceDragType);
+        const resource = resourceRef === '' ? undefined : resourceByRef(resources, resourceRef);
+        const url = resource === undefined ? undefined : appUrlForResource(resource);
+        const allocated = allocateWorkspaceIds();
+        const contextId = url === undefined
+          ? event.dataTransfer.getData(tabDragType)
+          : allocated.contextId;
         if (contextId !== '') {
           setDrag({
             contextId,
-            open: resourceContext !== '',
-            unshieldedPane: resourceContext === '' ? null : source?.dataset.pane ?? null,
+            nodes: allocated.nodes,
+            open: resource !== undefined,
+            unshieldedPane: resource === undefined ? null : source?.dataset.pane ?? null,
+            url,
           });
         }
       }}
@@ -143,8 +154,10 @@ export function App() {
 type ContentDropZone = WorkspaceSplitEdge | 'center';
 type DraggedContext = {
   readonly contextId: string;
+  readonly nodes: WorkspaceSplitIds;
   readonly open: boolean;
   readonly unshieldedPane: string | null;
+  readonly url: string | undefined;
 };
 type PaneDropTarget = { readonly beforeContext: string | undefined } | {
   readonly zone: ContentDropZone;
@@ -156,11 +169,16 @@ const applyDrop = (
   paneId: WorkspacePaneId,
   target: PaneDropTarget,
 ) => {
-  if ('zone' in target && target.zone !== 'center') {
-    return splitContext(workspace, drag.contextId, paneId, target.zone);
-  }
-  const opened = drag.open ? openContext(workspace, drag.contextId, paneId) : workspace;
-  return moveContext(opened, drag.contextId, paneId, 'beforeContext' in target ? target.beforeContext : undefined);
+  const registered = drag.url === undefined ? workspace : addContext(workspace, drag.contextId, drag.url);
+  const dropped = 'zone' in target && target.zone !== 'center'
+    ? splitContext(registered, drag.contextId, paneId, target.zone, drag.nodes)
+    : moveContext(
+        drag.open ? openContext(registered, drag.contextId, paneId) : registered,
+        drag.contextId,
+        paneId,
+        'beforeContext' in target ? target.beforeContext : undefined,
+      );
+  return dropped === registered && registered !== workspace ? workspace : dropped;
 };
 
 function Split({ axis, first, nodeId, onResize, ratio, second }: {
@@ -362,46 +380,44 @@ function Resources({ onShow, resources }: {
 }) {
   return (
     <section className="view">
-      {resourceGroups(resources).map((group) => (
-        <div className="resource-group" key={group.sourceId}>
-          <div className="resource resource-folder resource-source" style={treeDepthStyle(0)}>
-            <span aria-hidden="true" className="resource-icon">📂</span>
-            <span className="resource-name">{group.sourceId}</span>
-          </div>
-          {group.rows.map(({ depth, resource }) => {
-            const label = (
-              <>
-                <span aria-hidden="true" className="resource-icon">{resourceIcon(resource)}</span>
-                <span className="resource-name">{resource.name}</span>
-              </>
-            );
-            return resource.kind === 'folder'
-              ? (
-                  <div
-                    className="resource resource-folder"
-                    key={resource.localId}
-                    style={treeDepthStyle(depth + 1)}
-                  >
-                    {label}
-                  </div>
-                )
-              : (
-                  <button
-                    className="resource"
-                    draggable
-                    key={resource.localId}
-                    onClick={() => onShow(resource, false)}
-                    onDoubleClick={() => onShow(resource, true)}
-                    onDragStart={(event) => event.dataTransfer.setData(resourceDragType, resourceId(resource.sourceId, resource.localId))}
-                    style={treeDepthStyle(depth + 1)}
-                    type="button"
-                  >
-                    {label}
-                  </button>
-                );
-          })}
+      <div className="resource-group">
+        <div className="resource resource-folder resource-source" style={treeDepthStyle(0)}>
+          <span aria-hidden="true" className="resource-icon">📂</span>
+          <span className="resource-name">patchpit</span>
         </div>
-      ))}
+        {resourceRows(resources).map(({ depth, resource }) => {
+          const label = (
+            <>
+              <span aria-hidden="true" className="resource-icon">{resourceIcon(resource)}</span>
+              <span className="resource-name">{resource.name}</span>
+            </>
+          );
+          return resource.kind === 'folder'
+            ? (
+                <div
+                  className="resource resource-folder"
+                  key={resource.localId}
+                  style={treeDepthStyle(depth + 1)}
+                >
+                  {label}
+                </div>
+              )
+            : (
+                <button
+                  className="resource"
+                  draggable
+                  key={resource.localId}
+                  onClick={() => onShow(resource, false)}
+                  onDoubleClick={() => onShow(resource, true)}
+                  onDragStart={(event) => event.dataTransfer.setData(resourceDragType, resource.resourceRef)}
+                  style={treeDepthStyle(depth + 1)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              );
+        })}
+      </div>
     </section>
   );
 }
@@ -422,10 +438,32 @@ const resourceIcon = (resource: Resource) => {
   return '📄';
 };
 
-function Viewer({ content }: {
-  readonly content: unknown;
+function Viewer({ resourceRef, runtime }: {
+  readonly resourceRef: string;
+  readonly runtime: PatchpitRuntime;
 }) {
-  return <pre className="viewer">{String(content)}</pre>;
+  const [handle, setHandle] = useState<Awaited<ReturnType<PatchpitRuntime['resolve']>>>();
+  useEffect(() => {
+    let current = true;
+    setHandle(undefined);
+    void runtime.resolve(resourceRef).then((resolved) => {
+      if (current) setHandle(resolved);
+    }, () => {
+      if (current) setHandle(undefined);
+    });
+    return () => { current = false; };
+  }, [resourceRef, runtime]);
+  const doc = useSyncExternalStore(
+    (listener) => {
+      if (handle === undefined) return () => undefined;
+      const changed = () => { listener(); };
+      handle.on('heads-changed', changed);
+      return () => { handle.off('heads-changed', changed); };
+    },
+    () => handle?.doc(),
+    () => handle?.doc(),
+  );
+  return <pre className="viewer">{viewerContent(doc, resourceRef)}</pre>;
 }
 
 function SandboxApp() {
@@ -439,12 +477,48 @@ function SandboxApp() {
   return <iframe className="sandbox-app" title="Sandbox Compat" {...frame} />;
 }
 
-const contextLabel = (resources: readonly Resource[], contextId: string) => {
-  const resource = resourceById(resources, contextId);
-  return resource === undefined ? 'Resources' : `${resource.sourceId} / ${resource.name}`;
+const contextLabel = (resources: readonly Resource[], appUrl: string | undefined) => {
+  if (appUrl === filesAppUrl) return 'Resources';
+  const resourceRef = appUrl === sandboxCompatAppUrl ? undefined : appUrl === undefined
+    ? undefined
+    : viewerSource(appUrl);
+  const resource = resourceRef === undefined ? undefined : resourceByRef(resources, resourceRef);
+  if (appUrl === sandboxCompatAppUrl) return `${sandboxCompatApp.id} / ${sandboxCompatEntryId}`;
+  if (resource === undefined) return 'Resources';
+  const source = resource.localId.startsWith(`${sandboxCompatApp.id}:`) ? sandboxCompatApp.id : 'patchpit';
+  return `${source} / ${resource.name}`;
 };
 
 const documentPaneId = (workspace: WorkspaceState) => Object.entries(workspace.nodes)
   .find(([, node]) => node.kind === 'pane'
-    && node.contexts.some((contextId) => contextId !== resourceListContextId))?.[0]
-  ?? 'right';
+    && node.contexts.some((contextId) => workspace.contexts[contextId]?.url !== filesAppUrl))?.[0];
+
+const allocateWorkspaceIds = () => ({
+  contextId: `context:${crypto.randomUUID()}`,
+  nodes: {
+    paneId: `pane:${crypto.randomUUID()}`,
+    splitId: `split:${crypto.randomUUID()}`,
+  },
+});
+
+const appUrlForResource = (resource: Resource) => resource.localId === sandboxCompatResourceId
+  ? sandboxCompatAppUrl
+  : `viewer.html#${JSON.stringify({ src: resource.resourceRef })}`;
+
+const viewerSource = (appUrl: string) => {
+  if (!appUrl.startsWith('viewer.html#')) return undefined;
+  try {
+    const config = JSON.parse(appUrl.slice('viewer.html#'.length)) as { readonly src?: unknown };
+    return typeof config.src === 'string' ? config.src : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const viewerContent = (doc: object | undefined, resourceRef: string) => {
+  if (doc === undefined) return resourceRef;
+  const bytes = 'bytes' in doc ? doc.bytes : undefined;
+  return bytes instanceof Uint8Array
+    ? new TextDecoder().decode(bytes)
+    : JSON.stringify(doc, null, 2);
+};

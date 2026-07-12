@@ -24,8 +24,36 @@ Schemas describe logical meaning; storage layout, authority, lifecycle, and
 physical indexes belong to mappings, bindings, or runtime. Generic gaps belong
 upstream in Tarstate.
 
+Sandbox launch needs an authority-scoped projection that reports ready,
+incomplete, or invalid state, exact completeness, and each contributing source
+basis. Patchpit may materialize that result as an immutable app snapshot; raw
+source handles and unresolved resources must not cross the launch boundary.
+
 Regenerate generated artifacts from their canonical source rather than
 hand-editing them.
+
+## Patchpit Documents
+
+Durable Patchpit config and state files are I&S-style Automerge documents owned
+by `@patchpit`. Its `type` identifies the Patchpit document, `schema` names the
+exact primary Tarstate artifact, and self-contained documents inline sealed
+artifacts by ID in `schemas`. Schemas describe logical relations rather than the
+physical state tree. Normal state writes do not rewrite this metadata; regenerate
+inline artifacts from their canonical schema source.
+
+TODO: Before durable loading or replication, move per-client active and preview
+state to an explicitly attached presence source. Inline its sealed Tarstate
+schema in `@patchpit.schemas` only once that source and its real reference exist.
+
+## Root Invocation
+
+Patchpit's JSON hash selects the root filesystem document with `src` and
+reserves `sync` and opaque `delegation` for document-host adapters. They remain
+inert until those adapters exist. Missing `src` creates a root and canonicalizes
+the hash; changing the hash replaces the active root lifecycle. Keep the Repo
+injectable so browser and container hosts use the same protocol. Sandbox app
+hashes remain app-owned invocation data and must not inherit Patchpit's sync or
+delegation values.
 
 ## Identity
 

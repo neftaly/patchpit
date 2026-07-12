@@ -2,6 +2,7 @@ import * as Automerge from '@automerge/automerge';
 import {
   createFsAttachment,
   fsEntriesRelation,
+  fsSchemaArtifact,
   parseFsEntry,
   type FsEntry,
 } from '@patchpit/fs';
@@ -10,7 +11,12 @@ import {
   AutomergeMapStorageBinding,
   AutomergeSourceRuntime,
 } from '@tarstate/automerge';
-import { coordinateSourceCommit, sha256Json, type JsonValue } from '@tarstate/core';
+import {
+  coordinateSourceCommit,
+  normalizeArtifactRef,
+  sha256Json,
+  type JsonValue,
+} from '@tarstate/core';
 
 export type AutomergeFsFile = {
   readonly bytes: Uint8Array<ArrayBuffer>;
@@ -22,19 +28,34 @@ export type AutomergeFsFile = {
   readonly resourceRef: string;
 };
 
-type AutomergeFileContentDoc = {
+export type AutomergeFileContentDoc = {
   readonly kind: 'patchpit.file-content@1';
   readonly contentType?: string;
   readonly bytes: Uint8Array<ArrayBuffer>;
 };
 
+export const createAutomergeFileContentDocument = (
+  bytes: Uint8Array<ArrayBuffer>,
+  contentType?: string,
+): AutomergeFileContentDoc => ({
+  bytes: bytes.slice(),
+  ...(contentType === undefined ? {} : { contentType }),
+  kind: 'patchpit.file-content@1',
+});
+
 type StoredFsEntry = Omit<FsEntry, 'entryId'>;
 type ProjectedFsEntry = FsEntry & Readonly<Record<string, JsonValue>>;
 
 export type AutomergeFsFolderDoc = {
-  readonly kind: 'patchpit.fs-folder@1';
+  readonly '@patchpit': typeof automergeFsDocumentMetadata;
   readonly entries: Record<string, StoredFsEntry>;
 };
+
+export const automergeFsDocumentMetadata = {
+  type: 'filesystem',
+  schema: normalizeArtifactRef(fsSchemaArtifact),
+  schemas: { [fsSchemaArtifact.id]: fsSchemaArtifact },
+} as const;
 
 type AutomergeFsPackage = {
   readonly files: readonly (readonly [resourceRef: string, doc: AutomergeFileContentDoc])[];
@@ -44,30 +65,47 @@ type AutomergeFsPackage = {
 export const automergeFsPackageFromFiles = (
   files: readonly AutomergeFsFile[],
 ): AutomergeFsPackage => ({
-  files: files.map((file) => [file.resourceRef, {
-    bytes: file.bytes.slice(),
-    ...(file.contentType === undefined ? {} : { contentType: file.contentType }),
-    kind: 'patchpit.file-content@1',
-  }] as const),
+  files: files.filter(({ resourceRef }) => !resourceRef.startsWith('https:'))
+    .map((file) => [
+      file.resourceRef,
+      createAutomergeFileContentDocument(file.bytes, file.contentType),
+    ] as const),
   folder: {
+    '@patchpit': automergeFsDocumentMetadata,
     entries: Object.fromEntries(files.map(({
       bytes: _bytes,
       contentType: _contentType,
       entryId,
       ...entry
     }) => [entryId, { ...entry, kind: 'file' }])),
-    kind: 'patchpit.fs-folder@1',
   },
 });
 
-export const openAutomergeFsFolder = (
+export function openAutomergeFsFolder(
+  runtime: AutomergeSourceRuntime<AutomergeFsFolderDoc>,
+): ReturnType<typeof projectAutomergeFsFolder>;
+export function openAutomergeFsFolder(
   sourceId: string,
   folder: AutomergeFsFolderDoc,
-) => {
-  const runtime = new AutomergeSourceRuntime({ sourceId, doc: Automerge.from(folder) });
+): ReturnType<typeof projectAutomergeFsFolder>;
+export function openAutomergeFsFolder(
+  runtimeOrSourceId: AutomergeSourceRuntime<AutomergeFsFolderDoc> | string,
+  folder?: AutomergeFsFolderDoc,
+) {
+  if (typeof runtimeOrSourceId === 'string' && folder === undefined) {
+    throw new TypeError('A folder document is required with a source ID');
+  }
+  const runtime = typeof runtimeOrSourceId === 'string'
+    ? new AutomergeSourceRuntime({ sourceId: runtimeOrSourceId, doc: Automerge.from(folder!) })
+    : runtimeOrSourceId;
+  return projectAutomergeFsFolder(runtime);
+}
+
+/** Takes ownership of the runtime, not of any Repo handle behind it. */
+const projectAutomergeFsFolder = (runtime: AutomergeSourceRuntime<AutomergeFsFolderDoc>) => {
   const source = new AutomergeAtomicSource({
     runtime,
-    operationEpoch: `${sourceId}:operations:1`,
+    operationEpoch: `${runtime.sourceId}:operations:${crypto.randomUUID()}`,
     ownsRuntime: true,
   });
   const binding = new AutomergeMapStorageBinding<AutomergeFsFolderDoc, ProjectedFsEntry>({
@@ -118,7 +156,7 @@ export const openAutomergeFsFolder = (
         operationId: input.operationId,
         intentHash: await sha256Json({
           kind: 'rename-fs-entry',
-          sourceId,
+          sourceId: runtime.sourceId,
           entryId: input.entryId,
           name: input.name,
         }),
@@ -126,5 +164,5 @@ export const openAutomergeFsFolder = (
       },
     });
   };
-  return { attachment, renameEntry };
+  return { attachment, close: () => source.close(), renameEntry };
 };

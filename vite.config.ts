@@ -41,11 +41,9 @@ function sandboxCompatPlugin(): Plugin {
     },
     async load(id) {
       if (id !== resolvedSandboxCompatBundleId) return;
-      const { entries, packageFiles } = await readSandboxCompatBundle();
-      const contents = Object.fromEntries(packageFiles
-        .filter(({ resourceRef }) => !resourceRef.startsWith('http'))
-        .map(({ bytes, resourceRef }) => [resourceRef, new TextDecoder().decode(bytes)]));
-      return `export default ${JSON.stringify({ contents, entries })}`;
+      const { packageFiles } = await readSandboxCompatBundle();
+      const files = packageFiles.map(({ bytes, ...file }) => ({ ...file, bytes: [...bytes] }));
+      return `export default ${JSON.stringify({ files })}`;
     },
     async generateBundle() {
       const { packageFiles } = await readSandboxCompatBundle();

@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.33.2",
   "pnpm": {
     "overrides": {
-      "@tarstate/core": "file:vendor/tarstate/tarstate-core-0.2.0.tgz"
+      "@tarstate/core": "file:vendor/tarstate/tarstate-core-0.2.2.tgz"
     }
   },
   "engines": {
@@ -26,11 +26,12 @@
   },
   "dependencies": {
     "@automerge/automerge": "3.2.6",
+    "@automerge/automerge-repo": "2.5.6",
     "@patchpit/automerge-fs": "workspace:*",
     "@patchpit/fs": "workspace:*",
     "@patchpit/sandbox": "workspace:*",
-    "@tarstate/automerge": "file:vendor/tarstate/tarstate-automerge-0.2.0.tgz",
-    "@tarstate/core": "file:vendor/tarstate/tarstate-core-0.2.0.tgz",
+    "@tarstate/automerge": "file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz",
+    "@tarstate/core": "file:vendor/tarstate/tarstate-core-0.2.2.tgz",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

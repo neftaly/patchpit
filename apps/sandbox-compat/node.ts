@@ -51,7 +51,10 @@ async function packageSandboxCompatBuild() {
     const snapshot = filesystem.observer.getSnapshot();
     if (snapshot.state !== 'open') throw new Error('Sandbox compat filesystem did not open');
     const entries: readonly FsEntry[] = snapshot.current.rows.map(({ sourceId: _sourceId, ...entry }) => entry);
-    const contentByRef = new Map(packaged.files);
+    const contentByRef = new Map(packageFiles.map(({ bytes, contentType, resourceRef }) => [
+      resourceRef,
+      { bytes, ...(contentType === undefined ? {} : { contentType }) },
+    ] as const));
     const files = await sandboxFsFilesFromEntries(entries, (resourceRef) => {
       const content = contentByRef.get(resourceRef);
       return content === undefined ? undefined : {

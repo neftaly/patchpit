@@ -1,6 +1,15 @@
 export type WorkspacePaneId = string;
 export type WorkspaceSplitEdge = 'left' | 'right' | 'top' | 'bottom';
 
+export type WorkspaceContext = {
+  readonly url: string;
+};
+
+export type WorkspaceSplitIds = {
+  readonly paneId: WorkspacePaneId;
+  readonly splitId: string;
+};
+
 export type WorkspacePane = {
   readonly kind: 'pane';
   readonly activeContext: string;
@@ -17,25 +26,46 @@ export type WorkspaceNode = WorkspacePane | {
 };
 
 export type WorkspaceState = {
+  readonly contexts: Readonly<Record<string, WorkspaceContext>>;
   readonly nodes: Readonly<Record<string, WorkspaceNode>>;
   readonly rootNodeId: string;
 };
 
 export const createWorkspace = (initialContext: string, documentContext?: string): WorkspaceState => documentContext === undefined
   ? {
+      contexts: { 'context-0': { url: initialContext } },
       nodes: {
-        left: { kind: 'pane', activeContext: initialContext, contexts: [initialContext], previewContext: null },
+        left: { kind: 'pane', activeContext: 'context-0', contexts: ['context-0'], previewContext: null },
       },
       rootNodeId: 'left',
     }
   : {
+      contexts: {
+        'context-0': { url: initialContext },
+        'context-1': { url: documentContext },
+      },
       nodes: {
-        left: { kind: 'pane', activeContext: initialContext, contexts: [initialContext], previewContext: null },
-        right: { kind: 'pane', activeContext: documentContext, contexts: [documentContext], previewContext: null },
+        left: { kind: 'pane', activeContext: 'context-0', contexts: ['context-0'], previewContext: null },
+        right: { kind: 'pane', activeContext: 'context-1', contexts: ['context-1'], previewContext: null },
         'split-0': { kind: 'split', axis: 'horizontal', first: 'left', ratio: 0.2, second: 'right' },
       },
       rootNodeId: 'split-0',
     };
+
+export const addContext = (
+  workspace: WorkspaceState,
+  contextId: string,
+  url: string,
+): WorkspaceState => workspace.contexts[contextId] === undefined
+  ? { ...workspace, contexts: { ...workspace.contexts, [contextId]: { url } } }
+  : workspace;
+
+export const contextIdForUrl = (
+  workspace: WorkspaceState,
+  url: string,
+  paneId: WorkspacePaneId,
+): string | undefined => paneAt(workspace, paneId)?.contexts
+  .find((contextId) => workspace.contexts[contextId]?.url === url);
 
 export const activateContext = (
   workspace: WorkspaceState,
@@ -55,36 +85,41 @@ export const closeContext = (
   const pane = paneAt(workspace, paneId);
   if (pane === undefined || !pane.contexts.includes(contextId)) return workspace;
   if (pane.contexts.length === 1 && workspace.rootNodeId === paneId) return workspace;
-  return removeEmptyPane(updatePane(workspace, paneId, removeContextFromPane(pane, contextId)), paneId);
+  return pruneContexts(removeEmptyPane(updatePane(workspace, paneId, removeContextFromPane(pane, contextId)), paneId));
 };
 
 export const previewContext = (
   workspace: WorkspaceState,
   contextId: string,
   targetPaneId: WorkspacePaneId,
+  missingSplitId?: string,
 ): WorkspaceState => {
+  if (workspace.contexts[contextId] === undefined) return workspace;
   const existingPaneId = paneContaining(workspace, contextId);
   if (existingPaneId !== undefined) return activateContext(workspace, existingPaneId, contextId);
 
   const targetPane = paneAt(workspace, targetPaneId);
-  if (targetPane === undefined) return addPreviewPane(workspace, targetPaneId, contextId);
+  if (targetPane === undefined) return missingSplitId === undefined
+    ? workspace
+    : addPreviewPane(workspace, targetPaneId, missingSplitId, contextId);
   const nextTarget = targetPane.previewContext === null
     ? targetPane
     : removeContextFromPane(targetPane, targetPane.previewContext);
-  return updatePane(workspace, targetPaneId, {
+  return pruneContexts(updatePane(workspace, targetPaneId, {
     kind: 'pane',
     activeContext: contextId,
     contexts: [...nextTarget.contexts, contextId],
     previewContext: contextId,
-  });
+  }));
 };
 
 export const openContext = (
   workspace: WorkspaceState,
   contextId: string,
   targetPaneId: WorkspacePaneId,
+  missingSplitId?: string,
 ): WorkspaceState => {
-  const previewed = previewContext(workspace, contextId, targetPaneId);
+  const previewed = previewContext(workspace, contextId, targetPaneId, missingSplitId);
   const paneId = paneContaining(previewed, contextId);
   return paneId === undefined ? previewed : pinContext(previewed, paneId, contextId);
 };
@@ -125,7 +160,11 @@ export const splitContext = (
   contextId: string,
   targetPaneId: WorkspacePaneId,
   edge: WorkspaceSplitEdge,
+  ids: WorkspaceSplitIds,
 ): WorkspaceState => {
+  if (workspace.contexts[contextId] === undefined
+    || workspace.nodes[ids.paneId] !== undefined
+    || workspace.nodes[ids.splitId] !== undefined) return workspace;
   const sourcePaneId = paneContaining(workspace, contextId);
   const sourcePane = sourcePaneId === undefined ? undefined : paneAt(workspace, sourcePaneId);
   if (paneAt(workspace, targetPaneId) === undefined || (sourcePaneId !== undefined && sourcePane === undefined)) {
@@ -139,22 +178,19 @@ export const splitContext = (
     if (sourcePaneId !== targetPaneId) withoutSource = removeEmptyPane(withoutSource, sourcePaneId);
   }
 
-  const suffix = nextNodeSuffix(workspace);
-  const newPaneId = `pane-${suffix}`;
-  const splitNodeId = `split-${suffix}`;
   const targetFirst = edge === 'right' || edge === 'bottom';
-  const replaced = replaceNodeReference(withoutSource, targetPaneId, splitNodeId);
+  const replaced = replaceNodeReference(withoutSource, targetPaneId, ids.splitId);
   return {
     ...replaced,
     nodes: {
       ...replaced.nodes,
-      [newPaneId]: { kind: 'pane', activeContext: contextId, contexts: [contextId], previewContext: null },
-      [splitNodeId]: {
+      [ids.paneId]: { kind: 'pane', activeContext: contextId, contexts: [contextId], previewContext: null },
+      [ids.splitId]: {
         kind: 'split',
         axis: edge === 'left' || edge === 'right' ? 'horizontal' : 'vertical',
-        first: targetFirst ? targetPaneId : newPaneId,
+        first: targetFirst ? targetPaneId : ids.paneId,
         ratio: 0.5,
-        second: targetFirst ? newPaneId : targetPaneId,
+        second: targetFirst ? ids.paneId : targetPaneId,
       },
     },
   };
@@ -185,10 +221,13 @@ const removeContextFromPane = (
   pane: WorkspacePane,
   contextId: string,
 ): WorkspacePane => {
+  const removedIndex = pane.contexts.indexOf(contextId);
   const contexts = pane.contexts.filter((candidate) => candidate !== contextId);
   return {
     kind: 'pane',
-    activeContext: pane.activeContext === contextId ? contexts.at(-1) ?? pane.activeContext : pane.activeContext,
+    activeContext: pane.activeContext === contextId
+      ? contexts[removedIndex] ?? contexts[removedIndex - 1] ?? pane.activeContext
+      : pane.activeContext,
     contexts,
     previewContext: pane.previewContext === contextId ? null : pane.previewContext,
   };
@@ -203,16 +242,16 @@ const updatePane = (
 const addPreviewPane = (
   workspace: WorkspaceState,
   paneId: WorkspacePaneId,
+  splitId: string,
   contextId: string,
 ): WorkspaceState => {
-  if (workspace.nodes[paneId] !== undefined) return workspace;
-  const splitNodeId = `split-${nextNodeSuffix(workspace)}`;
+  if (workspace.nodes[paneId] !== undefined || workspace.nodes[splitId] !== undefined) return workspace;
   return {
     ...workspace,
     nodes: {
       ...workspace.nodes,
       [paneId]: { kind: 'pane', activeContext: contextId, contexts: [contextId], previewContext: contextId },
-      [splitNodeId]: {
+      [splitId]: {
         kind: 'split',
         axis: 'horizontal',
         first: workspace.rootNodeId,
@@ -220,13 +259,19 @@ const addPreviewPane = (
         second: paneId,
       },
     },
-    rootNodeId: splitNodeId,
+    rootNodeId: splitId,
   };
 };
 
-const nextNodeSuffix = (workspace: WorkspaceState) => Math.max(-1, ...Object.keys(workspace.nodes)
-  .map((nodeId) => /^(?:pane|split)-(\d+)$/.exec(nodeId)?.[1])
-  .map((suffix) => suffix === undefined ? -1 : Number(suffix))) + 1;
+const pruneContexts = (workspace: WorkspaceState): WorkspaceState => {
+  const mounted = new Set(Object.values(workspace.nodes)
+    .flatMap((node) => node.kind === 'pane' ? node.contexts : []));
+  const contexts = Object.fromEntries(Object.entries(workspace.contexts)
+    .filter(([contextId]) => mounted.has(contextId)));
+  return Object.keys(contexts).length === Object.keys(workspace.contexts).length
+    ? workspace
+    : { ...workspace, contexts };
+};
 
 export const resizeSplit = (
   workspace: WorkspaceState,

@@ -7,7 +7,10 @@
   "dependencies": {
     "@automerge/automerge": "3.2.6",
     "@patchpit/fs": "workspace:*",
-    "@tarstate/automerge": "file:../../vendor/tarstate/tarstate-automerge-0.2.0.tgz",
-    "@tarstate/core": "file:../../vendor/tarstate/tarstate-core-0.2.0.tgz"
+    "@tarstate/automerge": "file:../../vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz",
+    "@tarstate/core": "file:../../vendor/tarstate/tarstate-core-0.2.2.tgz"
+  },
+  "devDependencies": {
+    "@automerge/automerge-repo": "2.5.6"
   }
 }

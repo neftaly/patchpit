@@ -2,8 +2,15 @@
 
 declare module 'virtual:patchpit/sandbox-compat-bundle' {
   const bundle: {
-    readonly contents: Readonly<Record<string, string>>;
-    readonly entries: readonly import('@patchpit/fs').FsEntry[];
+    readonly files: readonly {
+      readonly bytes: readonly number[];
+      readonly contentType?: string;
+      readonly entryId: string;
+      readonly name: string;
+      readonly order: number;
+      readonly parentId: string | null;
+      readonly resourceRef: string;
+    }[];
   };
   export default bundle;
 }

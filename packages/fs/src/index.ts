@@ -5,4 +5,4 @@ export {
   type FsAttachment,
   type FsDocument,
 } from './database.ts';
-export { fsEntriesRelation, parseFsEntry, type FsEntry } from './schema.ts';
+export { fsEntriesRelation, fsSchemaArtifact, parseFsEntry, type FsEntry } from './schema.ts';

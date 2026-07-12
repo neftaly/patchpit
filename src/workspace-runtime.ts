@@ -1,16 +1,15 @@
-import * as Automerge from '@automerge/automerge';
-import { staticFsAttachment } from '@patchpit/fs';
-import { AutomergeSourceRuntime } from '@tarstate/automerge';
+import type { DocHandle } from '@automerge/automerge-repo';
+import { automergeRepoSourceRuntime } from '@tarstate/automerge';
 import { sha256Json } from '@tarstate/core';
 import { createWorkspace, type WorkspaceNode, type WorkspaceState } from './workspace.ts';
+import { workspaceDocumentMetadata } from './workspace-schema.ts';
 
-const workspaceResourceRef = 'automerge:patchpit-workspace';
-
-type WorkspaceDocument = WorkspaceState & {
-  readonly kind: 'patchpit.workspace@1';
+export type WorkspaceDocument = WorkspaceState & {
+  readonly '@patchpit': typeof workspaceDocumentMetadata;
 };
 
 type WorkspaceDraft = {
+  contexts: Record<string, { url: string }>;
   nodes: Record<string, MutableWorkspaceNode>;
   rootNodeId: string;
 };
@@ -27,19 +26,17 @@ type MutableWorkspaceNode = {
   second: string;
 };
 
-export const openWorkspace = (initialContext: string, documentContext?: string) => {
-  const sourceId = 'patchpit-workspace';
-  const operationEpoch = `${sourceId}:operations:1`;
-  const runtime = new AutomergeSourceRuntime<WorkspaceDocument>({
-    sourceId,
-    doc: Automerge.from({ kind: 'patchpit.workspace@1', ...createWorkspace(initialContext, documentContext) }),
-  });
-  let view = { workspace: runtime.snapshot().storage };
-  const listeners = new Set<() => void>();
-  runtime.subscribe(() => {
-    view = { workspace: runtime.snapshot().storage };
-    for (const listener of listeners) listener();
-  });
+export const createWorkspaceDocument = (
+  initialContext: string,
+  documentContext?: string,
+): WorkspaceDocument => ({
+  '@patchpit': workspaceDocumentMetadata,
+  ...createWorkspace(initialContext, documentContext),
+});
+
+export const openWorkspace = (handle: DocHandle<WorkspaceDocument>) => {
+  const runtime = automergeRepoSourceRuntime({ handle });
+  const operationEpoch = `${runtime.sourceId}:operations:${crypto.randomUUID()}`;
   let nextOperationId = 0;
   let pending = Promise.resolve();
 
@@ -63,33 +60,24 @@ export const openWorkspace = (initialContext: string, documentContext?: string) 
   };
 
   return {
-    attachment: staticFsAttachment({
-      sourceId: 'patchpit',
-      entries: [{
-        entryId: 'workspace',
-        kind: 'file',
-        name: 'workspace.am',
-        order: 0,
-        parentId: null,
-        resourceRef: workspaceResourceRef,
-      }],
-    }),
-    close: () => {
-      listeners.clear();
-      runtime.close();
-    },
-    getSnapshot: () => view,
-    resourceRef: workspaceResourceRef,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => { listeners.delete(listener); };
-    },
+    close: () => runtime.close(),
+    getSnapshot: () => runtime.snapshot().storage,
+    resourceRef: handle.url,
+    subscribe: (listener: () => void) => runtime.subscribe(listener),
     update,
   };
 };
 
 const syncWorkspace = (draft: WorkspaceDraft, next: WorkspaceState) => {
   draft.rootNodeId = next.rootNodeId;
+  for (const contextId of Object.keys(draft.contexts)) {
+    if (next.contexts[contextId] === undefined) delete draft.contexts[contextId];
+  }
+  for (const [contextId, context] of Object.entries(next.contexts)) {
+    const current = draft.contexts[contextId];
+    if (current === undefined) draft.contexts[contextId] = { ...context };
+    else current.url = context.url;
+  }
   syncNodes(draft.nodes, next.nodes);
 };
 

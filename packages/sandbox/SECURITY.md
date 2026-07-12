@@ -29,6 +29,10 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
 
 - `sandbox-compat` records the desired browser behavior and current expected
   failures.
+- Its current URL mount serves a build fixture, not live Patchpit filesystem
+  documents. Live launch requires an authority-complete immutable snapshot and
+  a host-owned capability URL mount; debug or development middleware is not
+  that boundary.
 - Runtime mount lifecycle and cleanup are still owned by the caller.
 - URL mounts currently support only simple `GET`/`HEAD` asset requests.
   `respond()` rejects other methods, including `OPTIONS` preflights.
