@@ -74,6 +74,9 @@ importers:
       '@patchpit/sandbox':
         specifier: workspace:*
         version: link:packages/sandbox
+      '@patchpit/sandbox-fs':
+        specifier: workspace:*
+        version: link:packages/sandbox-fs
       '@tarstate/automerge':
         specifier: file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz
         version: file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz
@@ -90,9 +93,6 @@ importers:
       '@babel/core':
         specifier: 'catalog:'
         version: 8.0.1
-      '@patchpit/sandbox-fs':
-        specifier: workspace:*
-        version: link:packages/sandbox-fs
       '@rolldown/plugin-babel':
         specifier: 'catalog:'
         version: 0.2.3(@babel/core@8.0.1)(rolldown@1.1.5)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(terser@5.48.0)(yaml@2.9.0))
