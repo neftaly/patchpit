@@ -1,5 +1,9 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  readonly VITE_PATCHPIT_RUNNER_URL?: string;
+}
+
 declare module 'virtual:patchpit/sandbox-compat-bundle' {
   const bundle: {
     readonly files: readonly {

@@ -745,7 +745,7 @@ packages:
     engines: {node: '>=24.12.0'}
 
   '@tarstate/core@file:vendor/tarstate/tarstate-core-0.2.2.tgz':
-    resolution: {integrity: sha512-g2UqO73Zg/qWHsfyjNiXZBmvvD5O73Ocx+VpXS2qKh/OW7q2diTcof49l1njFITrCihdpw1keIz3rKVMopa+3g==, tarball: file:vendor/tarstate/tarstate-core-0.2.2.tgz}
+    resolution: {integrity: sha512-puJ+YAIRYt22g9US0KfmWJCYNR1gL9EJEZpCp+RgC5ESH1yNzGPzOHfyV5D023PDpw9SElQAI08Q3BNNgWNv3g==, tarball: file:vendor/tarstate/tarstate-core-0.2.2.tgz}
     version: 0.2.2
     engines: {node: '>=24.12.0'}
 

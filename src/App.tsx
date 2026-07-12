@@ -467,9 +467,13 @@ function Viewer({ resourceRef, runtime }: {
 }
 
 function SandboxApp() {
-  const baseRoute = import.meta.env.BASE_URL.split('/').filter((segment) => segment !== '');
+  const runner = new URL(
+    import.meta.env.VITE_PATCHPIT_RUNNER_URL ?? import.meta.env.BASE_URL,
+    window.location.origin,
+  );
+  const baseRoute = runner.pathname.split('/').filter((segment) => segment !== '');
   const frame = createSandboxFrameAttributes({
-    baseUrl: window.location.href,
+    baseUrl: runner,
     entry: sandboxCompatApp.entry,
     mountId: sandboxCompatApp.id,
     route: [...baseRoute, '__patchpit', 'sandbox'],

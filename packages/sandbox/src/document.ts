@@ -4,7 +4,7 @@ export type SandboxDocumentBody = string | Blob | BufferSource;
 
 export type SandboxFrameAttributes = {
   readonly referrerPolicy: "no-referrer";
-  readonly sandbox: "allow-scripts";
+  readonly sandbox: "allow-scripts allow-same-origin";
   readonly src: string;
 };
 
@@ -54,7 +54,8 @@ export const createSandboxFrameAttributes = ({
   route = defaultSandboxRoute,
 }: SandboxFrameAttributesOptions): SandboxFrameAttributes => ({
   referrerPolicy: "no-referrer",
-  sandbox: "allow-scripts",
+  // TODO: Serve mounts from an authority-free runner origin before accepting untrusted apps.
+  sandbox: "allow-scripts allow-same-origin",
   src: new URL(
     `${sandboxMountScopePath(route, mountId)}${sandboxDocumentPathKey(entry)}`,
     baseUrl,
@@ -78,6 +79,7 @@ export const createSandboxUrlMount = ({
     frameAttributes: createSandboxFrameAttributes({ baseUrl, entry, mountId, route }),
     respond: async (request) => {
       const url = new URL(request.url);
+      if (url.origin !== mountOrigin) return undefined;
       if (!url.pathname.startsWith(scopePath)) return undefined;
       if (request.method !== "GET" && request.method !== "HEAD")
         return sandboxResponse("Method not allowed", 405, "text/plain", mountSource, {
@@ -165,7 +167,7 @@ const sandboxUrlMountContentSecurityPolicy = (
 ): string =>
   [
     `default-src 'none'`,
-    `sandbox allow-scripts`,
+    `sandbox allow-scripts allow-same-origin`,
     `base-uri 'none'`,
     `connect-src ${mountSource}`,
     `font-src ${mountSource} data:`,

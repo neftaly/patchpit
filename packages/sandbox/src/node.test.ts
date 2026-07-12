@@ -7,7 +7,7 @@ import { respondWithSandboxUrlMount } from './node.ts';
 void test('node sandbox URL mounts reject non-GET and non-HEAD methods without reading files', async () => {
   let reads = 0;
   const mount = createSandboxUrlMount({
-    baseUrl: 'https://patchpit.test/',
+    baseUrl: 'http://patchpit.test/',
     entry: ['index.html'],
     files: [{
       path: ['index.html'],
@@ -35,7 +35,7 @@ void test('node sandbox URL mounts reject non-GET and non-HEAD methods without r
 
 void test('node sandbox URL mounts leave unrelated non-GET requests unhandled', async () => {
   const mount = createSandboxUrlMount({
-    baseUrl: 'https://patchpit.test/',
+    baseUrl: 'http://patchpit.test/',
     entry: ['index.html'],
     files: [{ path: ['index.html'], read: () => ({ body: '', contentType: 'text/html' }) }],
     mountId: 'mount-1',
@@ -55,7 +55,7 @@ void test('node sandbox URL mounts leave unrelated non-GET requests unhandled', 
 void test('node sandbox URL mounts reject methods forbidden by Fetch', async () => {
   let reads = 0;
   const mount = createSandboxUrlMount({
-    baseUrl: 'https://patchpit.test/',
+    baseUrl: 'http://patchpit.test/',
     entry: ['index.html'],
     files: [{
       path: ['index.html'],

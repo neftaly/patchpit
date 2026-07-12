@@ -77,6 +77,11 @@ native moves are distinct capability levels.
 Prefer smaller state surfaces, clearer ownership, and less incidental coupling.
 Avoid abstractions that only rename existing complexity.
 
+The same-origin sandbox profile is temporarily restricted to trusted plugins so
+browser-local URL mounts can use native relative loading. Keep runner origin
+configurable, but do not invent a cross-origin transfer protocol yet. Before
+accepting untrusted plugins, move mounts to an authority-free runner origin.
+
 ## Testing Ratchet
 
 Existing tests are legacy tripwires. Do not expand them as guard rails for new

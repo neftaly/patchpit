@@ -45,7 +45,7 @@ void test('creates sandbox frame attributes from iframe-shaped launch data', () 
     mountId: 'mount-1',
   }), {
     referrerPolicy: 'no-referrer',
-    sandbox: 'allow-scripts',
+    sandbox: 'allow-scripts allow-same-origin',
     src: 'https://patchpit.test/__patchpit/sandbox/mount-1/assets/a%2Fb.html',
   });
   assert.throws(
@@ -72,7 +72,7 @@ void test('creates sandbox URL mounts that serve planned files', async () => {
   });
 
   assert.equal(mount.frameAttributes.referrerPolicy, 'no-referrer');
-  assert.equal(mount.frameAttributes.sandbox, 'allow-scripts');
+  assert.equal(mount.frameAttributes.sandbox, 'allow-scripts allow-same-origin');
   assert.equal(mount.frameAttributes.src, 'https://patchpit.test/__patchpit/sandbox/mount-1/index.html');
 
   const response = await mount.respond(new Request('https://patchpit.test/__patchpit/sandbox/mount-1/assets/a%2Fb.svg'));
@@ -80,8 +80,7 @@ void test('creates sandbox URL mounts that serve planned files', async () => {
   assert.equal(response?.headers.get('Access-Control-Allow-Origin'), '*');
   assert.equal(response?.headers.get('Content-Type'), 'image/svg+xml');
   assert.equal(response?.headers.get('X-Content-Type-Options'), 'nosniff');
-  assert.match(response?.headers.get('Content-Security-Policy') ?? '', /sandbox allow-scripts/);
-  assert.doesNotMatch(response?.headers.get('Content-Security-Policy') ?? '', /allow-same-origin/);
+  assert.match(response?.headers.get('Content-Security-Policy') ?? '', /sandbox allow-scripts allow-same-origin/);
   assert.match(
     response?.headers.get('Content-Security-Policy') ?? '',
     /connect-src https:\/\/patchpit\.test\/__patchpit\/sandbox\/mount-1\//,
@@ -114,7 +113,7 @@ void test('sandbox URL mounts reject in-scope non-GET and non-HEAD methods', asy
   assert.equal(reads, 0);
   assert.equal(response?.status, 405);
   assert.equal(response?.headers.get('Allow'), 'GET, HEAD');
-  assert.match(response?.headers.get('Content-Security-Policy') ?? '', /sandbox allow-scripts/);
+  assert.match(response?.headers.get('Content-Security-Policy') ?? '', /sandbox allow-scripts allow-same-origin/);
   assert.equal(await response?.text(), 'Method not allowed');
   assert.equal(
     await mount.respond(new Request('https://patchpit.test/not-sandbox/index.html', { method: 'POST' })),
@@ -145,4 +144,5 @@ void test('sandbox URL mounts return undefined for unrelated requests', async ()
   });
 
   assert.equal(await mount.respond(new Request('https://patchpit.test/index.html')), undefined);
+  assert.equal(await mount.respond(new Request('https://other.test/__patchpit/sandbox/mount-1/index.html')), undefined);
 });

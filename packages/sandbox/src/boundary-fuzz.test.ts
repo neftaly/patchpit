@@ -38,7 +38,7 @@ void test('sandbox mount segment behavior fuzz', async () => {
 
 void test('node sandbox request boundary behavior fuzz', async () => {
   const mount = createSandboxUrlMount({
-    baseUrl: 'https://patchpit.test/',
+    baseUrl: 'http://patchpit.test/',
     entry: ['index.html'],
     files: [{ path: ['index.html'], read: () => ({ body: 'ok', contentType: 'text/plain' }) }],
     mountId: 'mount-1',
@@ -51,9 +51,9 @@ void test('node sandbox request boundary behavior fuzz', async () => {
       createNodeRequest(host, 'GET'),
       nodeResponse.response,
     );
-    assert.equal(handled, true);
-    assert.equal(nodeResponse.status, 200);
-    assert.equal(nodeResponse.body, 'ok');
+    assert.equal(handled, false);
+    assert.equal(nodeResponse.status, undefined);
+    assert.equal(nodeResponse.body, undefined);
   }
 
   for (const method of ['CONNECT', 'TRACE', 'TRACK']) {

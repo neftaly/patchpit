@@ -1,16 +1,25 @@
 # Sandbox Security
 
-The sandbox runs app documents in an opaque-origin iframe with scripts enabled.
-It aims to host a small local-first app profile, not arbitrary websites.
+The sandbox currently runs trusted app documents on Patchpit's origin with
+scripts enabled. It aims to host a small local-first app profile, not arbitrary
+websites.
 The `sandbox-compat` browser harness is the executable supported-profile spec.
 
 ## Current Boundary
 
-- Host iframe uses `sandbox="allow-scripts"` and `referrerPolicy="no-referrer"`.
+- Host iframe temporarily uses `sandbox="allow-scripts allow-same-origin"` and
+  `referrerPolicy="no-referrer"` so a browser-local service worker can serve
+  native relative URLs.
+- Same-origin apps can access Patchpit and remove the iframe sandbox. Only
+  trusted plugins may run in this profile; this is not an isolation boundary.
+- The runner base URL is configurable so deployment can move to a distinct
+  origin without changing app URLs. No cross-origin snapshot-transfer protocol
+  exists yet.
 - The old data-URL bootstrap path has been removed.
 - The package owns path planning, launch document creation, and URL mount
   request handling.
-- URL mounts serve files with CORS headers for opaque-origin browser loaders.
+- URL mounts serve files with explicit content types and restrictive response
+  policy headers.
 - Production URL mount ids are capability URLs and must be unguessable. Fixed
   ids are only for local compatibility harnesses.
 
@@ -27,6 +36,9 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
 
 ## Known Gaps
 
+- TODO: move mounts to a dedicated authority-free runner origin before
+  accepting untrusted apps or claiming host isolation. The runner may remain
+  local-first by caching its bootstrap and receiving app snapshots locally.
 - `sandbox-compat` records the desired browser behavior and current expected
   failures.
 - Its current URL mount serves a build fixture, not live Patchpit filesystem
