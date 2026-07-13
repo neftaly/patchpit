@@ -9,9 +9,10 @@ writers at boundaries.
 
 ## Tarstate Direction
 
-Tarstate v1 is consumed through temporary local package builds while its Repo
-adapter and readiness API remain uncommitted upstream. Do not call hypothetical
-APIs or build Patchpit-local substitutes; pause or escalate dependent work.
+Tarstate v1 is consumed through tagged local package builds while its packages
+remain unpublished. Its Repo adapter and readiness API are available in v0.3.0.
+Do not call hypothetical APIs or build Patchpit-local substitutes; pause or
+escalate dependent work.
 
 The target boundary keeps application data in canonical Automerge documents or
 explicitly attached stores. Tarstate supplies authority-scoped projections,

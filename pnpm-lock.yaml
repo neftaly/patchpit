@@ -53,7 +53,7 @@ catalogs:
       version: 8.1.3
 
 overrides:
-  '@tarstate/core': file:vendor/tarstate/tarstate-core-0.2.2.tgz
+  '@tarstate/core': file:vendor/tarstate/tarstate-core-0.3.0.tgz
 
 importers:
 
@@ -78,11 +78,11 @@ importers:
         specifier: workspace:*
         version: link:packages/sandbox-fs
       '@tarstate/automerge':
-        specifier: file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz
-        version: file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz
+        specifier: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz
+        version: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz
       '@tarstate/core':
-        specifier: file:vendor/tarstate/tarstate-core-0.2.2.tgz
-        version: file:vendor/tarstate/tarstate-core-0.2.2.tgz
+        specifier: file:vendor/tarstate/tarstate-core-0.3.0.tgz
+        version: file:vendor/tarstate/tarstate-core-0.3.0.tgz
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -139,11 +139,11 @@ importers:
         specifier: workspace:*
         version: link:../fs
       '@tarstate/automerge':
-        specifier: file:../../vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz
-        version: file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz
+        specifier: file:../../vendor/tarstate/tarstate-automerge-0.3.0.tgz
+        version: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz
       '@tarstate/core':
-        specifier: file:../../vendor/tarstate/tarstate-core-0.2.2.tgz
-        version: file:vendor/tarstate/tarstate-core-0.2.2.tgz
+        specifier: file:../../vendor/tarstate/tarstate-core-0.3.0.tgz
+        version: file:vendor/tarstate/tarstate-core-0.3.0.tgz
     devDependencies:
       '@automerge/automerge-repo':
         specifier: 2.5.6
@@ -152,8 +152,8 @@ importers:
   packages/fs:
     dependencies:
       '@tarstate/core':
-        specifier: file:../../vendor/tarstate/tarstate-core-0.2.2.tgz
-        version: file:vendor/tarstate/tarstate-core-0.2.2.tgz
+        specifier: file:../../vendor/tarstate/tarstate-core-0.3.0.tgz
+        version: file:vendor/tarstate/tarstate-core-0.3.0.tgz
 
   packages/sandbox: {}
 
@@ -166,8 +166,8 @@ importers:
         specifier: workspace:*
         version: link:../sandbox
       '@tarstate/core':
-        specifier: file:../../vendor/tarstate/tarstate-core-0.2.2.tgz
-        version: file:vendor/tarstate/tarstate-core-0.2.2.tgz
+        specifier: file:../../vendor/tarstate/tarstate-core-0.3.0.tgz
+        version: file:vendor/tarstate/tarstate-core-0.3.0.tgz
 
 packages:
 
@@ -742,14 +742,14 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@tarstate/automerge@file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz':
-    resolution: {integrity: sha512-HoR2XpW0TbCPLR1vMC6/L9caHnYSnsay8VlZH6oPlOOY+0yNbrb7tm0jEd2UNlxzTRh507Xq7XtwMNTBWh199w==, tarball: file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz}
-    version: 0.2.3-dev.0
+  '@tarstate/automerge@file:vendor/tarstate/tarstate-automerge-0.3.0.tgz':
+    resolution: {integrity: sha512-Sc0S3vWQZVJMua1m3K9BZ9MCASUfLezQTpBamq8oBdE6tC6coVV1tN1L2rxK6q7lS3HQzF3ygwQWoX+aYtAx8Q==, tarball: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz}
+    version: 0.3.0
     engines: {node: '>=24.12.0'}
 
-  '@tarstate/core@file:vendor/tarstate/tarstate-core-0.2.2.tgz':
-    resolution: {integrity: sha512-puJ+YAIRYt22g9US0KfmWJCYNR1gL9EJEZpCp+RgC5ESH1yNzGPzOHfyV5D023PDpw9SElQAI08Q3BNNgWNv3g==, tarball: file:vendor/tarstate/tarstate-core-0.2.2.tgz}
-    version: 0.2.2
+  '@tarstate/core@file:vendor/tarstate/tarstate-core-0.3.0.tgz':
+    resolution: {integrity: sha512-agMswiPnVX8jxlgQLOOsf7UIfz9F+aQir+sCtAQTBo1yFZ0rC58MhVN17owVB2C7sXoUdJs4rkWuWlvQwlPjjA==, tarball: file:vendor/tarstate/tarstate-core-0.3.0.tgz}
+    version: 0.3.0
     engines: {node: '>=24.12.0'}
 
   '@tybys/wasm-util@0.10.3':
@@ -1669,12 +1669,12 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@tarstate/automerge@file:vendor/tarstate/tarstate-automerge-0.2.3-dev.0.tgz':
+  '@tarstate/automerge@file:vendor/tarstate/tarstate-automerge-0.3.0.tgz':
     dependencies:
       '@automerge/automerge': 3.2.6
-      '@tarstate/core': file:vendor/tarstate/tarstate-core-0.2.2.tgz
+      '@tarstate/core': file:vendor/tarstate/tarstate-core-0.3.0.tgz
 
-  '@tarstate/core@file:vendor/tarstate/tarstate-core-0.2.2.tgz': {}
+  '@tarstate/core@file:vendor/tarstate/tarstate-core-0.3.0.tgz': {}
 
   '@tybys/wasm-util@0.10.3':
     dependencies:

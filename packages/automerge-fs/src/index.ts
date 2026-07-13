@@ -10,6 +10,7 @@ import {
   AutomergeAtomicSource,
   AutomergeMapStorageBinding,
   AutomergeSourceRuntime,
+  type AutomergeSourceRuntimeApi,
 } from '@tarstate/automerge';
 import {
   coordinateSourceCommit,
@@ -82,14 +83,14 @@ export const automergeFsPackageFromFiles = (
 });
 
 export function openAutomergeFsFolder(
-  runtime: AutomergeSourceRuntime<AutomergeFsFolderDoc>,
+  runtime: AutomergeSourceRuntimeApi<AutomergeFsFolderDoc>,
 ): ReturnType<typeof projectAutomergeFsFolder>;
 export function openAutomergeFsFolder(
   sourceId: string,
   folder: AutomergeFsFolderDoc,
 ): ReturnType<typeof projectAutomergeFsFolder>;
 export function openAutomergeFsFolder(
-  runtimeOrSourceId: AutomergeSourceRuntime<AutomergeFsFolderDoc> | string,
+  runtimeOrSourceId: AutomergeSourceRuntimeApi<AutomergeFsFolderDoc> | string,
   folder?: AutomergeFsFolderDoc,
 ) {
   if (typeof runtimeOrSourceId === 'string' && folder === undefined) {
@@ -102,7 +103,7 @@ export function openAutomergeFsFolder(
 }
 
 /** Takes ownership of the runtime, not of any Repo handle behind it. */
-const projectAutomergeFsFolder = (runtime: AutomergeSourceRuntime<AutomergeFsFolderDoc>) => {
+const projectAutomergeFsFolder = (runtime: AutomergeSourceRuntimeApi<AutomergeFsFolderDoc>) => {
   const source = new AutomergeAtomicSource({
     runtime,
     operationEpoch: `${runtime.sourceId}:operations:${crypto.randomUUID()}`,

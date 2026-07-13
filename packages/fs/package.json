@@ -4,5 +4,5 @@
   "version": "0.0.0",
   "type": "module",
   "exports": "./src/index.ts",
-  "dependencies": { "@tarstate/core": "file:../../vendor/tarstate/tarstate-core-0.2.2.tgz" }
+  "dependencies": { "@tarstate/core": "file:../../vendor/tarstate/tarstate-core-0.3.0.tgz" }
 }

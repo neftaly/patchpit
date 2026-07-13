@@ -1,9 +1,7 @@
 # Tarstate packages
 
-These are temporary local builds from Tarstate commit `2833300` plus the
-uncommitted readiness result and Repo-handle source adapter changes in
-`~/dev/tarstate`. Their package versions are unchanged until those APIs land
-upstream.
+These are local builds from the tagged Tarstate `v0.3.0` release. The packages
+are vendored while Tarstate is not published to npm.
 
-- `tarstate-automerge-0.2.3-dev.0.tgz`: `2d97592ed607ef3a548a0bf14ba368a2c92202ef173f87bf5474fc2beaf5224e`
-- `tarstate-core-0.2.2.tgz`: `c89862148fffdc9c3466dd8f38da3ad801af4807367fa01c38718ba6e0615889`
+- `tarstate-automerge-0.3.0.tgz`: `20e99f035d6e4acdbcb361d0d3fa9f01169355ba343826b051e2606adc53e77b`
+- `tarstate-core-0.3.0.tgz`: `765c94199888b7355432de1e9a89a71e9ce857af8fc02d41f6750a8c6f21fdcf`
