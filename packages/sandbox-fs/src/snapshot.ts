@@ -67,7 +67,7 @@ const contentSchema = await sealSchema({
   id: 'urn:patchpit:schema:app-file-content@1',
   body: contentSchemaBody,
 });
-const contentsRelation = relationLiteral(contentSchema, contentSchemaBody, 'contents');
+const contentsRelation = relationLiteral(contentSchema, 'contents');
 const contentsQuery: QueryNode = {
   kind: 'select',
   input: { kind: 'from', relation: contentsRelation, alias: 'content' },

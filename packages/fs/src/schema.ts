@@ -36,7 +36,6 @@ export const fsSchemaArtifact = await sealSchema({
 
 export const fsEntriesRelation = relationLiteral(
   fsSchemaArtifact,
-  fsSchemaBody,
   'entries',
 );
 

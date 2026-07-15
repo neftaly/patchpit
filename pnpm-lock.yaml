@@ -740,12 +740,12 @@ packages:
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
   '@tarstate/automerge@file:vendor/tarstate/tarstate-automerge-0.3.0.tgz':
-    resolution: {integrity: sha512-Sc0S3vWQZVJMua1m3K9BZ9MCASUfLezQTpBamq8oBdE6tC6coVV1tN1L2rxK6q7lS3HQzF3ygwQWoX+aYtAx8Q==, tarball: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz}
+    resolution: {integrity: sha512-M0sd3arsHJxXTBE1BNy2nfyFJOO/7y+4zZHP7llJp+7VmuyXCSd4yWsLqH64SqttzmDuK5HhgR6MNH033eUxFQ==, tarball: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz}
     version: 0.3.0
     engines: {node: '>=24.12.0'}
 
   '@tarstate/core@file:vendor/tarstate/tarstate-core-0.3.0.tgz':
-    resolution: {integrity: sha512-agMswiPnVX8jxlgQLOOsf7UIfz9F+aQir+sCtAQTBo1yFZ0rC58MhVN17owVB2C7sXoUdJs4rkWuWlvQwlPjjA==, tarball: file:vendor/tarstate/tarstate-core-0.3.0.tgz}
+    resolution: {integrity: sha512-3zE3084dibea5jGTazzIlldYBC13O/vhklQSWAduZbe1QGbzJjHmEhjp9in1sEAQX1aKLujJpKI9i7jvK5QM7g==, tarball: file:vendor/tarstate/tarstate-core-0.3.0.tgz}
     version: 0.3.0
     engines: {node: '>=24.12.0'}
 

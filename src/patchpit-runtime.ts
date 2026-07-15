@@ -22,7 +22,6 @@ import {
   openWorkspace,
   type WorkspaceDocument,
 } from './workspace-runtime.ts';
-import { workspaceDocumentMetadata } from './workspace-schema.ts';
 
 const workspaceEntryId = 'workspace';
 
@@ -123,11 +122,13 @@ const openRootHandle = async (
     findOptions(signal),
   );
   handles.set(workspaceEntry.resourceRef, asObjectHandle(workspaceHandle));
-  await validateMetadata(toJS(workspaceHandle.doc())['@patchpit'], workspaceDocumentMetadata);
 
   const folder = openAutomergeFsFolder(automergeRepoSourceRuntime({ handle: rootHandle }));
   const resources = openResources(folder.attachment);
-  const workspace = openWorkspace(workspaceHandle);
+  const workspace = await openWorkspace(workspaceHandle).catch((error: unknown) => {
+    resources.close();
+    throw error;
+  });
   const findResourceHandle = async (resourceRef: string) => {
     const current = handles.get(resourceRef);
     if (current !== undefined) return current;

@@ -1,4 +1,5 @@
 import {
+  builtInCapabilityRefs,
   compileStorageMapping,
   normalizeArtifactRef,
   prepareSchema,
@@ -7,7 +8,10 @@ import {
   sealStorageMapping,
   sealSchema,
   TarstateParseError,
+  type DocumentDeclaration,
 } from '@tarstate/core';
+
+const replaceable = { editCapabilities: [builtInCapabilityRefs.fieldReplace] } as const;
 
 export const workspaceSchemaBody = schemaLiteral({
   description: 'Patchpit workspace configuration and state.',
@@ -17,7 +21,7 @@ export const workspaceSchemaBody = schemaLiteral({
       key: ['id'],
       fields: {
         id: { type: { kind: 'string' } },
-        rootNodeId: { type: { kind: 'string' } },
+        rootNodeId: { type: { kind: 'string' }, ...replaceable },
       },
     },
     contexts: {
@@ -25,7 +29,11 @@ export const workspaceSchemaBody = schemaLiteral({
       key: ['id'],
       fields: {
         id: { type: { kind: 'string' } },
-        url: { type: { kind: 'string' }, description: 'App invocation URL.' },
+        url: {
+          type: { kind: 'string' },
+          description: 'App invocation URL.',
+          ...replaceable,
+        },
       },
     },
     panes: {
@@ -33,16 +41,16 @@ export const workspaceSchemaBody = schemaLiteral({
       key: ['id'],
       fields: {
         id: { type: { kind: 'string' } },
-        activeContext: { type: { kind: 'string' } },
-        previewContext: { type: { kind: 'string' }, nullable: true },
+        activeContext: { type: { kind: 'string' }, ...replaceable },
+        previewContext: { type: { kind: 'string' }, nullable: true, ...replaceable },
       },
     },
     paneContexts: {
       relationId: 'patchpit.workspace.pane-context',
       key: ['contextId'],
       fields: {
-        paneId: { type: { kind: 'string' } },
-        position: { type: { kind: 'number' } },
+        paneId: { type: { kind: 'string' }, ...replaceable },
+        position: { type: { kind: 'number' }, ...replaceable },
         contextId: { type: { kind: 'string' } },
       },
     },
@@ -51,10 +59,13 @@ export const workspaceSchemaBody = schemaLiteral({
       key: ['id'],
       fields: {
         id: { type: { kind: 'string' } },
-        axis: { type: { kind: 'string', values: ['horizontal', 'vertical'] } },
-        first: { type: { kind: 'string' } },
-        ratio: { type: { kind: 'number' } },
-        second: { type: { kind: 'string' } },
+        axis: {
+          type: { kind: 'string', values: ['horizontal', 'vertical'] },
+          ...replaceable,
+        },
+        first: { type: { kind: 'string' }, ...replaceable },
+        ratio: { type: { kind: 'number' }, ...replaceable },
+        second: { type: { kind: 'string' }, ...replaceable },
       },
     },
   },
@@ -71,14 +82,17 @@ if (!preparedWorkspaceSchemaResult.success) {
 }
 
 export const workspaceRelations = {
-  contexts: relationLiteral(workspaceSchemaArtifact, workspaceSchemaBody, 'contexts'),
-  paneContexts: relationLiteral(workspaceSchemaArtifact, workspaceSchemaBody, 'paneContexts'),
-  panes: relationLiteral(workspaceSchemaArtifact, workspaceSchemaBody, 'panes'),
-  splits: relationLiteral(workspaceSchemaArtifact, workspaceSchemaBody, 'splits'),
-  state: relationLiteral(workspaceSchemaArtifact, workspaceSchemaBody, 'state'),
+  contexts: relationLiteral(workspaceSchemaArtifact, 'contexts'),
+  paneContexts: relationLiteral(workspaceSchemaArtifact, 'paneContexts'),
+  panes: relationLiteral(workspaceSchemaArtifact, 'panes'),
+  splits: relationLiteral(workspaceSchemaArtifact, 'splits'),
+  state: relationLiteral(workspaceSchemaArtifact, 'state'),
 } as const;
 
-const readOnly = { kind: 'read-only' } as const;
+const replace = {
+  kind: 'replace',
+  capability: builtInCapabilityRefs.fieldReplace,
+} as const;
 export const workspaceStorageMappingArtifact = await sealStorageMapping({
   id: 'patchpit.workspace.storage@1',
   body: {
@@ -88,37 +102,37 @@ export const workspaceStorageMappingArtifact = await sealStorageMapping({
       [workspaceRelations.state.relationId]: {
         collection: { kind: 'object-map', path: ['state'], absent: 'invalid' },
         keys: { id: { kind: 'map-key', onMismatch: 'reject' } },
-        fields: { rootNodeId: { path: ['rootNodeId'], write: readOnly } },
+        fields: { rootNodeId: { path: ['rootNodeId'], write: replace } },
       },
       [workspaceRelations.contexts.relationId]: {
         collection: { kind: 'object-map', path: ['contexts'], absent: 'invalid' },
         keys: { id: { kind: 'map-key', onMismatch: 'reject' } },
-        fields: { url: { path: ['url'], write: readOnly } },
+        fields: { url: { path: ['url'], write: replace } },
       },
       [workspaceRelations.panes.relationId]: {
         collection: { kind: 'object-map', path: ['panes'], absent: 'invalid' },
         keys: { id: { kind: 'map-key', onMismatch: 'reject' } },
         fields: {
-          activeContext: { path: ['activeContext'], write: readOnly },
-          previewContext: { path: ['previewContext'], write: readOnly },
+          activeContext: { path: ['activeContext'], write: replace },
+          previewContext: { path: ['previewContext'], write: replace },
         },
       },
       [workspaceRelations.paneContexts.relationId]: {
         collection: { kind: 'object-map', path: ['paneContexts'], absent: 'invalid' },
         keys: { contextId: { kind: 'map-key', onMismatch: 'reject' } },
         fields: {
-          paneId: { path: ['paneId'], write: readOnly },
-          position: { path: ['position'], write: readOnly },
+          paneId: { path: ['paneId'], write: replace },
+          position: { path: ['position'], write: replace },
         },
       },
       [workspaceRelations.splits.relationId]: {
         collection: { kind: 'object-map', path: ['splits'], absent: 'invalid' },
         keys: { id: { kind: 'map-key', onMismatch: 'reject' } },
         fields: {
-          axis: { path: ['axis'], write: readOnly },
-          first: { path: ['first'], write: readOnly },
-          ratio: { path: ['ratio'], write: readOnly },
-          second: { path: ['second'], write: readOnly },
+          axis: { path: ['axis'], write: replace },
+          first: { path: ['first'], write: replace },
+          ratio: { path: ['ratio'], write: replace },
+          second: { path: ['second'], write: replace },
         },
       },
     },
@@ -133,10 +147,22 @@ const workspaceStorageMappingResult = compileStorageMapping(
 if (!workspaceStorageMappingResult.success) {
   throw new TarstateParseError(workspaceStorageMappingResult.issues);
 }
-export const workspaceStorageMapping = workspaceStorageMappingResult.value;
+
+export const workspaceDocumentDeclaration: DocumentDeclaration = {
+  formatVersion: 1,
+  storageSchema: normalizeArtifactRef(workspaceSchemaArtifact),
+  projection: {
+    kind: 'storage-mapping',
+    storageMapping: normalizeArtifactRef(workspaceStorageMappingArtifact),
+  },
+};
 
 export const workspaceDocumentMetadata = {
   type: 'workspace',
   schema: normalizeArtifactRef(workspaceSchemaArtifact),
-  schemas: { [workspaceSchemaArtifact.id]: workspaceSchemaArtifact },
+  declaration: workspaceDocumentDeclaration,
+  schemas: {
+    [workspaceSchemaArtifact.id]: workspaceSchemaArtifact,
+    [workspaceStorageMappingArtifact.id]: workspaceStorageMappingArtifact,
+  },
 } as const;

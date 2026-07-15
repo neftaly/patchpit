@@ -3,5 +3,5 @@
 These are local builds from the tagged Tarstate `v0.3.0` release. The packages
 are vendored while Tarstate is not published to npm.
 
-- `tarstate-automerge-0.3.0.tgz`: `20e99f035d6e4acdbcb361d0d3fa9f01169355ba343826b051e2606adc53e77b`
-- `tarstate-core-0.3.0.tgz`: `765c94199888b7355432de1e9a89a71e9ce857af8fc02d41f6750a8c6f21fdcf`
+- `tarstate-automerge-0.3.0.tgz`: `f8ea4a53f64b543a1557e2592dc8aae9d91394737f9ea5e2f1ac987a52cc6db2`
+- `tarstate-core-0.3.0.tgz`: `55b8a392e08b64bab7a6a35d3b4d2560d590aa648c222fbba8fe022c551708cb`

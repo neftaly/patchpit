@@ -7,7 +7,7 @@ import { workspaceSchemaArtifact } from './workspace-schema.ts';
 void test('workspace runtime projects relation-shaped storage and applies named operations', async () => {
   const repo = new Repo();
   const handle = repo.create(createWorkspaceDocument('home'));
-  const workspace = openWorkspace(handle);
+  const workspace = await openWorkspace(handle);
   let changes = 0;
   const unsubscribe = workspace.subscribe(() => {
     changes += 1;
@@ -62,8 +62,8 @@ void test('workspace runtime projects relation-shaped storage and applies named 
 void test('named workspace operations replan after a concurrent stale basis', async () => {
   const repo = new Repo({ network: [] });
   const handle = repo.create(createWorkspaceDocument('home'));
-  const first = openWorkspace(handle);
-  const second = openWorkspace(handle);
+  const first = await openWorkspace(handle);
+  const second = await openWorkspace(handle);
 
   try {
     const results = await Promise.all([
@@ -104,7 +104,7 @@ void test('named workspace operations replan after a concurrent stale basis', as
 void test('malformed workspace relations produce an invalid projection without throwing', async () => {
   const repo = new Repo({ network: [] });
   const handle = repo.create(createWorkspaceDocument('home'));
-  const workspace = openWorkspace(handle);
+  const workspace = await openWorkspace(handle);
   try {
     handle.change((doc) => {
       (doc.panes.left as { activeContext: string }).activeContext = 'missing';
