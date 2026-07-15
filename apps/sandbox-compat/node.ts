@@ -1,7 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { automergeFsPackageFromFiles, openAutomergeFsFolder } from '@patchpit/automerge-fs';
-import { openFsEntries, type FsEntry } from '@patchpit/fs';
-import { createSandboxUrlMountFromFsFiles, sandboxFsFilesFromEntries } from '@patchpit/sandbox-fs';
+import { createSandboxUrlMount } from '@patchpit/sandbox';
 import { readSandboxFsDirectory } from '@patchpit/sandbox-fs/node';
 import { build } from 'vite';
 import { sandboxCompatApp } from './app.ts';
@@ -10,7 +8,6 @@ const appPath = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 const appBuildRoot = appPath('dist');
 const { id: sandboxCompatId } = sandboxCompatApp;
-const ghostscriptTigerUrl = 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg';
 let buildSnapshot: ReturnType<typeof packageSandboxCompatBuild> | undefined;
 
 export const readSandboxCompatBundle = () => buildSnapshot ??= packageSandboxCompatBuild();
@@ -18,9 +15,13 @@ export const readSandboxCompatBundle = () => buildSnapshot ??= packageSandboxCom
 export const readSandboxCompatFiles = async () => (await readSandboxCompatBundle()).files;
 
 export const createSandboxCompatMount = async (baseUrl: string | URL) =>
-  createSandboxUrlMountFromFsFiles(await readSandboxCompatFiles(), {
+  createSandboxUrlMount({
     baseUrl,
     entry: sandboxCompatApp.entry,
+    files: (await readSandboxCompatFiles()).map((file) => ({
+      path: file.path,
+      read: () => ({ body: file.body, contentType: file.contentType }),
+    })),
     mountId: sandboxCompatId,
   });
 
@@ -39,29 +40,9 @@ async function packageSandboxCompatBuild() {
       name,
       order,
       parentId: null,
-      resourceRef: name === 'ghostscript-tiger.svg' ? ghostscriptTigerUrl : `sandbox-compat:${name}`,
+      resourceRef: `sandbox-compat:${name}`,
     };
   });
-  const packaged = automergeFsPackageFromFiles(packageFiles);
-  const folder = openAutomergeFsFolder(sandboxCompatId, packaged.folder);
-  const filesystem = openFsEntries([folder.attachment]);
-  try {
-    const snapshot = filesystem.observer.getSnapshot();
-    if (snapshot.state !== 'open') throw new Error('Sandbox compat filesystem did not open');
-    const entries: readonly FsEntry[] = snapshot.current.rows.map(({ sourceId: _sourceId, ...entry }) => entry);
-    const contentByRef = new Map(packageFiles.map(({ bytes, contentType, resourceRef }) => [
-      resourceRef,
-      { bytes, ...(contentType === undefined ? {} : { contentType }) },
-    ] as const));
-    const files = await sandboxFsFilesFromEntries(entries, (resourceRef) => {
-      const content = contentByRef.get(resourceRef);
-      return content === undefined ? undefined : {
-        body: content.bytes,
-        ...(content.contentType === undefined ? {} : { contentType: content.contentType }),
-      };
-    });
-    return { entries, files, packageFiles };
-  } finally {
-    filesystem.close();
-  }
+  const files = output.map(({ body, contentType, path }) => ({ body, contentType, path }));
+  return { files, packageFiles };
 }

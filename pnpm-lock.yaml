@@ -162,9 +162,6 @@ importers:
       '@patchpit/fs':
         specifier: workspace:*
         version: link:../fs
-      '@patchpit/sandbox':
-        specifier: workspace:*
-        version: link:../sandbox
       '@tarstate/core':
         specifier: file:../../vendor/tarstate/tarstate-core-0.3.0.tgz
         version: file:vendor/tarstate/tarstate-core-0.3.0.tgz

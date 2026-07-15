@@ -3,7 +3,7 @@ import {
   createFsAttachment,
   fsEntriesRelation,
   fsSchemaArtifact,
-  parseFsEntry,
+  safeParseFsEntry,
   type FsEntry,
 } from '@patchpit/fs';
 import {
@@ -13,9 +13,7 @@ import {
   type AutomergeSourceRuntimeApi,
 } from '@tarstate/automerge';
 import {
-  coordinateSourceCommit,
   normalizeArtifactRef,
-  sha256Json,
   type JsonValue,
 } from '@tarstate/core';
 
@@ -115,10 +113,21 @@ const projectAutomergeFsFolder = (runtime: AutomergeSourceRuntimeApi<AutomergeFs
     missingCollection: 'invalid',
     keySource: 'map-key',
     parse: (candidate, { mapKey, path }) => {
-      if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
-        return { success: false, issue: { code: 'automerge.row_invalid', path } };
-      }
-      return { success: true, row: parseFsEntry({ ...candidate, entryId: mapKey }) as ProjectedFsEntry };
+      const result = candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)
+        ? undefined
+        : safeParseFsEntry({ ...candidate, entryId: mapKey }, { path });
+      return result?.success === true
+        ? { success: true, row: result.value as ProjectedFsEntry }
+        : {
+            success: false,
+            issue: {
+              code: 'automerge.row_invalid',
+              path,
+              ...(result === undefined ? {} : {
+                details: { schemaIssueCodes: result.issues.map(({ code }) => code) },
+              }),
+            },
+          };
     },
   });
   const attachment = createFsAttachment({
@@ -134,36 +143,5 @@ const projectAutomergeFsFolder = (runtime: AutomergeSourceRuntimeApi<AutomergeFs
       };
     },
   });
-  const renameEntry = async (input: {
-    readonly entryId: string;
-    readonly name: string;
-    readonly operationId: string;
-  }) => {
-    const snapshot = source.snapshot();
-    const row = binding.project(snapshot).rows.find(({ key }) => key[0] === input.entryId);
-    if (row === undefined) throw new Error(`Filesystem entry not found: ${input.entryId}`);
-    return coordinateSourceCommit({
-      source,
-      bindings: [binding],
-      edits: [{
-        kind: 'replace-fields',
-        relationId: fsEntriesRelation.relationId,
-        key: row.key,
-        locator: row.locator as unknown as JsonValue,
-        fields: { name: input.name },
-      }],
-      commit: {
-        operationEpoch: source.operationEpoch,
-        operationId: input.operationId,
-        intentHash: await sha256Json({
-          kind: 'rename-fs-entry',
-          sourceId: runtime.sourceId,
-          entryId: input.entryId,
-          name: input.name,
-        }),
-        expectedBasis: snapshot.basis,
-      },
-    });
-  };
-  return { attachment, close: () => source.close(), renameEntry };
+  return { attachment, close: () => source.close() };
 };

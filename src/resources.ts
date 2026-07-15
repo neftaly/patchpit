@@ -11,8 +11,8 @@ export type Resource = {
 
 export const openResources = (attachment: FsAttachment) => openFsEntries([attachment]);
 
-export const resourceByRef = (resources: readonly Resource[], resourceRef: string) =>
-  resources.find((resource) => resource.resourceRef === resourceRef);
+export const resourceById = (resources: readonly Resource[], localId: string) =>
+  resources.find((resource) => resource.localId === localId);
 
 type ResourceSnapshot = ReturnType<ReturnType<typeof openFsEntries>['observer']['getSnapshot']>;
 

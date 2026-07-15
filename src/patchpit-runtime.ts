@@ -25,7 +25,6 @@ import {
 import { workspaceDocumentMetadata } from './workspace-schema.ts';
 
 const workspaceEntryId = 'workspace';
-const sandboxEntryId = 'sandbox-compat';
 
 export type RootSeedFile = {
   readonly bytes: readonly number[];
@@ -33,13 +32,19 @@ export type RootSeedFile = {
   readonly entryId: string;
   readonly name: string;
   readonly order: number;
-  readonly parentId: string | null;
   readonly resourceRef: string;
+};
+
+export type RootSeedFolder = {
+  readonly entryId: string;
+  readonly files: readonly RootSeedFile[];
+  readonly name: string;
+  readonly order: number;
 };
 
 type RootOptions = {
   readonly repo: Repo;
-  readonly files: readonly RootSeedFile[];
+  readonly folders: readonly RootSeedFolder[];
   readonly initialContext: string;
   readonly documentContext?: string;
 };
@@ -55,26 +60,28 @@ export const createRoot = async (options: RootOptions) => {
   ));
   const entries: FsEntry[] = [
     rootEntry(workspaceEntryId, 'file', 'workspace.am', 0, null, workspace.url),
-    rootEntry(sandboxEntryId, 'folder', 'sandbox-compat', 1, null, rootHandle.url),
   ];
 
-  for (const file of options.files) {
-    const entryId = sandboxId(file.entryId);
-    let resourceRef = file.resourceRef;
-    if (!resourceRef.startsWith('https:')) {
-      resourceRef = options.repo.create(createAutomergeFileContentDocument(
-        Uint8Array.from(file.bytes),
-        file.contentType,
-      )).url;
+  for (const folder of options.folders) {
+    entries.push(rootEntry(folder.entryId, 'folder', folder.name, folder.order, null, rootHandle.url));
+    for (const file of folder.files) {
+      const entryId = folderFileId(folder.entryId, file.entryId);
+      let resourceRef = file.resourceRef;
+      if (!resourceRef.startsWith('https:')) {
+        resourceRef = options.repo.create(createAutomergeFileContentDocument(
+          Uint8Array.from(file.bytes),
+          file.contentType,
+        )).url;
+      }
+      entries.push(rootEntry(
+        entryId,
+        'file',
+        file.name,
+        file.order,
+        folder.entryId,
+        resourceRef,
+      ));
     }
-    entries.push(rootEntry(
-      entryId,
-      'file',
-      file.name,
-      file.order,
-      file.parentId === null ? sandboxEntryId : sandboxId(file.parentId),
-      resourceRef,
-    ));
   }
   rootHandle.change((doc) => {
     const target = doc.entries as Record<string, Omit<FsEntry, 'entryId'>>;
@@ -202,10 +209,10 @@ const validateFileContent = (
   resourceRef: string,
   doc: object,
 ) => {
-  const isSandboxFile = Object.entries(root.doc().entries).some(([entryId, entry]) =>
-    entryId.startsWith(`${sandboxEntryId}:`) && entry.kind === 'file'
+  const isContentFile = Object.entries(root.doc().entries).some(([entryId, entry]) =>
+    entryId !== workspaceEntryId && entry.kind === 'file'
       && entry.resourceRef === resourceRef);
-  if (isSandboxFile && fileContent(doc) === undefined) {
+  if (isContentFile && fileContent(doc) === undefined) {
     throw new Error(`Patchpit file content is invalid: ${resourceRef}`);
   }
 };
@@ -229,8 +236,7 @@ const validateRoot = (handle: DocHandle<AutomergeFsFolderDoc>) => {
     throw new Error('Patchpit root entries are invalid', { cause });
   }
   const workspace = entries.find(({ entryId }) => entryId === workspaceEntryId);
-  const sandbox = entries.find(({ entryId }) => entryId === sandboxEntryId);
-  if (workspace?.kind !== 'file' || sandbox?.kind !== 'folder') {
+  if (workspace?.kind !== 'file') {
     throw new Error('Patchpit root entries are missing');
   }
   const byId = new Map(entries.map((entry) => [entry.entryId, entry]));
@@ -274,7 +280,7 @@ const rootEntry = (
   resourceRef: string,
 ): FsEntry => ({ entryId, kind, name, order, parentId, resourceRef });
 
-const sandboxId = (entryId: string) => `${sandboxEntryId}:${entryId}`;
+const folderFileId = (folderEntryId: string, fileEntryId: string) => `${folderEntryId}:${fileEntryId}`;
 const asObjectHandle = <T extends object>(handle: DocHandle<T>) =>
   handle as unknown as DocHandle<object>;
 const findOptions = (signal: AbortSignal | undefined) => signal === undefined ? {} : { signal };

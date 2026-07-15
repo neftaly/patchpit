@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { isValidAutomergeUrl, Repo } from '@automerge/automerge-repo';
 import type { AutomergeFileContentDoc, AutomergeFsFolderDoc } from '@patchpit/automerge-fs';
-import { addContext, openContext } from './workspace.ts';
 import { createRoot, openRoot } from './patchpit-runtime.ts';
 
 void test('Patchpit root reopens one live Automerge document tree', async () => {
@@ -12,14 +11,17 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
     repo,
     initialContext: 'files.html',
     documentContext: 'sandbox-compat/index.html',
-    files: [
+    folders: [{
+      entryId: 'sandbox-compat',
+      name: 'sandbox-compat',
+      order: 1,
+      files: [
       {
         bytes: [60, 104, 49, 62],
         contentType: 'text/html',
         entryId: 'index.html',
         name: 'index.html',
         order: 0,
-        parentId: null,
         resourceRef: 'sandbox-compat:index.html',
       },
       {
@@ -28,10 +30,10 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
         entryId: 'tiger.svg',
         name: 'tiger.svg',
         order: 1,
-        parentId: null,
         resourceRef: externalUrl,
       },
-    ],
+      ],
+    }],
   });
   const rootHandle = await repo.find<AutomergeFsFolderDoc>(runtime.rootUrl);
   const resourceSnapshot = runtime.resources.observer.getSnapshot();
@@ -85,11 +87,14 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
   if (renamedSnapshot.state !== 'open') throw new Error('Resource query closed');
   assert.equal(renamedSnapshot.current.rows
     .find(({ entryId }) => entryId === index.entryId)?.name, 'main.html');
-  await runtime.workspace.update((current) => openContext(
-    addContext(current, 'notes', 'viewer.html#{"src":"notes"}'),
-    'notes',
-    'right',
-  ));
+  await runtime.workspace.act({
+    kind: 'workspace.context.open',
+    contextId: 'notes',
+    url: 'viewer.html#{"src":"notes"}',
+    targetPaneId: 'right',
+    missingSplitId: 'unused',
+    mode: 'open',
+  });
 
   runtime.close();
   assert.equal(await runtime.resolve(index.resourceRef), undefined);
@@ -111,7 +116,10 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
     ((await reopened.resolve(index.resourceRef))!.doc() as AutomergeFileContentDoc).bytes,
     new Uint8Array([9]),
   );
-  const right = reopened.workspace.getSnapshot().nodes.right;
+  const workspaceProjection = reopened.workspace.getSnapshot();
+  assert.equal(workspaceProjection.state, 'ready');
+  if (workspaceProjection.state !== 'ready') throw new Error('Workspace projection is unavailable');
+  const right = workspaceProjection.workspace.nodes.right;
   assert.equal(right?.kind === 'pane' && right.contexts.includes('notes'), true);
 
   reopened.close();
@@ -134,14 +142,18 @@ void test('Patchpit runtime snapshots valid app bytes and preserves invalid cont
   const runtime = await createRoot({
     repo,
     initialContext: 'files.html',
-    files: [{
-      bytes: [1, 2, 3],
-      contentType: 'application/octet-stream',
-      entryId: 'index.html',
-      name: 'index.html',
-      order: 0,
-      parentId: null,
-      resourceRef: 'sandbox-compat:index.html',
+    folders: [{
+      entryId: 'sandbox-compat',
+      name: 'sandbox-compat',
+      order: 1,
+      files: [{
+        bytes: [1, 2, 3],
+        contentType: 'application/octet-stream',
+        entryId: 'index.html',
+        name: 'index.html',
+        order: 0,
+        resourceRef: 'sandbox-compat:index.html',
+      }],
     }],
   });
   const ready = await runtime.snapshotApp('sandbox-compat');

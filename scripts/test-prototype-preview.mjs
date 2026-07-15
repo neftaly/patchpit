@@ -49,6 +49,7 @@ try {
   assert.equal(entryHeaders?.['access-control-allow-origin'], '*');
   assert.match(entryHeaders?.['content-security-policy'] ?? '', /sandbox allow-scripts allow-same-origin/);
   await proveOfflineSandboxReload(page);
+  await proveFolderAppLaunch(page);
   console.log(JSON.stringify({ cases: report.cases.length, entryHeaders: 'pass', mode: development ? 'dev' : 'preview', workspace: 'pass' }, null, 2));
 } finally {
   await browser?.close();
@@ -83,6 +84,10 @@ async function proveWorkspaceBehavior(page) {
   await tab('sandbox-compat / index.html').waitFor();
   assert.notEqual(await tab('sandbox-compat / index.html').getAttribute('data-context'), null);
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
+  await resource('external', 'unresolved.svg').click();
+  await page.getByRole('alert').getByText('Resource unavailable.').waitFor();
+  await page.getByRole('button', { name: 'Close external / unresolved.svg' }).click();
+  await tab('sandbox-compat / index.html').click();
   await drag(
     tab('sandbox-compat / index.html'),
     rightPane.locator('.pane-content'),
@@ -96,7 +101,7 @@ async function proveWorkspaceBehavior(page) {
   const workspaceViewer = page.locator('.viewer');
   await workspaceViewer.waitFor();
   const workspaceDocument = JSON.parse(await workspaceViewer.textContent());
-  assert.equal(workspaceDocument.nodes['split-0'].ratio, 0.2);
+  assert.equal(workspaceDocument.splits['split-0'].ratio, 0.2);
   const viewerUrl = Object.values(workspaceDocument.contexts)
     .map((context) => context.url)
     .find((url) => url.startsWith('viewer.html#'));
@@ -119,7 +124,7 @@ async function proveWorkspaceBehavior(page) {
     document.querySelector('[data-node="split-0"]')?.getAttribute('data-ratio'),
   ) > 0.25);
   await page.locator('.viewer', { hasText: '"ratio": 0.3' }).waitFor();
-  assert(JSON.parse(await workspaceViewer.textContent()).nodes['split-0'].ratio > 0.25);
+  assert(JSON.parse(await workspaceViewer.textContent()).splits['split-0'].ratio > 0.25);
   await page.getByRole('button', { name: 'Close patchpit / workspace.am' }).click();
   await tab('sandbox-compat / index.html').click();
 
@@ -185,6 +190,7 @@ async function proveWorkspaceBehavior(page) {
   await resource('sandbox-compat', 'css-url.css').click();
   await tab('sandbox-compat / data.json').waitFor();
   await tab('sandbox-compat / css-url.css').waitFor();
+  assert.equal(await splitPane.locator('.tab', { hasText: 'sandbox-compat / css-url.css' }).count(), 1);
   await resource('sandbox-compat', 'css-import.css').click();
   assert.equal(await tab('sandbox-compat / css-url.css').count(), 0);
 
@@ -242,6 +248,16 @@ async function proveOfflineSandboxReload(page) {
   } finally {
     await page.context().setOffline(false);
   }
+}
+
+async function proveFolderAppLaunch(page) {
+  await page.getByRole('button', { name: 'Close sandbox-compat / index.html' }).click();
+  assert.equal(await page.locator('.sandbox-app').count(), 0);
+  await page.evaluate(() => { window.__sandboxCompatReport = undefined; });
+  await page.locator('button.resource', { hasText: 'sandbox-compat' }).click();
+  await page.locator('.sandbox-app').waitFor();
+  await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2_000 });
+  assert.equal(await page.locator('.tab', { hasText: 'sandbox-compat / index.html' }).getAttribute('data-preview'), 'true');
 }
 
 async function dragWithTargetPreview(

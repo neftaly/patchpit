@@ -1,12 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import babel from '@rolldown/plugin-babel';
+import { sandboxCompatApp } from './apps/sandbox-compat/app.ts';
 import { readSandboxCompatBundle } from './apps/sandbox-compat/node.ts';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
 const repoPath = (path: string) => fileURLToPath(new URL(path, import.meta.url));
-const sandboxCompatBundleId = 'virtual:patchpit/sandbox-compat-bundle';
-const resolvedSandboxCompatBundleId = `\0${sandboxCompatBundleId}`;
+const sandboxCompatArtifactPath = '__patchpit/apps/sandbox-compat';
 
 export default defineConfig({
   base: process.env.PATCHPIT_BASE ?? '/',
@@ -34,7 +34,7 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     sandboxServiceWorkerPlugin(),
-    sandboxCompatPlugin(),
+    sandboxCompatArtifactPlugin(),
   ],
 });
 
@@ -54,21 +54,65 @@ function sandboxServiceWorkerPlugin(): Plugin {
   };
 }
 
-function sandboxCompatPlugin(): Plugin {
+function sandboxCompatArtifactPlugin(): Plugin {
+  const artifact = async () => {
+    const { packageFiles } = await readSandboxCompatBundle();
+    return {
+      files: packageFiles.map(({ bytes, contentType, name, order }) => ({
+        bytes,
+        ...(contentType === undefined ? {} : { contentType }),
+        name,
+        order,
+        url: encodeURIComponent(name),
+      })),
+      manifest: {
+        type: 'patchpit.demo-files@1',
+        entry: sandboxCompatApp.entry,
+        rootEntryId: sandboxCompatApp.id,
+      },
+    };
+  };
   return {
-    name: 'patchpit-sandbox-compat-mount',
-    resolveId(id) {
-      return id === sandboxCompatBundleId ? resolvedSandboxCompatBundleId : undefined;
+    name: 'patchpit-sandbox-compat-artifact',
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const base = `${server.config.base}${sandboxCompatArtifactPath}/`;
+        const requestPath = request.url?.split('?', 1)[0];
+        if (requestPath?.startsWith(base) !== true) return next();
+        const packaged = await artifact();
+        const relativePath = requestPath.slice(base.length);
+        if (relativePath === 'files.json') {
+          response.setHeader('Content-Type', 'application/json');
+          response.end(JSON.stringify({
+            ...packaged.manifest,
+            files: packaged.files.map(({ bytes: _bytes, ...file }) => file),
+          }));
+          return;
+        }
+        const name = decodeURIComponent(relativePath);
+        const file = packaged.files.find((candidate) => candidate.name === name);
+        if (file === undefined) return next();
+        response.setHeader('Content-Type', file.contentType ?? 'application/octet-stream');
+        response.end(file.bytes);
+      });
     },
-    async load(id) {
-      if (id !== resolvedSandboxCompatBundleId) return;
-      const { packageFiles } = await readSandboxCompatBundle();
-      const files = packageFiles.map(({ bytes, ...file }) => ({
-        ...file,
-        bytes: [...bytes],
-        resourceRef: `sandbox-compat:${file.entryId}`,
-      }));
-      return `export default ${JSON.stringify({ files })}`;
+    async generateBundle() {
+      const packaged = await artifact();
+      for (const file of packaged.files) {
+        this.emitFile({
+          type: 'asset',
+          fileName: `${sandboxCompatArtifactPath}/${file.url}`,
+          source: file.bytes,
+        });
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: `${sandboxCompatArtifactPath}/files.json`,
+        source: JSON.stringify({
+          ...packaged.manifest,
+          files: packaged.files.map(({ bytes: _bytes, ...file }) => file),
+        }),
+      });
     },
   };
 }

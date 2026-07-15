@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@patchpit/fs": "workspace:*",
-    "@patchpit/sandbox": "workspace:*",
     "@tarstate/core": "file:../../vendor/tarstate/tarstate-core-0.3.0.tgz"
   }
 }

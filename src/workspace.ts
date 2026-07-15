@@ -31,6 +31,92 @@ export type WorkspaceState = {
   readonly rootNodeId: string;
 };
 
+export type WorkspaceOperation = {
+  readonly kind: 'workspace.context.activate';
+  readonly paneId: WorkspacePaneId;
+  readonly contextId: string;
+} | {
+  readonly kind: 'workspace.context.close';
+  readonly paneId: WorkspacePaneId;
+  readonly contextId: string;
+} | {
+  readonly kind: 'workspace.context.open';
+  readonly contextId: string;
+  readonly url: string;
+  readonly targetPaneId: WorkspacePaneId;
+  readonly missingSplitId: string;
+  readonly mode: 'open' | 'preview';
+} | {
+  readonly kind: 'workspace.context.move';
+  readonly contextId: string;
+  readonly targetPaneId: WorkspacePaneId;
+  readonly beforeContext: string | null;
+  readonly url: string | null;
+  readonly pin: boolean;
+} | {
+  readonly kind: 'workspace.context.split';
+  readonly contextId: string;
+  readonly targetPaneId: WorkspacePaneId;
+  readonly edge: WorkspaceSplitEdge;
+  readonly ids: WorkspaceSplitIds;
+  readonly url: string | null;
+} | {
+  readonly kind: 'workspace.split.resize';
+  readonly splitId: string;
+  readonly ratio: number;
+};
+
+export const applyWorkspaceOperation = (
+  workspace: WorkspaceState,
+  operation: WorkspaceOperation,
+): WorkspaceState => {
+  switch (operation.kind) {
+    case 'workspace.context.activate':
+      return activateContext(workspace, operation.paneId, operation.contextId);
+    case 'workspace.context.close':
+      return closeContext(workspace, operation.paneId, operation.contextId);
+    case 'workspace.context.open': {
+      const registered = addContext(workspace, operation.contextId, operation.url);
+      return (operation.mode === 'open' ? openContext : previewContext)(
+        registered,
+        operation.contextId,
+        operation.targetPaneId,
+        operation.missingSplitId,
+      );
+    }
+    case 'workspace.context.move': {
+      const registered = operation.url === null
+        ? workspace
+        : addContext(workspace, operation.contextId, operation.url);
+      const prepared = operation.pin
+        ? openContext(registered, operation.contextId, operation.targetPaneId)
+        : registered;
+      const moved = moveContext(
+        prepared,
+        operation.contextId,
+        operation.targetPaneId,
+        operation.beforeContext ?? undefined,
+      );
+      return moved === registered && registered !== workspace ? workspace : moved;
+    }
+    case 'workspace.context.split': {
+      const registered = operation.url === null
+        ? workspace
+        : addContext(workspace, operation.contextId, operation.url);
+      const split = splitContext(
+        registered,
+        operation.contextId,
+        operation.targetPaneId,
+        operation.edge,
+        operation.ids,
+      );
+      return split === registered && registered !== workspace ? workspace : split;
+    }
+    case 'workspace.split.resize':
+      return resizeSplit(workspace, operation.splitId, operation.ratio);
+  }
+};
+
 export const createWorkspace = (initialContext: string, documentContext?: string): WorkspaceState => documentContext === undefined
   ? {
       contexts: { 'context-0': { url: initialContext } },
@@ -66,6 +152,26 @@ export const contextIdForUrl = (
   paneId: WorkspacePaneId,
 ): string | undefined => paneAt(workspace, paneId)?.contexts
   .find((contextId) => workspace.contexts[contextId]?.url === url);
+
+export const paneIdsInLayoutOrder = (workspace: WorkspaceState): readonly WorkspacePaneId[] => {
+  const paneIds: WorkspacePaneId[] = [];
+  const visited = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+    const node = workspace.nodes[nodeId];
+    if (node?.kind === 'pane') {
+      paneIds.push(nodeId);
+      return;
+    }
+    if (node?.kind === 'split') {
+      visit(node.first);
+      visit(node.second);
+    }
+  };
+  visit(workspace.rootNodeId);
+  return paneIds;
+};
 
 export const activateContext = (
   workspace: WorkspaceState,

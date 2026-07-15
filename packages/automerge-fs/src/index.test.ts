@@ -48,44 +48,7 @@ void test('automerge filesystem package keeps bytes separate from folder resourc
   assert.deepEqual(firstFile?.[1].bytes, new Uint8Array([60, 104, 49, 62]));
 });
 
-void test('Tarstate-coordinated rename flows through the shared filesystem query', async () => {
-  const packaged = automergeFsPackageFromFiles([{
-    bytes: new Uint8Array(),
-    entryId: 'readme',
-    name: 'readme.md',
-    order: 0,
-    parentId: null,
-    resourceRef: 'content:readme',
-  }]);
-  const folder = openAutomergeFsFolder('shared', packaged.folder);
-  const query = openFsEntries([folder.attachment]);
-  const before = query.observer.getSnapshot();
-  const readmeKey = before.state === 'open' ? before.current.resultKeys[0] : undefined;
-
-  const committed = await folder.renameEntry({
-    entryId: 'readme',
-    name: 'notes.md',
-    operationId: 'rename-readme',
-  });
-  const after = query.observer.getSnapshot();
-
-  assert.equal(committed.outcome, 'committed');
-  assert.equal(after.state, 'open');
-  assert.deepEqual(after.current.rows, [{
-    entryId: 'readme',
-    kind: 'file',
-    name: 'notes.md',
-    order: 0,
-    parentId: null,
-    resourceRef: 'content:readme',
-    sourceId: 'shared',
-  }]);
-  assert.equal(after.current.resultKeys[0], readmeKey);
-
-  query.close();
-});
-
-void test('Repo-backed filesystem observes and writes through one live handle', async () => {
+void test('Repo-backed filesystem observes one live handle', () => {
   const packaged = automergeFsPackageFromFiles([{
     bytes: new Uint8Array(),
     entryId: 'readme',
@@ -103,9 +66,6 @@ void test('Repo-backed filesystem observes and writes through one live handle', 
   handle.change((doc) => { (doc.entries.readme as { name: string }).name = 'external.md'; });
   let snapshot = query.observer.getSnapshot();
   assert.equal(snapshot.state === 'open' && snapshot.current.rows[0]?.name, 'external.md');
-
-  await folder.renameEntry({ entryId: 'readme', name: 'notes.md', operationId: 'rename-repo-readme' });
-  assert.equal(handle.doc().entries.readme?.name, 'notes.md');
 
   query.close();
   handle.change((doc) => { (doc.entries.readme as { name: string }).name = 'handle-still-open.md'; });
