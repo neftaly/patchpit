@@ -36,42 +36,22 @@ import {
 } from '@tarstate/core';
 import {
   applyWorkspaceOperation,
-  createWorkspace,
-  type WorkspaceNode,
+  workspaceInvariantViolations,
   type WorkspaceOperation,
   type WorkspaceState,
 } from './workspace.ts';
+import {
+  workspaceFromLogicalRows,
+  workspaceRelationRows,
+  type WorkspaceDocument,
+} from './workspace-document.ts';
 import {
   workspaceDocumentMetadata,
   workspaceDocumentDeclaration,
   workspaceRelations,
 } from './workspace-schema.ts';
 
-type WorkspaceStateRow = { readonly rootNodeId: string };
-type WorkspaceContextRow = { readonly url: string };
-type WorkspacePaneRow = {
-  readonly activeContext: string;
-  readonly previewContext: string | null;
-};
-type WorkspacePaneContextRow = {
-  readonly paneId: string;
-  readonly position: number;
-};
-type WorkspaceSplitRow = {
-  readonly axis: 'horizontal' | 'vertical';
-  readonly first: string;
-  readonly ratio: number;
-  readonly second: string;
-};
-
-export type WorkspaceDocument = {
-  readonly '@patchpit': typeof workspaceDocumentMetadata;
-  readonly state: Readonly<Record<string, WorkspaceStateRow>>;
-  readonly contexts: Readonly<Record<string, WorkspaceContextRow>>;
-  readonly panes: Readonly<Record<string, WorkspacePaneRow>>;
-  readonly paneContexts: Readonly<Record<string, WorkspacePaneContextRow>>;
-  readonly splits: Readonly<Record<string, WorkspaceSplitRow>>;
-};
+export { createWorkspaceDocument, type WorkspaceDocument } from './workspace-document.ts';
 
 export type WorkspaceProjection = {
   readonly state: 'ready';
@@ -89,14 +69,8 @@ export type WorkspaceOperationResult = {
   readonly issues: readonly Issue[];
 };
 
-const workspaceStateId = 'workspace';
 const maxStaleRetries = 2;
 type WorkspaceSourceSnapshot = SourceSnapshot<WorkspaceDocument>;
-
-export const createWorkspaceDocument = (
-  initialContext: string,
-  documentContext?: string,
-): WorkspaceDocument => workspaceDocumentFromState(createWorkspace(initialContext, documentContext));
 
 export const openWorkspace = async (handle: DocHandle<WorkspaceDocument>) => {
   const source = new AutomergeAtomicSource({
@@ -157,7 +131,6 @@ export const openWorkspace = async (handle: DocHandle<WorkspaceDocument>) => {
     act,
     close: () => source.close(),
     getSnapshot,
-    resourceRef: handle.url,
     subscribe: (listener: () => void) => source.subscribe(listener),
   };
 };
@@ -289,118 +262,29 @@ const workspaceProjectionFromRows = (
   basis: SourceBasis,
   inputIssues: readonly Issue[] = [],
 ): WorkspaceProjection => {
-  const issues = [...inputIssues];
-  const stateRows = relationRows(rows, workspaceRelations.state.relationId);
-  if (stateRows.length !== 1 || stateRows[0]?.row.id !== workspaceStateId) {
-    return {
-      state: 'invalid',
-      basis,
-      issues: [...issues, workspaceIssue('state-cardinality', { rows: stateRows.length })],
-    };
-  }
-
-  const contexts = Object.fromEntries(relationRows(rows, workspaceRelations.contexts.relationId)
-    .map(({ row }) => [row.id as string, { url: row.url as string }]));
-  const paneContexts = new Map<string, { contextId: string; position: number }[]>();
-  for (const { row } of relationRows(rows, workspaceRelations.paneContexts.relationId)) {
-    const paneId = row.paneId as string;
-    const current = paneContexts.get(paneId) ?? [];
-    current.push({ contextId: row.contextId as string, position: row.position as number });
-    paneContexts.set(paneId, current);
-  }
-  const nodes: Record<string, WorkspaceNode> = {};
-  for (const { row } of relationRows(rows, workspaceRelations.panes.relationId)) {
-    const id = row.id as string;
-    nodes[id] = {
-      kind: 'pane',
-      activeContext: row.activeContext as string,
-      contexts: [...paneContexts.get(id) ?? []]
-        .sort((left, right) => left.position - right.position || left.contextId.localeCompare(right.contextId))
-        .map(({ contextId }) => contextId),
-      previewContext: row.previewContext as string | null,
-    };
-  }
-  for (const { row } of relationRows(rows, workspaceRelations.splits.relationId)) {
-    const id = row.id as string;
-    if (nodes[id] !== undefined) {
-      issues.push(workspaceIssue('node-id-collision', { nodeId: id }));
-      continue;
-    }
-    nodes[id] = {
-      kind: 'split',
-      axis: row.axis as 'horizontal' | 'vertical',
-      first: row.first as string,
-      ratio: row.ratio as number,
-      second: row.second as string,
-    };
-  }
-  const workspace: WorkspaceState = {
-    contexts,
-    nodes,
-    rootNodeId: stateRows[0].row.rootNodeId as string,
-  };
-  issues.push(...workspaceTopologyIssues(workspace));
+  const decoded = workspaceFromLogicalRows(rows);
+  const issues = [
+    ...inputIssues,
+    ...decoded.issues.map(({ kind, details }) => workspaceIssue(kind, details)),
+  ];
+  if (decoded.workspace === undefined) return { state: 'invalid', basis, issues };
+  issues.push(...workspaceInvariantViolations(decoded.workspace)
+    .map(({ kind, details }) => workspaceIssue(kind, details)));
   return issues.some(({ severity }) => severity === 'error')
     ? { state: 'invalid', basis, issues }
-    : { state: 'ready', workspace, basis, issues };
-};
-
-const workspaceDocumentFromState = (workspace: WorkspaceState): WorkspaceDocument => {
-  const document: MutableWorkspaceDocument = {
-    '@patchpit': workspaceDocumentMetadata,
-    state: { [workspaceStateId]: { rootNodeId: workspace.rootNodeId } },
-    contexts: Object.fromEntries(Object.entries(workspace.contexts)
-      .map(([id, context]) => [id, { url: context.url }])),
-    panes: {},
-    paneContexts: {},
-    splits: {},
-  };
-  for (const [id, node] of Object.entries(workspace.nodes)) {
-    if (node.kind === 'pane') {
-      document.panes[id] = {
-        activeContext: node.activeContext,
-        previewContext: node.previewContext,
-      };
-      node.contexts.forEach((contextId, position) => {
-        document.paneContexts[contextId] = { paneId: id, position };
-      });
-    } else {
-      document.splits[id] = {
-        axis: node.axis,
-        first: node.first,
-        ratio: node.ratio,
-        second: node.second,
-      };
-    }
-  }
-  return document;
-};
-
-type MutableWorkspaceDocument = {
-  '@patchpit': typeof workspaceDocumentMetadata;
-  state: Record<string, WorkspaceStateRow>;
-  contexts: Record<string, WorkspaceContextRow>;
-  panes: Record<string, WorkspacePaneRow>;
-  paneContexts: Record<string, WorkspacePaneContextRow>;
-  splits: Record<string, WorkspaceSplitRow>;
-};
-
-type WorkspaceRelationRows = {
-  readonly relation: WriteRelation;
-  readonly keyField: string;
-  readonly rows: readonly Readonly<Record<string, JsonValue>>[];
+    : { state: 'ready', workspace: decoded.workspace, basis, issues };
 };
 
 const workspaceTransaction = async (
   before: WorkspaceState,
   after: WorkspaceState,
 ): Promise<Transaction> => {
-  const beforeRelations = new Map(workspaceRows(before)
+  const beforeRelations = new Map(workspaceRelationRows(before)
     .map((relation) => [relation.relation.relationId, relation]));
   const deletes: WriteStatement[] = [];
   const inserts: WriteStatement[] = [];
   const updates: WriteStatement[] = [];
-  for (const afterRelation of workspaceRows(after)) {
+  for (const afterRelation of workspaceRelationRows(after)) {
     const beforeRelation = beforeRelations.get(afterRelation.relation.relationId);
     if (beforeRelation === undefined) throw new Error('Workspace relation is unavailable');
     const beforeRows = new Map(beforeRelation.rows
@@ -449,54 +333,6 @@ const workspaceTransaction = async (
   });
 };
 
-const workspaceRows = (workspace: WorkspaceState): readonly WorkspaceRelationRows[] => {
-  const contexts = sortedEntries(workspace.contexts)
-    .map(([id, context]) => ({ id, url: context.url }));
-  const panes: Readonly<Record<string, JsonValue>>[] = [];
-  const paneContexts: Readonly<Record<string, JsonValue>>[] = [];
-  const splits: Readonly<Record<string, JsonValue>>[] = [];
-  for (const [id, node] of sortedEntries(workspace.nodes)) {
-    if (node.kind === 'pane') {
-      panes.push({ id, activeContext: node.activeContext, previewContext: node.previewContext });
-      node.contexts.forEach((contextId, position) => {
-        paneContexts.push({ contextId, paneId: id, position });
-      });
-    } else {
-      splits.push({
-        id,
-        axis: node.axis,
-        first: node.first,
-        ratio: node.ratio,
-        second: node.second,
-      });
-    }
-  }
-  paneContexts.sort((left, right) => compareStrings(
-    left.contextId as string,
-    right.contextId as string,
-  ));
-  return [
-    {
-      relation: writeRelation(workspaceRelations.state),
-      keyField: 'id',
-      rows: [{ id: workspaceStateId, rootNodeId: workspace.rootNodeId }],
-    },
-    { relation: writeRelation(workspaceRelations.contexts), keyField: 'id', rows: contexts },
-    { relation: writeRelation(workspaceRelations.panes), keyField: 'id', rows: panes },
-    {
-      relation: writeRelation(workspaceRelations.paneContexts),
-      keyField: 'contextId',
-      rows: paneContexts,
-    },
-    { relation: writeRelation(workspaceRelations.splits), keyField: 'id', rows: splits },
-  ];
-};
-
-const writeRelation = (relation: WriteRelation): WriteRelation => ({
-  relationId: relation.relationId,
-  schemaView: relation.schemaView,
-});
-
 const keyedTarget = (
   relation: WriteRelation,
   keyField: string,
@@ -521,71 +357,6 @@ const literalRow = (row: Readonly<Record<string, JsonValue>>) => Object.fromEntr
 );
 const sameJson = (left: unknown, right: unknown) => canonicalizeJson(left as JsonValue)
   === canonicalizeJson(right as JsonValue);
-const sortedEntries = <Value>(record: Readonly<Record<string, Value>>) => Object.entries(record)
-  .sort(([left], [right]) => compareStrings(left, right));
-const compareStrings = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0;
-
-const workspaceTopologyIssues = (workspace: WorkspaceState): readonly Issue[] => {
-  const issues: Issue[] = [];
-  const mounted = new Set<string>();
-  for (const [nodeId, node] of Object.entries(workspace.nodes)) {
-    if (node.kind === 'pane') {
-      if (node.contexts.length === 0) issues.push(workspaceIssue('pane-empty', { nodeId }));
-      for (const contextId of node.contexts) {
-        if (workspace.contexts[contextId] === undefined) {
-          issues.push(workspaceIssue('pane-context-missing', { contextId, nodeId }));
-        }
-        if (mounted.has(contextId)) issues.push(workspaceIssue('context-mounted-twice', { contextId }));
-        mounted.add(contextId);
-      }
-      if (!node.contexts.includes(node.activeContext)) {
-        issues.push(workspaceIssue('active-context-unmounted', { contextId: node.activeContext, nodeId }));
-      }
-      if (node.previewContext !== null && !node.contexts.includes(node.previewContext)) {
-        issues.push(workspaceIssue('preview-context-unmounted', { contextId: node.previewContext, nodeId }));
-      }
-    } else {
-      if (workspace.nodes[node.first] === undefined || workspace.nodes[node.second] === undefined) {
-        issues.push(workspaceIssue('split-child-missing', { nodeId }));
-      }
-      if (node.first === node.second) issues.push(workspaceIssue('split-child-duplicate', { nodeId }));
-      if (node.ratio < 0.1 || node.ratio > 0.9) issues.push(workspaceIssue('split-ratio-invalid', { nodeId }));
-    }
-  }
-  for (const contextId of Object.keys(workspace.contexts)) {
-    if (!mounted.has(contextId)) issues.push(workspaceIssue('context-unmounted', { contextId }));
-  }
-  if (workspace.nodes[workspace.rootNodeId] === undefined) {
-    issues.push(workspaceIssue('root-missing', { rootNodeId: workspace.rootNodeId }));
-    return issues;
-  }
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const visit = (nodeId: string) => {
-    if (visiting.has(nodeId)) {
-      issues.push(workspaceIssue('layout-cycle', { nodeId }));
-      return;
-    }
-    if (visited.has(nodeId)) {
-      issues.push(workspaceIssue('layout-node-shared', { nodeId }));
-      return;
-    }
-    const node = workspace.nodes[nodeId];
-    if (node === undefined) return;
-    visiting.add(nodeId);
-    if (node.kind === 'split') {
-      visit(node.first);
-      visit(node.second);
-    }
-    visiting.delete(nodeId);
-    visited.add(nodeId);
-  };
-  visit(workspace.rootNodeId);
-  for (const nodeId of Object.keys(workspace.nodes)) {
-    if (!visited.has(nodeId)) issues.push(workspaceIssue('layout-node-unreachable', { nodeId }));
-  }
-  return issues;
-};
 
 const workspaceTopologyConstraint: SourceConstraint<WritableLogicalState> = {
   id: 'patchpit.workspace.topology',
@@ -614,13 +385,6 @@ const workspaceTopologyConstraint: SourceConstraint<WritableLogicalState> = {
       : { status: 'violated' as const, violations };
   },
 };
-
-const relationRows = (
-  rows: readonly Pick<WritableLogicalRow, 'relationId' | 'fields'>[],
-  relationId: string,
-) => rows
-  .filter((row) => row.relationId === relationId)
-  .map(({ fields: row }) => ({ row }));
 
 const workspaceIssue = (kind: string, details: Readonly<Record<string, JsonValue>>) => createIssue({
   code: `patchpit.workspace.${kind}`,

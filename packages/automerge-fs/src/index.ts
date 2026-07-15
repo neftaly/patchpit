@@ -3,18 +3,25 @@ import {
   createFsAttachment,
   fsEntriesRelation,
   fsSchemaArtifact,
-  safeParseFsEntry,
   type FsEntry,
 } from '@patchpit/fs';
 import {
   AutomergeAtomicSource,
-  AutomergeMapStorageBinding,
+  AutomergeMappedStorageBinding,
   AutomergeSourceRuntime,
   type AutomergeSourceRuntimeApi,
 } from '@tarstate/automerge';
 import {
+  CapabilityRegistry,
+  ExactArtifactResolver,
+  ResourceResolver,
+  canonicalizeJson,
+  exactArtifactAttachmentResolver,
   normalizeArtifactRef,
-  type JsonValue,
+  prepareDatabaseAttachment,
+  registerBuiltInCapabilities,
+  sealStorageMapping,
+  type DocumentDeclaration,
 } from '@tarstate/core';
 
 export type AutomergeFsFile = {
@@ -43,17 +50,50 @@ export const createAutomergeFileContentDocument = (
 });
 
 type StoredFsEntry = Omit<FsEntry, 'entryId'>;
-type ProjectedFsEntry = FsEntry & Readonly<Record<string, JsonValue>>;
 
 export type AutomergeFsFolderDoc = {
   readonly '@patchpit': typeof automergeFsDocumentMetadata;
   readonly entries: Record<string, StoredFsEntry>;
 };
 
+export const automergeFsStorageMappingArtifact = await sealStorageMapping({
+  id: 'urn:patchpit:mapping:automerge-fs@1',
+  body: {
+    schema: normalizeArtifactRef(fsSchemaArtifact),
+    model: 'json-tree-v1',
+    relations: {
+      [fsEntriesRelation.relationId]: {
+        collection: { kind: 'object-map', path: ['entries'], absent: 'invalid' },
+        keys: { entryId: { kind: 'map-key', onMismatch: 'reject' } },
+        fields: {
+          parentId: { path: ['parentId'], write: { kind: 'read-only' } },
+          order: { path: ['order'], write: { kind: 'read-only' } },
+          kind: { path: ['kind'], write: { kind: 'read-only' } },
+          name: { path: ['name'], write: { kind: 'read-only' } },
+          resourceRef: { path: ['resourceRef'], write: { kind: 'read-only' } },
+        },
+      },
+    },
+  },
+});
+
+export const automergeFsDocumentDeclaration: DocumentDeclaration = {
+  formatVersion: 1,
+  storageSchema: normalizeArtifactRef(fsSchemaArtifact),
+  projection: {
+    kind: 'storage-mapping',
+    storageMapping: normalizeArtifactRef(automergeFsStorageMappingArtifact),
+  },
+};
+
 export const automergeFsDocumentMetadata = {
   type: 'filesystem',
   schema: normalizeArtifactRef(fsSchemaArtifact),
-  schemas: { [fsSchemaArtifact.id]: fsSchemaArtifact },
+  declaration: automergeFsDocumentDeclaration,
+  schemas: {
+    [fsSchemaArtifact.id]: fsSchemaArtifact,
+    [automergeFsStorageMappingArtifact.id]: automergeFsStorageMappingArtifact,
+  },
 } as const;
 
 type AutomergeFsPackage = {
@@ -82,12 +122,12 @@ export const automergeFsPackageFromFiles = (
 
 export function openAutomergeFsFolder(
   runtime: AutomergeSourceRuntimeApi<AutomergeFsFolderDoc>,
-): ReturnType<typeof projectAutomergeFsFolder>;
+): Promise<Awaited<ReturnType<typeof projectAutomergeFsFolder>>>;
 export function openAutomergeFsFolder(
   sourceId: string,
   folder: AutomergeFsFolderDoc,
-): ReturnType<typeof projectAutomergeFsFolder>;
-export function openAutomergeFsFolder(
+): Promise<Awaited<ReturnType<typeof projectAutomergeFsFolder>>>;
+export async function openAutomergeFsFolder(
   runtimeOrSourceId: AutomergeSourceRuntimeApi<AutomergeFsFolderDoc> | string,
   folder?: AutomergeFsFolderDoc,
 ) {
@@ -101,47 +141,83 @@ export function openAutomergeFsFolder(
 }
 
 /** Takes ownership of the runtime, not of any Repo handle behind it. */
-const projectAutomergeFsFolder = (runtime: AutomergeSourceRuntimeApi<AutomergeFsFolderDoc>) => {
+const projectAutomergeFsFolder = async (runtime: AutomergeSourceRuntimeApi<AutomergeFsFolderDoc>) => {
   const source = new AutomergeAtomicSource({
     runtime,
     operationEpoch: `${runtime.sourceId}:operations:${crypto.randomUUID()}`,
     ownsRuntime: true,
   });
-  const binding = new AutomergeMapStorageBinding<AutomergeFsFolderDoc, ProjectedFsEntry>({
-    relationId: fsEntriesRelation.relationId,
-    collectionPath: ['entries'],
-    missingCollection: 'invalid',
-    keySource: 'map-key',
-    parse: (candidate, { mapKey, path }) => {
-      const result = candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)
-        ? undefined
-        : safeParseFsEntry({ ...candidate, entryId: mapKey }, { path });
-      return result?.success === true
-        ? { success: true, row: result.value as ProjectedFsEntry }
-        : {
-            success: false,
-            issue: {
-              code: 'automerge.row_invalid',
-              path,
-              ...(result === undefined ? {} : {
-                details: { schemaIssueCodes: result.issues.map(({ code }) => code) },
-              }),
-            },
-          };
-    },
-  });
-  const attachment = createFsAttachment({
-    source,
-    close: () => source.close(),
-    project: (snapshot) => {
-      const projection = binding.project(snapshot);
-      return {
-        entries: projection.rows.map(({ fields }) => fields),
-        occurrenceIds: projection.rows.map(({ locator }) => locator.rowIncarnation),
-        completeness: projection.completeness,
-        issues: projection.issues,
-      };
-    },
-  });
-  return { attachment, close: () => source.close() };
+  try {
+    const snapshot = source.snapshot();
+    if (snapshot.state !== 'ready' || snapshot.storage === undefined) {
+      throw new Error('Automerge filesystem source is unavailable', { cause: snapshot.issues });
+    }
+    const metadata = inertAutomergeValue(Automerge.toJS(snapshot.storage)['@patchpit']);
+    const registry = new CapabilityRegistry('patchpit.automerge-fs@1');
+    await registerBuiltInCapabilities(registry);
+    const schemas = isRecord(metadata) && isRecord(metadata.schemas) ? metadata.schemas : {};
+    const resolver = new ExactArtifactResolver({
+      resourceResolver: new ResourceResolver({ authority: { permits: () => false } }),
+      embedded: { get: (reference) => schemas[reference.id] },
+    });
+    const prepared = await prepareDatabaseAttachment({
+      sourceId: source.sourceId,
+      bootstrap: filesystemBootstrap(metadata),
+      resolveArtifact: exactArtifactAttachmentResolver(resolver, {
+        authorityScope: 'patchpit.automerge-fs',
+      }),
+      registry,
+    });
+    if (prepared.state !== 'ready' || prepared.mapping === undefined) {
+      throw new Error('Automerge filesystem attachment is unavailable', { cause: prepared.issues });
+    }
+    const binding = new AutomergeMappedStorageBinding<AutomergeFsFolderDoc>({
+      id: 'patchpit.automerge-fs.mapping',
+      locatorNamespace: source.sourceId,
+      mapping: prepared.mapping,
+      registry,
+    });
+    const attachment = createFsAttachment({
+      source,
+      close: () => source.close(),
+      project: (snapshot) => {
+        const projection = binding.project(snapshot);
+        return {
+          entries: projection.rows.map(({ fields }) => fields as FsEntry),
+          occurrenceIds: projection.rows.map(({ locator }) => canonicalizeJson(locator)),
+          completeness: projection.completeness,
+          issues: projection.issues,
+        };
+      },
+    });
+    return { attachment, close: () => source.close() };
+  } catch (error) {
+    source.close();
+    throw error;
+  }
 };
+
+const filesystemBootstrap = (metadata: unknown) => {
+  if (!isRecord(metadata)
+    || metadata.type !== automergeFsDocumentMetadata.type
+    || !isRecord(metadata.schema)
+    || metadata.schema.id !== automergeFsDocumentMetadata.schema.id
+    || metadata.schema.contentHash !== automergeFsDocumentMetadata.schema.contentHash
+    || !isRecord(metadata.schemas)
+    || !isRecord(metadata.declaration)
+    || !isRecord(metadata.declaration.storageSchema)
+    || metadata.schema.id !== metadata.declaration.storageSchema.id
+    || metadata.schema.contentHash !== metadata.declaration.storageSchema.contentHash) {
+    return { status: 'malformed' as const };
+  }
+  return { status: 'ready' as const, declaration: metadata.declaration };
+};
+
+const inertAutomergeValue = (value: unknown): unknown => {
+  const encoded = JSON.stringify(value);
+  if (encoded === undefined) throw new TypeError('Automerge metadata is not JSON data');
+  return JSON.parse(encoded) as unknown;
+};
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);

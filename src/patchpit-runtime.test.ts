@@ -132,7 +132,7 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
   });
   await assert.rejects(
     openRoot({ repo, rootUrl: runtime.rootUrl }),
-    /filesystem schema is invalid/,
+    /filesystem attachment is unavailable/,
   );
   await repo.shutdown();
 });

@@ -31,6 +31,11 @@ export type WorkspaceState = {
   readonly rootNodeId: string;
 };
 
+export type WorkspaceInvariantViolation = {
+  readonly kind: string;
+  readonly details: Readonly<Record<string, string | number>>;
+};
+
 export type WorkspaceOperation = {
   readonly kind: 'workspace.context.activate';
   readonly paneId: WorkspacePaneId;
@@ -138,7 +143,7 @@ export const createWorkspace = (initialContext: string, documentContext?: string
       rootNodeId: 'split-0',
     };
 
-export const addContext = (
+const addContext = (
   workspace: WorkspaceState,
   contextId: string,
   url: string,
@@ -173,7 +178,7 @@ export const paneIdsInLayoutOrder = (workspace: WorkspaceState): readonly Worksp
   return paneIds;
 };
 
-export const activateContext = (
+const activateContext = (
   workspace: WorkspaceState,
   paneId: WorkspacePaneId,
   contextId: string,
@@ -183,7 +188,7 @@ export const activateContext = (
   return updatePane(workspace, paneId, { ...pane, activeContext: contextId });
 };
 
-export const closeContext = (
+const closeContext = (
   workspace: WorkspaceState,
   paneId: WorkspacePaneId,
   contextId: string,
@@ -194,7 +199,7 @@ export const closeContext = (
   return pruneContexts(removeEmptyPane(updatePane(workspace, paneId, removeContextFromPane(pane, contextId)), paneId));
 };
 
-export const previewContext = (
+const previewContext = (
   workspace: WorkspaceState,
   contextId: string,
   targetPaneId: WorkspacePaneId,
@@ -219,7 +224,7 @@ export const previewContext = (
   }));
 };
 
-export const openContext = (
+const openContext = (
   workspace: WorkspaceState,
   contextId: string,
   targetPaneId: WorkspacePaneId,
@@ -230,7 +235,7 @@ export const openContext = (
   return paneId === undefined ? previewed : pinContext(previewed, paneId, contextId);
 };
 
-export const moveContext = (
+const moveContext = (
   workspace: WorkspaceState,
   contextId: string,
   targetPaneId: WorkspacePaneId,
@@ -261,7 +266,7 @@ export const moveContext = (
   return sourcePaneId === targetPaneId ? moved : removeEmptyPane(moved, sourcePaneId);
 };
 
-export const splitContext = (
+const splitContext = (
   workspace: WorkspaceState,
   contextId: string,
   targetPaneId: WorkspacePaneId,
@@ -379,7 +384,7 @@ const pruneContexts = (workspace: WorkspaceState): WorkspaceState => {
     : { ...workspace, contexts };
 };
 
-export const resizeSplit = (
+const resizeSplit = (
   workspace: WorkspaceState,
   nodeId: string,
   ratio: number,
@@ -435,3 +440,80 @@ const parentNode = (
   }
   return undefined;
 };
+
+export const workspaceInvariantViolations = (
+  workspace: WorkspaceState,
+): readonly WorkspaceInvariantViolation[] => {
+  const violations: WorkspaceInvariantViolation[] = [];
+  const mounted = new Set<string>();
+  for (const [nodeId, node] of Object.entries(workspace.nodes)) {
+    if (node.kind === 'pane') {
+      if (node.contexts.length === 0) violations.push(violation('pane-empty', { nodeId }));
+      for (const contextId of node.contexts) {
+        if (workspace.contexts[contextId] === undefined) {
+          violations.push(violation('pane-context-missing', { contextId, nodeId }));
+        }
+        if (mounted.has(contextId)) violations.push(violation('context-mounted-twice', { contextId }));
+        mounted.add(contextId);
+      }
+      if (!node.contexts.includes(node.activeContext)) {
+        violations.push(violation('active-context-unmounted', {
+          contextId: node.activeContext,
+          nodeId,
+        }));
+      }
+      if (node.previewContext !== null && !node.contexts.includes(node.previewContext)) {
+        violations.push(violation('preview-context-unmounted', {
+          contextId: node.previewContext,
+          nodeId,
+        }));
+      }
+    } else {
+      if (workspace.nodes[node.first] === undefined || workspace.nodes[node.second] === undefined) {
+        violations.push(violation('split-child-missing', { nodeId }));
+      }
+      if (node.first === node.second) violations.push(violation('split-child-duplicate', { nodeId }));
+      if (node.ratio < 0.1 || node.ratio > 0.9) {
+        violations.push(violation('split-ratio-invalid', { nodeId }));
+      }
+    }
+  }
+  for (const contextId of Object.keys(workspace.contexts)) {
+    if (!mounted.has(contextId)) violations.push(violation('context-unmounted', { contextId }));
+  }
+  if (workspace.nodes[workspace.rootNodeId] === undefined) {
+    violations.push(violation('root-missing', { rootNodeId: workspace.rootNodeId }));
+    return violations;
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (nodeId: string) => {
+    if (visiting.has(nodeId)) {
+      violations.push(violation('layout-cycle', { nodeId }));
+      return;
+    }
+    if (visited.has(nodeId)) {
+      violations.push(violation('layout-node-shared', { nodeId }));
+      return;
+    }
+    const node = workspace.nodes[nodeId];
+    if (node === undefined) return;
+    visiting.add(nodeId);
+    if (node.kind === 'split') {
+      visit(node.first);
+      visit(node.second);
+    }
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+  };
+  visit(workspace.rootNodeId);
+  for (const nodeId of Object.keys(workspace.nodes)) {
+    if (!visited.has(nodeId)) violations.push(violation('layout-node-unreachable', { nodeId }));
+  }
+  return violations;
+};
+
+const violation = (
+  kind: string,
+  details: Readonly<Record<string, string | number>>,
+): WorkspaceInvariantViolation => ({ kind, details });

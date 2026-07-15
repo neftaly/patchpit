@@ -17,7 +17,6 @@ void test('workspace runtime projects relation-shaped storage and applies named 
     const initialProjection = workspace.getSnapshot();
     assert.equal(workspace.getSnapshot(), initialProjection);
     assert.equal(initialProjection.state, 'ready');
-    assert.equal(workspace.resourceRef, handle.url);
     assert.equal(handle.doc()['@patchpit'].type, 'workspace');
     assert.deepEqual(handle.doc()['@patchpit'].schema, {
       id: workspaceSchemaArtifact.id,

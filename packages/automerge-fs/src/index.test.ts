@@ -48,7 +48,7 @@ void test('automerge filesystem package keeps bytes separate from folder resourc
   assert.deepEqual(firstFile?.[1].bytes, new Uint8Array([60, 104, 49, 62]));
 });
 
-void test('Repo-backed filesystem observes one live handle', () => {
+void test('Repo-backed filesystem observes one live handle', async () => {
   const packaged = automergeFsPackageFromFiles([{
     bytes: new Uint8Array(),
     entryId: 'readme',
@@ -59,7 +59,7 @@ void test('Repo-backed filesystem observes one live handle', () => {
   }]);
   const handle = new Repo({ network: [] }).create(packaged.folder);
   const runtime = automergeRepoSourceRuntime({ handle });
-  const folder = openAutomergeFsFolder(runtime);
+  const folder = await openAutomergeFsFolder(runtime);
   const query = openFsEntries([folder.attachment]);
 
   assert.match(handle.url, /^automerge:/);

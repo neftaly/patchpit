@@ -4,7 +4,6 @@ import {
   type DocHandle,
   type Repo,
 } from '@automerge/automerge-repo';
-import { toJS } from '@automerge/automerge';
 import {
   automergeFsDocumentMetadata,
   createAutomergeFileContentDocument,
@@ -12,11 +11,14 @@ import {
   type AutomergeFileContentDoc,
   type AutomergeFsFolderDoc,
 } from '@patchpit/automerge-fs';
-import { parseFsEntry, type FsEntry } from '@patchpit/fs';
+import type { FsEntry } from '@patchpit/fs';
 import { snapshotFilesystemApp, type AppFileContent } from '@patchpit/sandbox-fs';
 import { AutomergeAtomicSource, automergeRepoSourceRuntime } from '@tarstate/automerge';
-import { safeParseArtifactValue, type ArtifactRef } from '@tarstate/core';
-import { openResources } from './resources.ts';
+import {
+  openResources,
+  resourcesFromSnapshot,
+  type Resource,
+} from './resources.ts';
 import {
   createWorkspaceDocument,
   openWorkspace,
@@ -107,24 +109,28 @@ const openRootHandle = async (
   rootHandle: DocHandle<AutomergeFsFolderDoc>,
   signal?: AbortSignal,
 ) => {
-  const entries = validateRoot(rootHandle);
-  await validateMetadata(toJS(rootHandle.doc())['@patchpit'], automergeFsDocumentMetadata);
   const handles = new Map<string, DocHandle<object>>([[rootHandle.url, asObjectHandle(rootHandle)]]);
   const pendingHandles = new Map<string, Promise<DocHandle<object>>>();
   const resolver = new AbortController();
   let closed = false;
-  const workspaceEntry = entries.find(({ entryId }) => entryId === workspaceEntryId)!;
-  if (!isValidAutomergeUrl(workspaceEntry.resourceRef)) {
-    throw new Error('Patchpit workspace document reference is invalid');
-  }
-  const workspaceHandle = await repo.find<WorkspaceDocument>(
-    workspaceEntry.resourceRef,
-    findOptions(signal),
-  );
-  handles.set(workspaceEntry.resourceRef, asObjectHandle(workspaceHandle));
-
-  const folder = openAutomergeFsFolder(automergeRepoSourceRuntime({ handle: rootHandle }));
+  const folder = await openAutomergeFsFolder(automergeRepoSourceRuntime({ handle: rootHandle }));
   const resources = openResources(folder.attachment);
+  let workspaceHandle: DocHandle<WorkspaceDocument>;
+  try {
+    const entries = validateRoot(currentResources(resources));
+    const workspaceEntry = entries.find(({ localId }) => localId === workspaceEntryId)!;
+    if (!isValidAutomergeUrl(workspaceEntry.resourceRef)) {
+      throw new Error('Patchpit workspace document reference is invalid');
+    }
+    workspaceHandle = await repo.find<WorkspaceDocument>(
+      workspaceEntry.resourceRef,
+      findOptions(signal),
+    );
+    handles.set(workspaceEntry.resourceRef, asObjectHandle(workspaceHandle));
+  } catch (error) {
+    resources.close();
+    throw error;
+  }
   const workspace = await openWorkspace(workspaceHandle).catch((error: unknown) => {
     resources.close();
     throw error;
@@ -143,14 +149,14 @@ const openRootHandle = async (
   };
   const resolve = async (resourceRef: string) => {
     if (closed) return undefined;
-    if (!rootReferences(rootHandle, resourceRef)) {
+    if (!rootReferences(resources, resourceRef)) {
       handles.delete(resourceRef);
       return undefined;
     }
     if (!isValidAutomergeUrl(resourceRef)) return undefined;
     const handle = await findResourceHandle(resourceRef);
-    if (closed || !rootReferences(rootHandle, resourceRef)) return undefined;
-    validateFileContent(rootHandle, resourceRef, handle.doc());
+    if (closed || !rootReferences(resources, resourceRef)) return undefined;
+    validateFileContent(resources, resourceRef, handle.doc());
     handles.set(resourceRef, handle);
     return handle;
   };
@@ -187,7 +193,6 @@ const openRootHandle = async (
   });
   return {
     rootUrl: rootHandle.url,
-    folder,
     resources,
     workspace,
     resolve,
@@ -202,20 +207,30 @@ const openRootHandle = async (
   };
 };
 
-const rootReferences = (handle: DocHandle<AutomergeFsFolderDoc>, resourceRef: string) =>
-  Object.values(handle.doc().entries).some((entry) => entry.resourceRef === resourceRef);
+type ResourceRuntime = ReturnType<typeof openResources>;
+
+const rootReferences = (resources: ResourceRuntime, resourceRef: string) =>
+  currentResources(resources).some((entry) => entry.resourceRef === resourceRef);
 
 const validateFileContent = (
-  root: DocHandle<AutomergeFsFolderDoc>,
+  resources: ResourceRuntime,
   resourceRef: string,
   doc: object,
 ) => {
-  const isContentFile = Object.entries(root.doc().entries).some(([entryId, entry]) =>
-    entryId !== workspaceEntryId && entry.kind === 'file'
+  const isContentFile = currentResources(resources).some((entry) =>
+    entry.localId !== workspaceEntryId && entry.kind === 'file'
       && entry.resourceRef === resourceRef);
   if (isContentFile && fileContent(doc) === undefined) {
     throw new Error(`Patchpit file content is invalid: ${resourceRef}`);
   }
+};
+
+const currentResources = (resources: ResourceRuntime): readonly Resource[] => {
+  const snapshot = resources.observer.getSnapshot();
+  if (snapshot.state !== 'open' || snapshot.current.completeness !== 'exact') {
+    throw new Error('Patchpit root entries are unavailable');
+  }
+  return resourcesFromSnapshot(snapshot);
 };
 
 const fileContent = (doc: object): AutomergeFileContentDoc | undefined =>
@@ -225,51 +240,18 @@ const fileContent = (doc: object): AutomergeFileContentDoc | undefined =>
     ? doc as AutomergeFileContentDoc
     : undefined;
 
-const validateRoot = (handle: DocHandle<AutomergeFsFolderDoc>) => {
-  const doc = handle.doc();
-  if (doc.entries === null || typeof doc.entries !== 'object') {
-    throw new Error('Patchpit root document is invalid');
-  }
-  let entries: readonly FsEntry[];
-  try {
-    entries = Object.entries(doc.entries).map(([entryId, entry]) => parseFsEntry({ ...entry, entryId }));
-  } catch (cause) {
-    throw new Error('Patchpit root entries are invalid', { cause });
-  }
-  const workspace = entries.find(({ entryId }) => entryId === workspaceEntryId);
+const validateRoot = (entries: readonly Resource[]) => {
+  const workspace = entries.find(({ localId }) => localId === workspaceEntryId);
   if (workspace?.kind !== 'file') {
     throw new Error('Patchpit root entries are missing');
   }
-  const byId = new Map(entries.map((entry) => [entry.entryId, entry]));
+  const byId = new Map(entries.map((entry) => [entry.localId, entry]));
   for (const entry of entries) {
     if (entry.parentId !== null && byId.get(entry.parentId)?.kind !== 'folder') {
       throw new Error(`Patchpit root parent is invalid: ${entry.name}`);
     }
   }
   return entries;
-};
-
-type DocumentMetadata = {
-  readonly type: string;
-  readonly schema: ArtifactRef;
-  readonly schemas: Readonly<Record<string, unknown>>;
-};
-
-const validateMetadata = async (value: unknown, expected: DocumentMetadata) => {
-  if (!isRecord(value) || value.type !== expected.type || !isRecord(value.schema)
-    || value.schema.id !== expected.schema.id
-    || value.schema.contentHash !== expected.schema.contentHash
-    || !isRecord(value.schemas)) {
-    throw new Error(`Patchpit ${expected.type} metadata is invalid`);
-  }
-  const artifact = await safeParseArtifactValue(structuredClone(value.schemas[expected.schema.id]));
-  if (!artifact.success || artifact.value.kind !== 'schema'
-    || artifact.value.id !== expected.schema.id
-    || artifact.value.contentHash !== expected.schema.contentHash) {
-    throw new Error(`Patchpit ${expected.type} schema is invalid`, {
-      cause: artifact.success ? undefined : artifact.issues,
-    });
-  }
 };
 
 const rootEntry = (
@@ -303,7 +285,4 @@ const abortable = async <Value>(promise: Promise<Value>, signal?: AbortSignal): 
     );
   });
 };
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
 export type PatchpitRuntime = Awaited<ReturnType<typeof createRoot>>;

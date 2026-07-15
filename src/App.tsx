@@ -10,6 +10,7 @@ import {
   contextIdForUrl, paneIdsInLayoutOrder,
   type WorkspaceState,
 } from './workspace.ts';
+import { allocateWorkspaceIds } from './workspace-ids.ts';
 import { WorkspaceView } from './workspace-view.tsx';
 import {
   resourceById,
@@ -86,11 +87,3 @@ const documentPaneId = (workspace: WorkspaceState) => paneIdsInLayoutOrder(works
     return node?.kind === 'pane'
       && node.contexts.some((contextId) => workspace.contexts[contextId]?.url !== resourceBrowserUrl);
   });
-
-const allocateWorkspaceIds = () => ({
-  contextId: `context:${crypto.randomUUID()}`,
-  nodes: {
-    paneId: `pane:${crypto.randomUUID()}`,
-    splitId: `split:${crypto.randomUUID()}`,
-  },
-});

@@ -14,6 +14,7 @@ import {
   type WorkspaceSplitIds,
   type WorkspaceState,
 } from './workspace.ts';
+import { allocateWorkspaceIds } from './workspace-ids.ts';
 
 const tabDragType = 'application/x-patchpit-context';
 
@@ -323,11 +324,3 @@ const contentDropZone = (event: DragEvent<HTMLElement>): ContentDropZone => {
   ));
   return distance < 1 / 3 ? edge : 'center';
 };
-
-const allocateWorkspaceIds = () => ({
-  contextId: `context:${crypto.randomUUID()}`,
-  nodes: {
-    paneId: `pane:${crypto.randomUUID()}`,
-    splitId: `split:${crypto.randomUUID()}`,
-  },
-});
