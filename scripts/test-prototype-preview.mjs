@@ -81,6 +81,9 @@ async function proveWorkspaceBehavior(page) {
   assert.match(sandboxSrc ?? '', /\/__patchpit\/sandbox\/[0-9a-f-]{36}\/index\.html$/);
   assert.equal(sandboxSrc?.includes('placeholder:beelay'), false);
   assert.equal(sandboxSrc?.includes('sync.automerge.org'), false);
+  await page.evaluate(() => {
+    window.__patchpitIdentityFrame = document.querySelector('.sandbox-app');
+  });
   await tab('sandbox-compat / index.html').waitFor();
   assert.notEqual(await tab('sandbox-compat / index.html').getAttribute('data-context'), null);
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
@@ -88,6 +91,39 @@ async function proveWorkspaceBehavior(page) {
   await page.getByRole('alert').getByText('Resource unavailable.').waitFor();
   await page.getByRole('button', { name: 'Close external / unresolved.svg' }).click();
   await tab('sandbox-compat / index.html').click();
+  await drag(
+    resource('sandbox-compat', 'data.json'),
+    leftPane.locator('.pane-content'),
+    'data-drop-zone',
+    null,
+    0.01,
+  );
+  assert.equal(await page.locator('.pane').count(), 2);
+  assert.equal(await tab('sandbox-compat / data.json').count(), 0);
+  await resource('sandbox-compat', 'data.json').click();
+  await page.getByText('{"ok":true}', { exact: true }).waitFor();
+  await tab('sandbox-compat / index.html').click();
+  await drag(
+    tab('sandbox-compat / index.html'),
+    rightPane.locator('.pane-content'),
+    'data-drop-zone',
+    'left',
+    0.01,
+  );
+  assert.equal(await page.locator('.pane').count(), 3);
+  await assertSandboxIdentity(page);
+  const identityPane = page.locator('.pane', { has: tab('sandbox-compat / index.html') });
+  await drag(
+    identityPane.locator('.tab', { hasText: 'sandbox-compat / index.html' }),
+    rightPane.locator('.pane-content'),
+    'data-drop-zone',
+    'center',
+    0.5,
+  );
+  assert.equal(await page.locator('.pane').count(), 2);
+  await assertSandboxIdentity(page);
+  await page.getByRole('button', { name: 'Close sandbox-compat / data.json' }).click();
+  await assertSandboxIdentity(page);
   await drag(
     tab('sandbox-compat / index.html'),
     rightPane.locator('.pane-content'),
@@ -237,6 +273,13 @@ async function proveWorkspaceBehavior(page) {
   await page.getByRole('button', { name: 'Close sandbox-compat / frame.html' }).click();
   assert.equal(await page.locator(`[data-pane="${splitPaneId}"]`).count(), 0);
   assert.equal(await page.locator('.pane').count(), 2);
+  await assertSandboxIdentity(page);
+}
+
+async function assertSandboxIdentity(page) {
+  assert.equal(await page.evaluate(() => (
+    document.querySelector('.sandbox-app') === window.__patchpitIdentityFrame
+  )), true, 'Workspace placement changes must preserve the live sandbox iframe');
 }
 
 async function proveOfflineSandboxReload(page) {
@@ -275,16 +318,14 @@ async function dragWithTargetPreview(
   assert(sourceElement !== null, 'Drag source must exist');
   const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
   await sourceElement.dispatchEvent('dragstart', { dataTransfer });
-  await page.locator('.drag-shield').first().waitFor();
-  const shield = target.locator('.drag-shield');
-  const eventTarget = await shield.count() === 0 ? target : shield;
+  await page.locator('.pane-content[data-dragging="true"]').first().waitFor();
   const position = {
     clientX: targetBounds.x + (targetBounds.width * xRatio),
     clientY: targetBounds.y + (targetBounds.height * yRatio),
     dataTransfer,
   };
-  await eventTarget.dispatchEvent('dragover', position);
+  await target.dispatchEvent('dragover', position);
   assert.equal(await target.getAttribute(attribute), expectedTarget);
-  await eventTarget.dispatchEvent('drop', position);
+  await target.dispatchEvent('drop', position);
   await sourceElement.dispatchEvent('dragend', { dataTransfer });
 }

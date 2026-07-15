@@ -1,6 +1,7 @@
 import {
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type PointerEvent,
   type ReactNode,
@@ -27,47 +28,27 @@ export function WorkspaceView({ act, contextLabel, renderContext, resourceDragTy
   readonly workspace: WorkspaceState;
 }) {
   const [drag, setDrag] = useState<DraggedContext>();
+  const [draftRatios, setDraftRatios] = useState<Readonly<Record<string, number>>>({});
+  const layout = projectWorkspaceLayout(workspace, draftRatios);
+  const operationForCurrentDrop = (paneId: WorkspacePaneId, target: PaneDropTarget) =>
+    drag === undefined || (drag.resource && drag.sourcePaneId === paneId)
+      ? undefined
+      : operationForDrop(drag, paneId, target);
   const dropContext = (paneId: WorkspacePaneId, target: PaneDropTarget) => {
-    if (drag === undefined) return;
+    const operation = operationForCurrentDrop(paneId, target);
     setDrag(undefined);
-    act(operationForDrop(drag, paneId, target));
+    if (operation !== undefined) act(operation);
   };
-  const renderLayout = (nodeId: string): ReactNode => {
-    const node = workspace.nodes[nodeId];
-    if (node === undefined) return null;
-    return node.kind === 'pane'
-      ? (
-        <Pane
-          key={nodeId}
-          canDrop={(target) => drag !== undefined
-            && applyWorkspaceOperation(workspace, operationForDrop(drag, nodeId, target)) !== workspace}
-          shielded={drag !== undefined && drag.unshieldedPane !== nodeId}
-          labelContext={contextLabel}
-          onActivate={(contextId) => {
-            act({ kind: 'workspace.context.activate', paneId: nodeId, contextId });
-          }}
-          onClose={(contextId) => {
-            act({ kind: 'workspace.context.close', paneId: nodeId, contextId });
-          }}
-          onDrop={(target) => dropContext(nodeId, target)}
-          pane={node}
-          paneId={nodeId}
-          renderContext={renderContext}
-          root={workspace.rootNodeId === nodeId}
-        />
-      )
-      : (
-        <Split
-          axis={node.axis}
-          first={renderLayout(node.first)}
-          nodeId={nodeId}
-          onResize={(ratio) => {
-            act({ kind: 'workspace.split.resize', splitId: nodeId, ratio });
-          }}
-          ratio={node.ratio}
-          second={renderLayout(node.second)}
-        />
-      );
+  const setDraftRatio = (splitId: string, ratio: number | undefined) => {
+    setDraftRatios((current) => {
+      if (ratio === undefined) {
+        if (current[splitId] === undefined) return current;
+        const next = { ...current };
+        delete next[splitId];
+        return next;
+      }
+      return current[splitId] === ratio ? current : { ...current, [splitId]: ratio };
+    });
   };
 
   return (
@@ -75,7 +56,9 @@ export function WorkspaceView({ act, contextLabel, renderContext, resourceDragTy
       className="workspace"
       onDragEnd={() => setDrag(undefined)}
       onDragStart={(event) => {
-        const source = event.target instanceof Element ? event.target.closest<HTMLElement>('.pane') : null;
+        const source = event.target instanceof Element
+          ? event.target.closest<HTMLElement>('[data-pane], [data-context-pane]')
+          : null;
         const resourceId = event.dataTransfer.getData(resourceDragType);
         const url = resourceId === '' ? undefined : resourceUrl(resourceId);
         const allocated = allocateWorkspaceIds();
@@ -87,13 +70,64 @@ export function WorkspaceView({ act, contextLabel, renderContext, resourceDragTy
             contextId,
             nodes: allocated.nodes,
             open: resourceId !== '' && url !== undefined,
-            unshieldedPane: resourceId === '' ? null : source?.dataset.pane ?? null,
+            resource: resourceId !== '',
+            sourcePaneId: resourceId === ''
+              ? null
+              : source?.dataset.pane ?? source?.dataset.contextPane ?? null,
             url,
           });
         }
       }}
     >
-      {renderLayout(workspace.rootNodeId)}
+      {layout.panes.map(({ pane, paneId, rect }) => (
+        <Pane
+          key={paneId}
+          canDrop={(target) => {
+            const operation = operationForCurrentDrop(paneId, target);
+            return operation !== undefined && applyWorkspaceOperation(workspace, operation) !== workspace;
+          }}
+          dragging={drag !== undefined}
+          labelContext={contextLabel}
+          onActivate={(contextId) => {
+            act({ kind: 'workspace.context.activate', paneId, contextId });
+          }}
+          onClose={(contextId) => {
+            act({ kind: 'workspace.context.close', paneId, contextId });
+          }}
+          onDrop={(target) => dropContext(paneId, target)}
+          pane={pane}
+          paneId={paneId}
+          rect={rect}
+          root={workspace.rootNodeId === paneId}
+        />
+      ))}
+      <div className="context-layer">
+        {layout.contexts.map(({ active, contextId, paneId, rect }) => (
+          <div
+            className="app"
+            data-context-host={contextId}
+            data-context-pane={paneId}
+            hidden={!active}
+            key={contextId}
+            style={rectStyle(rect)}
+          >
+            {renderContext(contextId)}
+          </div>
+        ))}
+      </div>
+      {layout.splits.map(({ axis, ratio, rect, splitId }) => (
+        <SplitBoundary
+          axis={axis}
+          key={splitId}
+          nodeId={splitId}
+          onDraftRatio={(nextRatio) => setDraftRatio(splitId, nextRatio)}
+          onResize={(ratio) => {
+            act({ kind: 'workspace.split.resize', splitId, ratio });
+          }}
+          ratio={ratio}
+          rect={rect}
+        />
+      ))}
     </main>
   );
 }
@@ -103,12 +137,76 @@ type DraggedContext = {
   readonly contextId: string;
   readonly nodes: WorkspaceSplitIds;
   readonly open: boolean;
-  readonly unshieldedPane: string | null;
+  readonly resource: boolean;
+  readonly sourcePaneId: string | null;
   readonly url: string | undefined;
 };
 type PaneDropTarget = { readonly beforeContext: string | undefined } | {
   readonly zone: ContentDropZone;
 };
+
+type LayoutRect = {
+  readonly height: number;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+};
+
+const projectWorkspaceLayout = (
+  workspace: WorkspaceState,
+  draftRatios: Readonly<Record<string, number>>,
+) => {
+  const panes: Array<{ pane: WorkspacePane; paneId: WorkspacePaneId; rect: LayoutRect }> = [];
+  const splits: Array<{
+    axis: 'horizontal' | 'vertical';
+    ratio: number;
+    rect: LayoutRect;
+    splitId: string;
+  }> = [];
+  const visited = new Set<string>();
+  const visit = (nodeId: string, rect: LayoutRect) => {
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+    const node = workspace.nodes[nodeId];
+    if (node?.kind === 'pane') {
+      panes.push({ pane: node, paneId: nodeId, rect });
+      return;
+    }
+    if (node?.kind !== 'split') return;
+    const ratio = draftRatios[nodeId] ?? node.ratio;
+    splits.push({ axis: node.axis, ratio, rect, splitId: nodeId });
+    if (node.axis === 'horizontal') {
+      visit(node.first, { ...rect, width: rect.width * ratio });
+      visit(node.second, {
+        ...rect,
+        left: rect.left + (rect.width * ratio),
+        width: rect.width * (1 - ratio),
+      });
+      return;
+    }
+    visit(node.first, { ...rect, height: rect.height * ratio });
+    visit(node.second, {
+      ...rect,
+      height: rect.height * (1 - ratio),
+      top: rect.top + (rect.height * ratio),
+    });
+  };
+  visit(workspace.rootNodeId, { height: 1, left: 0, top: 0, width: 1 });
+  const contexts = panes.flatMap(({ pane, paneId, rect }) => pane.contexts.map((contextId) => ({
+    active: pane.activeContext === contextId,
+    contextId,
+    paneId,
+    rect,
+  })));
+  return { contexts, panes, splits };
+};
+
+const rectStyle = (rect: LayoutRect): CSSProperties => ({
+  height: `${rect.height * 100}%`,
+  left: `${rect.left * 100}%`,
+  top: `${rect.top * 100}%`,
+  width: `${rect.width * 100}%`,
+});
 
 const operationForDrop = (
   drag: DraggedContext,
@@ -132,18 +230,16 @@ const operationForDrop = (
       pin: drag.open,
     };
 
-function Split({ axis, first, nodeId, onResize, ratio, second }: {
+function SplitBoundary({ axis, nodeId, onDraftRatio, onResize, ratio, rect }: {
   readonly axis: 'horizontal' | 'vertical';
-  readonly first: ReactNode;
   readonly nodeId: string;
+  readonly onDraftRatio: (ratio: number | undefined) => void;
   readonly onResize: (ratio: number) => void;
   readonly ratio: number;
-  readonly second: ReactNode;
+  readonly rect: LayoutRect;
 }) {
   const split = useRef<HTMLDivElement>(null);
   const activePointer = useRef<number | undefined>(undefined);
-  const [draftRatio, setDraftRatio] = useState<number>();
-  const displayedRatio = draftRatio ?? ratio;
   const ratioAtPointer = (event: PointerEvent<HTMLElement>) => {
     const bounds = split.current?.getBoundingClientRect();
     if (bounds === undefined) return ratio;
@@ -159,13 +255,19 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    setDraftRatio(undefined);
+    onDraftRatio(undefined);
     onResize(nextRatio);
   };
 
   return (
-    <div className="split" data-axis={axis} data-node={nodeId} data-ratio={displayedRatio} ref={split}>
-      <div className="split-child" style={{ flexGrow: displayedRatio }}>{first}</div>
+    <div
+      className="split-boundary"
+      data-axis={axis}
+      data-node={nodeId}
+      data-ratio={ratio}
+      ref={split}
+      style={rectStyle(rect)}
+    >
       <div
         className="resize-handle"
         onPointerCancel={(event) => {
@@ -174,34 +276,34 @@ function Split({ axis, first, nodeId, onResize, ratio, second }: {
           if (event.currentTarget.hasPointerCapture(event.pointerId)) {
             event.currentTarget.releasePointerCapture(event.pointerId);
           }
-          setDraftRatio(undefined);
+          onDraftRatio(undefined);
         }}
         onPointerDown={(event) => {
           activePointer.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
-          setDraftRatio(ratioAtPointer(event));
+          onDraftRatio(ratioAtPointer(event));
         }}
         onPointerMove={(event) => {
-          if (activePointer.current === event.pointerId) setDraftRatio(ratioAtPointer(event));
+          if (activePointer.current === event.pointerId) onDraftRatio(ratioAtPointer(event));
         }}
         onPointerUp={finishResize}
+        style={axis === 'horizontal' ? { left: `${ratio * 100}%` } : { top: `${ratio * 100}%` }}
       />
-      <div className="split-child" style={{ flexGrow: 1 - displayedRatio }}>{second}</div>
     </div>
   );
 }
 
-function Pane({ canDrop, labelContext, onActivate, onClose, onDrop, pane, paneId, renderContext, root, shielded }: {
+function Pane({ canDrop, dragging, labelContext, onActivate, onClose, onDrop, pane, paneId, rect, root }: {
   readonly canDrop: (target: PaneDropTarget) => boolean;
+  readonly dragging: boolean;
   readonly labelContext: (contextId: string) => string;
   readonly onActivate: (contextId: string) => void;
   readonly onClose: (contextId: string) => void;
   readonly onDrop: (target: PaneDropTarget) => void;
   readonly pane: WorkspacePane;
   readonly paneId: WorkspacePaneId;
-  readonly renderContext: (contextId: string) => ReactNode;
+  readonly rect: LayoutRect;
   readonly root: boolean;
-  readonly shielded: boolean;
 }) {
   const [dropTarget, setDropTarget] = useState<number | ContentDropZone>();
   const previewDrop = (preview: number | ContentDropZone, target: PaneDropTarget) => {
@@ -237,6 +339,7 @@ function Pane({ canDrop, labelContext, onActivate, onClose, onDrop, pane, paneId
         previewDrop(pane.contexts.length, { beforeContext: undefined });
       }}
       onDrop={drop}
+      style={rectStyle(rect)}
     >
       <div className="tabs">
         {pane.contexts.map((contextId, index) => {
@@ -284,6 +387,7 @@ function Pane({ canDrop, labelContext, onActivate, onClose, onDrop, pane, paneId
       </div>
       <div
         className="pane-content"
+        data-dragging={dragging || undefined}
         data-drop-zone={typeof dropTarget === 'string' ? dropTarget : undefined}
         onDragOver={(event) => {
           event.preventDefault();
@@ -292,14 +396,7 @@ function Pane({ canDrop, labelContext, onActivate, onClose, onDrop, pane, paneId
           previewDrop(zone, { zone });
         }}
         onDrop={(event) => drop(event, { zone: contentDropZone(event) })}
-      >
-        {shielded && <div className="drag-shield" />}
-        {pane.contexts.map((contextId) => (
-          <div className="app" hidden={pane.activeContext !== contextId} key={contextId}>
-            {renderContext(contextId)}
-          </div>
-        ))}
-      </div>
+      />
     </section>
   );
 }
