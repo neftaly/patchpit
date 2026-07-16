@@ -1,70 +1,65 @@
-import { openFsEntriesQuery, type FsDatabaseSource, type FsEntryRow } from '@patchpit/fs';
+import {
+  openFolderGraphQuery,
+  type FolderDatabaseSource,
+  type FolderLinkRow,
+} from '@patchpit/fs';
+import type { OpenLinkedDatabaseSource } from '@tarstate/core/database/session';
 
-export const openResourceQuery = (source: FsDatabaseSource) => openFsEntriesQuery([source]);
+export const openResourceQuery = (options: {
+  readonly root: FolderDatabaseSource;
+  readonly openSource: OpenLinkedDatabaseSource;
+}) => openFolderGraphQuery(options);
 
-export const resourceIdentity = ({ entryId, sourceId }: Pick<FsEntryRow, 'entryId' | 'sourceId'>) =>
-  JSON.stringify([sourceId, entryId]);
+export const resourceIdentity = ({ linkId, sourceId }: Pick<FolderLinkRow, 'linkId' | 'sourceId'>) =>
+  JSON.stringify([sourceId, linkId]);
 
 export type ResourceProjection = {
   readonly rows: readonly ResourceTreeRow[];
-  readonly byIdentity: ReadonlyMap<string, FsEntryRow>;
-  readonly byEntryId: ReadonlyMap<string, FsEntryRow>;
+  readonly byIdentity: ReadonlyMap<string, FolderLinkRow>;
+  readonly byResourceRef: ReadonlyMap<string, FolderLinkRow>;
   readonly launchableFolders: ReadonlySet<string>;
 };
 
 type ResourceTreeRow = {
   readonly depth: number;
-  readonly resource: FsEntryRow;
+  readonly resource: FolderLinkRow;
 };
 
-export const findResource = (resources: ResourceProjection, sourceId: string, entryId: string) =>
-  resources.byIdentity.get(resourceIdentity({ sourceId, entryId }));
+type ResourceSnapshot = ReturnType<Awaited<ReturnType<typeof openResourceQuery>>['getSnapshot']>;
 
-type ResourceSnapshot = ReturnType<Awaited<ReturnType<typeof openFsEntriesQuery>>['getSnapshot']>;
+export const resourceRowsFromQuerySnapshot = (snapshot: ResourceSnapshot): readonly FolderLinkRow[] =>
+  snapshot.state === 'closed' ? [] : snapshot.current.rows;
 
-export const resourceRowsFromQuerySnapshot = (snapshot: ResourceSnapshot): readonly FsEntryRow[] => {
-  if (snapshot.state === 'closed') return [];
-  return snapshot.current.rows.map((row) => {
-    if (row.sourceId === undefined) throw new Error('Filesystem row is missing source provenance');
-    return { ...row, sourceId: row.sourceId };
+export const projectResourceTree = (
+  resources: readonly FolderLinkRow[],
+  rootSourceId?: string,
+): ResourceProjection => {
+  const byIdentity = new Map(resources.map((resource) => [resourceIdentity(resource), resource]));
+  const byResourceRef = new Map<string, FolderLinkRow>();
+  resources.forEach((resource) => {
+    if (!byResourceRef.has(resource.resourceRef)) byResourceRef.set(resource.resourceRef, resource);
   });
-};
-
-export const projectResourceTree = (resources: readonly FsEntryRow[]): ResourceProjection => {
-  const byIdentity = new Map<string, FsEntryRow>();
-  const byEntryId = new Map<string, FsEntryRow>();
-  const children = new Map<string, FsEntryRow[]>();
-  for (const resource of resources) {
-    const identity = resourceIdentity(resource);
-    byIdentity.set(identity, resource);
-    if (!byEntryId.has(resource.entryId)) byEntryId.set(resource.entryId, resource);
-    const parent = hierarchyKey(resource.sourceId, resource.parentId);
-    const siblings = children.get(parent) ?? [];
-    siblings.push(resource);
-    children.set(parent, siblings);
-  }
+  const byFolder = resources.reduce((folders, resource) => {
+    folders.set(resource.sourceId, [...folders.get(resource.sourceId) ?? [], resource]);
+    return folders;
+  }, new Map<string, FolderLinkRow[]>());
   const rows: ResourceTreeRow[] = [];
-  const visited = new Set<string>();
-  const append = (resource: FsEntryRow, depth: number) => {
-    const identity = resourceIdentity(resource);
-    if (visited.has(identity)) return;
-    visited.add(identity);
-    rows.push({ depth, resource });
-    for (const child of sorted(children.get(hierarchyKey(resource.sourceId, resource.entryId)))) append(child, depth + 1);
+  const expandedFolders = new Set<string>();
+  const appendFolder = (sourceId: string, depth: number) => {
+    if (expandedFolders.has(sourceId)) return;
+    expandedFolders.add(sourceId);
+    sorted(byFolder.get(sourceId)).forEach((resource) => {
+      rows.push({ depth, resource });
+      if (resource.typeHint === 'folder') appendFolder(resource.resourceRef, depth + 1);
+    });
   };
-  for (const sourceId of [...new Set(resources.map(({ sourceId }) => sourceId))].sort()) {
-    for (const root of sorted(children.get(hierarchyKey(sourceId, null)))) append(root, 0);
-  }
-  for (const resource of sorted(resources.filter((entry) => !visited.has(resourceIdentity(entry))))) append(resource, 0);
-  const launchableFolders = new Set(resources.flatMap((resource) =>
-    resource.kind === 'file' && resource.name === 'index.html' && resource.parentId !== null
-      ? [resourceIdentity({ sourceId: resource.sourceId, entryId: resource.parentId })]
-      : []));
-  return { rows, byIdentity, byEntryId, launchableFolders };
+  if (rootSourceId !== undefined) appendFolder(rootSourceId, 0);
+  [...byFolder.keys()].sort().forEach((sourceId) => appendFolder(sourceId, 0));
+  const launchableFolders = new Set(resources.flatMap(({ name, sourceId, typeHint }) =>
+    name === 'index.html' && typeHint !== 'folder' ? [sourceId] : []));
+  return { rows, byIdentity, byResourceRef, launchableFolders };
 };
 
-const sorted = (resources: readonly FsEntryRow[] | undefined) => [...resources ?? []].sort((left, right) =>
-  left.sourceId.localeCompare(right.sourceId) || left.order - right.order
-  || left.name.localeCompare(right.name) || left.entryId.localeCompare(right.entryId));
-
-const hierarchyKey = (sourceId: string, entryId: string | null) => JSON.stringify([sourceId, entryId]);
+const sorted = (resources: readonly FolderLinkRow[] | undefined) => [...resources ?? []].sort((left, right) =>
+  (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER)
+  || left.name.localeCompare(right.name) || left.linkId.localeCompare(right.linkId));

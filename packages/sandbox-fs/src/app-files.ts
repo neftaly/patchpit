@@ -1,57 +1,50 @@
-import type { FsEntryRow } from '@patchpit/fs';
+import type { FolderLinkRow } from '@patchpit/fs';
 
 const MAX_APP_FILES = 4_096;
 
 export const APP_ENTRY_PATH = ['index.html'] as const;
 
-export const selectAppFiles = (rows: readonly FsEntryRow[], rootEntryId: string) => {
-  const root = rows.find(({ entryId }) => entryId === rootEntryId);
-  if (root?.kind !== 'folder') throw new Error('Filesystem app root is not an authorized folder');
-  const entries = rows.filter(({ entryId }) => entryId !== root.entryId);
-  const files = entries.filter(({ kind }) => kind === 'file');
+export type AppFileOccurrence = {
+  readonly resource: FolderLinkRow;
+  readonly path: readonly string[];
+};
+
+export const projectAppFiles = (
+  rows: readonly FolderLinkRow[],
+  rootFolderRef: string,
+): readonly AppFileOccurrence[] => {
+  const byFolder = rows.reduce((folders, row) => {
+    folders.set(row.sourceId, [...folders.get(row.sourceId) ?? [], row]);
+    return folders;
+  }, new Map<string, FolderLinkRow[]>());
+  const activeFolders = new Set<string>();
+  const visit = (folderRef: string, parentPath: readonly string[]): readonly AppFileOccurrence[] => {
+    if (activeFolders.has(folderRef)) throw new Error(`Filesystem folder cycle at: ${folderRef}`);
+    activeFolders.add(folderRef);
+    const files = sorted(byFolder.get(folderRef)).flatMap((resource): readonly AppFileOccurrence[] => {
+      const path = Object.freeze([...parentPath, resource.name]);
+      return resource.typeHint === 'folder'
+        ? visit(resource.resourceRef, path)
+        : [{ resource, path }];
+    });
+    activeFolders.delete(folderRef);
+    return files;
+  };
+  const files = visit(rootFolderRef, []);
   if (files.length > MAX_APP_FILES) throw new Error('Filesystem app has too many files');
-  return {
-    root,
-    entries,
-    files,
-  };
+  const pathKeys = files.map(({ path }) => JSON.stringify(path));
+  if (new Set(pathKeys).size !== pathKeys.length) throw new Error('Filesystem app paths are not unique');
+  return files;
 };
 
-export const projectAppFilePaths = (root: FsEntryRow, entries: readonly FsEntryRow[]) => {
-  const byId = new Map(entries.map((entry) => [entry.entryId, entry]));
-  const paths = new Map<string, readonly string[]>();
-  const resolving = new Set<string>();
-  const pathFor = (entry: FsEntryRow): readonly string[] => {
-    const known = paths.get(entry.entryId);
-    if (known !== undefined) return known;
-    if (resolving.has(entry.entryId)) throw new Error(`Filesystem parent cycle at: ${entry.entryId}`);
-    resolving.add(entry.entryId);
-    const parent = entry.parentId === null ? undefined : byId.get(entry.parentId);
-    let path: readonly string[];
-    if (entry.parentId === root.entryId) path = [entry.name];
-    else {
-      if (parent === undefined) {
-        throw new Error(`Filesystem parent is outside the app subtree: ${entry.entryId}`);
-      }
-      path = [...pathFor(parent), entry.name];
-    }
-    resolving.delete(entry.entryId);
-    paths.set(entry.entryId, Object.freeze(path));
-    return path;
-  };
-  for (const entry of entries) pathFor(entry);
-  const filePathKeys = entries
-    .filter((entry) => entry.kind === 'file')
-    .map((entry) => JSON.stringify(pathFor(entry)));
-  if (new Set(filePathKeys).size !== filePathKeys.length) throw new Error('Filesystem app paths are not unique');
-  return paths;
-};
+export const hasAppEntry = (files: readonly AppFileOccurrence[]) =>
+  files.some(({ path }) => samePath(path, APP_ENTRY_PATH));
 
-export const hasAppEntry = (
-  files: readonly FsEntryRow[],
-  paths: ReadonlyMap<string, readonly string[]>,
-) => files.some((file) => samePath(paths.get(file.entryId), APP_ENTRY_PATH));
+const sorted = (rows: readonly FolderLinkRow[] | undefined) => [...rows ?? []].sort((left, right) =>
+  (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER)
+  || linkIdentity(left).localeCompare(linkIdentity(right)));
 
-const samePath = (left: readonly string[] | undefined, right: readonly string[]) =>
-  left !== undefined && left.length === right.length
-  && left.every((segment, index) => segment === right[index]);
+const linkIdentity = ({ linkId, sourceId }: FolderLinkRow) => JSON.stringify([sourceId, linkId]);
+
+const samePath = (left: readonly string[], right: readonly string[]) =>
+  left.length === right.length && left.every((segment, index) => segment === right[index]);

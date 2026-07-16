@@ -30,6 +30,10 @@ available. Writers store the best known Patchwork type hint, but retyping a
 linked document cannot atomically update every inbound link; stale hints remain
 diagnosable hints rather than changing the target's logical type.
 
+Owned folders expose relational rename, unlink, and alias operations. Reorder
+is deliberately separate because preserving an Automerge list object's
+identity is a source capability, not equivalent to sorting projected rows.
+
 One name and one occurrence of a document URL per folder is the desired
 resolved state, matching Patchwork's normal folder behavior. It is not a
 coordination-free invariant: concurrent replicas may create duplicates. Those
@@ -209,10 +213,10 @@ Canonical filesystem storage is an ordered Patchwork-compatible folder graph:
 folder documents contain `title` and `docs`, while links contain document URLs
 and placement facts. Patchpit-owned folders additionally carry exact
 `@patchpit` declarations and minimal `@patchwork.type: folder` metadata. The
-browser host's flat root adapter is temporary; Tarstate's live source-link
-queries provide the recursive membership lifecycle needed to replace it. The
-durable flat entry table is not an application primitive and must not become a
-second filesystem ontology.
+root `src` identifies the root folder document, nested folders are linked
+documents, and the workspace is an ordinary root link. Tarstate's bounded live
+source-link query owns recursive membership, readiness, provenance, and
+authority. There is no durable flat entry table or second filesystem ontology.
 
 ### F2. Untrusted application isolation
 
@@ -224,18 +228,7 @@ not confer trust.
 
 ## Next behaviors
 
-### N1. Canonical folder graph
-
-Replace the browser host's flat root entry table with Patchwork-compatible
-folder documents linked by Automerge URLs. The root `src` identifies the root
-folder document; nested folders are ordinary linked documents, and the
-workspace is an ordinary durable link rather than a privileged row shape.
-Tarstate source-link discovery and recursive queries project the graph without
-turning paths or projection rows into identity. Migration is complete when the
-flat representation and its adapter can be deleted rather than retained as a
-second writable format.
-
-### N2. Durable reopening
+### N1. Durable reopening
 
 Use the injectable Repo boundary to persist and reopen the root folder document
 across browser lifetimes. Root `src` continues to identify that document.
@@ -243,20 +236,19 @@ Concurrent browser tabs either share a storage/network protocol that converges
 normally or report an unsupported ownership conflict; they never assume a hash
 alone proves that document bytes remain locally available.
 
-### N3. Semantic link operations
+### N2. Complete link semantics
 
-Keep these behaviors distinct:
+Add the remaining single-folder behaviors without weakening their semantics:
 
-1. Rename or reorder a link within one folder document.
-2. Unlink a document without deleting it.
-3. Add an alias link to an existing document in another folder.
-4. Detect and expose concurrently created duplicate names or targets without
+1. Reorder a link while preserving its source-native occurrence identity.
+2. Detect and expose concurrently created duplicate names or targets without
    dropping either fact.
 
-Identity-preserving link movement is a separate capability from preserving the
-linked document's identity.
+Rename, unlink, and alias are already source-routed relational operations.
+Identity-preserving link movement remains a separate capability from preserving
+the linked document's identity.
 
-### N4. Scoped application data
+### N3. Scoped application data
 
 The first real editing application is a Patchwork-compatible Markdown editor.
 It should drive a minimal host protocol for:
@@ -269,7 +261,7 @@ It should drive a minimal host protocol for:
 Applications do not receive a Repo, raw `DocHandle`, foreign source handles, or
 a generic provider registry.
 
-### N5. Cross-source move and copy
+### N4. Cross-source move and copy
 
 Moving a link between folders removes and adds occurrences across two atomic
 sources, so its receipt exposes partial completion and retry/repair state. A

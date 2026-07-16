@@ -6,35 +6,23 @@ import {
   viewerContentUrl,
 } from '../../src/content/invocation.ts';
 import { projectResourceTree } from '../../src/content/resource-projection.ts';
-import type { FsEntryRow } from '@patchpit/fs';
+import type { FolderLinkRow } from '@patchpit/fs';
 
-void test('folder launch and viewer labels do not cross source boundaries', () => {
-  const folderA = entry('source-a', 'app', null, 'folder', 'app-a');
-  const indexB = entry('source-b', 'index', 'app', 'file', 'index.html');
-  const fileA = entry('source-a', 'readme', 'app', 'file', 'readme.md');
-  const folderB = entry('source-b', 'app', null, 'folder', 'app-b');
+void test('folder launch and viewer labels follow document references', () => {
+  const folder = link('root', 'app', 'folder', 'App', 'folder:app');
+  const unrelatedIndex = link('folder:other', 'index', 'file', 'index.html', 'file:other');
+  const readme = link('folder:app', 'readme', 'file', 'readme.md', 'file:readme');
 
-  assert.equal(contentUrlForResource(folderA, projectResourceTree([folderA, indexB])), undefined);
-  const resources = projectResourceTree([folderA, folderB, fileA]);
-  assert.equal(contentUrlForResource(fileA, resources), viewerContentUrl('source-a', 'readme'));
-  assert.equal(
-    contentLabel(resources, viewerContentUrl('source-a', 'readme')),
-    'app-a / readme.md',
-  );
+  assert.equal(contentUrlForResource(folder, projectResourceTree([folder, unrelatedIndex])), undefined);
+  const resources = projectResourceTree([folder, readme], 'root');
+  assert.equal(contentUrlForResource(readme, resources), viewerContentUrl('file:readme'));
+  assert.equal(contentLabel(resources, viewerContentUrl('file:readme')), 'readme.md');
 });
 
-const entry = (
+const link = (
   sourceId: string,
-  entryId: string,
-  parentId: string | null,
-  kind: FsEntryRow['kind'],
+  linkId: string,
+  typeHint: string,
   name: string,
-): FsEntryRow => ({
-  sourceId,
-  entryId,
-  parentId,
-  kind,
-  name,
-  order: 0,
-  resourceRef: `${sourceId}:${entryId}`,
-});
+  resourceRef: string,
+): FolderLinkRow => ({ sourceId, linkId, typeHint, name, order: 0, resourceRef });

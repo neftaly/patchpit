@@ -1,5 +1,5 @@
 import { useMemo, useRef, useSyncExternalStore } from 'react';
-import type { FsEntryRow } from '@patchpit/fs';
+import type { FolderLinkRow } from '@patchpit/fs';
 import {
   ContentView,
   RESOURCE_DRAG_TYPE,
@@ -43,8 +43,8 @@ export function App({ runtime, sandboxHost }: {
     () => resourceQuery.getSnapshot(),
   );
   const resources = useMemo(
-    () => projectResourceTree(resourceRowsFromQuerySnapshot(resourceSnapshot)),
-    [resourceSnapshot],
+    () => projectResourceTree(resourceRowsFromQuerySnapshot(resourceSnapshot), runtime.rootUrl),
+    [resourceSnapshot, runtime.rootUrl],
   );
   const workspaceProjection = useSyncExternalStore(
     workspaceRuntime.subscribe,
@@ -79,7 +79,7 @@ export function App({ runtime, sandboxHost }: {
     });
     pendingWorkspacePlans.current = queuedPlan.then(() => undefined, () => undefined);
   };
-  const openResource = (resource: FsEntryRow, pinned: boolean) => {
+  const openResource = (resource: FolderLinkRow, pinned: boolean) => {
     const url = contentUrlForResource(resource, resources);
     if (url === undefined) return;
     const allocated = allocateWorkspaceIds();

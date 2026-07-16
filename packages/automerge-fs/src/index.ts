@@ -5,14 +5,27 @@ import {
   type AutomergeDatabase,
 } from '@tarstate/automerge';
 import { adoptConflictFreeAutomergeJsonValue } from '@tarstate/automerge/values';
-import { normalizeArtifactRef } from '@tarstate/core';
-import type { DocumentDeclaration } from '@tarstate/core/attachment';
-import { sealStorageMapping } from '@tarstate/core/schema';
 import {
-  fsEntriesRelation,
-  fsSchemaArtifact,
-  type FsDatabaseSource,
-  type FsEntry,
+  builtInCapabilityRefs,
+  createIssue,
+  normalizeArtifactRef,
+  type ArtifactRef,
+  type Issue,
+  type ParseResult,
+} from '@tarstate/core';
+import type { DocumentDeclaration } from '@tarstate/core/attachment';
+import {
+  sealStorageMapping,
+  type KeyMapping,
+  type StoredFieldMapping,
+  type StorageMappingBody,
+} from '@tarstate/core/schema';
+import {
+  folderLinksRelation,
+  folderRelation,
+  folderSchemaArtifact,
+  type FolderDatabaseSource,
+  type FolderLink,
 } from '@patchpit/fs';
 
 export {
@@ -27,96 +40,244 @@ export {
   type AutomergeTextFileDocument,
 } from './file-content.ts';
 
-type StoredFsEntry = Omit<FsEntry, 'entryId'>;
+const patchworkFolderMetadata = { type: 'folder' } as const;
+const replace = {
+  kind: 'replace',
+  capability: builtInCapabilityRefs.fieldReplace,
+} as const;
+const readOnly = { kind: 'read-only' } as const;
 
-export type AutomergeFsDocument = {
-  readonly '@patchpit': typeof automergeFsDocumentMetadata;
-  readonly entries: Record<string, StoredFsEntry>;
+export type AutomergeFolderLink = {
+  readonly id: string;
+  readonly name: string;
+  readonly type: string;
+  readonly url: string;
+  readonly icon?: string;
+  readonly copyOf?: string;
 };
 
-export type AutomergeFsDatabase = FsDatabaseSource & Pick<AutomergeDatabase, 'close'>;
+export type AutomergeFolderDocument = {
+  readonly '@patchpit': typeof automergeFolderDocumentMetadata;
+  readonly '@patchwork': typeof patchworkFolderMetadata;
+  readonly title: string;
+  readonly docs: readonly AutomergeFolderLink[];
+};
 
-export const automergeFsStorageMappingArtifact = await sealStorageMapping({
-  id: 'urn:patchpit:mapping:automerge-fs@1',
-  body: {
-    schema: normalizeArtifactRef(fsSchemaArtifact),
+export type AutomergeFolderDatabase = AutomergeDatabase & FolderDatabaseSource;
+
+type SelectedFolderAttachment = {
+  readonly declaration: DocumentDeclaration;
+  readonly artifacts: Readonly<Record<string, unknown>>;
+};
+
+const ownedFolderAttachment = await createFolderAttachment({
+  mappingId: 'urn:patchpit:mapping:automerge-folder@1',
+  linkKey: { kind: 'field', path: ['id'] },
+  nameWrite: replace,
+});
+const foreignFolderAttachment = await createFolderAttachment({
+  mappingId: 'urn:patchpit:mapping:foreign-automerge-folder@1',
+  linkKey: { kind: 'source-metadata', value: 'collection-element-identity' },
+  nameWrite: readOnly,
+});
+
+export const automergeFolderDocumentMetadata = {
+  type: 'folder',
+  schema: normalizeArtifactRef(folderSchemaArtifact),
+  declaration: ownedFolderAttachment.declaration,
+  schemas: ownedFolderAttachment.artifacts,
+} as const;
+
+export const createAutomergeFolderDocument = (
+  title: string,
+  links: readonly FolderLink[],
+): AutomergeFolderDocument => ({
+  '@patchpit': automergeFolderDocumentMetadata,
+  '@patchwork': patchworkFolderMetadata,
+  title,
+  docs: links.map(({ linkId, name, typeHint, resourceRef, icon, copyOf }) => ({
+    id: linkId,
+    name,
+    type: typeHint,
+    url: resourceRef,
+    ...(icon === undefined ? {} : { icon }),
+    ...(copyOf === undefined ? {} : { copyOf }),
+  })),
+});
+
+export const openAutomergeFolderDatabase = async (
+  handle: DocHandle<object>,
+  authorityScope = 'public',
+): Promise<ParseResult<AutomergeFolderDatabase>> => {
+  const sourceId = handle.url;
+  const document = handle.doc();
+  if (document === undefined) {
+    return { success: false, issues: [folderIssue('source-unavailable', sourceId)] };
+  }
+  const selected = selectFolderAttachment(document, sourceId);
+  if (selected.attachment === undefined) return { success: false, issues: selected.issues };
+  const opened = await openAutomergeDatabase({
+    handle,
+    declaration: selected.attachment.declaration,
+    embeddedArtifacts: selected.attachment.artifacts,
+    authorityScope,
+    attachmentId: `patchpit:folder:${sourceId}`,
+  });
+  return opened.success
+    ? {
+        success: true,
+        value: opened.value,
+        issues: [...selected.issues, ...opened.issues],
+      }
+    : { success: false, issues: [...selected.issues, ...opened.issues] };
+};
+
+const selectFolderAttachment = (
+  document: object,
+  sourceId: string,
+): { readonly attachment: SelectedFolderAttachment; readonly issues: readonly Issue[] }
+  | { readonly attachment?: undefined; readonly issues: readonly Issue[] } => {
+  if ('@patchpit' in document) return selectOwnedFolderAttachment(document, sourceId);
+  if (getConflicts(document, 'docs') !== undefined || getConflicts(document, 'title') !== undefined) {
+    return { issues: [folderIssue('content-conflicted', sourceId)] };
+  }
+  if (!hasPatchworkFolderShape(document)) {
+    return { issues: [folderIssue('shape-invalid', sourceId)] };
+  }
+  const interopIssue = patchworkMetadataIssue(document, sourceId);
+  return {
+    attachment: foreignFolderAttachment,
+    issues: interopIssue === undefined ? [] : [interopIssue],
+  };
+};
+
+const selectOwnedFolderAttachment = (
+  document: object & { readonly '@patchpit': unknown },
+  sourceId: string,
+): { readonly attachment: SelectedFolderAttachment; readonly issues: readonly Issue[] }
+  | { readonly attachment?: undefined; readonly issues: readonly Issue[] } => {
+  if (getConflicts(document, '@patchpit') !== undefined) {
+    return { issues: [folderIssue('metadata-conflicted', sourceId)] };
+  }
+  const adopted = adoptConflictFreeAutomergeJsonValue(document['@patchpit']);
+  if (!adopted.success || !isRecord(adopted.value) || adopted.value.type !== 'folder') {
+    return { issues: [...adopted.issues, folderIssue('metadata-invalid', sourceId)] };
+  }
+  const metadata = adopted.value;
+  if (!isRecord(metadata.declaration) || !isRecord(metadata.schemas)
+    || !sameArtifactRef(metadata.schema, folderSchemaArtifact)
+    || !sameArtifactRef(metadata.declaration.storageSchema, metadata.schema)) {
+    return { issues: [folderIssue('metadata-invalid', sourceId)] };
+  }
+  const declaration = metadata.declaration as DocumentDeclaration;
+  if (!sameStorageMapping(declaration, ownedFolderAttachment.declaration)) {
+    return { issues: [folderIssue('metadata-invalid', sourceId)] };
+  }
+  const interopIssue = patchworkMetadataIssue(document, sourceId);
+  return {
+    attachment: { declaration, artifacts: metadata.schemas },
+    issues: interopIssue === undefined ? [] : [interopIssue],
+  };
+};
+
+async function createFolderAttachment(input: {
+  readonly mappingId: string;
+  readonly linkKey: KeyMapping;
+  readonly nameWrite: StoredFieldMapping['write'];
+}): Promise<SelectedFolderAttachment> {
+  const schema = normalizeArtifactRef(folderSchemaArtifact);
+  const mapping = await sealStorageMapping({
+    id: input.mappingId,
+    body: folderStorageMapping(schema, input.linkKey, input.nameWrite),
+  });
+  return {
+    declaration: {
+      formatVersion: 1,
+      storageSchema: schema,
+      projection: {
+        kind: 'storage-mapping',
+        storageMapping: normalizeArtifactRef(mapping),
+      },
+    },
+    artifacts: {
+      [folderSchemaArtifact.id]: folderSchemaArtifact,
+      [mapping.id]: mapping,
+    },
+  };
+}
+
+function folderStorageMapping(
+  schema: ArtifactRef,
+  linkKey: KeyMapping,
+  nameWrite: StoredFieldMapping['write'],
+): StorageMappingBody {
+  return {
+    schema,
     model: 'json-tree-v1',
     relations: {
-      [fsEntriesRelation.relationId]: {
-        collection: { kind: 'object-map', path: ['entries'], absent: 'invalid' },
-        keys: { entryId: { kind: 'map-key', onMismatch: 'reject' } },
+      [folderRelation.relationId]: {
+        collection: { kind: 'singleton', path: [], absent: 'invalid' },
+        keys: { id: { kind: 'literal', value: 'folder' } },
+        fields: { title: { path: ['title'], write: readOnly } },
+      },
+      [folderLinksRelation.relationId]: {
+        collection: { kind: 'array', path: ['docs'], absent: 'invalid' },
+        keys: { linkId: linkKey },
         fields: {
-          parentId: { path: ['parentId'], write: { kind: 'read-only' } },
-          order: { path: ['order'], write: { kind: 'read-only' } },
-          kind: { path: ['kind'], write: { kind: 'read-only' } },
-          name: { path: ['name'], write: { kind: 'read-only' } },
-          resourceRef: { path: ['resourceRef'], write: { kind: 'read-only' } },
+          order: { kind: 'source-metadata', value: 'collection-position' },
+          name: { path: ['name'], write: nameWrite },
+          typeHint: { path: ['type'], write: readOnly },
+          resourceRef: { path: ['url'], write: readOnly },
+          icon: { path: ['icon'], write: readOnly },
+          copyOf: { path: ['copyOf'], write: readOnly },
         },
       },
     },
-  },
+  };
+}
+
+const hasPatchworkFolderShape = (document: object): document is {
+  readonly title: string;
+  readonly docs: readonly object[];
+} => 'title' in document && typeof document.title === 'string'
+  && 'docs' in document && Array.isArray(document.docs)
+  && document.docs.every((link) => isRecord(link)
+    && typeof link.name === 'string'
+    && typeof link.type === 'string'
+    && typeof link.url === 'string'
+    && (link.icon === undefined || typeof link.icon === 'string')
+    && (link.copyOf === undefined || typeof link.copyOf === 'string'));
+
+const patchworkMetadataIssue = (document: object, sourceId: string): Issue | undefined => {
+  if (!('@patchwork' in document)) return undefined;
+  if (getConflicts(document, '@patchwork') !== undefined) {
+    return folderIssue('interop-metadata-conflicted', sourceId, 'warning');
+  }
+  const adopted = adoptConflictFreeAutomergeJsonValue(document['@patchwork']);
+  return adopted.success && isRecord(adopted.value) && adopted.value.type === 'folder'
+    ? undefined
+    : folderIssue('interop-metadata-invalid', sourceId, 'warning');
+};
+
+const sameStorageMapping = (left: DocumentDeclaration, right: DocumentDeclaration) =>
+  left.projection.kind === 'storage-mapping'
+  && right.projection.kind === 'storage-mapping'
+  && sameArtifactRef(left.projection.storageMapping, right.projection.storageMapping);
+
+const folderIssue = (
+  kind: string,
+  sourceId: string,
+  severity: 'error' | 'warning' = 'error',
+) => createIssue({
+  code: `patchpit.folder.${kind}`,
+  phase: 'parse',
+  severity,
+  sourceId,
 });
 
-const automergeFsDocumentDeclaration: DocumentDeclaration = {
-  formatVersion: 1,
-  storageSchema: normalizeArtifactRef(fsSchemaArtifact),
-  projection: {
-    kind: 'storage-mapping',
-    storageMapping: normalizeArtifactRef(automergeFsStorageMappingArtifact),
-  },
-};
-
-export const automergeFsDocumentMetadata = {
-  type: 'filesystem',
-  schema: normalizeArtifactRef(fsSchemaArtifact),
-  declaration: automergeFsDocumentDeclaration,
-  schemas: {
-    [fsSchemaArtifact.id]: fsSchemaArtifact,
-    [automergeFsStorageMappingArtifact.id]: automergeFsStorageMappingArtifact,
-  },
-} as const;
-
-export const openAutomergeFsDocument = async (
-  handle: DocHandle<AutomergeFsDocument>,
-): Promise<AutomergeFsDatabase> => {
-  const document = handle.doc();
-  if (document === undefined) throw new Error('Automerge filesystem source is unavailable');
-  const metadata = parseFilesystemMetadata(document);
-  const opened = await openAutomergeDatabase({
-    handle,
-    declaration: metadata.declaration,
-    embeddedArtifacts: metadata.schemas,
-    authorityScope: 'public',
-    attachmentId: `patchpit:fs:${handle.url}`,
-  });
-  if (!opened.success) {
-    throw new Error('Automerge filesystem attachment is unavailable', { cause: opened.issues });
-  }
-  return opened.value;
-};
-
-const parseFilesystemMetadata = (document: AutomergeFsDocument) => {
-  if (Object.keys(getConflicts(document, '@patchpit') ?? {}).length > 1) {
-    throw new Error('Automerge filesystem metadata is conflicted');
-  }
-  const adopted = adoptConflictFreeAutomergeJsonValue(document['@patchpit']);
-  if (!adopted.success) {
-    throw new Error('Automerge filesystem metadata is invalid', { cause: adopted.issues });
-  }
-  const input = adopted.value;
-  if (!isRecord(input)
-    || input.type !== automergeFsDocumentMetadata.type
-    || !sameArtifactRef(input.schema, automergeFsDocumentMetadata.schema)
-    || !isRecord(input.declaration)
-    || !sameArtifactRef(input.declaration.storageSchema, automergeFsDocumentMetadata.schema)
-    || !isRecord(input.schemas)) {
-    throw new Error('Automerge filesystem metadata is invalid');
-  }
-  return { declaration: input.declaration, schemas: input.schemas };
-};
-
-const sameArtifactRef = (input: unknown, expected: { readonly id: string; readonly contentHash: string }) =>
-  isRecord(input) && input.id === expected.id && input.contentHash === expected.contentHash;
+const sameArtifactRef = (input: unknown, expected: unknown) =>
+  isRecord(input) && isRecord(expected)
+  && input.id === expected.id && input.contentHash === expected.contentHash;
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

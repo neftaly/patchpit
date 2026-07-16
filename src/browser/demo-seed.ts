@@ -1,4 +1,4 @@
-import { appContentUrl, resourceBrowserUrl } from '../content/invocation.ts';
+import { resourceBrowserUrl } from '../content/invocation.ts';
 import type { RootSeedFile, RootSeedFolder } from '../root/runtime.ts';
 
 type DemoFilesManifest = {
@@ -8,7 +8,7 @@ type DemoFilesManifest = {
     readonly order: number;
     readonly url: string;
   }[];
-  readonly rootEntryId: string;
+  readonly rootFolderId: string;
   readonly type: 'patchpit.demo-files@1';
 };
 
@@ -34,22 +34,22 @@ export const loadBrowserDemoSeed = async (
     return {
       bytes: new Uint8Array(await fileResponse.arrayBuffer()),
       ...(file.contentType === undefined ? {} : { contentType: file.contentType }),
-      entryId: file.name,
+      linkId: file.name,
       name: file.name,
       order: file.order,
     };
   }));
   return {
-    documentContext: appContentUrl(manifest.rootEntryId),
+    documentContextFolderId: manifest.rootFolderId,
     folders: [{
-      entryId: manifest.rootEntryId,
+      folderId: manifest.rootFolderId,
       files,
-      name: manifest.rootEntryId,
+      name: manifest.rootFolderId,
       order: 1,
     }, {
-      entryId: 'external-resources',
+      folderId: 'external-resources',
       files: [{
-        entryId: 'unresolved.svg',
+        linkId: 'unresolved.svg',
         name: 'unresolved.svg',
         order: 0,
         resourceUrl: 'https://example.com/unresolved.svg',
@@ -64,8 +64,8 @@ export const loadBrowserDemoSeed = async (
 const parseDemoFilesManifest = (candidate: unknown): DemoFilesManifest => {
   if (!isRecord(candidate)
     || candidate.type !== 'patchpit.demo-files@1'
-    || typeof candidate.rootEntryId !== 'string'
-    || candidate.rootEntryId === ''
+    || typeof candidate.rootFolderId !== 'string'
+    || candidate.rootFolderId === ''
     || !Array.isArray(candidate.files)) {
     throw new TypeError('Demo app index is invalid');
   }
@@ -94,7 +94,7 @@ const parseDemoFilesManifest = (candidate: unknown): DemoFilesManifest => {
   }
   return {
     files,
-    rootEntryId: candidate.rootEntryId,
+    rootFolderId: candidate.rootFolderId,
     type: candidate.type,
   };
 };

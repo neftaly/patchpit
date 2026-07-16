@@ -1,9 +1,5 @@
-import type { FsEntryRow } from '@patchpit/fs';
-import {
-  findResource,
-  resourceIdentity,
-  type ResourceProjection,
-} from './resource-projection.ts';
+import type { FolderLinkRow } from '@patchpit/fs';
+import type { ResourceProjection } from './resource-projection.ts';
 
 export const resourceBrowserUrl = 'files.html';
 
@@ -14,26 +10,25 @@ type ContentInvocation = {
   readonly kind: 'resources';
 } | {
   readonly kind: 'app';
-  readonly rootEntryId: string;
+  readonly resourceRef: string;
 } | {
   readonly kind: 'viewer';
-  readonly entryId: string;
-  readonly sourceId: string;
+  readonly resourceRef: string;
 };
 
-export const appContentUrl = (rootEntryId: string) =>
-  `${APP_CONTENT_PREFIX}${JSON.stringify({ rootEntryId })}`;
+export const appContentUrl = (resourceRef: string) =>
+  `${APP_CONTENT_PREFIX}${JSON.stringify({ resourceRef })}`;
 
-export const viewerContentUrl = (sourceId: string, entryId: string) =>
-  `${VIEWER_CONTENT_PREFIX}${JSON.stringify({ sourceId, entryId })}`;
+export const viewerContentUrl = (resourceRef: string) =>
+  `${VIEWER_CONTENT_PREFIX}${JSON.stringify({ resourceRef })}`;
 
 export const contentUrlForResource = (
-  resource: FsEntryRow,
+  resource: FolderLinkRow,
   resources: ResourceProjection,
 ): string | undefined => {
-  if (resource.kind === 'file') return viewerContentUrl(resource.sourceId, resource.entryId);
-  return resources.launchableFolders.has(resourceIdentity(resource))
-    ? appContentUrl(resource.entryId)
+  if (resource.typeHint !== 'folder') return viewerContentUrl(resource.resourceRef);
+  return resources.launchableFolders.has(resource.resourceRef)
+    ? appContentUrl(resource.resourceRef)
     : undefined;
 };
 
@@ -43,47 +38,30 @@ export const contentLabel = (
 ) => {
   const invocation = contentUrl === undefined ? undefined : parseContentInvocation(contentUrl);
   if (invocation?.kind === 'resources') return 'Resources';
-  if (invocation?.kind === 'app') {
-    const root = resources.byEntryId.get(invocation.rootEntryId);
-    return root === undefined ? 'App unavailable' : `${root.name} / index.html`;
-  }
-  const resource = invocation?.kind !== 'viewer'
-    ? undefined
-    : findResource(resources, invocation.sourceId, invocation.entryId);
-  if (resource === undefined) return 'Resource unavailable';
-  const parent = resource.parentId === null
-    ? undefined
-    : findResource(resources, resource.sourceId, resource.parentId);
-  return `${parent?.name ?? 'patchpit'} / ${resource.name}`;
+  const resource = invocation === undefined ? undefined : resources.byResourceRef.get(invocation.resourceRef);
+  if (resource === undefined) return invocation?.kind === 'app' ? 'App unavailable' : 'Resource unavailable';
+  return invocation?.kind === 'app' ? `${resource.name} / index.html` : resource.name;
 };
 
 export const parseContentInvocation = (contentUrl: string): ContentInvocation | undefined => {
   if (contentUrl === resourceBrowserUrl) return { kind: 'resources' };
   if (contentUrl.startsWith(APP_CONTENT_PREFIX)) {
-    const candidate = parseHashObject(contentUrl, APP_CONTENT_PREFIX);
-    return typeof candidate?.rootEntryId === 'string' && candidate.rootEntryId !== ''
-      ? { kind: 'app', rootEntryId: candidate.rootEntryId }
-      : undefined;
+    const resourceRef = parseResourceRef(contentUrl, APP_CONTENT_PREFIX);
+    return resourceRef === undefined ? undefined : { kind: 'app', resourceRef };
   }
   if (contentUrl.startsWith(VIEWER_CONTENT_PREFIX)) {
-    const candidate = parseHashObject(contentUrl, VIEWER_CONTENT_PREFIX);
-    return typeof candidate?.sourceId === 'string' && candidate.sourceId !== ''
-      && typeof candidate.entryId === 'string' && candidate.entryId !== ''
-      ? { kind: 'viewer', sourceId: candidate.sourceId, entryId: candidate.entryId }
-      : undefined;
+    const resourceRef = parseResourceRef(contentUrl, VIEWER_CONTENT_PREFIX);
+    return resourceRef === undefined ? undefined : { kind: 'viewer', resourceRef };
   }
   return undefined;
 };
 
-const parseHashObject = (
-  contentUrl: string,
-  prefix: string,
-): Readonly<Record<string, unknown>> | undefined => {
+const parseResourceRef = (contentUrl: string, prefix: string) => {
   try {
     const candidate: unknown = JSON.parse(contentUrl.slice(prefix.length));
     return typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate)
-      ? candidate as Readonly<Record<string, unknown>>
-      : undefined;
+      && 'resourceRef' in candidate && typeof candidate.resourceRef === 'string'
+      && candidate.resourceRef !== '' ? candidate.resourceRef : undefined;
   } catch {
     return undefined;
   }

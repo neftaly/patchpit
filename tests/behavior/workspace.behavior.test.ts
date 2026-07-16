@@ -20,7 +20,7 @@ const resourcesUrl = 'files.html';
 const isEditor = (url: string) => url !== resourcesUrl;
 
 void test('durable workspace stores topology and pinned placements without per-view selection', () => {
-  const workspace = createWorkspace(resourcesUrl, 'app.html#{"rootEntryId":"demo"}');
+  const workspace = createWorkspace(resourcesUrl, 'app.html#{"resourceRef":"demo"}');
   assert.deepEqual(workspace.nodes, {
     left: { kind: 'pane', contexts: ['context-0'] },
     right: { kind: 'pane', contexts: ['context-1'] },
@@ -123,7 +123,7 @@ void test('Resources selection does not replace the active editor target', () =>
     nodes: { paneId: 'unused-pane', splitId: 'unused-split' },
     pinned: false,
     viewState,
-    url: 'viewer.html#{"entryId":"notes"}',
+    url: 'viewer.html#{"resourceRef":"notes"}',
     workspace,
   });
 
@@ -138,7 +138,7 @@ void test('moving a preview promotes it and closing it collapses the destination
     workspace,
     createWorkspaceViewState(workspace, 'right'),
     'right',
-    { contextId: 'preview', url: 'viewer.html#{"entryId":"notes"}' },
+    { contextId: 'preview', url: 'viewer.html#{"resourceRef":"notes"}' },
   );
   let plan = planWorkspaceAction({
     action: {
@@ -155,7 +155,7 @@ void test('moving a preview promotes it and closing it collapses the destination
   });
   workspace = plan.workspace;
   viewState = plan.viewState;
-  assert.equal(workspace.contexts.preview?.url, 'viewer.html#{"entryId":"notes"}');
+  assert.equal(workspace.contexts.preview?.url, 'viewer.html#{"resourceRef":"notes"}');
   assert.deepEqual(workspace.nodes.bottom, { kind: 'pane', contexts: ['preview'] });
 
   plan = planWorkspaceAction({

@@ -12,27 +12,25 @@ import {
 import { safeMaterializePortableBytes } from '@tarstate/core/values';
 import { prepareQuery } from '@tarstate/core/query';
 import {
-  compare,
   field,
   from,
-  literal,
   orderBy,
   pipe,
   select,
   sourceOf,
-  where,
 } from '@tarstate/core/query/authoring';
 import {
+  DEFAULT_FOLDER_DISCOVERY_BUDGET,
   fileRelation,
-  fsSubtreeQuery,
-  openFsSubtreeQuery,
-  type FsDatabaseSource,
+  folderLinksRelation,
+  openFolderGraphQuery,
+  type FolderDatabaseSource,
+  type FolderLinkRow,
 } from '@patchpit/fs';
 import {
   APP_ENTRY_PATH,
   hasAppEntry,
-  projectAppFilePaths,
-  selectAppFiles,
+  projectAppFiles,
 } from './app-files.ts';
 
 export type ImmutableAppSnapshot = {
@@ -75,12 +73,11 @@ const contentQuery = pipe(
   orderBy([{ value: field('content', 'resourceRef'), direction: 'asc' }]),
 );
 const contentLinksQuery = pipe(
-  fsSubtreeQuery,
-  where(compare('eq', field('selected', 'kind'), literal('file'))),
-  select('link', {
-    linkId: field('selected', 'entryId'),
-    originSourceId: field('selected', 'sourceId'),
-    targetSourceId: field('selected', 'resourceRef'),
+  from(folderLinksRelation, 'link'),
+  select('sourceLink', {
+    linkId: field('link', 'linkId'),
+    originSourceId: sourceOf('link'),
+    targetSourceId: field('link', 'resourceRef'),
   }),
 );
 const contentsPlan = await prepareQuery({ root: contentQuery, ...QUERY_IDENTITY });
@@ -91,8 +88,8 @@ export const APP_FILE_AUTHORITY_SCOPE = 'patchpit.app-file';
 
 type SnapshotOptions = {
   readonly byteLimit?: number;
-  readonly filesystem: FsDatabaseSource;
-  readonly rootEntryId: string;
+  readonly root: FolderDatabaseSource;
+  readonly rootFolderRef: string;
   readonly openSource: OpenLinkedDatabaseSource;
   readonly signal?: AbortSignal;
 };
@@ -105,77 +102,64 @@ const snapshotFilesystemAppAttempt = async (
   options: SnapshotOptions,
   retries: number,
 ): Promise<AppSnapshotResult> => {
-  const subtree = await openFsSubtreeQuery(options.filesystem, options.rootEntryId);
+  const graph = await openFolderGraphQuery({
+    authorityScope: APP_FILE_AUTHORITY_SCOPE,
+    root: options.root,
+    openSource: options.openSource,
+  });
   try {
     options.signal?.throwIfAborted();
-    const subtreeSnapshot = subtree.getSnapshot();
-    if (subtreeSnapshot.state === 'closed') throw new Error('Filesystem subtree observation closed');
-    const subtreeResult = subtreeSnapshot.current;
-    if (!launchable(subtreeResult)) {
-      return unavailable(subtreeResult);
-    }
-    const { entries, files, root } = selectAppFiles(subtreeResult.rows, options.rootEntryId);
-    const subtreeBases = subtreeResult.basis.attachments;
-    const paths = projectAppFilePaths(root, entries);
-    if (!hasAppEntry(files, paths)) return missingEntry(subtreeBases);
+    const graphResult = await graph.whenSettled(settleOptions(options.signal));
+    if (!launchable(graphResult)) return unavailable(graphResult);
+    const files = projectAppFiles(graphResult.rows as readonly FolderLinkRow[], options.rootFolderRef);
+    if (!hasAppEntry(files)) return missingEntry(graphResult.basis.attachments);
 
     const contentResult = await snapshotContents(options);
-    const latestSubtree = subtree.getSnapshot();
-    if (!sameOpenBasis(subtreeSnapshot, latestSubtree)) {
+    const latestGraph = graph.getSnapshot();
+    if (latestGraph.state !== 'open' || !sameBasis(graphResult.basis, latestGraph.current.basis)) {
       if (retries === 0) throw new Error('Filesystem app changed while creating its snapshot');
       return snapshotFilesystemAppAttempt(options, retries - 1);
     }
     const sourceBases = contentResult.basis.attachments;
-    if (!launchable(contentResult)) {
-      return unavailable(contentResult, sourceBases);
-    }
+    if (!launchable(contentResult)) return unavailable(contentResult, sourceBases);
 
     options.signal?.throwIfAborted();
     const contents = materializeContentRows(contentResult.rows);
-    const totalBytes = files.reduce((total, file) =>
-      total + (contents.get(file.resourceRef)?.content.byteLength ?? 0), 0);
+    const totalBytes = files.reduce((total, { resource }) =>
+      total + (contents.get(resource.resourceRef)?.content.byteLength ?? 0), 0);
     if (totalBytes > (options.byteLimit ?? DEFAULT_APP_BYTE_LIMIT)) {
       throw new Error('Filesystem app is too large');
     }
-    return ready(files.map((file) => {
-      const resolved = contents.get(file.resourceRef);
+    return ready(files.map(({ path, resource }) => {
+      const resolved = contents.get(resource.resourceRef);
       if (resolved === undefined) {
-        throw new Error(`Ready app content is unavailable: ${file.resourceRef}`);
+        throw new Error(`Ready app content is unavailable: ${resource.resourceRef}`);
       }
       return {
         body: new Blob([resolved.content]),
         contentType: resolved.mimeType,
-        path: requiredPath(paths, file.entryId),
+        path,
       };
     }), sourceBases);
   } finally {
-    subtree.close();
+    graph.close();
   }
 };
 
-const sameOpenBasis = (
-  left: ReturnType<Awaited<ReturnType<typeof openFsSubtreeQuery>>['getSnapshot']>,
-  right: ReturnType<Awaited<ReturnType<typeof openFsSubtreeQuery>>['getSnapshot']>,
-) => left.state === 'open' && right.state === 'open'
-  && canonicalizeJson(left.current.basis as unknown as JsonValue)
-    === canonicalizeJson(right.current.basis as unknown as JsonValue);
-
 const snapshotContents = async (options: SnapshotOptions) => {
   const observer = await openDatabaseQuery({
-    sources: [{ source: options.filesystem }],
+    sources: [{ source: options.root }],
     plan: contentsPlan,
     queryAuthorityScope: APP_FILE_AUTHORITY_SCOPE,
     canRead: () => true,
     followSourceLinks: {
+      budget: DEFAULT_FOLDER_DISCOVERY_BUDGET,
       plan: contentLinksPlan,
-      parameters: { rootEntryId: options.rootEntryId },
       openSource: options.openSource,
     },
   });
   try {
-    return await observer.whenSettled(options.signal === undefined
-      ? undefined
-      : { signal: options.signal });
+    return await observer.whenSettled(settleOptions(options.signal));
   } finally {
     observer.close();
   }
@@ -188,23 +172,20 @@ type MaterializedContent = {
 
 const materializeContentRows = (
   rows: readonly Readonly<Record<string, unknown>>[],
-): ReadonlyMap<string, MaterializedContent> => {
-  const contents = new Map<string, MaterializedContent>();
-  for (const row of rows) {
-    const { binaryContent, contentKind, mimeType, resourceRef, textContent } = row;
-    if (typeof mimeType !== 'string' || typeof resourceRef !== 'string') {
-      throw new TypeError('App file content projection is invalid');
-    }
-    const bytes = contentKind === 'text' && typeof textContent === 'string'
-      ? new TextEncoder().encode(textContent)
-      : materializeBinaryContent(contentKind, binaryContent);
-    if (bytes === undefined || contents.has(resourceRef)) {
-      throw new TypeError('App file content projection is invalid');
-    }
-    contents.set(resourceRef, { content: bytes, mimeType });
+): ReadonlyMap<string, MaterializedContent> => rows.reduce((contents, row) => {
+  const { binaryContent, contentKind, mimeType, resourceRef, textContent } = row;
+  if (typeof mimeType !== 'string' || typeof resourceRef !== 'string') {
+    throw new TypeError('App file content projection is invalid');
   }
+  const bytes = contentKind === 'text' && typeof textContent === 'string'
+    ? new TextEncoder().encode(textContent)
+    : materializeBinaryContent(contentKind, binaryContent);
+  if (bytes === undefined || contents.has(resourceRef)) {
+    throw new TypeError('App file content projection is invalid');
+  }
+  contents.set(resourceRef, { content: bytes, mimeType });
   return contents;
-};
+}, new Map<string, MaterializedContent>());
 
 const materializeBinaryContent = (
   contentKind: unknown,
@@ -259,12 +240,6 @@ const ready = (
   sourceBases: Object.freeze(sourceBases),
 });
 
-const requiredPath = (paths: ReadonlyMap<string, readonly string[]>, entryId: string) => {
-  const path = paths.get(entryId);
-  if (path === undefined) throw new Error(`Filesystem app path is unavailable: ${entryId}`);
-  return path;
-};
-
 const missingEntry = (
   sourceBases: ImmutableAppSnapshot['sourceBases'],
 ): AppSnapshotResult => Object.freeze({
@@ -278,3 +253,7 @@ const missingEntry = (
   })],
   sourceBases: Object.freeze(sourceBases),
 });
+
+const sameBasis = (left: unknown, right: unknown) =>
+  canonicalizeJson(left as JsonValue) === canonicalizeJson(right as JsonValue);
+const settleOptions = (signal: AbortSignal | undefined) => signal === undefined ? undefined : { signal };

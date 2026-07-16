@@ -1,45 +1,64 @@
-import {
-  type AttachmentProjection,
-} from '@tarstate/core/database';
 import type { Issue } from '@tarstate/core';
+import { prepareManualReadOnlyAttachment } from '@tarstate/core/attachment/adapter';
+import type { AttachmentProjection } from '@tarstate/core/database';
 import {
   openDatabaseQuery,
+  type DatabaseDiscoveryBudget,
   type DatabaseQuerySession,
   type MountableDatabaseSource,
+  type OpenLinkedDatabaseSource,
 } from '@tarstate/core/database/session';
-import { prepareManualReadOnlyAttachment } from '@tarstate/core/attachment/adapter';
-import type {
-  Completeness,
-  RelationInput,
-} from '@tarstate/core/query';
+import type { Completeness, RelationInput } from '@tarstate/core/query';
 import type { ObservableSource, SourceSnapshot } from '@tarstate/core/source';
-import { fsEntriesPlan, fsSubtreePlan } from './queries.ts';
-import { fsEntriesRelation, fsSchemaArtifact, parseFsEntries, type FsEntry } from './schema.ts';
+import {
+  folderLinksPlan,
+  nestedFolderSourceLinksPlan,
+} from './queries.ts';
+import {
+  folderLinksRelation,
+  folderRelation,
+  folderSchemaArtifact,
+  parseFolderLink,
+  type Folder,
+  type FolderLink,
+} from './schema.ts';
 
-export type FsDocument = {
+export type FolderDocument = {
   readonly sourceId: string;
-  readonly entries: readonly FsEntry[];
+  readonly title: string;
+  readonly links: readonly FolderLink[];
 };
 
-export type FsEntryRow = FsEntry & { readonly sourceId: string };
+export type FolderLinkRow = FolderLink & { readonly sourceId: string };
+export type FolderDatabaseSource = MountableDatabaseSource;
 
-type FsStorage = { readonly entries: readonly FsEntry[] };
+type FolderStorage = {
+  readonly title: string;
+  readonly links: readonly FolderLink[];
+};
 
-export type FsDatabaseSource = MountableDatabaseSource;
-
-type FsProjectionRows = {
-  readonly entries: readonly FsEntry[];
+type FolderProjectionRows = {
+  readonly folder: Folder;
+  readonly links: readonly FolderLink[];
   readonly occurrenceIds: readonly string[];
   readonly completeness: Completeness;
   readonly issues: readonly Issue[];
 };
 
-export const createFsDatabaseSource = <Storage>(options: {
+export const DEFAULT_FOLDER_DISCOVERY_BUDGET = {
+  maxLinkedSources: 1_024,
+  maxDiscoveryEdges: 4_096,
+  maxDepth: 64,
+  maxTraversalSteps: 16_384,
+} as const satisfies DatabaseDiscoveryBudget;
+
+export const createFolderDatabaseSource = <Storage>(options: {
+  readonly authorityScope?: string;
   readonly source: ObservableSource<Storage>;
-  readonly project: (snapshot: SourceSnapshot<Storage>) => FsProjectionRows;
-}): FsDatabaseSource => {
+  readonly project: (snapshot: SourceSnapshot<Storage>) => FolderProjectionRows;
+}): FolderDatabaseSource => {
   const { source } = options;
-  const attachmentId = `patchpit:fs:${source.sourceId}`;
+  const attachmentId = `patchpit:folder:${source.sourceId}`;
   return {
     mount: (catalog, mountOptions) => {
       const discoveryEdges = mountOptions?.discoveryEdges ?? [];
@@ -48,10 +67,10 @@ export const createFsDatabaseSource = <Storage>(options: {
         incarnation: `${attachmentId}:1`,
         sourceId: source.sourceId,
         source,
-        authorityScope: 'public',
+        authorityScope: options.authorityScope ?? 'public',
         discoveryEdges,
         preparation: prepareManualReadOnlyAttachment<Storage, readonly RelationInput[]>({
-          schemaViewIds: [fsSchemaArtifact.id],
+          schemaViewIds: [folderSchemaArtifact.id],
           project: (snapshot): AttachmentProjection<readonly RelationInput[]> => {
             if (snapshot.storage === undefined) {
               return { state: snapshot.state === 'ready' ? 'failed' : snapshot.state, issues: snapshot.issues };
@@ -60,8 +79,16 @@ export const createFsDatabaseSource = <Storage>(options: {
             return {
               state: 'ready',
               value: [{
-                relation: fsEntriesRelation,
-                rows: projection.entries,
+                relation: folderRelation,
+                rows: [projection.folder],
+                occurrenceIds: ['folder'],
+                completeness: projection.completeness,
+                sourceId: source.sourceId,
+                attachmentId,
+                basis: snapshot.basis,
+              }, {
+                relation: folderLinksRelation,
+                rows: projection.links,
                 occurrenceIds: projection.occurrenceIds,
                 completeness: projection.completeness,
                 sourceId: source.sourceId,
@@ -83,43 +110,55 @@ export const createFsDatabaseSource = <Storage>(options: {
   };
 };
 
-export const createStaticFsDatabaseSource = (input: FsDocument): FsDatabaseSource => {
-  const entries = parseFsEntries(input.entries);
-  return createFsDatabaseSource({
-    source: staticSource(input.sourceId, entries),
+export const createStaticFolderDatabaseSource = (
+  input: FolderDocument,
+  authorityScope = 'public',
+): FolderDatabaseSource => {
+  const links = input.links.map(parseFolderLink);
+  return createFolderDatabaseSource({
+    authorityScope,
+    source: staticSource(input.sourceId, input.title, links),
     project: () => ({
-      entries,
-      occurrenceIds: entries.map(({ entryId }) => entryId),
+      folder: { id: 'folder', title: input.title },
+      links,
+      occurrenceIds: links.map(({ linkId }) => linkId),
       completeness: 'exact',
       issues: [],
     }),
   });
 };
 
-export const openFsEntriesQuery = (sources: readonly FsDatabaseSource[]) => openDatabaseQuery({
+export const openFolderLinksQuery = (sources: readonly FolderDatabaseSource[]) => openDatabaseQuery({
   sources: sources.map((source) => ({ source })),
-  plan: fsEntriesPlan,
+  plan: folderLinksPlan,
   queryAuthorityScope: 'public',
-});
+}) as Promise<DatabaseQuerySession<FolderLinkRow>>;
 
-export const openFsSubtreeQuery = (source: FsDatabaseSource, rootEntryId: string) =>
-  openDatabaseQuery({
-    sources: [{ source }],
-    plan: fsSubtreePlan,
-    queryAuthorityScope: `patchpit:fs-subtree:${rootEntryId}`,
-    canRead: () => true,
-    parameters: { rootEntryId },
-  }) as Promise<DatabaseQuerySession<FsEntryRow>>;
+export const openFolderGraphQuery = (options: {
+  readonly authorityScope?: string;
+  readonly root: FolderDatabaseSource;
+  readonly openSource: OpenLinkedDatabaseSource;
+  readonly budget?: DatabaseDiscoveryBudget;
+}) => openDatabaseQuery({
+  sources: [{ source: options.root }],
+  plan: folderLinksPlan,
+  queryAuthorityScope: options.authorityScope ?? 'public',
+  followSourceLinks: {
+    plan: nestedFolderSourceLinksPlan,
+    budget: options.budget ?? DEFAULT_FOLDER_DISCOVERY_BUDGET,
+    openSource: options.openSource,
+  },
+}) as Promise<DatabaseQuerySession<FolderLinkRow>>;
 
-const staticSource = (sourceId: string, entries: readonly FsEntry[]) => ({
+const staticSource = (sourceId: string, title: string, links: readonly FolderLink[]) => ({
   sourceId,
-  snapshot: (): SourceSnapshot<FsStorage> => ({
+  snapshot: (): SourceSnapshot<FolderStorage> => ({
     sourceId,
     operationEpoch: `${sourceId}:operations:1`,
     basis: { incarnation: `${sourceId}:1`, revision: 0 },
     state: 'ready',
     freshness: 'current',
-    storage: { entries },
+    storage: { title, links },
     issues: [],
   }),
   subscribe: () => () => undefined,

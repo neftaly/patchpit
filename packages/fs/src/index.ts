@@ -1,20 +1,27 @@
 export {
-  createFsDatabaseSource,
-  createStaticFsDatabaseSource,
-  openFsEntriesQuery,
-  openFsSubtreeQuery,
-  type FsDatabaseSource,
-  type FsDocument,
-  type FsEntryRow,
+  createFolderDatabaseSource,
+  createStaticFolderDatabaseSource,
+  DEFAULT_FOLDER_DISCOVERY_BUDGET,
+  openFolderGraphQuery,
+  openFolderLinksQuery,
+  type FolderDatabaseSource,
+  type FolderDocument,
+  type FolderLinkRow,
 } from './database-source.ts';
 export {
-  fsEntriesRelation,
-  fsSchemaArtifact,
-  parseFsEntry,
-  safeParseFsEntry,
-  type FsEntry,
+  folderLinksRelation,
+  folderRelation,
+  folderSchemaArtifact,
+  parseFolderLink,
+  safeParseFolderLink,
+  type Folder,
+  type FolderLink,
 } from './schema.ts';
-export { fsSubtreeQuery } from './queries.ts';
+export {
+  applyFolderOperation,
+  commitFolderOperation,
+  type FolderOperation,
+} from './operations.ts';
 export {
   fileRelation,
   fileSchemaArtifact,

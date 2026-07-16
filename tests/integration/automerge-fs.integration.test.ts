@@ -1,75 +1,76 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import * as Automerge from '@automerge/automerge';
 import { Repo } from '@automerge/automerge-repo';
-import { openFsEntriesQuery } from '@patchpit/fs';
+import { commitFolderOperation, openFolderLinksQuery } from '@patchpit/fs';
 import {
-  automergeFsDocumentMetadata,
-  openAutomergeFsDocument,
-  type AutomergeFsDocument,
+  createAutomergeFolderDocument,
+  openAutomergeFolderDatabase,
 } from '@patchpit/automerge-fs';
 
-void test('Repo-backed filesystem observes one live handle', async () => {
-  const document: AutomergeFsDocument = {
-    '@patchpit': automergeFsDocumentMetadata,
-    entries: {
-      readme: {
-        kind: 'file',
-        name: 'readme.md',
-        order: 0,
-        parentId: null,
-        resourceRef: 'content:readme',
-      },
-    },
-  };
+void test('owned Automerge folders support relational rename, alias, and unlink', async () => {
   const repo = new Repo({ network: [] });
-  const handle = repo.create(document);
-  const filesystem = await openAutomergeFsDocument(handle);
-  const query = await openFsEntriesQuery([filesystem]);
+  const handle = repo.create(createAutomergeFolderDocument('Root', [{
+    linkId: 'readme',
+    name: 'readme.md',
+    order: 0,
+    resourceRef: 'automerge:4hj6FJqozF7cLYqHi3FuK1SQhKc',
+    typeHint: 'file',
+  }]));
+  const opened = await openAutomergeFolderDatabase(handle);
+  assert.equal(opened.success, true);
+  if (!opened.success) return;
+  const folder = opened.value;
+  const query = await openFolderLinksQuery([folder]);
 
   try {
-    assert.match(handle.url, /^automerge:/);
-    handle.change((doc) => { (doc.entries.readme as { name: string }).name = 'external.md'; });
+    await commitFolderOperation(folder, {
+      kind: 'folder.link.rename', linkId: 'readme', name: 'README.md',
+    });
+    await commitFolderOperation(folder, {
+      kind: 'folder.link.alias',
+      link: {
+        linkId: 'readme-alias',
+        name: 'guide.md',
+        resourceRef: 'automerge:4hj6FJqozF7cLYqHi3FuK1SQhKc',
+        typeHint: 'file',
+      },
+    });
+    await commitFolderOperation(folder, { kind: 'folder.link.unlink', linkId: 'readme' });
     const snapshot = query.getSnapshot();
-    assert.equal(snapshot.state === 'open' && snapshot.current.rows[0]?.name, 'external.md');
-
-    query.close();
-    handle.change((doc) => { (doc.entries.readme as { name: string }).name = 'handle-still-open.md'; });
-    assert.equal(handle.doc().entries.readme?.name, 'handle-still-open.md');
-    filesystem.close();
+    assert.equal(snapshot.state, 'open');
+    assert.deepEqual(snapshot.current.rows.map(({ linkId, name }) => [linkId, name]), [
+      ['readme-alias', 'guide.md'],
+    ]);
+    assert.deepEqual(handle.doc().docs.map(({ id, name }) => [id, name]), [
+      ['readme-alias', 'guide.md'],
+    ]);
   } finally {
     query.close();
-    filesystem.close();
+    folder.close();
     await repo.shutdown();
   }
 });
 
-void test('Repo-backed filesystem rejects conflicted Patchpit metadata', async () => {
+void test('foreign Patchwork folders project source-native link identity read-only', async () => {
   const repo = new Repo({ network: [] });
-  const handle = repo.create<AutomergeFsDocument>({
-    '@patchpit': automergeFsDocumentMetadata,
-    entries: {},
+  const handle = repo.create<object>({
+    '@patchwork': { type: 'folder' },
+    title: 'Foreign',
+    docs: [{ name: 'readme.md', type: 'file', url: 'https://example.com/readme.md' }],
   });
-  handle.change((doc) => {
-    (doc['@patchpit'].schema as { contentHash: string }).contentHash = 'sha256:neutral';
-  });
-  const base = handle.doc();
-  const left = Automerge.change(
-    Automerge.clone(base, { actor: '8'.repeat(64) }),
-    (doc) => { (doc['@patchpit'].schema as { contentHash: string }).contentHash = 'sha256:other'; },
-  );
-  const right = Automerge.change(
-    Automerge.clone(base, { actor: '9'.repeat(64) }),
-    (doc) => {
-      (doc['@patchpit'].schema as { contentHash: string }).contentHash =
-        automergeFsDocumentMetadata.schema.contentHash;
-    },
-  );
-  handle.update(() => Automerge.merge(left, right));
+  const opened = await openAutomergeFolderDatabase(handle);
+  assert.equal(opened.success, true);
+  if (!opened.success) return;
+  const query = await openFolderLinksQuery([opened.value]);
 
   try {
-    await assert.rejects(openAutomergeFsDocument(handle), /filesystem metadata is invalid/);
+    const snapshot = query.getSnapshot();
+    assert.equal(snapshot.state, 'open');
+    assert.equal(snapshot.current.rows[0]?.name, 'readme.md');
+    assert.equal(typeof snapshot.current.rows[0]?.linkId, 'string');
   } finally {
+    query.close();
+    opened.value.close();
     await repo.shutdown();
   }
 });

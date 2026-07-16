@@ -1,64 +1,69 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  createStaticFsDatabaseSource,
-  openFsEntriesQuery,
-  openFsSubtreeQuery,
+  createStaticFolderDatabaseSource,
+  openFolderGraphQuery,
+  openFolderLinksQuery,
 } from '@patchpit/fs';
 
-void test('filesystem query keeps stable local IDs scoped by source', async () => {
-  const query = await openFsEntriesQuery([
-    createStaticFsDatabaseSource({
+void test('folder links keep stable local IDs scoped by their document', async () => {
+  const query = await openFolderLinksQuery([
+    createStaticFolderDatabaseSource({
       sourceId: 'personal',
-      entries: [{ entryId: 'readme', parentId: null, order: 0, kind: 'file', name: 'readme.md', resourceRef: 'content:personal' }],
+      title: 'Personal',
+      links: [{ linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:personal', typeHint: 'file' }],
     }),
-    createStaticFsDatabaseSource({
+    createStaticFolderDatabaseSource({
       sourceId: 'shared',
-      entries: [
-        { entryId: 'folder', parentId: null, order: 2, kind: 'folder', name: 'archive', resourceRef: 'folder:archive' },
-        { entryId: 'schedule', parentId: null, order: 1, kind: 'file', name: 'schedule.txt', resourceRef: 'content:schedule' },
-        { entryId: 'readme', parentId: null, order: 0, kind: 'file', name: 'readme.md', resourceRef: 'content:shared' },
-        { entryId: 'nested', parentId: 'folder', order: 0, kind: 'file', name: 'nested.txt', resourceRef: 'content:nested' },
-      ],
+      title: 'Shared',
+      links: [{ linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:shared', typeHint: 'file' }],
     }),
   ]);
-  const snapshot = query.getSnapshot();
 
-  assert.equal(snapshot.state, 'open');
-  assert.deepEqual(snapshot.current.rows, [
-    { entryId: 'readme', kind: 'file', name: 'readme.md', order: 0, parentId: null, resourceRef: 'content:personal', sourceId: 'personal' },
-    { entryId: 'folder', kind: 'folder', name: 'archive', order: 2, parentId: null, resourceRef: 'folder:archive', sourceId: 'shared' },
-    { entryId: 'nested', kind: 'file', name: 'nested.txt', order: 0, parentId: 'folder', resourceRef: 'content:nested', sourceId: 'shared' },
-    { entryId: 'readme', kind: 'file', name: 'readme.md', order: 0, parentId: null, resourceRef: 'content:shared', sourceId: 'shared' },
-    { entryId: 'schedule', kind: 'file', name: 'schedule.txt', order: 1, parentId: null, resourceRef: 'content:schedule', sourceId: 'shared' },
-  ]);
-  assert.equal(new Set(snapshot.current.resultKeys).size, 5);
-
-  query.close();
+  try {
+    const snapshot = query.getSnapshot();
+    assert.equal(snapshot.state, 'open');
+    assert.deepEqual(snapshot.current.rows, [
+      { linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:personal', sourceId: 'personal', typeHint: 'file' },
+      { linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:shared', sourceId: 'shared', typeHint: 'file' },
+    ]);
+    assert.equal(new Set(snapshot.current.resultKeys).size, 2);
+  } finally {
+    query.close();
+  }
 });
 
-void test('filesystem subtree query is recursive and source-authority scoped', async () => {
-  const selected = createStaticFsDatabaseSource({
-    sourceId: 'selected',
-    entries: [
-      { entryId: 'app', parentId: null, order: 0, kind: 'folder', name: 'app', resourceRef: 'folder:app' },
-      { entryId: 'index', parentId: 'app', order: 0, kind: 'file', name: 'index.html', resourceRef: 'content:index' },
-      { entryId: 'assets', parentId: 'app', order: 1, kind: 'folder', name: 'assets', resourceRef: 'folder:assets' },
-      { entryId: 'icon', parentId: 'assets', order: 0, kind: 'file', name: 'icon.svg', resourceRef: 'content:icon' },
-      { entryId: 'outside', parentId: null, order: 1, kind: 'file', name: 'outside.txt', resourceRef: 'content:outside' },
+void test('folder graph discovers nested folder documents without following file links', async () => {
+  const nested = createStaticFolderDatabaseSource({
+    sourceId: 'folder:nested',
+    title: 'Nested',
+    links: [{ linkId: 'icon', name: 'icon.svg', order: 0, resourceRef: 'content:icon', typeHint: 'file' }],
+  });
+  const root = createStaticFolderDatabaseSource({
+    sourceId: 'folder:root',
+    title: 'Root',
+    links: [
+      { linkId: 'nested', name: 'assets', order: 0, resourceRef: 'folder:nested', typeHint: 'folder' },
+      { linkId: 'outside', name: 'outside.txt', order: 1, resourceRef: 'content:outside', typeHint: 'file' },
     ],
   });
-  const query = await openFsSubtreeQuery(selected, 'app');
-  const snapshot = query.getSnapshot();
+  const query = await openFolderGraphQuery({
+    root,
+    openSource: ({ sourceId }) => sourceId === 'folder:nested'
+      ? Object.assign(nested, { close: () => undefined })
+      : undefined,
+  });
 
-  assert.equal(snapshot.state, 'open');
-  assert.equal(snapshot.current.readiness, 'ready');
-  assert.equal(snapshot.current.completeness, 'exact');
-  assert.deepEqual(snapshot.current.rows.map(({ entryId, sourceId }) => [entryId, sourceId]), [
-    ['app', 'selected'],
-    ['assets', 'selected'],
-    ['icon', 'selected'],
-    ['index', 'selected'],
-  ]);
-  query.close();
+  try {
+    const snapshot = await query.whenSettled();
+    assert.equal(snapshot.readiness, 'ready');
+    assert.equal(snapshot.completeness, 'exact');
+    assert.deepEqual(snapshot.rows.map(({ linkId, sourceId }) => [linkId, sourceId]), [
+      ['icon', 'folder:nested'],
+      ['nested', 'folder:root'],
+      ['outside', 'folder:root'],
+    ]);
+  } finally {
+    query.close();
+  }
 });

@@ -1,65 +1,43 @@
 # @patchpit/fs
 
-`@patchpit/fs` exposes filesystem placement and file-document meaning as exact
-Tarstate schemas. Storage adapters own physical documents and source lifecycle.
+`@patchpit/fs` is the logical folder and file boundary. Physical Automerge
+shapes belong to `@patchpit/automerge-fs`; this package contains Tarstate
+schemas, graph queries, and semantic link operations.
 
-## Relation
+## Folder model
 
-The sealed `patchpit.fs.entry` relation has these fields:
+Each source contributes one `patchpit.folder` row and an ordered
+`patchpit.folder.link` relation. A link has source-local `linkId`, optional
+source-derived `order`, placement `name`, non-authoritative `typeHint`, and a
+durable `resourceRef`. Query rows add the containing folder's `sourceId` from
+Tarstate provenance.
 
-| Field | Meaning |
-| --- | --- |
-| `entryId` | Stable logical entry ID and relation key |
-| `parentId` | Parent entry ID, or `null` for a root |
-| `order` | Integer order among siblings |
-| `kind` | `folder` or `file` |
-| `name` | Entry name |
-| `resourceRef` | Reference to the folder or file resource |
+`openFolderGraphQuery` follows links whose type hint is `folder`. Discovery is
+bounded, authority-scoped, cycle-safe, and retains unavailable or invalid
+sources as evidence. It never turns a missing folder into an empty one.
 
-Queries add `sourceId` from Tarstate attachment provenance. Parent traversal is
-restricted to entries from that same source.
+Owned sources can apply `folder.link.rename`, `folder.link.unlink`, and
+`folder.link.alias` with `commitFolderOperation`. Reordering remains a distinct
+source-native identity-preserving move capability.
 
-## Exports
-
-- `fsSchemaArtifact` and `fsEntriesRelation` describe the logical relation;
-  `parseFsEntry` parses rows at its boundary.
-- `createFsDatabaseSource` adapts an observable source and projection into a
-  mountable filesystem database source.
-- `createStaticFsDatabaseSource` creates an exact source from an `FsDocument`.
-- `openFsEntriesQuery` observes entries across a list of sources.
-- `openFsSubtreeQuery` observes one folder and its recursive descendants within
-  one source.
-- `FsDatabaseSource`, `FsDocument`, `FsEntry`, and `FsEntryRow` are the exported
-  public types.
-- `fileSchemaArtifact` and `fileRelation` describe logical files with `name`,
-  `extension`, `mimeType`, and a discriminated text or binary content branch.
-  Storage mappings retain the physical Automerge representation.
-
-`FsDatabaseSource` is deliberately only a Tarstate mount capability. Source and
-attachment identities are obtained from its mount lease rather than exposed as
-parallel Patchpit state.
-
-Both query functions return an owned Tarstate query session. Consumers read
-readiness, completeness, issues, basis, and rows from `getSnapshot()`, may await
-`whenSettled()`, and call `close()` when finished.
+The separate exact file relation describes logical text or binary content.
+Storage mappings retain each physical representation and its write capability.
 
 ```ts
-import { createStaticFsDatabaseSource, openFsEntriesQuery } from '@patchpit/fs';
+import { createStaticFolderDatabaseSource, openFolderGraphQuery } from '@patchpit/fs';
 
-const source = createStaticFsDatabaseSource({
-  sourceId: 'workspace',
-  entries: [
-    {
-      entryId: 'root',
-      parentId: null,
-      order: 0,
-      kind: 'folder',
-      name: 'workspace',
-      resourceRef: 'automerge:root',
-    },
-  ],
+const root = createStaticFolderDatabaseSource({
+  sourceId: 'folder:root',
+  title: 'Root',
+  links: [{
+    linkId: 'readme',
+    name: 'readme.md',
+    order: 0,
+    resourceRef: 'document:readme',
+    typeHint: 'file',
+  }],
 });
-const query = await openFsEntriesQuery([source]);
-const snapshot = query.getSnapshot();
+const query = await openFolderGraphQuery({ root, openSource: () => undefined });
+const snapshot = await query.whenSettled();
 query.close();
 ```

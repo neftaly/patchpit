@@ -67,7 +67,7 @@ function sandboxCompatArtifactPlugin(): Plugin {
       })),
       manifest: {
         type: 'patchpit.demo-files@1',
-        rootEntryId: sandboxCompatApp.id,
+        rootFolderId: sandboxCompatApp.id,
       },
     };
   };
