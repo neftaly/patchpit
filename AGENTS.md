@@ -9,8 +9,9 @@ writers at boundaries.
 
 ## Tarstate Direction
 
-Tarstate v1 is consumed through tagged local package builds while its packages
-remain unpublished. Its Repo adapter and readiness API are available in v0.3.0.
+Tarstate v1 is consumed through immutable GitHub Release tarballs while its npm
+packages remain unpublished. Patchpit uses the standard Repo-backed attachment
+and readiness API from v0.4.0.
 Do not call hypothetical APIs or build Patchpit-local substitutes; pause or
 escalate dependent work.
 

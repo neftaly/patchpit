@@ -30,6 +30,9 @@ catalogs:
     babel-plugin-react-compiler:
       specifier: ^1.0.0
       version: 1.0.0
+    fast-check:
+      specifier: ^4.9.0
+      version: 4.9.0
     oxlint:
       specifier: 1.70.0
       version: 1.70.0
@@ -53,7 +56,7 @@ catalogs:
       version: 8.1.3
 
 overrides:
-  '@tarstate/core': file:vendor/tarstate/tarstate-core-0.3.0.tgz
+  '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
 
 importers:
 
@@ -78,11 +81,11 @@ importers:
         specifier: workspace:*
         version: link:packages/sandbox-fs
       '@tarstate/automerge':
-        specifier: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz
-        version: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz
       '@tarstate/core':
-        specifier: file:vendor/tarstate/tarstate-core-0.3.0.tgz
-        version: file:vendor/tarstate/tarstate-core-0.3.0.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -114,6 +117,9 @@ importers:
       babel-plugin-react-compiler:
         specifier: 'catalog:'
         version: 1.0.0
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.9.0
       oxlint:
         specifier: 'catalog:'
         version: 1.70.0(oxlint-tsgolint@0.23.0)
@@ -132,18 +138,15 @@ importers:
 
   packages/automerge-fs:
     dependencies:
-      '@automerge/automerge':
-        specifier: 3.2.6
-        version: 3.2.6
       '@patchpit/fs':
         specifier: workspace:*
         version: link:../fs
       '@tarstate/automerge':
-        specifier: file:../../vendor/tarstate/tarstate-automerge-0.3.0.tgz
-        version: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz
       '@tarstate/core':
-        specifier: file:../../vendor/tarstate/tarstate-core-0.3.0.tgz
-        version: file:vendor/tarstate/tarstate-core-0.3.0.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
     devDependencies:
       '@automerge/automerge-repo':
         specifier: 2.5.6
@@ -152,8 +155,8 @@ importers:
   packages/fs:
     dependencies:
       '@tarstate/core':
-        specifier: file:../../vendor/tarstate/tarstate-core-0.3.0.tgz
-        version: file:vendor/tarstate/tarstate-core-0.3.0.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
 
   packages/sandbox: {}
 
@@ -163,8 +166,8 @@ importers:
         specifier: workspace:*
         version: link:../fs
       '@tarstate/core':
-        specifier: file:../../vendor/tarstate/tarstate-core-0.3.0.tgz
-        version: file:vendor/tarstate/tarstate-core-0.3.0.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
 
 packages:
 
@@ -739,14 +742,14 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@tarstate/automerge@file:vendor/tarstate/tarstate-automerge-0.3.0.tgz':
-    resolution: {integrity: sha512-M0sd3arsHJxXTBE1BNy2nfyFJOO/7y+4zZHP7llJp+7VmuyXCSd4yWsLqH64SqttzmDuK5HhgR6MNH033eUxFQ==, tarball: file:vendor/tarstate/tarstate-automerge-0.3.0.tgz}
-    version: 0.3.0
+  '@tarstate/automerge@https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz':
+    resolution: {integrity: sha512-sboHKPskyQk7sFy527p3BieM2K+KOmcGeEOGANtY+qGRoilBDKKZXxgQNdeZk7qewYwjJOibxlecY6A/ggwi6w==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz}
+    version: 0.4.0
     engines: {node: '>=24.12.0'}
 
-  '@tarstate/core@file:vendor/tarstate/tarstate-core-0.3.0.tgz':
-    resolution: {integrity: sha512-3zE3084dibea5jGTazzIlldYBC13O/vhklQSWAduZbe1QGbzJjHmEhjp9in1sEAQX1aKLujJpKI9i7jvK5QM7g==, tarball: file:vendor/tarstate/tarstate-core-0.3.0.tgz}
-    version: 0.3.0
+  '@tarstate/core@https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz':
+    resolution: {integrity: sha512-0oVHT2GfYGLuaxmVP/oPvaZaF7cY3V9mrS3sgEu4and/noG8JV9IIyIHVzXJk9COSs/jKD4CqLRtr1VZCkA/QQ==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz}
+    version: 0.4.0
     engines: {node: '>=24.12.0'}
 
   '@tybys/wasm-util@0.10.3':
@@ -995,6 +998,10 @@ packages:
   eventemitter3@5.0.4:
     resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
 
+  fast-check@4.9.0:
+    resolution: {integrity: sha512-7ms6T7SybUev/PQITciI0yLM2pOSFy5zpG8Ty7tQofcVaQUvrMXp6CBwqF6fThLCLOrfBtuHAtwq6Yu4XPCllg==}
+    engines: {node: '>=12.17.0'}
+
   fast-sha256@1.3.0:
     resolution: {integrity: sha512-n11RGP/lrWEFI/bWdygLxhI+pVeo1ZYIVwvvPkW7azl/rOy+F3HYRZ2K5zeE9mmkhQppyv9sQFx0JM9UabnpPQ==}
 
@@ -1162,6 +1169,9 @@ packages:
   postcss@8.5.16:
     resolution: {integrity: sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg==}
     engines: {node: ^10 || ^12 || >=14}
+
+  pure-rand@8.4.2:
+    resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
 
   react-dom@19.2.7:
     resolution: {integrity: sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ==}
@@ -1666,12 +1676,12 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@tarstate/automerge@file:vendor/tarstate/tarstate-automerge-0.3.0.tgz':
+  '@tarstate/automerge@https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz':
     dependencies:
       '@automerge/automerge': 3.2.6
-      '@tarstate/core': file:vendor/tarstate/tarstate-core-0.3.0.tgz
+      '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz
 
-  '@tarstate/core@file:vendor/tarstate/tarstate-core-0.3.0.tgz': {}
+  '@tarstate/core@https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz': {}
 
   '@tybys/wasm-util@0.10.3':
     dependencies:
@@ -1883,6 +1893,10 @@ snapshots:
 
   eventemitter3@5.0.4: {}
 
+  fast-check@4.9.0:
+    dependencies:
+      pure-rand: 8.4.2
+
   fast-sha256@1.3.0: {}
 
   fdir@6.5.0(picomatch@4.0.4):
@@ -2009,6 +2023,8 @@ snapshots:
       nanoid: 3.3.15
       picocolors: 1.1.1
       source-map-js: 1.2.1
+
+  pure-rand@8.4.2: {}
 
   react-dom@19.2.7(react@19.2.7):
     dependencies:

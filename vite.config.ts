@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import babel from '@rolldown/plugin-babel';
 import { sandboxCompatApp } from './apps/sandbox-compat/app.ts';
-import { readSandboxCompatBundle } from './apps/sandbox-compat/node.ts';
+import { readSandboxCompatBundle } from './apps/sandbox-compat/build.ts';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
@@ -14,7 +14,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: repoPath('index.html'),
-        sandboxServiceWorker: repoPath('src/sandbox-service-worker.ts'),
+        sandboxServiceWorker: repoPath('src/browser/sandbox-service-worker.ts'),
       },
       output: {
         entryFileNames: ({ name }) => name === 'sandboxServiceWorker'
@@ -45,7 +45,7 @@ function sandboxServiceWorkerPlugin(): Plugin {
       server.middlewares.use(async (request, response, next) => {
         const path = `${server.config.base}__patchpit/sandbox/service-worker.js`;
         if (request.url?.split('?', 1)[0] !== path) return next();
-        const result = await server.transformRequest('/src/sandbox-service-worker.ts');
+        const result = await server.transformRequest('/src/browser/sandbox-service-worker.ts');
         if (result === null) return next();
         response.setHeader('Content-Type', 'text/javascript');
         response.end(result.code);
@@ -67,7 +67,6 @@ function sandboxCompatArtifactPlugin(): Plugin {
       })),
       manifest: {
         type: 'patchpit.demo-files@1',
-        entry: sandboxCompatApp.entry,
         rootEntryId: sandboxCompatApp.id,
       },
     };

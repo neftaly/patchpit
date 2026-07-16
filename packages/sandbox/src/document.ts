@@ -1,43 +1,21 @@
-import { sandboxDocumentPathKey, type SandboxDocumentPath } from "./path.ts";
+import { sandboxDocumentPathKey, type SandboxDocumentPath } from './path.ts';
 
 export type SandboxDocumentBody = string | Blob | BufferSource;
 
-export type SandboxFrameAttributes = {
-  readonly referrerPolicy: "no-referrer";
-  readonly sandbox: "allow-scripts allow-same-origin";
-  readonly src: string;
-};
-
-export type SandboxUrlMount = {
-  readonly frameAttributes: SandboxFrameAttributes;
-  readonly respond: (request: SandboxUrlMountRequest) => Promise<Response | undefined>;
-  readonly scopePath: string;
-};
-
-export type SandboxUrlMountRequest = {
-  readonly method: string;
-  readonly url: string;
-};
-
-export type SandboxUrlMountFile = {
-  readonly path: SandboxDocumentPath;
-  readonly read: () =>
-    | Promise<SandboxUrlMountFileContent | undefined>
-    | SandboxUrlMountFileContent
-    | undefined;
-};
-
-export type SandboxUrlMountFileContent = {
+export type SandboxFileContent = {
   readonly body: SandboxDocumentBody;
   readonly contentType?: string;
 };
 
-type SandboxUrlMountOptions = {
-  readonly baseUrl: string | URL;
-  readonly entry: SandboxDocumentPath;
-  readonly files: readonly SandboxUrlMountFile[];
-  readonly mountId?: string;
-  readonly route?: readonly string[];
+export type SandboxFile = {
+  readonly path: SandboxDocumentPath;
+  readonly read: () => Promise<SandboxFileContent | undefined> | SandboxFileContent | undefined;
+};
+
+export type SandboxFrameAttributes = {
+  readonly referrerPolicy: 'no-referrer';
+  readonly sandbox: 'allow-scripts allow-same-origin';
+  readonly src: string;
 };
 
 export type SandboxFrameAttributesOptions = {
@@ -47,131 +25,72 @@ export type SandboxFrameAttributesOptions = {
   readonly route?: readonly string[];
 };
 
+const defaultSandboxRoute = ['__patchpit', 'sandbox'] as const;
+
 export const createSandboxFrameAttributes = ({
   baseUrl,
   entry,
   mountId,
   route = defaultSandboxRoute,
 }: SandboxFrameAttributesOptions): SandboxFrameAttributes => ({
-  referrerPolicy: "no-referrer",
+  referrerPolicy: 'no-referrer',
   // TODO: Serve mounts from an authority-free runner origin before accepting untrusted apps.
-  sandbox: "allow-scripts allow-same-origin",
+  sandbox: 'allow-scripts allow-same-origin',
   src: new URL(
     `${sandboxMountScopePath(route, mountId)}${sandboxDocumentPathKey(entry)}`,
     baseUrl,
   ).toString(),
 });
 
-export const createSandboxUrlMount = ({
-  baseUrl,
-  entry,
-  files,
-  mountId = crypto.randomUUID(),
-  route = defaultSandboxRoute,
-}: SandboxUrlMountOptions): SandboxUrlMount => {
-  const mountFiles = indexSandboxFiles(entry, files);
-  const base = new URL(baseUrl);
-  const mountOrigin = base.origin;
-  const scopePath = sandboxMountScopePath(route, mountId);
-
-  return {
-    frameAttributes: createSandboxFrameAttributes({ baseUrl, entry, mountId, route }),
-    respond: async (request) => {
-      const url = new URL(request.url);
-      if (url.origin !== mountOrigin) return undefined;
-      if (!url.pathname.startsWith(scopePath)) return undefined;
-      if (request.method !== "GET" && request.method !== "HEAD")
-        return sandboxResponse("Method not allowed", 405, "text/plain", {
-          Allow: "GET, HEAD",
-        });
-      const path = sandboxPathKey(url.pathname.slice(scopePath.length));
-      const content = path === undefined ? undefined : await mountFiles.get(path)?.read();
-      if (content === undefined)
-        return sandboxResponse("Not found", 404, "text/plain");
-      return sandboxResponse(
-        request.method === "HEAD" ? null : content.body,
-        200,
-        content.contentType ?? defaultSandboxContentType,
-      );
-    },
-    scopePath,
-  };
-};
-
-export const indexSandboxFiles = <
-  TFile extends { readonly path: SandboxDocumentPath },
->(
+export const indexSandboxFiles = <File extends { readonly path: SandboxDocumentPath }>(
   entry: SandboxDocumentPath,
-  files: readonly TFile[],
-): ReadonlyMap<string, TFile> => {
+  files: readonly File[],
+): ReadonlyMap<string, File> => {
   const entryPath = sandboxDocumentPathKey(entry);
-  const plannedFiles = new Map<string, TFile>();
+  const indexed = new Map<string, File>();
   for (const file of files) {
     const path = sandboxDocumentPathKey(file.path);
-    if (plannedFiles.has(path))
-      throw new Error(`Duplicate sandbox document path: ${path}`);
-    plannedFiles.set(path, file);
+    if (indexed.has(path)) throw new Error(`Duplicate sandbox document path: ${path}`);
+    indexed.set(path, file);
   }
-  if (!plannedFiles.has(entryPath))
-    throw new Error(`Sandbox entry file is missing: ${entryPath}`);
-
-  return plannedFiles;
+  if (!indexed.has(entryPath)) throw new Error(`Sandbox entry file is missing: ${entryPath}`);
+  return indexed;
 };
 
-const defaultSandboxRoute = ["__patchpit", "sandbox"] as const;
-const defaultSandboxContentType = "application/octet-stream";
-
-const sandboxMountScopePath = (
+export const sandboxMountScopePath = (
   route: readonly string[],
   mountId: string,
 ): string => {
   const segments = [...route, mountId];
-  if (segments.some((segment) => segment === "" || segment === "." || segment === ".."))
-    throw new Error(`Sandbox mount routes must use non-empty, non-dot segments: ${segments.join("/")}`);
-  return `/${segments.map(encodeURIComponent).join("/")}/`;
-};
-
-const sandboxPathKey = (pathname: string): string | undefined => {
-  try {
-    return sandboxDocumentPathKey(
-      pathname.split("/").filter((segment) => segment !== "").map(decodeURIComponent),
-    );
-  } catch {
-    return undefined;
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    throw new Error(`Sandbox mount routes must use non-empty, non-dot segments: ${segments.join('/')}`);
   }
+  return `/${segments.map(encodeURIComponent).join('/')}/`;
 };
 
-const sandboxResponse = (
-  body: BodyInit | null,
-  status: number,
-  contentType: string,
-  headers: Record<string, string> = {},
-): Response =>
-  new Response(body, {
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Content-Security-Policy": sandboxUrlMountContentSecurityPolicy,
-      "Content-Type": contentType,
-      "Timing-Allow-Origin": "*",
-      "X-Content-Type-Options": "nosniff",
-      ...headers,
-    },
-    status,
-  });
+export const sandboxFileResponse = (content: SandboxFileContent): Response => new Response(content.body, {
+  headers: {
+    'Access-Control-Allow-Origin': '*',
+    'Content-Security-Policy': sandboxContentSecurityPolicy,
+    'Content-Type': content.contentType ?? 'application/octet-stream',
+    'Timing-Allow-Origin': '*',
+    'X-Content-Type-Options': 'nosniff',
+  },
+  status: 200,
+});
 
-const sandboxUrlMountContentSecurityPolicy =
-  [
-    `default-src 'none'`,
-    `sandbox allow-scripts allow-same-origin`,
-    `base-uri 'none'`,
-    `connect-src 'self'`,
-    `font-src 'self' data:`,
-    `form-action 'none'`,
-    `frame-src 'self'`,
-    `img-src 'self' data:`,
-    `media-src 'self'`,
-    `object-src 'none'`,
-    `script-src 'unsafe-inline' 'self'`,
-    `style-src 'unsafe-inline' 'self'`,
-    `worker-src 'none'`,
-  ].join("; ");
+const sandboxContentSecurityPolicy = [
+  `default-src 'none'`,
+  `sandbox allow-scripts allow-same-origin`,
+  `base-uri 'none'`,
+  `connect-src 'self'`,
+  `font-src 'self' data:`,
+  `form-action 'none'`,
+  `frame-src 'self'`,
+  `img-src 'self' data:`,
+  `media-src 'self'`,
+  `object-src 'none'`,
+  `script-src 'unsafe-inline' 'self'`,
+  `style-src 'unsafe-inline' 'self'`,
+  `worker-src 'none'`,
+].join('; ');

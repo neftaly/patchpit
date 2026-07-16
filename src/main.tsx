@@ -1,10 +1,10 @@
 import { isValidAutomergeUrl } from '@automerge/automerge-repo';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
-import { loadBrowserDemoSeed } from './browser-demo-seed.ts';
-import { openBrowserSandboxHost, type BrowserSandboxHost } from './browser-sandbox-host.ts';
-import { createBrowserRootHost } from './browser-root-host.ts';
-import { canonicalRootInvocationHash, parseRootInvocationHash } from './root-invocation.ts';
+import { loadBrowserDemoSeed } from './browser/demo-seed.ts';
+import { openBrowserSandboxHost, type BrowserSandboxHost } from './browser/sandbox-host.ts';
+import { createBrowserRootHost } from './browser/root-host.ts';
+import { canonicalRootInvocationHash, parseRootInvocationHash } from './root/invocation.ts';
 
 const container = document.querySelector('#root');
 if (container === null) throw new Error('Missing root element.');

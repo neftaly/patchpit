@@ -1,25 +1,41 @@
 import {
-  field,
-  parameter,
   prepareQuery,
+  type Expr,
+  type QueryNode,
+} from '@tarstate/core/query';
+import {
+  and,
+  compare,
+  field,
+  from,
+  join,
+  literal,
+  orderBy,
+  parameter,
+  pipe,
+  prepareTypedQuery,
+  select,
   sourceOf,
   typedFrom,
   typedOrderBy,
-  typedPreparedPlan,
   typedSelect,
   typedSourceOf,
-  type Expr,
-  type QueryNode,
-} from '@tarstate/core';
+  union,
+  where,
+} from '@tarstate/core/query/authoring';
 import { fsEntriesRelation } from './schema.ts';
 
 const entries = typedFrom(fsEntriesRelation, 'entry');
+const portableEntriesRelation = {
+  relationId: fsEntriesRelation.relationId,
+  schemaView: fsEntriesRelation.schemaView,
+};
 const orderedEntries = typedOrderBy(entries, ({ entry }) => [
   { value: typedSourceOf(entry), direction: 'asc' },
   { value: entry.row.entryId, direction: 'asc' },
 ]);
 
-export const fsEntriesQuery = typedSelect(orderedEntries, 'entry', ({ entry }) => ({
+const fsEntriesQuery = typedSelect(orderedEntries, 'entry', ({ entry }) => ({
   entryId: entry.row.entryId,
   kind: entry.row.kind,
   name: entry.row.name,
@@ -29,22 +45,16 @@ export const fsEntriesQuery = typedSelect(orderedEntries, 'entry', ({ entry }) =
   sourceId: typedSourceOf(entry),
 }));
 
-export const fsEntriesPlan = typedPreparedPlan(await prepareQuery({
-  root: fsEntriesQuery.root,
+export const fsEntriesPlan = await prepareTypedQuery(fsEntriesQuery, {
   registryFingerprint: 'patchpit:registry:1',
   authorityFingerprint: 'patchpit:authority:public:1',
   datasetId: 'patchpit:fs:entries',
-}), fsEntriesQuery);
+});
 
 const entryField = (name: string) => field('entry', name);
 const folderField = (name: string) => field('folder', name);
-const equals = (left: Expr, right: Expr): Expr => ({ kind: 'compare', op: 'eq', left, right });
-const both = (...args: readonly Expr[]): Expr => ({ kind: 'boolean', op: 'and', args });
-const selectEntry = (input: QueryNode): QueryNode => ({
-  kind: 'select',
-  input,
-  alias: 'selected',
-  fields: {
+const equals = (left: Expr, right: Expr) => compare('eq', left, right);
+const selectEntry = (input: QueryNode): QueryNode => pipe(input, select('selected', {
     entryId: entryField('entryId'),
     kind: entryField('kind'),
     name: entryField('name'),
@@ -52,65 +62,47 @@ const selectEntry = (input: QueryNode): QueryNode => ({
     parentId: entryField('parentId'),
     resourceRef: entryField('resourceRef'),
     sourceId: sourceOf('entry'),
-  },
-});
-const rootEntry: QueryNode = {
-  kind: 'where',
-  input: { kind: 'from', relation: fsEntriesRelation, alias: 'entry' },
-  predicate: both(
+  }));
+const rootEntry = pipe(
+  from(portableEntriesRelation, 'entry'),
+  where(and(
     equals(entryField('entryId'), parameter('rootEntryId')),
     equals(sourceOf('entry'), parameter('rootSourceId')),
-    equals(entryField('kind'), { kind: 'literal', value: 'folder' }),
-  ),
-};
+    equals(entryField('kind'), literal('folder')),
+  )),
+);
 const folders: QueryNode = {
   kind: 'recursive',
   name: 'authorized-folders',
-  seed: {
-    kind: 'select',
-    input: rootEntry,
-    alias: 'folder',
-    fields: { entryId: entryField('entryId'), sourceId: sourceOf('entry') },
-  },
-  step: {
-    kind: 'select',
-    alias: 'folder',
-    input: {
-      kind: 'where',
-      input: {
-        kind: 'join',
-        join: 'inner',
-        left: { kind: 'recursion-ref', name: 'authorized-folders' },
-        right: { kind: 'from', relation: fsEntriesRelation, alias: 'entry' },
-        on: both(
-          equals(folderField('entryId'), entryField('parentId')),
-          equals(folderField('sourceId'), sourceOf('entry')),
-        ),
-      },
-      predicate: equals(entryField('kind'), { kind: 'literal', value: 'folder' }),
-    },
-    fields: { entryId: entryField('entryId'), sourceId: sourceOf('entry') },
-  },
+  seed: pipe(rootEntry, select('folder', {
+    entryId: entryField('entryId'), sourceId: sourceOf('entry'),
+  })),
+  step: pipe(
+    { kind: 'recursion-ref', name: 'authorized-folders' },
+    join(from(portableEntriesRelation, 'entry'), 'inner', and(
+      equals(folderField('entryId'), entryField('parentId')),
+      equals(folderField('sourceId'), sourceOf('entry')),
+    )),
+    where(equals(entryField('kind'), literal('folder'))),
+    select('folder', { entryId: entryField('entryId'), sourceId: sourceOf('entry') }),
+  ),
   key: [folderField('sourceId'), folderField('entryId')],
 };
-const descendants = selectEntry({
-  kind: 'join',
-  join: 'inner',
-  left: folders,
-  right: { kind: 'from', relation: fsEntriesRelation, alias: 'entry' },
-  on: both(
+const descendants = selectEntry(pipe(
+  folders,
+  join(from(portableEntriesRelation, 'entry'), 'inner', and(
     equals(folderField('entryId'), entryField('parentId')),
     equals(folderField('sourceId'), sourceOf('entry')),
-  ),
-});
-const fsSubtreeQuery: QueryNode = {
-  kind: 'order',
-  input: { kind: 'set', op: 'union', left: selectEntry(rootEntry), right: descendants },
-  by: [
+  )),
+));
+const fsSubtreeQuery = pipe(
+  selectEntry(rootEntry),
+  union(descendants),
+  orderBy([
     { value: field('selected', 'sourceId'), direction: 'asc' },
     { value: field('selected', 'entryId'), direction: 'asc' },
-  ],
-};
+  ]),
+);
 
 export const fsSubtreePlan = await prepareQuery({
   root: fsSubtreeQuery,

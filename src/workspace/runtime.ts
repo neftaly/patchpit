@@ -1,0 +1,162 @@
+import { getConflicts } from '@automerge/automerge';
+import type { DocHandle } from '@automerge/automerge-repo';
+import {
+  openAutomergeAttachment,
+  type AutomergeAttachmentSnapshot,
+} from '@tarstate/automerge';
+import { adoptConflictFreeAutomergeJsonValue } from '@tarstate/automerge/values';
+import {
+  createIssue,
+  type Issue,
+  type JsonValue,
+} from '@tarstate/core';
+import type { SourceBasis } from '@tarstate/core/source';
+import {
+  applyWorkspaceOperation,
+  type WorkspaceOperation,
+  type WorkspaceState,
+} from './model.ts';
+import {
+  workspaceFromLogicalRows,
+  workspaceLogicalRows,
+  type WorkspaceDocument,
+} from './document.ts';
+import { workspaceDocumentMetadata } from './schema.ts';
+
+export { createWorkspaceDocument, type WorkspaceDocument } from './document.ts';
+
+type WorkspaceProjection = {
+  readonly state: 'ready';
+  readonly workspace: WorkspaceState;
+  readonly basis: SourceBasis;
+  readonly issues: readonly Issue[];
+} | {
+  readonly state: 'incomplete' | 'invalid';
+  readonly basis?: SourceBasis;
+  readonly issues: readonly Issue[];
+};
+
+type WorkspaceOperationResult = {
+  readonly outcome: 'committed' | 'unchanged' | 'rejected' | 'unknown';
+  readonly issues: readonly Issue[];
+};
+
+export const openWorkspace = async (handle: DocHandle<WorkspaceDocument>) => {
+  const document = handle.doc();
+  if (document === undefined) throw new Error('Patchpit workspace source is unavailable');
+  const metadata = parseWorkspaceMetadata(document);
+  const opened = await openAutomergeAttachment({
+    handle,
+    declaration: metadata.declaration,
+    embeddedArtifacts: metadata.schemas,
+    authorityScope: 'patchpit.workspace',
+    attachmentId: `${handle.url}:workspace`,
+  });
+  if (!opened.success) {
+    throw new Error('Patchpit workspace attachment is unavailable', { cause: opened.issues });
+  }
+  const attachment = opened.value;
+  let pending = Promise.resolve();
+  let cachedAttachmentSnapshot = attachment.getSnapshot();
+  let cachedProjection = projectAttachmentSnapshot(cachedAttachmentSnapshot);
+
+  const getSnapshot = (): WorkspaceProjection => {
+    const snapshot = attachment.getSnapshot();
+    if (snapshot !== cachedAttachmentSnapshot) {
+      cachedAttachmentSnapshot = snapshot;
+      cachedProjection = projectAttachmentSnapshot(snapshot);
+    }
+    return cachedProjection;
+  };
+
+  const act = (operation: WorkspaceOperation) => {
+    const queued = pending.then(async (): Promise<WorkspaceOperationResult> => {
+      let changed = false;
+      const receipt = await attachment.transact(
+        operation as unknown as JsonValue,
+        ({ rows }) => {
+          const decoded = workspaceFromLogicalRows(rows);
+          if (decoded.workspace === undefined) {
+            throw new Error('Patchpit workspace logical state is unavailable', {
+              cause: decoded.issues,
+            });
+          }
+          const next = applyWorkspaceOperation(decoded.workspace, operation);
+          changed = next !== decoded.workspace;
+          return changed ? workspaceLogicalRows(next) : rows;
+        },
+      );
+      return {
+        outcome: receipt.outcome === 'committed' && !changed ? 'unchanged' : receipt.outcome,
+        issues: receipt.issues,
+      };
+    });
+    pending = queued.then(() => undefined, () => undefined);
+    return queued;
+  };
+
+  return {
+    act,
+    close: () => attachment.close(),
+    getSnapshot,
+    subscribe: (listener: () => void) => attachment.subscribe(listener),
+  };
+};
+
+const projectAttachmentSnapshot = (
+  snapshot: AutomergeAttachmentSnapshot,
+): WorkspaceProjection => {
+  if (snapshot.state === 'closed') {
+    return { state: 'invalid', issues: [workspaceIssue('closed', {})] };
+  }
+  const { current } = snapshot;
+  if (current.readiness !== 'ready') {
+    return {
+      state: current.readiness,
+      basis: current.basis,
+      issues: current.issues,
+    };
+  }
+  const decoded = workspaceFromLogicalRows(current.rows);
+  const issues = [
+    ...current.issues,
+    ...decoded.issues.map(({ kind, details }) => workspaceIssue(kind, details)),
+  ];
+  return decoded.workspace === undefined || issues.some(({ severity }) => severity === 'error')
+    ? { state: 'invalid', basis: current.basis, issues }
+    : { state: 'ready', workspace: decoded.workspace, basis: current.basis, issues };
+};
+
+const parseWorkspaceMetadata = (document: WorkspaceDocument) => {
+  if (Object.keys(getConflicts(document, '@patchpit') ?? {}).length > 1) {
+    throw invalidWorkspaceMetadata();
+  }
+  const adopted = adoptConflictFreeAutomergeJsonValue(document['@patchpit']);
+  if (!adopted.success) throw invalidWorkspaceMetadata(adopted.issues);
+  const input = adopted.value;
+  if (!isRecord(input)
+    || input.type !== workspaceDocumentMetadata.type
+    || !sameArtifactRef(input.schema, workspaceDocumentMetadata.schema)
+    || !isRecord(input.declaration)
+    || !sameArtifactRef(input.declaration.storageSchema, workspaceDocumentMetadata.schema)
+    || !isRecord(input.schemas)) {
+    throw invalidWorkspaceMetadata();
+  }
+  return { declaration: input.declaration, schemas: input.schemas };
+};
+
+const invalidWorkspaceMetadata = (cause: readonly Issue[] = [workspaceIssue('metadata-invalid', {})]) =>
+  new Error('Patchpit workspace metadata is invalid', { cause });
+
+const sameArtifactRef = (input: unknown, expected: { readonly id: string; readonly contentHash: string }) =>
+  isRecord(input) && input.id === expected.id && input.contentHash === expected.contentHash;
+
+const workspaceIssue = (kind: string, details: Readonly<Record<string, JsonValue>>) => createIssue({
+  code: `patchpit.workspace.${kind}`,
+  phase: 'parse',
+  severity: 'error',
+  details,
+});
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);

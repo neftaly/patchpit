@@ -13,7 +13,7 @@ The sealed `patchpit.fs.entry` relation has these fields:
 | `parentId` | Parent entry ID, or `null` for a root |
 | `order` | Integer order among siblings |
 | `kind` | `folder` or `file` |
-| `name` | Mutable entry name |
+| `name` | Entry name |
 | `resourceRef` | Reference to the folder or file resource |
 
 Queries add `sourceId` from Tarstate attachment provenance. Parent traversal is
@@ -31,6 +31,10 @@ restricted to entries from that same source.
   attachment.
 - `FsAttachment`, `FsDocument`, `FsEntry`, and `FsEntryRow` are the exported
   public types.
+
+`FsAttachment` is deliberately only a Tarstate mount capability. Source and
+attachment identities are obtained from its mount lease rather than exposed as
+parallel Patchpit state.
 
 Both query functions return `{ observer, close }`. Consumers read readiness,
 completeness, issues, basis, and rows from `observer.getSnapshot()` and call

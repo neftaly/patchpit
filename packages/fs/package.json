@@ -4,5 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "exports": "./src/index.ts",
-  "dependencies": { "@tarstate/core": "file:../../vendor/tarstate/tarstate-core-0.3.0.tgz" }
+  "dependencies": {
+    "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz"
+  }
 }

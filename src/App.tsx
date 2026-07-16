@@ -1,24 +1,33 @@
-import { useSyncExternalStore } from 'react';
+import { useMemo, useRef, useSyncExternalStore } from 'react';
+import type { FsEntryRow } from '@patchpit/fs';
 import {
   ContentView,
+  resourceDragType,
+} from './content/ContentView.tsx';
+import {
   contentLabel,
   contentUrlForResource,
   resourceBrowserUrl,
-  resourceDragType,
-} from './content.tsx';
+} from './content/invocation.ts';
 import {
-  contextIdForUrl, paneIdsInLayoutOrder,
-  type WorkspaceState,
-} from './workspace.ts';
-import { allocateWorkspaceIds } from './workspace-ids.ts';
-import { WorkspaceView } from './workspace-view.tsx';
+  composeWorkspacePresentation,
+  reconcileWorkspacePresence,
+} from './workspace/presence.ts';
 import {
-  resourceById,
+  planOpenWorkspaceContext,
+  planWorkspaceAction,
+  type WorkspacePlan,
+} from './workspace/controller.ts';
+import { allocateWorkspaceIds } from './workspace/ids.ts';
+import type { WorkspaceState } from './workspace/model.ts';
+import { WorkspaceView } from './workspace/WorkspaceView.tsx';
+import {
+  projectResources,
+  resourceByIdentity,
   resourcesFromSnapshot,
-  type Resource,
-} from './resources.ts';
-import type { PatchpitRuntime } from './patchpit-runtime.ts';
-import type { BrowserSandboxHost } from './browser-sandbox-host.ts';
+} from './content/resources.ts';
+import type { PatchpitRuntime } from './root/runtime.ts';
+import type { BrowserSandboxHost } from './browser/sandbox-host.ts';
 import './app.css';
 
 export function App({ runtime, sandboxHost }: {
@@ -27,44 +36,83 @@ export function App({ runtime, sandboxHost }: {
 }) {
   const resourceRuntime = runtime.resources;
   const workspaceRuntime = runtime.workspace;
+  const workspacePresence = runtime.workspacePresence;
+  const pending = useRef(Promise.resolve());
   const resourceSnapshot = useSyncExternalStore(
     (listener) => resourceRuntime.observer.subscribe(listener),
     () => resourceRuntime.observer.getSnapshot(),
     () => resourceRuntime.observer.getSnapshot(),
   );
-  const resources = resourcesFromSnapshot(resourceSnapshot);
+  const resources = useMemo(
+    () => projectResources(resourcesFromSnapshot(resourceSnapshot)),
+    [resourceSnapshot],
+  );
   const projection = useSyncExternalStore(
     workspaceRuntime.subscribe,
     workspaceRuntime.getSnapshot,
     workspaceRuntime.getSnapshot,
   );
+  const presence = useSyncExternalStore(
+    workspacePresence.subscribe,
+    workspacePresence.getSnapshot,
+    workspacePresence.getSnapshot,
+  );
   if (projection.state !== 'ready') {
     return <main className="workspace"><p role="alert">Workspace unavailable.</p></main>;
   }
   const workspace = projection.workspace;
-  const openResource = (resource: Resource, pinned: boolean) => {
+  const presentation = composeWorkspacePresentation(workspace, presence);
+  const run = (plan: (
+    workspace: WorkspaceState,
+    presence: ReturnType<typeof workspacePresence.getSnapshot>,
+  ) => WorkspacePlan) => {
+    const queued = pending.current.then(async () => {
+      const current = workspaceRuntime.getSnapshot();
+      if (current.state !== 'ready') return;
+      const planned = plan(current.workspace, workspacePresence.getSnapshot());
+      for (const operation of planned.operations) await workspaceRuntime.act(operation);
+      const latest = workspaceRuntime.getSnapshot();
+      if (latest.state !== 'ready') return;
+      workspacePresence.update(latest.workspace, () => reconcileWorkspacePresence(
+        latest.workspace,
+        planned.presence,
+      ));
+    });
+    pending.current = queued.then(() => undefined, () => undefined);
+  };
+  const openResource = (resource: FsEntryRow, pinned: boolean) => {
     const url = contentUrlForResource(resource, resources);
     if (url === undefined) return;
     const allocated = allocateWorkspaceIds();
-    const paneId = documentPaneId(workspace) ?? allocated.nodes.paneId;
-    const contextId = contextIdForUrl(workspace, url, paneId) ?? allocated.contextId;
-    void workspaceRuntime.act({
-      kind: 'workspace.context.open',
-      contextId,
+    run((currentWorkspace, currentPresence) => planOpenWorkspaceContext({
+      contextId: allocated.contextId,
+      isEditorContext,
+      nodes: allocated.nodes,
+      pinned,
+      presence: currentPresence,
       url,
-      targetPaneId: paneId,
-      missingSplitId: allocated.nodes.splitId,
-      mode: pinned ? 'open' : 'preview',
-    });
+      workspace: currentWorkspace,
+    }));
   };
 
   return (
     <WorkspaceView
-      act={(operation) => { void workspaceRuntime.act(operation); }}
-      contextLabel={(contextId) => contentLabel(resources, workspace.contexts[contextId]?.url)}
+      canDrop={(action) => {
+        const planned = planWorkspaceAction({ action, isEditorContext, presence, workspace });
+        return planned.operations.length > 0;
+      }}
+      act={(action) => {
+        run((currentWorkspace, currentPresence) => planWorkspaceAction({
+          action,
+          isEditorContext,
+          presence: currentPresence,
+          workspace: currentWorkspace,
+        }));
+      }}
+      contextLabel={(contextId) => contentLabel(resources, presentation.contexts[contextId]?.url)}
       renderContext={(contextId) => (
         <ContentView
-          contentUrl={workspace.contexts[contextId]?.url}
+          contentUrl={presentation.contexts[contextId]?.url}
           host={sandboxHost}
           onOpenResource={openResource}
           resources={resources}
@@ -73,17 +121,12 @@ export function App({ runtime, sandboxHost }: {
       )}
       resourceDragType={resourceDragType}
       resourceUrl={(resourceId) => {
-        const resource = resourceById(resources, resourceId);
+        const resource = resourceByIdentity(resources, resourceId);
         return resource === undefined ? undefined : contentUrlForResource(resource, resources);
       }}
-      workspace={workspace}
+      workspace={presentation}
     />
   );
 }
 
-const documentPaneId = (workspace: WorkspaceState) => paneIdsInLayoutOrder(workspace)
-  .find((paneId) => {
-    const node = workspace.nodes[paneId];
-    return node?.kind === 'pane'
-      && node.contexts.some((contextId) => workspace.contexts[contextId]?.url !== resourceBrowserUrl);
-  });
+const isEditorContext = (url: string) => url !== resourceBrowserUrl;

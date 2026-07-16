@@ -4,13 +4,12 @@ import {
   relationLiteral,
   schemaLiteral,
   sealSchema,
-  TarstateParseError,
   type CandidateContext,
-  type ParseResult,
   type SchemaRow,
-} from '@tarstate/core';
+} from '@tarstate/core/schema';
+import { TarstateParseError, type ParseResult } from '@tarstate/core';
 
-export const fsSchemaBody = schemaLiteral({
+const fsSchemaBody = schemaLiteral({
   relations: {
     entries: {
       relationId: 'patchpit.fs.entry',

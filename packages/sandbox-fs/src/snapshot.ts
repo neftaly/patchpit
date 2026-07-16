@@ -1,20 +1,16 @@
 import {
-  AttachmentCatalog,
   canonicalizeJson,
-  createIncrementalDatabaseQueryMaintenance,
-  DatabaseView,
-  DatasetMembership,
-  prepareManualReadOnlyAttachment,
-  prepareQuery,
-  relationLiteral,
-  schemaLiteral,
-  sealSchema,
+  createIssue,
   type Issue,
   type JsonValue,
-  type QueryNode,
-  type RelationInput,
-  type SourceSnapshot,
 } from '@tarstate/core';
+import { createIncrementalDatabaseQueryMaintenance } from '@tarstate/core/database/incremental';
+import { AttachmentCatalog, DatabaseView, DatasetMembership } from '@tarstate/core/database';
+import { prepareManualReadOnlyAttachment } from '@tarstate/core/attachment/adapter';
+import type { RelationInput } from '@tarstate/core/query';
+import { prepareTypedQuery, typedFrom } from '@tarstate/core/query/authoring';
+import { relationLiteral, schemaLiteral, sealSchema } from '@tarstate/core/schema';
+import type { SourceSnapshot } from '@tarstate/core/source';
 import { openFsSubtree, type FsAttachment, type FsEntryRow } from '@patchpit/fs';
 
 export type AppFileContent = {
@@ -31,6 +27,7 @@ export type AppFileContentReader = (
 export type ImmutableAppSnapshot = {
   readonly state: 'ready';
   readonly completeness: 'exact';
+  readonly entry: readonly ['index.html'];
   readonly files: readonly {
     readonly body: Blob;
     readonly contentType?: string;
@@ -68,24 +65,14 @@ const contentSchema = await sealSchema({
   body: contentSchemaBody,
 });
 const contentsRelation = relationLiteral(contentSchema, 'contents');
-const contentsQuery: QueryNode = {
-  kind: 'select',
-  input: { kind: 'from', relation: contentsRelation, alias: 'content' },
-  alias: 'content',
-  fields: {
-    resourceRef: { kind: 'field', alias: 'content', name: 'resourceRef' },
-    contentType: { kind: 'field', alias: 'content', name: 'contentType' },
-    byteLength: { kind: 'field', alias: 'content', name: 'byteLength' },
-  },
-};
-const contentsPlan = await prepareQuery({
-  root: contentsQuery,
+const contentsPlan = await prepareTypedQuery(typedFrom(contentsRelation, 'content'), {
   registryFingerprint: 'patchpit:registry:1',
   authorityFingerprint: 'patchpit:authority:app-contents:1',
   datasetId: 'patchpit:app:contents',
 });
 const maxAppFiles = 4_096;
 const maxAppBytes = 256 * 1024 * 1024;
+const appEntry = ['index.html'] as const;
 
 export const snapshotFilesystemApp = async (options: {
   readonly filesystem: FsAttachment;
@@ -109,8 +96,7 @@ const snapshotFilesystemAppAttempt = async (
     const subtreeSnapshot = subtree.observer.getSnapshot();
     if (subtreeSnapshot.state === 'closed') throw new Error('Filesystem subtree observation closed');
     const subtreeResult = subtreeSnapshot.current;
-    const root = subtreeResult.rows.find(({ entryId, sourceId }) =>
-      entryId === options.rootEntryId && sourceId === options.filesystem.sourceId);
+    const root = subtreeResult.rows.find(({ entryId }) => entryId === options.rootEntryId);
     if (!launchable(subtreeResult)) {
       return unavailable(subtreeResult);
     }
@@ -119,7 +105,7 @@ const snapshotFilesystemAppAttempt = async (
     const files = entries.filter(({ kind }) => kind === 'file');
     if (files.length > maxAppFiles) throw new Error('Filesystem app has too many files');
     const subtreeBases = subtreeResult.basis.attachments;
-    if (files.length === 0) return ready([], subtreeBases);
+    if (files.length === 0) return missingEntry(subtreeBases);
 
     const refs = [...new Set(files.map(({ resourceRef }) => resourceRef))];
     const reads = new Map<string, SourceSnapshot<AppFileContent> | undefined>();
@@ -129,6 +115,23 @@ const snapshotFilesystemAppAttempt = async (
         ? undefined
         : await options.read(resourceRef, options.signal).catch(() => undefined);
       reads.set(resourceRef, snapshot);
+    }
+    const invalidContentIssues = [...reads.values()].flatMap((snapshot) =>
+      snapshot?.issues.filter(({ severity }) => severity === 'error') ?? []);
+    if (invalidContentIssues.length > 0) {
+      return Object.freeze({
+        state: 'invalid',
+        completeness: 'unknown',
+        issues: Object.freeze(invalidContentIssues),
+        sourceBases: Object.freeze([
+          ...subtreeBases,
+          ...[...reads.entries()].flatMap(([resourceRef, snapshot]) => snapshot === undefined ? [] : [{
+            attachmentId: contentAttachmentId(resourceRef),
+            sourceId: snapshot.sourceId,
+            basis: snapshot.basis,
+          }]),
+        ]),
+      });
     }
     const totalBytes = files.reduce((total, file) => {
       const bytes = reads.get(file.resourceRef)?.storage?.bytes;
@@ -144,7 +147,7 @@ const snapshotFilesystemAppAttempt = async (
       }
       sourceRefs.set(snapshot.sourceId, resourceRef);
     }
-    const contents = observeContents(refs, reads, `${options.filesystem.sourceId}:${root.entryId}`);
+    const contents = observeContents(refs, reads, `${root.sourceId}:${root.entryId}`);
     const contentSnapshot = contents.observer.getSnapshot();
     contents.close();
     if (contentSnapshot.state === 'closed') throw new Error('App content observation closed');
@@ -160,15 +163,20 @@ const snapshotFilesystemAppAttempt = async (
     }
 
     const paths = appFilePaths(root, entries);
+    if (!files.some((file) => samePath(paths.get(file.entryId), appEntry))) {
+      return missingEntry(sourceBases);
+    }
     return ready(files.map((file) => {
       const snapshot = reads.get(file.resourceRef);
       if (snapshot?.state !== 'ready' || snapshot.storage?.kind !== 'patchpit.file-content@1'
         || !(snapshot.storage.bytes instanceof Uint8Array)
+        || !(snapshot.storage.bytes.buffer instanceof ArrayBuffer)
         || (snapshot.storage.contentType !== undefined && typeof snapshot.storage.contentType !== 'string')) {
         throw new Error(`Ready app content is unavailable: ${file.resourceRef}`);
       }
+      const bytes = snapshot.storage.bytes as Uint8Array<ArrayBuffer>;
       return {
-        body: new Blob([Uint8Array.from(snapshot.storage.bytes)]),
+        body: new Blob([bytes]),
         ...(snapshot.storage.contentType === undefined ? {} : { contentType: snapshot.storage.contentType }),
         path: paths.get(file.entryId)!,
       };
@@ -191,7 +199,7 @@ const observeContents = (
   authorityScope: string,
 ) => {
   const catalog = new AttachmentCatalog();
-  const attachmentIds = new Map(refs.map((ref) => [ref, `patchpit:app-content:${ref}`]));
+  const attachmentIds = new Map(refs.map((ref) => [ref, contentAttachmentId(ref)]));
   const sources = new Map<string, ReturnType<typeof staticSource>>();
   const leases = refs.flatMap((resourceRef) => {
     const snapshot = reads.get(resourceRef);
@@ -279,6 +287,8 @@ const staticSource = (snapshot: SourceSnapshot<AppFileContent>) => ({
   subscribe: () => () => undefined,
 });
 
+const contentAttachmentId = (resourceRef: string) => `patchpit:app-content:${resourceRef}`;
+
 const appFilePaths = (root: FsEntryRow, entries: readonly FsEntryRow[]) => {
   const byId = new Map(entries.map((entry) => [entry.entryId, entry]));
   const paths = new Map<string, readonly string[]>();
@@ -329,6 +339,25 @@ const ready = (
 ): ImmutableAppSnapshot => Object.freeze({
   state: 'ready',
   completeness: 'exact',
+  entry: appEntry,
   files: Object.freeze(files.map((file) => Object.freeze(file))),
   sourceBases: Object.freeze(sourceBases),
 });
+
+const missingEntry = (
+  sourceBases: ImmutableAppSnapshot['sourceBases'],
+): AppSnapshotResult => Object.freeze({
+  state: 'invalid',
+  completeness: 'exact',
+  issues: [createIssue({
+    code: 'patchpit.app.entry-missing',
+    phase: 'parse',
+    severity: 'error',
+    details: { path: 'index.html' },
+  })],
+  sourceBases: Object.freeze(sourceBases),
+});
+
+const samePath = (left: readonly string[] | undefined, right: readonly string[]) =>
+  left !== undefined && left.length === right.length
+  && left.every((segment, index) => segment === right[index]);

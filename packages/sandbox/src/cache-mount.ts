@@ -1,10 +1,17 @@
-import { createSandboxUrlMount, type SandboxFrameAttributes, type SandboxUrlMountFile } from './document.ts';
-import { sandboxDocumentPathKey, type SandboxDocumentPath } from './path.ts';
+import {
+  createSandboxFrameAttributes,
+  indexSandboxFiles,
+  sandboxFileResponse,
+  sandboxMountScopePath,
+  type SandboxFile,
+  type SandboxFrameAttributes,
+} from './document.ts';
+import type { SandboxDocumentPath } from './path.ts';
 import { sandboxCacheName, type SandboxCacheStorage } from './cache-service-worker.ts';
 
 export type SandboxCacheSnapshot = {
   readonly entry: SandboxDocumentPath;
-  readonly files: readonly SandboxUrlMountFile[];
+  readonly files: readonly SandboxFile[];
 };
 
 export type InstalledSandboxCacheMount = {
@@ -39,23 +46,16 @@ export const installSandboxCacheMount = async (
   }
   if (mountId === undefined) throw new Error('Could not allocate a unique sandbox mount UUID');
 
-  const mount = createSandboxUrlMount({
-    baseUrl: base,
-    entry: snapshot.entry,
-    files: snapshot.files,
-    mountId,
-    route,
-  });
+  const files = indexSandboxFiles(snapshot.entry, snapshot.files);
+  const scopePath = sandboxMountScopePath(route, mountId);
   const cacheName = sandboxCacheName(mountId);
   try {
     const cache = await cacheStorage.open(cacheName);
-    for (const { path } of snapshot.files) {
-      const url = new URL(sandboxDocumentPathKey(path), `${base.origin}${mount.scopePath}`);
-      const response = await mount.respond({ method: 'GET', url: url.toString() });
-      if (response === undefined || response.status !== 200) {
-        throw new Error(`Could not materialize sandbox snapshot file: ${path.join('/')}`);
-      }
-      await cache.put(url.toString(), response);
+    for (const [path, file] of files) {
+      const content = await file.read();
+      if (content === undefined) throw new Error(`Could not read sandbox snapshot file: ${path}`);
+      const url = new URL(path, `${base.origin}${scopePath}`);
+      await cache.put(url.toString(), sandboxFileResponse(content));
     }
   } catch (error) {
     await cacheStorage.delete(cacheName);
@@ -69,9 +69,9 @@ export const installSandboxCacheMount = async (
       await cacheStorage.delete(cacheName);
       closed = true;
     },
-    frameAttributes: mount.frameAttributes,
+    frameAttributes: createSandboxFrameAttributes({ baseUrl: base, entry: snapshot.entry, mountId, route }),
     mountId,
-    scopePath: mount.scopePath,
+    scopePath,
   };
 };
 

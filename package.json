@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.33.2",
   "pnpm": {
     "overrides": {
-      "@tarstate/core": "file:vendor/tarstate/tarstate-core-0.3.0.tgz"
+      "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz"
     }
   },
   "engines": {
@@ -16,11 +16,13 @@
     "build": "vite build",
     "build:sandbox-compat": "vite build --config apps/sandbox-compat/vite.config.ts",
     "dev": "vite",
-    "lint": "oxlint apps packages scripts src vite.config.ts --deny-warnings --type-aware",
-    "test": "node --import ./scripts/register-ts-loader.mjs --test 'packages/**/*.test.ts' 'src/**/*.test.ts'",
-    "test:browser": "node --import ./scripts/register-ts-loader.mjs scripts/test-sandbox-compat.mjs",
-    "test:dev": "node --import ./scripts/register-ts-loader.mjs scripts/test-prototype-preview.mjs --dev",
-    "test:preview": "node --import ./scripts/register-ts-loader.mjs scripts/test-prototype-preview.mjs",
+    "lint": "oxlint apps packages src tests vite.config.ts --deny-warnings --type-aware",
+    "test": "node tests/run.mjs",
+    "test:behavior": "node tests/run.mjs behavior",
+    "test:dev": "node --import ./tests/support/register-ts-loader.mjs tests/browser/prototype-preview.mjs --dev",
+    "test:fuzz": "node tests/run.mjs fuzz",
+    "test:integration": "node tests/run.mjs integration",
+    "test:preview": "node --import ./tests/support/register-ts-loader.mjs tests/browser/prototype-preview.mjs",
     "preview": "vite preview",
     "typecheck": "tsc"
   },
@@ -31,8 +33,8 @@
     "@patchpit/fs": "workspace:*",
     "@patchpit/sandbox": "workspace:*",
     "@patchpit/sandbox-fs": "workspace:*",
-    "@tarstate/automerge": "file:vendor/tarstate/tarstate-automerge-0.3.0.tgz",
-    "@tarstate/core": "file:vendor/tarstate/tarstate-core-0.3.0.tgz",
+    "@tarstate/automerge": "https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz",
+    "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
@@ -45,6 +47,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
+    "fast-check": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "playwright-core": "catalog:",
