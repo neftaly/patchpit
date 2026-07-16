@@ -33,11 +33,9 @@ export const resourceRowsFromQuerySnapshot = (snapshot: ResourceSnapshot): reado
 export const projectResourceTree = (resources: readonly FsEntryRow[]): ResourceProjection => {
   const byIdentity = new Map<string, FsEntryRow>();
   const byEntryId = new Map<string, FsEntryRow>();
-  const identities = new Map<FsEntryRow, string>();
   const children = new Map<string, FsEntryRow[]>();
   for (const resource of resources) {
     const identity = resourceIdentity(resource);
-    identities.set(resource, identity);
     byIdentity.set(identity, resource);
     if (!byEntryId.has(resource.entryId)) byEntryId.set(resource.entryId, resource);
     const parent = hierarchyKey(resource.sourceId, resource.parentId);
@@ -48,7 +46,7 @@ export const projectResourceTree = (resources: readonly FsEntryRow[]): ResourceP
   const rows: ResourceTreeRow[] = [];
   const visited = new Set<string>();
   const append = (resource: FsEntryRow, depth: number) => {
-    const identity = identities.get(resource)!;
+    const identity = resourceIdentity(resource);
     if (visited.has(identity)) return;
     visited.add(identity);
     rows.push({ depth, resource });
@@ -57,7 +55,7 @@ export const projectResourceTree = (resources: readonly FsEntryRow[]): ResourceP
   for (const sourceId of [...new Set(resources.map(({ sourceId }) => sourceId))].sort()) {
     for (const root of sorted(children.get(hierarchyKey(sourceId, null)))) append(root, 0);
   }
-  for (const resource of sorted(resources.filter((entry) => !visited.has(identities.get(entry)!)))) append(resource, 0);
+  for (const resource of sorted(resources.filter((entry) => !visited.has(resourceIdentity(entry))))) append(resource, 0);
   const launchableFolders = new Set(resources.flatMap((resource) =>
     resource.kind === 'file' && resource.name === 'index.html' && resource.parentId !== null
       ? [resourceIdentity({ sourceId: resource.sourceId, entryId: resource.parentId })]

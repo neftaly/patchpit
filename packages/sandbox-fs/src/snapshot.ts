@@ -80,7 +80,6 @@ const contentsPlan = await prepareTypedQuery(typedFrom(contentsRelation, 'conten
   authorityFingerprint: 'patchpit:authority:app-contents:1',
   datasetId: 'patchpit:app:contents',
 });
-const MAX_APP_FILES = 4_096;
 const MAX_APP_BYTES = 256 * 1024 * 1024;
 const MAX_SNAPSHOT_RETRIES = 2;
 
@@ -112,7 +111,6 @@ const snapshotFilesystemAppAttempt = async (
     const { entries, files, resourceRefs, root } = selectAppFiles(subtreeResult.rows, options.rootEntryId);
     const subtreeBases = subtreeResult.basis.attachments;
     if (files.length === 0) return missingEntry(subtreeBases);
-    if (files.length > MAX_APP_FILES) throw new Error('Filesystem app has too many files');
 
     const reads = new Map<string, SourceSnapshot<AppFileContent> | undefined>();
     for (const resourceRef of resourceRefs) {

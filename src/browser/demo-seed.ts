@@ -52,7 +52,7 @@ export const loadBrowserDemoSeed = async (
         entryId: 'unresolved.svg',
         name: 'unresolved.svg',
         order: 0,
-        resourceUrl: 'https://example.invalid/unresolved.svg',
+        resourceUrl: 'https://example.com/unresolved.svg',
       }],
       name: 'external',
       order: 2,

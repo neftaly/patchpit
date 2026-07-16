@@ -19,7 +19,6 @@ export type WorkspaceDrag = {
   readonly contentUrl: string | undefined;
   readonly contextId: string;
   readonly fromResource: boolean;
-  readonly pinOnDrop: boolean;
   readonly sourcePaneId: string | null;
 };
 
@@ -92,5 +91,4 @@ export const operationForDrop = (
       targetPaneId: paneId,
       beforeContext: 'beforeContext' in target ? target.beforeContext ?? null : null,
       url: drag.contentUrl ?? null,
-      pin: drag.pinOnDrop,
     };

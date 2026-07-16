@@ -36,7 +36,7 @@ try {
       if (event.data?.type === 'sandbox-compat:report') window.__sandboxCompatReport = event.data;
     });
   });
-  await page.goto(`${url}#${JSON.stringify({ delegation: 'placeholder:beelay' })}`);
+  await page.goto(`${url}#${JSON.stringify({ delegation: 'https://example.com/delegation' })}`);
   await proveWorkspaceBehavior(page);
   const reportHandle = await page.waitForFunction(() => window.__sandboxCompatReport, undefined, {
     timeout: 2_000,
@@ -90,7 +90,7 @@ async function proveWorkspaceBehavior(page) {
   const invocation = JSON.parse(decodeURIComponent(new URL(page.url()).hash.slice(1)));
   assert.equal(invocation.src.startsWith('automerge:'), true);
   assert.deepEqual(invocation.sync, ['wss://sync.automerge.org']);
-  assert.equal(invocation.delegation, 'placeholder:beelay');
+  assert.equal(invocation.delegation, 'https://example.com/delegation');
   const leftPane = page.locator('[data-pane="left"]');
   const rightPane = page.locator('[data-pane="right"]');
   const rootSplit = page.locator('[data-node="split-0"]');
@@ -104,7 +104,7 @@ async function proveWorkspaceBehavior(page) {
   assert.equal(await page.locator('.sandbox-app').getAttribute('title'), 'sandbox-compat app');
   const sandboxSrc = await page.locator('.sandbox-app').getAttribute('src');
   assert.match(sandboxSrc ?? '', /\/__patchpit\/sandbox\/[0-9a-f-]{36}\/index\.html$/);
-  assert.equal(sandboxSrc?.includes('placeholder:beelay'), false);
+  assert.equal(sandboxSrc?.includes('example.com/delegation'), false);
   assert.equal(sandboxSrc?.includes('sync.automerge.org'), false);
   await page.evaluate(() => {
     window.__patchpitIdentityFrame = document.querySelector('.sandbox-app');

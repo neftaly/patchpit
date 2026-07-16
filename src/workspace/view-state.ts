@@ -50,7 +50,6 @@ export type WorkspaceAction = {
   readonly targetPaneId: WorkspacePaneId;
   readonly beforeContext: string | null;
   readonly url: string | null;
-  readonly pin: boolean;
 } | {
   readonly kind: 'workspace.context.split';
   readonly contextId: string;
@@ -153,29 +152,31 @@ export const selectWorkspaceContext = (
   paneId: WorkspacePaneId,
   contextId: string,
   target: boolean,
-): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, (pane) => ({
-  activeContextId: contextId,
-  preview: pane.preview,
-}), target);
+): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, (pane) =>
+  pane.activeContextId === contextId ? pane : { ...pane, activeContextId: contextId }, target);
 
 export const previewWorkspaceContext = (
   workspace: WorkspaceState,
   viewState: WorkspaceViewState,
   paneId: WorkspacePaneId,
   preview: WorkspacePreview,
-): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, () => ({
-  activeContextId: preview.contextId,
-  preview,
-}), true);
+): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, (pane) =>
+  pane.activeContextId === preview.contextId
+    && pane.preview?.contextId === preview.contextId
+    && pane.preview.url === preview.url
+    ? pane
+    : { activeContextId: preview.contextId, preview }, true);
 
 export const clearWorkspacePreview = (
   workspace: WorkspaceState,
   viewState: WorkspaceViewState,
   paneId: WorkspacePaneId,
-): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, (pane) => ({
-  activeContextId: pane.preview?.contextId === pane.activeContextId ? null : pane.activeContextId,
-  preview: null,
-}), false);
+): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, (pane) => pane.preview === null
+  ? pane
+  : {
+      activeContextId: pane.preview.contextId === pane.activeContextId ? null : pane.activeContextId,
+      preview: null,
+    }, false);
 
 const updatePaneViewState = (
   workspace: WorkspaceState,

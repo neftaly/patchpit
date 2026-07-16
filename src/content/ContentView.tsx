@@ -78,8 +78,8 @@ function ResourceBrowser({ onOpenResource, resources }: {
         return !openable
           ? (
               <div
-                className="resource resource-folder"
-                key={`${resource.sourceId}:${resource.entryId}`}
+                className={`resource${resource.kind === 'folder' ? ' resource-folder' : ''}`}
+                key={resourceIdentity(resource)}
                 style={treeDepthStyle(depth + 1)}
               >
                 {label}
@@ -89,7 +89,7 @@ function ResourceBrowser({ onOpenResource, resources }: {
               <button
                 className={`resource${resource.kind === 'folder' ? ' resource-folder' : ''}`}
                 draggable
-                key={`${resource.sourceId}:${resource.entryId}`}
+                key={resourceIdentity(resource)}
                 onClick={() => onOpenResource(resource, false)}
                 onDoubleClick={() => onOpenResource(resource, true)}
                 onDragStart={(event) => event.dataTransfer.setData(RESOURCE_DRAG_TYPE, resourceIdentity(resource))}

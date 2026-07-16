@@ -91,8 +91,7 @@ void test('workspace pointer geometry lowers to bounded deterministic intent', (
     fc.double({ min: 0.01, max: 1_000, noNaN: true, noDefaultInfinity: true }),
     fc.double({ min: 0.01, max: 1_000, noNaN: true, noDefaultInfinity: true }),
     fc.nat(100),
-    fc.boolean(),
-    (x, y, left, top, width, height, index, open) => {
+    (x, y, left, top, width, height, index) => {
       const point = pointInRect(
         { x: left + (width * x), y: top + (height * y) },
         { left, top, width, height },
@@ -109,11 +108,9 @@ void test('workspace pointer geometry lowers to bounded deterministic intent', (
         contentUrl: 'viewer',
         contextId: 'context',
         fromResource: false,
-        pinOnDrop: open,
         sourcePaneId: null,
       }, 'target-pane', { zone });
       assert.equal(operation.kind, zone === 'center' ? 'workspace.context.move' : 'workspace.context.split');
-      if (operation.kind === 'workspace.context.move') assert.equal(operation.pin, open);
     },
   ), { numRuns: 200 });
 });
@@ -153,7 +150,6 @@ const planStep = (workspace: WorkspaceState, viewState: WorkspaceViewState, step
       targetPaneId,
       beforeContext: target?.kind === 'pane' ? select(target.contexts, step.first + step.second) ?? null : null,
       url: workspace.contexts[selected.contextId] === undefined ? `viewer:${step.first}` : null,
-      pin: step.pinned,
     };
   } else if (step.kind === 4 && selected !== undefined) {
     action = {

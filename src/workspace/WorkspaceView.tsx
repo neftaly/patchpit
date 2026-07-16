@@ -92,7 +92,6 @@ export function WorkspaceView({
             contentUrl: url,
             contextId,
             fromResource: resourceId !== '',
-            pinOnDrop: resourceId !== '' && url !== undefined,
             sourcePaneId: resourceId === ''
               ? null
               : source?.dataset.pane ?? source?.dataset.contextPane ?? null,

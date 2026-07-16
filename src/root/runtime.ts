@@ -290,7 +290,8 @@ const rootEntry = (
   resourceRef: string,
 ): FsEntry => ({ entryId, kind, name, order, parentId, resourceRef });
 
-const folderFileId = (folderEntryId: string, fileEntryId: string) => `${folderEntryId}:${fileEntryId}`;
+const folderFileId = (folderEntryId: string, fileEntryId: string) =>
+  `${encodeURIComponent(folderEntryId)}:${encodeURIComponent(fileEntryId)}`;
 const asObjectHandle = <T extends object>(handle: DocHandle<T>) =>
   handle as unknown as DocHandle<object>;
 const findOptions = (signal: AbortSignal | undefined) => signal === undefined ? {} : { signal };
@@ -300,6 +301,11 @@ const abortable = async <Value>(promise: Promise<Value>, signal?: AbortSignal): 
   return new Promise<Value>((resolve, reject) => {
     const aborted = () => reject(signal.reason);
     signal.addEventListener('abort', aborted, { once: true });
+    if (signal.aborted) {
+      signal.removeEventListener('abort', aborted);
+      reject(signal.reason);
+      return;
+    }
     void promise.then(
       (value) => {
         signal.removeEventListener('abort', aborted);
