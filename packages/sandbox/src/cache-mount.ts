@@ -65,13 +65,9 @@ export const installSandboxCacheMount = async (
     throw error;
   }
 
-  let closed = false;
+  let closing: Promise<void> | undefined;
   return {
-    close: async () => {
-      if (closed) return;
-      await cacheStorage.delete(cacheName);
-      closed = true;
-    },
+    close: () => closing ??= cacheStorage.delete(cacheName).then(() => undefined),
     frameAttributes: createSandboxFrameAttributes({ baseUrl: base, entry: snapshot.entry, mountId, route }),
     mountId,
     scopePath,

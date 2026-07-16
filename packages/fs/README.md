@@ -1,7 +1,7 @@
 # @patchpit/fs
 
-`@patchpit/fs` exposes filesystem metadata as a Tarstate relation. It does not
-store file bodies or define a nested tree document format.
+`@patchpit/fs` exposes filesystem placement and file-document meaning as exact
+Tarstate schemas. Storage adapters own physical documents and source lifecycle.
 
 ## Relation
 
@@ -31,6 +31,9 @@ restricted to entries from that same source.
   one source.
 - `FsDatabaseSource`, `FsDocument`, `FsEntry`, and `FsEntryRow` are the exported
   public types.
+- `fileSchemaArtifact` and `fileRelation` describe logical files with `name`,
+  `extension`, `mimeType`, and a discriminated text or binary content branch.
+  Storage mappings retain the physical Automerge representation.
 
 `FsDatabaseSource` is deliberately only a Tarstate mount capability. Source and
 attachment identities are obtained from its mount lease rather than exposed as

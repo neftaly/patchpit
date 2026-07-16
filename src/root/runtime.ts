@@ -1,4 +1,3 @@
-import { getHeads } from '@automerge/automerge';
 import {
   isValidAutomergeUrl,
   type AutomergeUrl,
@@ -7,15 +6,16 @@ import {
 } from '@automerge/automerge-repo';
 import {
   automergeFsDocumentMetadata,
-  createAutomergeFileContentDocument,
+  createAutomergeBinaryFileDocument,
+  openAutomergeFileDatabase,
   openAutomergeFsDocument,
-  parseAutomergeFileContentDocument,
   type AutomergeFsDocument,
 } from '@patchpit/automerge-fs';
 import type { FsEntry, FsEntryRow } from '@patchpit/fs';
-import { snapshotFilesystemApp, type AppFileContent } from '@patchpit/sandbox-fs';
-import { createIssue } from '@tarstate/core';
-import type { SourceSnapshot } from '@tarstate/core/source';
+import {
+  APP_FILE_AUTHORITY_SCOPE,
+  snapshotFilesystemApp,
+} from '@patchpit/sandbox-fs';
 import {
   openResourceQuery,
   resourceRowsFromQuerySnapshot,
@@ -74,7 +74,10 @@ export const createRoot = async (options: RootOptions) => {
       ...folder.files.map((file) => {
         const entryId = folderFileId(folder.entryId, file.entryId);
         const resourceRef = file.resourceUrl
-          ?? options.repo.create(createAutomergeFileContentDocument(file.bytes, file.contentType)).url;
+          ?? options.repo.create(createAutomergeBinaryFileDocument(file.bytes, {
+            name: file.name,
+            ...(file.contentType === undefined ? {} : { mimeType: file.contentType }),
+          })).url;
         return rootEntry(
           entryId,
           'file',
@@ -121,8 +124,7 @@ const openRootHandle = async (
   });
   let workspaceHandle: DocHandle<WorkspaceDocument>;
   try {
-    const entries = requireValidRootEntries(requireResourceRows(resourceQuery));
-    const workspaceEntry = entries.find(({ entryId }) => entryId === WORKSPACE_ENTRY_ID)!;
+    const workspaceEntry = requireWorkspaceEntry(requireResourceRows(resourceQuery));
     if (!isValidAutomergeUrl(workspaceEntry.resourceRef)) {
       throw new Error('Patchpit workspace document reference is invalid');
     }
@@ -175,57 +177,27 @@ const openRootHandle = async (
     if (!isValidAutomergeUrl(resourceRef)) return undefined;
     const handle = await findResourceHandle(resourceRef);
     if (closed || !rootReferencesResource(resourceQuery, resourceRef)) return undefined;
-    assertValidFileContent(resourceQuery, resourceRef, handle.doc());
     handles.set(resourceRef, handle);
     return handle;
-  };
-  const readAppFileContent = async (
-    resourceRef: string,
-    signal?: AbortSignal,
-  ): Promise<SourceSnapshot<AppFileContent> | undefined> => {
-    if (closed || !isValidAutomergeUrl(resourceRef)) return undefined;
-    const handle = await abortable(findResourceHandle(resourceRef), signal);
-    if (closed) return undefined;
-    const document = handle.doc();
-    if (document === undefined) return undefined;
-    const basis = { kind: 'automerge-heads', heads: [...getHeads(document)].sort() } as const;
-    const content = parseAutomergeFileContentDocument(document);
-    if (!content.success) {
-      return {
-        sourceId: handle.url,
-        operationEpoch: `patchpit:app-read:${handle.url}`,
-        basis,
-        state: 'ready',
-        freshness: 'current',
-        storage: document,
-        issues: [createIssue({
-          code: `patchpit.app.file-content-${content.reason}`,
-          phase: 'parse',
-          severity: 'error',
-          sourceId: handle.url,
-        })],
-      };
-    }
-    const snapshot: SourceSnapshot<AppFileContent> = {
-      sourceId: handle.url,
-      operationEpoch: `patchpit:app-read:${handle.url}`,
-      basis,
-      state: 'ready',
-      freshness: 'current',
-      storage: content.value,
-      issues: [],
-    };
-    handles.set(resourceRef, handle);
-    return snapshot;
   };
   const createAppSnapshot = (rootEntryId: string, signal?: AbortSignal) => snapshotFilesystemApp({
     filesystem,
     rootEntryId,
     ...(signal === undefined ? {} : { signal }),
-    read: async (resourceRef, readSignal) => {
-      const content = await readAppFileContent(resourceRef, readSignal);
-      if (content === undefined) throw new Error(`App file content is unavailable: ${resourceRef}`);
-      return content;
+    openSource: async ({ sourceId, signal: openSignal }) => {
+      if (closed || !isValidAutomergeUrl(sourceId)) return undefined;
+      const handle = await abortable(findResourceHandle(sourceId), openSignal);
+      if (closed || handle.doc() === undefined) return undefined;
+      const opened = await openAutomergeFileDatabase(handle, APP_FILE_AUTHORITY_SCOPE);
+      if (!opened.success) {
+        throw new Error(`App file content is invalid: ${sourceId}`, { cause: opened.issues });
+      }
+      if (closed || openSignal.aborted) {
+        opened.value.close();
+        return undefined;
+      }
+      handles.set(sourceId, handle);
+      return opened.value;
     },
   });
   return {
@@ -236,6 +208,7 @@ const openRootHandle = async (
     resolveResourceDocument,
     createAppSnapshot,
     close: () => {
+      if (closed) return;
       closed = true;
       resolver.abort();
       pendingHandles.clear();
@@ -252,19 +225,6 @@ type ResourceRuntime = Awaited<ReturnType<typeof openResourceQuery>>;
 const rootReferencesResource = (resourceQuery: ResourceRuntime, resourceRef: string) =>
   requireResourceRows(resourceQuery).some((entry) => entry.resourceRef === resourceRef);
 
-const assertValidFileContent = (
-  resourceQuery: ResourceRuntime,
-  resourceRef: string,
-  document: object,
-) => {
-  const isContentFile = requireResourceRows(resourceQuery).some((entry) =>
-    entry.entryId !== WORKSPACE_ENTRY_ID && entry.kind === 'file'
-    && entry.resourceRef === resourceRef);
-  if (isContentFile && !parseAutomergeFileContentDocument(document).success) {
-    throw new Error(`Patchpit file content is invalid: ${resourceRef}`);
-  }
-};
-
 const requireResourceRows = (resourceQuery: ResourceRuntime): readonly FsEntryRow[] => {
   const snapshot = resourceQuery.getSnapshot();
   if (snapshot.state !== 'open' || snapshot.current.completeness !== 'exact') {
@@ -273,12 +233,12 @@ const requireResourceRows = (resourceQuery: ResourceRuntime): readonly FsEntryRo
   return resourceRowsFromQuerySnapshot(snapshot);
 };
 
-const requireValidRootEntries = (entries: readonly FsEntryRow[]) => {
+const requireWorkspaceEntry = (entries: readonly FsEntryRow[]) => {
   const workspace = entries.find(({ entryId }) => entryId === WORKSPACE_ENTRY_ID);
   if (workspace?.kind !== 'file') {
     throw new Error('Patchpit root entries are missing');
   }
-  return entries;
+  return workspace;
 };
 
 const rootEntry = (

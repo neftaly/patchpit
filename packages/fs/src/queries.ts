@@ -94,7 +94,7 @@ const descendants = selectEntry(pipe(
     equals(folderField('sourceId'), sourceOf('entry')),
   )),
 ));
-const fsSubtreeQuery = pipe(
+export const fsSubtreeQuery = pipe(
   selectEntry(rootEntry),
   union(descendants),
   orderBy([

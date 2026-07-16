@@ -15,33 +15,17 @@ import {
   type FsEntry,
 } from '@patchpit/fs';
 
-export type AutomergeFileContentDoc = {
-  readonly kind: 'patchpit.file-content@1';
-  readonly contentType?: string;
-  readonly bytes: Uint8Array<ArrayBuffer>;
-};
-
-export const createAutomergeFileContentDocument = (
-  bytes: Uint8Array<ArrayBuffer>,
-  contentType?: string,
-): AutomergeFileContentDoc => ({
-  bytes: bytes.slice(),
-  ...(contentType === undefined ? {} : { contentType }),
-  kind: 'patchpit.file-content@1',
-});
-
-export const parseAutomergeFileContentDocument = (document: object):
-  | { readonly success: true; readonly value: AutomergeFileContentDoc }
-  | { readonly success: false; readonly reason: 'conflict' | 'invalid' } => {
-  if (['kind', 'bytes', 'contentType'].some((field) => getConflicts(document, field) !== undefined)) {
-    return { success: false, reason: 'conflict' };
-  }
-  return 'kind' in document && document.kind === 'patchpit.file-content@1'
-    && 'bytes' in document && document.bytes instanceof Uint8Array
-    && (!('contentType' in document) || document.contentType === undefined || typeof document.contentType === 'string')
-    ? { success: true, value: document as AutomergeFileContentDoc }
-    : { success: false, reason: 'invalid' };
-};
+export {
+  automergeBinaryFileDocumentMetadata,
+  automergeTextFileDocumentMetadata,
+  createAutomergeBinaryFileDocument,
+  createAutomergeTextFileDocument,
+  fileRelation,
+  fileSchemaArtifact,
+  openAutomergeFileDatabase,
+  type AutomergeBinaryFileDocument,
+  type AutomergeTextFileDocument,
+} from './file-content.ts';
 
 type StoredFsEntry = Omit<FsEntry, 'entryId'>;
 

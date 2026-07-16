@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as Automerge from '@automerge/automerge';
 import { isValidAutomergeUrl, Repo } from '@automerge/automerge-repo';
-import type { AutomergeFileContentDoc, AutomergeFsDocument } from '@patchpit/automerge-fs';
+import {
+  automergeBinaryFileDocumentMetadata,
+  createAutomergeBinaryFileDocument,
+  type AutomergeBinaryFileDocument,
+  type AutomergeFsDocument,
+} from '@patchpit/automerge-fs';
 import { createRoot, openRoot } from '../../src/root/runtime.ts';
 
 void test('Patchpit root reopens one live Automerge document tree', async () => {
@@ -48,16 +53,26 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
   assert.equal(await runtime.resolveResourceDocument(externalUrl), undefined);
 
   const contentHandle = (await runtime.resolveResourceDocument(index.resourceRef))!;
-  assert.deepEqual((contentHandle.doc() as AutomergeFileContentDoc).bytes, new Uint8Array([60, 104, 49, 62]));
+  const contentDocument = contentHandle.doc() as AutomergeBinaryFileDocument;
+  assert.equal(contentDocument['@patchpit'].type, 'file');
+  assert.deepEqual(contentDocument['@patchpit'].schema, automergeBinaryFileDocumentMetadata.schema);
+  assert.equal(contentDocument['@patchwork'].type, 'file');
+  assert.equal(contentDocument.name, 'index.html');
+  assert.equal(contentDocument.extension, 'html');
+  assert.equal(contentDocument.mimeType, 'text/html');
+  assert.deepEqual(contentDocument.content, new Uint8Array([60, 104, 49, 62]));
   contentHandle.change((doc) => {
-    (doc as unknown as { bytes: Uint8Array }).bytes = new Uint8Array([7, 8]);
+    (doc as unknown as { content: Uint8Array }).content = new Uint8Array([7, 8]);
   });
-  assert.deepEqual(((await runtime.resolveResourceDocument(index.resourceRef))!.doc() as AutomergeFileContentDoc).bytes, new Uint8Array([7, 8]));
+  assert.deepEqual(
+    ((await runtime.resolveResourceDocument(index.resourceRef))!.doc() as AutomergeBinaryFileDocument).content,
+    new Uint8Array([7, 8]),
+  );
 
-  const addedHandle = repo.create<AutomergeFileContentDoc>({
-    bytes: new Uint8Array([10]),
-    kind: 'patchpit.file-content@1',
-  });
+  const addedHandle = repo.create(createAutomergeBinaryFileDocument(
+    new Uint8Array([10]),
+    { name: 'added.bin' },
+  ));
   rootHandle.change((doc) => {
     doc.entries.added = {
       kind: 'file',
@@ -95,7 +110,7 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
   assert.equal(rootHandle.isReady(), true);
   assert.equal(contentHandle.isReady(), true);
   contentHandle.change((doc) => {
-    (doc as unknown as { bytes: Uint8Array }).bytes = new Uint8Array([9]);
+    (doc as unknown as { content: Uint8Array }).content = new Uint8Array([9]);
   });
 
   const reopened = await openRoot({ repo, rootUrl: runtime.rootUrl });
@@ -107,7 +122,7 @@ void test('Patchpit root reopens one live Automerge document tree', async () => 
   assert.equal(reopenedSnapshot.current.rows
     .find(({ entryId }) => entryId === workspace.entryId)?.name, 'session.am');
   assert.deepEqual(
-    ((await reopened.resolveResourceDocument(index.resourceRef))!.doc() as AutomergeFileContentDoc).bytes,
+    ((await reopened.resolveResourceDocument(index.resourceRef))!.doc() as AutomergeBinaryFileDocument).content,
     new Uint8Array([9]),
   );
   const workspaceProjection = reopened.workspaceRuntime.getSnapshot();
@@ -163,20 +178,66 @@ void test('Patchpit runtime snapshots valid app bytes and preserves invalid cont
   const resourceRef = resources.current.rows.find(({ entryId }) =>
     entryId === 'sandbox-compat:index.html')!.resourceRef;
   const handle = (await runtime.resolveResourceDocument(resourceRef))!;
-  const base = handle.doc() as Automerge.Doc<AutomergeFileContentDoc>;
+  const base = handle.doc() as Automerge.Doc<AutomergeBinaryFileDocument>;
   const left = Automerge.change(
     Automerge.clone(base, { actor: '6'.repeat(64) }),
-    (doc) => { (doc as { bytes: Uint8Array }).bytes = new Uint8Array([4]); },
+    (doc) => { (doc as { content: Uint8Array }).content = new Uint8Array([4]); },
   );
   const right = Automerge.change(
     Automerge.clone(base, { actor: '7'.repeat(64) }),
-    (doc) => { (doc as { bytes: Uint8Array }).bytes = new Uint8Array([5]); },
+    (doc) => { (doc as { content: Uint8Array }).content = new Uint8Array([5]); },
   );
   handle.update(() => Automerge.merge(left, right) as Automerge.Doc<object>);
-  assert.equal((await runtime.createAppSnapshot('sandbox-compat')).state, 'invalid');
+  const conflictedSnapshot = await runtime.createAppSnapshot('sandbox-compat');
+  assert.equal(conflictedSnapshot.state, 'invalid');
 
   handle.change((doc) => {
-    (doc as unknown as { bytes: unknown }).bytes = [4, 5];
+    (doc as unknown as { content: unknown }).content = [4, 5];
+  });
+  assert.equal((await runtime.createAppSnapshot('sandbox-compat')).state, 'invalid');
+  handle.change((doc) => {
+    (doc as unknown as { content: Uint8Array }).content = new Uint8Array([6]);
+  });
+
+  const foreign = repo.create({
+    '@patchwork': { type: 'file' },
+    content: new Automerge.ImmutableString('<h1>foreign</h1>'),
+    extension: 'html',
+    mimeType: 'text/html',
+    name: 'foreign.html',
+  });
+  const root = await repo.find<AutomergeFsDocument>(runtime.rootUrl);
+  root.change((doc) => {
+    doc.entries.foreign = {
+      kind: 'file',
+      name: 'foreign.html',
+      order: 2,
+      parentId: 'sandbox-compat',
+      resourceRef: foreign.url,
+    };
+  });
+  const foreignSnapshot = await runtime.createAppSnapshot('sandbox-compat');
+  assert.equal(foreignSnapshot.state, 'ready');
+  if (foreignSnapshot.state !== 'ready') throw new Error('Expected foreign content snapshot');
+  const foreignFile = foreignSnapshot.files.find(({ path }) => path.at(-1) === 'foreign.html');
+  assert.equal(await foreignFile?.body.text(), '<h1>foreign</h1>');
+
+  const falselyOwned = repo.create({
+    '@patchpit': { ...automergeBinaryFileDocumentMetadata, type: 'other' },
+    '@patchwork': { type: 'file' },
+    content: new Uint8Array([1]),
+    extension: 'txt',
+    mimeType: 'text/plain',
+    name: 'falsely-owned.txt',
+  });
+  root.change((doc) => {
+    doc.entries['falsely-owned'] = {
+      kind: 'file',
+      name: 'falsely-owned.txt',
+      order: 3,
+      parentId: 'sandbox-compat',
+      resourceRef: falselyOwned.url,
+    };
   });
   assert.equal((await runtime.createAppSnapshot('sandbox-compat')).state, 'invalid');
 

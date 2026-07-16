@@ -14,3 +14,11 @@ export {
   safeParseFsEntry,
   type FsEntry,
 } from './schema.ts';
+export { fsSubtreeQuery } from './queries.ts';
+export {
+  decodeBinaryFileContent,
+  fileRelation,
+  fileSchemaArtifact,
+  type BinaryFileContent,
+  type FileRow,
+} from './file-content.ts';

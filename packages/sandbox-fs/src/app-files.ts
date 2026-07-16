@@ -14,7 +14,6 @@ export const selectAppFiles = (rows: readonly FsEntryRow[], rootEntryId: string)
     root,
     entries,
     files,
-    resourceRefs: [...new Set(files.map(({ resourceRef }) => resourceRef))],
   };
 };
 
@@ -28,20 +27,22 @@ export const projectAppFilePaths = (root: FsEntryRow, entries: readonly FsEntryR
     if (resolving.has(entry.entryId)) throw new Error(`Filesystem parent cycle at: ${entry.entryId}`);
     resolving.add(entry.entryId);
     const parent = entry.parentId === null ? undefined : byId.get(entry.parentId);
-    if (entry.parentId !== root.entryId && parent === undefined) {
-      throw new Error(`Filesystem parent is outside the app subtree: ${entry.entryId}`);
+    let path: readonly string[];
+    if (entry.parentId === root.entryId) path = [entry.name];
+    else {
+      if (parent === undefined) {
+        throw new Error(`Filesystem parent is outside the app subtree: ${entry.entryId}`);
+      }
+      path = [...pathFor(parent), entry.name];
     }
-    const path = entry.parentId === root.entryId
-      ? [entry.name]
-      : [...pathFor(parent!), entry.name];
     resolving.delete(entry.entryId);
     paths.set(entry.entryId, Object.freeze(path));
     return path;
   };
   for (const entry of entries) pathFor(entry);
   const filePathKeys = entries
-    .filter(({ kind }) => kind === 'file')
-    .map(({ entryId }) => JSON.stringify(pathFor(byId.get(entryId)!)));
+    .filter((entry) => entry.kind === 'file')
+    .map((entry) => JSON.stringify(pathFor(entry)));
   if (new Set(filePathKeys).size !== filePathKeys.length) throw new Error('Filesystem app paths are not unique');
   return paths;
 };

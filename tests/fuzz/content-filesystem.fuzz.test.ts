@@ -155,7 +155,6 @@ void test('filesystem app projection preserves root-relative unique paths', asyn
         const paths = projectAppFilePaths(selection.root, selection.entries);
         assert.equal(selection.entries.some(({ entryId }) => entryId === outside.entryId), false);
         assert.equal(selection.files.length, files.length);
-        assert.equal(selection.resourceRefs.length, Math.min(fileCount, 4));
         assert.equal(hasAppEntry(selection.files, paths), true);
         assert.equal(new Set(files.map(({ entryId }) => JSON.stringify(paths.get(entryId)))).size, files.length);
         for (const file of files) assert.equal(paths.get(file.entryId)?.at(-1), file.name);

@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { isImmutableString } from '@automerge/automerge';
 import type { SandboxFrameAttributes } from '@patchpit/sandbox';
 import type { FsEntryRow } from '@patchpit/fs';
 import {
@@ -204,8 +205,9 @@ function SandboxApp({ contentRuntime, rootEntryId, sandboxHost, title }: {
 
 const formatViewerContent = (document: object | undefined, resourceRef: string) => {
   if (document === undefined) return resourceRef;
-  const bytes = 'bytes' in document ? document.bytes : undefined;
-  return bytes instanceof Uint8Array
-    ? new TextDecoder().decode(bytes)
+  const content = 'content' in document ? document.content : undefined;
+  return content instanceof Uint8Array
+    ? new TextDecoder().decode(content)
+    : typeof content === 'string' || isImmutableString(content) ? String(content)
     : JSON.stringify(document, null, 2);
 };

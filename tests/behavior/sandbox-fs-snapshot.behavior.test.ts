@@ -3,27 +3,34 @@ import test from 'node:test';
 import {
   createFsDatabaseSource,
   createStaticFsDatabaseSource,
+  fileRelation,
+  fileSchemaArtifact,
   type FsEntry,
 } from '@patchpit/fs';
+import { prepareManualReadOnlyAttachment } from '@tarstate/core/attachment/adapter';
+import type { AttachmentProjection } from '@tarstate/core/database';
+import type { OwnedDatabaseSource } from '@tarstate/core/database/session';
+import type { QueryLogicalValue, RelationInput } from '@tarstate/core/query';
 import type { SourceSnapshot } from '@tarstate/core/source';
 import {
+  APP_FILE_AUTHORITY_SCOPE,
   snapshotFilesystemApp,
-  type AppFileContent,
 } from '@patchpit/sandbox-fs';
 
-const content = (
+const contentSource = (
   sourceId: string,
   bytes: ArrayLike<number>,
   revision = 0,
   freshness: 'current' | 'stale' = 'current',
-): SourceSnapshot<AppFileContent> => ({
+): OwnedDatabaseSource => fileSource({
   sourceId,
-  operationEpoch: `${sourceId}:operations:1`,
-  basis: { incarnation: `${sourceId}:1`, revision },
-  state: 'ready',
+  revision,
   freshness,
-  storage: { bytes: Uint8Array.from(bytes), contentType: 'text/plain', kind: 'patchpit.file-content@1' },
-  issues: [],
+  content: {
+    kind: 'tarstate.value',
+    type: 'bytes',
+    value: Buffer.from(bytes).toString('base64url'),
+  },
 });
 
 void test('app snapshot is exact, immutable, basis-bearing, and root-relative', async () => {
@@ -37,16 +44,15 @@ void test('app snapshot is exact, immutable, basis-bearing, and root-relative', 
       entry('outside', null, 'file', 'outside.txt', 'automerge:outside'),
     ],
   });
-  const reads = new Map([
-    ['automerge:index', content('automerge:index', [1, 2], 2)],
-    ['automerge:icon', content('automerge:icon', [3], 4)],
+  const sources = new Map([
+    ['automerge:index', contentSource('automerge:index', [1, 2], 2)],
+    ['automerge:icon', contentSource('automerge:icon', [3], 4)],
   ]);
   const result = await snapshotFilesystemApp({
     filesystem,
     rootEntryId: 'app',
-    read: async (ref) => reads.get(ref)!,
+    openSource: ({ sourceId }) => sources.get(sourceId),
   });
-
   assert.equal(result.state, 'ready');
   if (result.state !== 'ready') throw new Error('Expected ready app snapshot');
   assert.deepEqual(await Promise.all(result.files.map(async ({ path, body }) => [
@@ -69,20 +75,21 @@ void test('HTTPS app leaves are incomplete and never fetched implicitly', async 
     sourceId: 'root',
     entries: [
       entry('app', null, 'folder', 'app', 'folder:app'),
-      entry('remote', 'app', 'file', 'remote.js', 'https://example.test/remote.js'),
+      entry('remote', 'app', 'file', 'index.html', 'https://example.test/remote.js'),
     ],
   });
-  let reads = 0;
+  let resolutions = 0;
   const result = await snapshotFilesystemApp({
     filesystem,
     rootEntryId: 'app',
-    read: async () => {
-      reads += 1;
-      throw new Error('must not fetch');
+    openSource: ({ sourceId }) => {
+      resolutions += 1;
+      assert.equal(sourceId, 'https://example.test/remote.js');
+      return undefined;
     },
   });
 
-  assert.equal(reads, 0);
+  assert.equal(resolutions, 1);
   assert.equal(result.state, 'incomplete');
   assert.equal(result.completeness, 'unknown');
 });
@@ -97,7 +104,7 @@ void test('an exact folder without direct index.html is not a launchable app sna
       ],
     }),
     rootEntryId: 'app',
-    read: async () => content('automerge:main', [1]),
+    openSource: ({ sourceId }) => contentSource(sourceId, [1]),
   });
 
   assert.equal(result.state, 'invalid');
@@ -114,7 +121,7 @@ void test('exact stale content cannot launch', async () => {
       ],
     }),
     rootEntryId: 'app',
-    read: async () => content('automerge:index', [1], 0, 'stale'),
+    openSource: ({ sourceId }) => contentSource(sourceId, [1], 0, 'stale'),
   });
 
   assert.equal(result.state, 'incomplete');
@@ -129,33 +136,31 @@ void test('invalid content from a ready source invalidates the app snapshot', as
       entry('bad', 'app', 'file', 'bad.js', 'automerge:bad'),
     ],
   });
-  const invalid = {
-    ...content('automerge:bad', []),
-    storage: { bytes: [1, 2, 3] },
-  } as unknown as SourceSnapshot<AppFileContent>;
   const result = await snapshotFilesystemApp({
     filesystem,
     rootEntryId: 'app',
-    read: async () => invalid,
+    openSource: ({ sourceId }) => fileSource({ sourceId, content: [1, 2, 3] }),
   });
 
   assert.equal(result.state, 'invalid');
-  assert.equal(result.completeness, 'unknown');
+  assert.equal(result.completeness, 'exact');
 });
 
 void test('snapshot byte bound counts repeated content at every mounted path', async () => {
-  const shared = content('automerge:shared', new Uint8Array(65 * 1024 * 1024));
+  const shared = contentSource('automerge:shared', [1]);
   await assert.rejects(() => snapshotFilesystemApp({
     filesystem: createStaticFsDatabaseSource({
       sourceId: 'root',
       entries: [
         entry('app', null, 'folder', 'app', 'folder:app'),
-        ...Array.from({ length: 4 }, (_, index) =>
+        entry('index', 'app', 'file', 'index.html', 'automerge:shared'),
+        ...Array.from({ length: 3 }, (_, index) =>
           entry(`copy-${index}`, 'app', 'file', `copy-${index}.bin`, 'automerge:shared')),
       ],
     }),
+    byteLimit: 3,
     rootEntryId: 'app',
-    read: async () => shared,
+    openSource: () => shared,
   }), /too large/);
 });
 
@@ -191,22 +196,22 @@ void test('filesystem authority changes during reads are retried before material
       issues: [],
     }),
   });
-  let reads = 0;
+  let opens = 0;
   const result = await snapshotFilesystemApp({
     filesystem,
     rootEntryId: 'app',
-    read: async (resourceRef) => {
-      reads += 1;
-      if (resourceRef === 'automerge:stale') {
+    openSource: ({ sourceId }) => {
+      opens += 1;
+      if (sourceId === 'automerge:stale') {
         entries = entries.filter(({ entryId }) => entryId !== 'stale');
         revision += 1;
         for (const listener of listeners) listener();
       }
-      return content(resourceRef, [1]);
+      return contentSource(sourceId, [1]);
     },
   });
 
-  assert.equal(reads, 3);
+  assert.equal(opens, 3);
   assert.equal(result.state, 'ready');
   if (result.state === 'ready') assert.deepEqual(result.files.map(({ path }) => path), [['index.html']]);
 });
@@ -218,3 +223,78 @@ const entry = (
   name: string,
   resourceRef: string,
 ): FsEntry => ({ entryId, parentId, kind, name, resourceRef, order: 0 });
+
+const fileSource = (input: {
+  readonly sourceId: string;
+  readonly content: QueryLogicalValue;
+  readonly revision?: number;
+  readonly freshness?: 'current' | 'stale';
+}): OwnedDatabaseSource => {
+  const { sourceId } = input;
+  const snapshot: SourceSnapshot<{ readonly content: QueryLogicalValue }> = {
+    sourceId,
+    operationEpoch: `${sourceId}:operations:1`,
+    basis: { incarnation: `${sourceId}:1`, revision: input.revision ?? 0 },
+    state: 'ready',
+    freshness: input.freshness ?? 'current',
+    storage: { content: input.content },
+    issues: [],
+  };
+  const source = {
+    sourceId,
+    snapshot: () => snapshot,
+    subscribe: () => () => undefined,
+  };
+  return {
+    close: () => undefined,
+    mount: (catalog, options) => {
+      const discoveryEdges = options?.discoveryEdges ?? [];
+      const lease = catalog.attach({
+        attachmentId: sourceId,
+        incarnation: `${sourceId}:attachment:1`,
+        sourceId,
+        source,
+        authorityScope: APP_FILE_AUTHORITY_SCOPE,
+        discoveryEdges,
+        preparation: prepareManualReadOnlyAttachment<
+          { readonly content: QueryLogicalValue },
+          readonly RelationInput[]
+        >({
+          schemaViewIds: [fileSchemaArtifact.id],
+          project: (current): AttachmentProjection<readonly RelationInput[]> =>
+            current.state !== 'ready' || current.storage === undefined
+              ? {
+                  state: current.state === 'ready' ? 'failed' : current.state,
+                  issues: current.issues,
+                }
+              : {
+                  state: 'ready',
+                  value: [{
+                    relation: fileRelation,
+                    rows: [{
+                      id: 'file',
+                      contentKind: 'binary',
+                      binaryContent: current.storage.content,
+                      extension: 'bin',
+                      mimeType: 'text/plain',
+                      name: 'file.bin',
+                    }],
+                    occurrenceIds: ['file'],
+                    completeness: 'exact',
+                    sourceId,
+                    attachmentId: sourceId,
+                    basis: current.basis,
+                  }],
+                  issues: current.issues,
+                },
+        }),
+      });
+      return {
+        attachmentId: sourceId,
+        sourceId,
+        discoveryEdges,
+        close: () => lease.close(),
+      };
+    },
+  };
+};
