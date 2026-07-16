@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.33.2",
   "pnpm": {
     "overrides": {
-      "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz"
+      "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz"
     }
   },
   "engines": {
@@ -33,8 +33,8 @@
     "@patchpit/fs": "workspace:*",
     "@patchpit/sandbox": "workspace:*",
     "@patchpit/sandbox-fs": "workspace:*",
-    "@tarstate/automerge": "https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz",
-    "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz",
+    "@tarstate/automerge": "https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz",
+    "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

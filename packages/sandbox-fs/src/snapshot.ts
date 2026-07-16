@@ -212,7 +212,7 @@ const materializeBinaryContent = (
 ): Uint8Array<ArrayBuffer> | undefined => {
   if (contentKind !== 'binary') return undefined;
   const materialized = safeMaterializePortableBytes(content);
-  return materialized.success ? Uint8Array.from(materialized.value) : undefined;
+  return materialized.success ? materialized.value : undefined;
 };
 
 const unavailable = (

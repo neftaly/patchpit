@@ -7,8 +7,8 @@
   "dependencies": {
     "@automerge/automerge": "3.2.6",
     "@patchpit/fs": "workspace:*",
-    "@tarstate/automerge": "https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz",
-    "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz"
+    "@tarstate/automerge": "https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz",
+    "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz"
   },
   "devDependencies": {
     "@automerge/automerge-repo": "2.5.6"

@@ -224,7 +224,18 @@ not confer trust.
 
 ## Next behaviors
 
-### N1. Durable reopening
+### N1. Canonical folder graph
+
+Replace the browser host's flat root entry table with Patchwork-compatible
+folder documents linked by Automerge URLs. The root `src` identifies the root
+folder document; nested folders are ordinary linked documents, and the
+workspace is an ordinary durable link rather than a privileged row shape.
+Tarstate source-link discovery and recursive queries project the graph without
+turning paths or projection rows into identity. Migration is complete when the
+flat representation and its adapter can be deleted rather than retained as a
+second writable format.
+
+### N2. Durable reopening
 
 Use the injectable Repo boundary to persist and reopen the root folder document
 across browser lifetimes. Root `src` continues to identify that document.
@@ -232,7 +243,7 @@ Concurrent browser tabs either share a storage/network protocol that converges
 normally or report an unsupported ownership conflict; they never assume a hash
 alone proves that document bytes remain locally available.
 
-### N2. Semantic link operations
+### N3. Semantic link operations
 
 Keep these behaviors distinct:
 
@@ -245,7 +256,7 @@ Keep these behaviors distinct:
 Identity-preserving link movement is a separate capability from preserving the
 linked document's identity.
 
-### N3. Scoped application data
+### N4. Scoped application data
 
 The first real editing application is a Patchwork-compatible Markdown editor.
 It should drive a minimal host protocol for:
@@ -258,7 +269,7 @@ It should drive a minimal host protocol for:
 Applications do not receive a Repo, raw `DocHandle`, foreign source handles, or
 a generic provider registry.
 
-### N4. Cross-source move and copy
+### N5. Cross-source move and copy
 
 Moving a link between folders removes and adds occurrences across two atomic
 sources, so its receipt exposes partial completion and retry/repair state. A

@@ -56,7 +56,7 @@ catalogs:
       version: 8.1.3
 
 overrides:
-  '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
+  '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
 
 importers:
 
@@ -81,11 +81,11 @@ importers:
         specifier: workspace:*
         version: link:packages/sandbox-fs
       '@tarstate/automerge':
-        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz
-        version: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz
       '@tarstate/core':
-        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
-        version: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -145,11 +145,11 @@ importers:
         specifier: workspace:*
         version: link:../fs
       '@tarstate/automerge':
-        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz
-        version: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz
       '@tarstate/core':
-        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
-        version: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
     devDependencies:
       '@automerge/automerge-repo':
         specifier: 2.5.6
@@ -158,8 +158,8 @@ importers:
   packages/fs:
     dependencies:
       '@tarstate/core':
-        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
-        version: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
 
   packages/sandbox: {}
 
@@ -169,8 +169,8 @@ importers:
         specifier: workspace:*
         version: link:../fs
       '@tarstate/core':
-        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
-        version: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
+        specifier: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
+        version: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
 
 packages:
 
@@ -745,14 +745,14 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@tarstate/automerge@https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz':
-    resolution: {integrity: sha512-LoxMC6cT9OOXryPpIVbR65XRoOoHlHfr50K8+MMUhoxi3DIX+79tF6RpASUSNIIo99/ITlkSDYzYNAx7O6opvg==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz}
-    version: 0.4.4
+  '@tarstate/automerge@https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz':
+    resolution: {integrity: sha512-c5/qVRrqyDC9qEzQHvcCNx7dyRS3xSvbj+nxEGrtNF5cA09a+/KLIE/FoEAhBTSN80hNa2lfMMuw90t0HGastA==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz}
+    version: 0.4.5
     engines: {node: '>=24.12.0'}
 
-  '@tarstate/core@https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz':
-    resolution: {integrity: sha512-PMsW6r9VZlBHo3iMqOY+nUQJPvB6ecOzqNvWpRJ17P5i2Q7g8vArot8RJSgkBDn8xtfkEYIi2t+DSwSDRzWXzg==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz}
-    version: 0.4.4
+  '@tarstate/core@https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz':
+    resolution: {integrity: sha512-rHhiuuhb5YHqWlAD8N4n0Odt0don3fjbE8J16J4U+RH5GGmFR0tP09jmu5VX2HvDQWGxTCPDsQBt2C6IQEEr8g==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz}
+    version: 0.4.5
     engines: {node: '>=24.12.0'}
 
   '@tybys/wasm-util@0.10.3':
@@ -1679,12 +1679,12 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@tarstate/automerge@https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-automerge-0.4.4.tgz':
+  '@tarstate/automerge@https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-automerge-0.4.5.tgz':
     dependencies:
       '@automerge/automerge': 3.2.6
-      '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz
+      '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz
 
-  '@tarstate/core@https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz': {}
+  '@tarstate/core@https://github.com/neftaly/tarstate/releases/download/v0.4.5/tarstate-core-0.4.5.tgz': {}
 
   '@tybys/wasm-util@0.10.3':
     dependencies:
