@@ -39,9 +39,9 @@ restricted to entries from that same source.
 attachment identities are obtained from its mount lease rather than exposed as
 parallel Patchpit state.
 
-Both query functions return a query observer. Consumers read readiness,
-completeness, issues, basis, and rows from `getSnapshot()` and call `close()`
-when finished.
+Both query functions return an owned Tarstate query session. Consumers read
+readiness, completeness, issues, basis, and rows from `getSnapshot()`, may await
+`whenSettled()`, and call `close()` when finished.
 
 ```ts
 import { createStaticFsDatabaseSource, openFsEntriesQuery } from '@patchpit/fs';

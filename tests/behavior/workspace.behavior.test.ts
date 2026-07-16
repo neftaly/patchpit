@@ -110,6 +110,7 @@ void test('per-view state is owned by an exact external source with its own iden
   assert.equal(changes, 1);
   unsubscribe();
   runtime.close();
+  assert.equal(runtime.getSnapshot(), after);
 });
 
 void test('Resources selection does not replace the active editor target', () => {

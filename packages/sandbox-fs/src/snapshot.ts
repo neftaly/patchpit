@@ -4,11 +4,12 @@ import {
   type Issue,
   type JsonValue,
 } from '@tarstate/core';
-import type { ObservedQueryResult, QueryObserver } from '@tarstate/core/database';
+import type { ObservedQueryResult } from '@tarstate/core/database';
 import {
   openDatabaseQuery,
   type OpenLinkedDatabaseSource,
 } from '@tarstate/core/database/session';
+import { safeMaterializePortableBytes } from '@tarstate/core/values';
 import { prepareQuery } from '@tarstate/core/query';
 import {
   compare,
@@ -22,11 +23,9 @@ import {
   where,
 } from '@tarstate/core/query/authoring';
 import {
-  decodeBinaryFileContent,
   fileRelation,
   fsSubtreeQuery,
   openFsSubtreeQuery,
-  type BinaryFileContent,
   type FsDatabaseSource,
 } from '@patchpit/fs';
 import {
@@ -88,7 +87,6 @@ const contentsPlan = await prepareQuery({ root: contentQuery, ...QUERY_IDENTITY 
 const contentLinksPlan = await prepareQuery({ root: contentLinksQuery, ...QUERY_IDENTITY });
 const DEFAULT_APP_BYTE_LIMIT = 256 * 1024 * 1024;
 const MAX_SNAPSHOT_RETRIES = 2;
-const MEMBERSHIP_OPEN_ISSUE_CODE = 'observer.membership_open';
 export const APP_FILE_AUTHORITY_SCOPE = 'patchpit.app-file';
 
 type SnapshotOptions = {
@@ -121,14 +119,12 @@ const snapshotFilesystemAppAttempt = async (
     const paths = projectAppFilePaths(root, entries);
     if (!hasAppEntry(files, paths)) return missingEntry(subtreeBases);
 
-    const contentSnapshot = await snapshotContents(options);
-    if (contentSnapshot.state === 'closed') throw new Error('App content observation closed');
+    const contentResult = await snapshotContents(options);
     const latestSubtree = subtree.getSnapshot();
     if (!sameOpenBasis(subtreeSnapshot, latestSubtree)) {
       if (retries === 0) throw new Error('Filesystem app changed while creating its snapshot');
       return snapshotFilesystemAppAttempt(options, retries - 1);
     }
-    const contentResult = contentSnapshot.current;
     const sourceBases = contentResult.basis.attachments;
     if (!launchable(contentResult)) {
       return unavailable(contentResult, sourceBases);
@@ -177,44 +173,13 @@ const snapshotContents = async (options: SnapshotOptions) => {
     },
   });
   try {
-    return await settledSnapshot(observer, options.signal);
+    return await observer.whenSettled(options.signal === undefined
+      ? undefined
+      : { signal: options.signal });
   } finally {
     observer.close();
   }
 };
-
-const settledSnapshot = async <Row>(
-  observer: QueryObserver<Row>,
-  signal?: AbortSignal,
-): Promise<ReturnType<QueryObserver<Row>['getSnapshot']>> => {
-  const current = observer.getSnapshot();
-  if (membershipSettled(current)) return current;
-  signal?.throwIfAborted();
-  return new Promise((resolve, reject) => {
-    let unsubscribe: () => void = () => undefined;
-    const finish = (snapshot: ReturnType<QueryObserver<Row>['getSnapshot']>) => {
-      unsubscribe();
-      signal?.removeEventListener('abort', aborted);
-      resolve(snapshot);
-    };
-    const changed = () => {
-      const snapshot = observer.getSnapshot();
-      if (membershipSettled(snapshot)) finish(snapshot);
-    };
-    const aborted = () => {
-      unsubscribe();
-      reject(signal?.reason);
-    };
-    unsubscribe = observer.subscribe(changed);
-    signal?.addEventListener('abort', aborted, { once: true });
-    if (signal?.aborted === true) aborted();
-    else changed();
-  });
-};
-
-const membershipSettled = <Row>(snapshot: ReturnType<QueryObserver<Row>['getSnapshot']>) =>
-  snapshot.state === 'closed'
-  || !snapshot.current.issues.some(({ code }) => code === MEMBERSHIP_OPEN_ISSUE_CODE);
 
 type MaterializedContent = {
   readonly content: Uint8Array<ArrayBuffer>;
@@ -232,9 +197,7 @@ const materializeContentRows = (
     }
     const bytes = contentKind === 'text' && typeof textContent === 'string'
       ? new TextEncoder().encode(textContent)
-      : contentKind === 'binary' && isBinaryContent(binaryContent)
-        ? decodeBinaryFileContent(binaryContent)
-        : undefined;
+      : materializeBinaryContent(contentKind, binaryContent);
     if (bytes === undefined || contents.has(resourceRef)) {
       throw new TypeError('App file content projection is invalid');
     }
@@ -243,13 +206,14 @@ const materializeContentRows = (
   return contents;
 };
 
-const isBinaryContent = (input: unknown): input is BinaryFileContent =>
-  input !== null
-  && typeof input === 'object'
-  && !Array.isArray(input)
-  && 'kind' in input && input.kind === 'tarstate.value'
-  && 'type' in input && input.type === 'bytes'
-  && 'value' in input && typeof input.value === 'string';
+const materializeBinaryContent = (
+  contentKind: unknown,
+  content: unknown,
+): Uint8Array<ArrayBuffer> | undefined => {
+  if (contentKind !== 'binary') return undefined;
+  const materialized = safeMaterializePortableBytes(content);
+  return materialized.success ? Uint8Array.from(materialized.value) : undefined;
+};
 
 const unavailable = (
   result: ObservedQueryResult<unknown>,

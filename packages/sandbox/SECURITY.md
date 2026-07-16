@@ -15,7 +15,6 @@ The `sandbox-compat` browser harness is the executable supported-profile spec.
 - The runner base URL is configurable so deployment can move to a distinct
   origin without changing app URLs. No cross-origin snapshot-transfer protocol
   exists yet.
-- The old data-URL bootstrap path has been removed.
 - The package owns path planning, launch document creation, and URL mount
   request handling.
 - URL mounts serve files with explicit content types and restrictive response

@@ -16,12 +16,13 @@ import {
 import type { DocumentDeclaration } from '@tarstate/core/attachment';
 import {
   sealStorageMapping,
-  type FieldMapping,
+  type StoredFieldMapping,
   type StorageMappingBody,
 } from '@tarstate/core/schema';
 import {
   fileRelation,
   fileSchemaArtifact,
+  type FileRow,
 } from '@patchpit/fs';
 
 export {
@@ -35,13 +36,13 @@ const replaceContent = {
   capability: builtInCapabilityRefs.fieldReplace,
 } as const;
 const readOnly = { kind: 'read-only' } as const;
-const inactiveContent = { path: ['@patchpit', 'inactiveContent'], write: readOnly } as const;
+const absentContent = { kind: 'absent' } as const;
 
 type SelectedFileAttachment = {
   readonly declaration: DocumentDeclaration;
   readonly artifacts: Readonly<Record<string, unknown>>;
 };
-type FileContentKind = 'binary' | 'text';
+type FileContentKind = FileRow['contentKind'];
 
 const binaryFileAttachment = await createFileAttachment({
   kind: 'binary',
@@ -240,7 +241,7 @@ async function createFileAttachment(input: {
   readonly kind: FileContentKind;
   readonly mappingId: string;
   readonly schema: typeof fileSchemaArtifact;
-  readonly write: FieldMapping['write'];
+  readonly write: StoredFieldMapping['write'];
 }): Promise<SelectedFileAttachment> {
   const schema = normalizeArtifactRef(input.schema);
   const mapping = await sealStorageMapping({
@@ -264,7 +265,7 @@ const sameStorageMapping = (left: DocumentDeclaration, right: DocumentDeclaratio
 function fileStorageMapping(
   schema: ArtifactRef,
   contentKind: FileContentKind,
-  contentWrite: FieldMapping['write'],
+  contentWrite: StoredFieldMapping['write'],
 ): StorageMappingBody {
   return {
     schema,
@@ -279,10 +280,10 @@ function fileStorageMapping(
         fields: {
           binaryContent: contentKind === 'binary'
             ? { path: ['content'], write: contentWrite }
-            : inactiveContent,
+            : absentContent,
           textContent: contentKind === 'text'
             ? { path: ['content'], write: contentWrite }
-            : inactiveContent,
+            : absentContent,
           extension: { path: ['extension'], write: readOnly },
           mimeType: { path: ['mimeType'], write: readOnly },
           name: { path: ['name'], write: readOnly },

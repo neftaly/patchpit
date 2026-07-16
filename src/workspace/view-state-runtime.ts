@@ -13,10 +13,9 @@ export const openWorkspaceViewState = (options: {
 }) => {
   const store = createAtomicStore(createWorkspaceViewState(options.workspace, options.activePaneId));
   const runtime = new ExternalStoreRuntime(options.sourceId, store);
-  const getSnapshot = () => runtime.snapshot().storage!;
   return {
     sourceId: options.sourceId,
-    getSnapshot,
+    getSnapshot: store.getState,
     subscribe: (listener: () => void) => runtime.subscribe(listener),
     update: (workspace: WorkspaceState, update: (viewState: WorkspaceViewState) => WorkspaceViewState) => {
       const snapshot = runtime.snapshot();

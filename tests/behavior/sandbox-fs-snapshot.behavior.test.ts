@@ -12,6 +12,7 @@ import type { AttachmentProjection } from '@tarstate/core/database';
 import type { OwnedDatabaseSource } from '@tarstate/core/database/session';
 import type { QueryLogicalValue, RelationInput } from '@tarstate/core/query';
 import type { SourceSnapshot } from '@tarstate/core/source';
+import { toPortableBytes } from '@tarstate/core/values';
 import {
   APP_FILE_AUTHORITY_SCOPE,
   snapshotFilesystemApp,
@@ -26,11 +27,7 @@ const contentSource = (
   sourceId,
   revision,
   freshness,
-  content: {
-    kind: 'tarstate.value',
-    type: 'bytes',
-    value: Buffer.from(bytes).toString('base64url'),
-  },
+  content: toPortableBytes(Uint8Array.from(bytes)),
 });
 
 void test('app snapshot is exact, immutable, basis-bearing, and root-relative', async () => {

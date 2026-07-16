@@ -6,6 +6,6 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@patchpit/fs": "workspace:*",
-    "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.3/tarstate-core-0.4.3.tgz"
+    "@tarstate/core": "https://github.com/neftaly/tarstate/releases/download/v0.4.4/tarstate-core-0.4.4.tgz"
   }
 }

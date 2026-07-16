@@ -1,10 +1,10 @@
 import {
   type AttachmentProjection,
-  type QueryObserver,
 } from '@tarstate/core/database';
 import type { Issue } from '@tarstate/core';
 import {
   openDatabaseQuery,
+  type DatabaseQuerySession,
   type MountableDatabaseSource,
 } from '@tarstate/core/database/session';
 import { prepareManualReadOnlyAttachment } from '@tarstate/core/attachment/adapter';
@@ -102,14 +102,14 @@ export const openFsEntriesQuery = (sources: readonly FsDatabaseSource[]) => open
   queryAuthorityScope: 'public',
 });
 
-export const openFsSubtreeQuery = async (source: FsDatabaseSource, rootEntryId: string) =>
-  await openDatabaseQuery({
+export const openFsSubtreeQuery = (source: FsDatabaseSource, rootEntryId: string) =>
+  openDatabaseQuery({
     sources: [{ source }],
     plan: fsSubtreePlan,
     queryAuthorityScope: `patchpit:fs-subtree:${rootEntryId}`,
     canRead: () => true,
     parameters: { rootEntryId },
-  }) as QueryObserver<FsEntryRow>;
+  }) as Promise<DatabaseQuerySession<FsEntryRow>>;
 
 const staticSource = (sourceId: string, entries: readonly FsEntry[]) => ({
   sourceId,
