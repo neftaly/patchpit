@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as Automerge from '@automerge/automerge';
 import { Repo } from '@automerge/automerge-repo';
-import { openFsEntries } from '@patchpit/fs';
+import { openFsEntriesQuery } from '@patchpit/fs';
 import {
   automergeFsDocumentMetadata,
   openAutomergeFsDocument,
@@ -25,12 +25,12 @@ void test('Repo-backed filesystem observes one live handle', async () => {
   const repo = new Repo({ network: [] });
   const handle = repo.create(document);
   const filesystem = await openAutomergeFsDocument(handle);
-  const query = openFsEntries([filesystem]);
+  const query = await openFsEntriesQuery([filesystem]);
 
   try {
     assert.match(handle.url, /^automerge:/);
     handle.change((doc) => { (doc.entries.readme as { name: string }).name = 'external.md'; });
-    const snapshot = query.observer.getSnapshot();
+    const snapshot = query.getSnapshot();
     assert.equal(snapshot.state === 'open' && snapshot.current.rows[0]?.name, 'external.md');
 
     query.close();

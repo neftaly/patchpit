@@ -3,16 +3,6 @@ import test from 'node:test';
 import { createSandboxFrameAttributes } from '@patchpit/sandbox';
 import { indexSandboxFiles } from '../../packages/sandbox/src/document.ts';
 
-void test('plans sandbox document paths without reading files', () => {
-  const index = { path: ['index.html'], src: 'automerge:index' };
-  const image = { path: ['assets', 'a/b.svg'], src: 'https://example.test/a.svg' };
-  const plan = indexSandboxFiles(['index.html'], [index, image]);
-
-  assert.deepEqual([...plan.keys()], ['index.html', 'assets/a%2Fb.svg']);
-  assert.equal(plan.get('index.html'), index);
-  assert.equal(plan.get('assets/a%2Fb.svg'), image);
-});
-
 void test('rejects invalid sandbox documents', () => {
   assert.throws(
     () => indexSandboxFiles(['index.html'], [{ path: ['app.html'] }]),

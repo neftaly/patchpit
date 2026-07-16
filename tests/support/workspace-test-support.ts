@@ -1,5 +1,5 @@
-import type { WorkspacePresentation, WorkspacePresence } from '../../src/workspace/presence.ts';
-import type { WorkspaceState } from '../../src/workspace/model.ts';
+import type { WorkspacePresentation, WorkspaceViewState } from '../../src/workspace/view-state.ts';
+import type { WorkspaceState } from '../../src/workspace/durable-state.ts';
 
 export const workspaceInvariantViolations = (workspace: WorkspaceState): readonly string[] => {
   const violations: string[] = [];
@@ -58,7 +58,7 @@ export const workspaceInvariantViolations = (workspace: WorkspaceState): readonl
 
 export const presentationInvariantViolations = (
   workspace: WorkspaceState,
-  presence: WorkspacePresence,
+  viewState: WorkspaceViewState,
   presentation: WorkspacePresentation,
 ): readonly string[] => {
   const violations: string[] = [];
@@ -66,10 +66,10 @@ export const presentationInvariantViolations = (
   if (presentation.activePaneId !== null && presentation.nodes[presentation.activePaneId]?.kind !== 'pane') {
     violations.push('active pane is unavailable');
   }
-  for (const paneId of Object.keys(presence.panes)) {
+  for (const paneId of Object.keys(viewState.panes)) {
     const pane = presentation.nodes[paneId];
     if (pane?.kind !== 'pane') {
-      violations.push(`presence pane is unavailable ${paneId}`);
+      violations.push(`view-state pane is unavailable ${paneId}`);
       continue;
     }
     if (pane.activeContext !== null && !pane.contexts.includes(pane.activeContext)) {

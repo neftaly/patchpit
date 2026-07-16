@@ -743,12 +743,12 @@ packages:
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
   '@tarstate/automerge@https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz':
-    resolution: {integrity: sha512-sboHKPskyQk7sFy527p3BieM2K+KOmcGeEOGANtY+qGRoilBDKKZXxgQNdeZk7qewYwjJOibxlecY6A/ggwi6w==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz}
+    resolution: {integrity: sha512-q7xJnCLCO52O2yvYK2jGkK48kl1Z3HMSB06pnaBr5k0s78uFrSjIaWvo1dvj33jQ6hyiLXvRqMbk32nOyWqnWQ==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-automerge-0.4.0.tgz}
     version: 0.4.0
     engines: {node: '>=24.12.0'}
 
   '@tarstate/core@https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz':
-    resolution: {integrity: sha512-0oVHT2GfYGLuaxmVP/oPvaZaF7cY3V9mrS3sgEu4and/noG8JV9IIyIHVzXJk9COSs/jKD4CqLRtr1VZCkA/QQ==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz}
+    resolution: {integrity: sha512-bDGfLiOH4sjTMj97MhnyvHqvpFqwwgQzTRZpkn+CVmzUDzPlbKDAe9xtmRIdcLuyisg+ouH38MaQ5vZrPKjtvg==, tarball: https://github.com/neftaly/tarstate/releases/download/v0.4.0/tarstate-core-0.4.0.tgz}
     version: 0.4.0
     engines: {node: '>=24.12.0'}
 

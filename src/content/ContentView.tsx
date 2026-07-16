@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -14,93 +13,103 @@ import {
 } from './invocation.ts';
 import {
   resourceIdentity,
-  resourceAt,
+  findResource,
   type ResourceProjection,
-} from './resources.ts';
+} from './resource-projection.ts';
 import type { PatchpitRuntime } from '../root/runtime.ts';
 import type { BrowserSandboxHost } from '../browser/sandbox-host.ts';
 
-export const resourceDragType = 'application/x-patchpit-resource';
+export const RESOURCE_DRAG_TYPE = 'application/x-patchpit-resource';
 
-type ContentRuntime = Pick<PatchpitRuntime, 'resolve' | 'snapshotApp'>;
+type ContentRuntime = Pick<PatchpitRuntime, 'createAppSnapshot' | 'resolveResourceDocument'>;
 type SandboxHost = Pick<BrowserSandboxHost, 'install'>;
 
-export function ContentView({ contentUrl, host, onOpenResource, resources, runtime }: {
+export function ContentView({ contentRuntime, contentUrl, onOpenResource, resources, sandboxHost }: {
+  readonly contentRuntime: ContentRuntime;
   readonly contentUrl: string | undefined;
-  readonly host: SandboxHost;
   readonly onOpenResource: (resource: FsEntryRow, pinned: boolean) => void;
   readonly resources: ResourceProjection;
-  readonly runtime: ContentRuntime;
+  readonly sandboxHost: SandboxHost;
 }): ReactNode {
-  const invocation = useMemo(
-    () => contentUrl === undefined ? undefined : parseContentInvocation(contentUrl),
-    [contentUrl],
-  );
+  const invocation = contentUrl === undefined ? undefined : parseContentInvocation(contentUrl);
   if (invocation?.kind === 'resources') {
-    return <ResourceBrowser onOpen={onOpenResource} resources={resources} />;
+    return <ResourceBrowser onOpenResource={onOpenResource} resources={resources} />;
   }
   if (invocation?.kind === 'app') {
     const root = resources.byEntryId.get(invocation.rootEntryId);
     return root === undefined
       ? <p role="alert">App unavailable.</p>
-      : <SandboxApp host={host} rootEntryId={invocation.rootEntryId} runtime={runtime} />;
+      : (
+          <SandboxApp
+            sandboxHost={sandboxHost}
+            key={invocation.rootEntryId}
+            rootEntryId={invocation.rootEntryId}
+            contentRuntime={contentRuntime}
+            title={root.name}
+          />
+        );
   }
   const resource = invocation?.kind !== 'viewer'
     ? undefined
-    : resourceAt(resources, invocation.sourceId, invocation.entryId);
+    : findResource(resources, invocation.sourceId, invocation.entryId);
   return resource === undefined
     ? <p role="alert">Resource unavailable.</p>
-    : <Viewer resourceRef={resource.resourceRef} runtime={runtime} />;
+    : <Viewer contentRuntime={contentRuntime} key={resource.resourceRef} resourceRef={resource.resourceRef} />;
 }
 
-function ResourceBrowser({ onOpen, resources }: {
-  readonly onOpen: (resource: FsEntryRow, pinned: boolean) => void;
+function ResourceBrowser({ onOpenResource, resources }: {
+  readonly onOpenResource: (resource: FsEntryRow, pinned: boolean) => void;
   readonly resources: ResourceProjection;
 }) {
   return (
-    <section className="view">
+    <section aria-label="Files" className="view">
       <div className="resource resource-folder" style={treeDepthStyle(0)}>
         <span aria-hidden="true" className="resource-icon">📂</span>
         <span className="resource-name">patchpit</span>
       </div>
       {resources.rows.map(({ depth, resource }) => {
-          const openable = contentUrlForResource(resource, resources) !== undefined;
-          const label = (
-            <>
-              <span aria-hidden="true" className="resource-icon">{resourceIcon(resource)}</span>
-              <span className="resource-name">{resource.name}</span>
-            </>
-          );
-          return !openable
-            ? (
-                <div
-                  className="resource resource-folder"
-                  key={`${resource.sourceId}:${resource.entryId}`}
-                  style={treeDepthStyle(depth + 1)}
-                >
-                  {label}
-                </div>
-              )
-            : (
-                <button
-                  className={`resource${resource.kind === 'folder' ? ' resource-folder' : ''}`}
-                  draggable
-                  key={`${resource.sourceId}:${resource.entryId}`}
-                  onClick={() => onOpen(resource, false)}
-                  onDoubleClick={() => onOpen(resource, true)}
-                  onDragStart={(event) => event.dataTransfer.setData(resourceDragType, resourceIdentity(resource))}
-                  style={treeDepthStyle(depth + 1)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              );
+        const openable = contentUrlForResource(resource, resources) !== undefined;
+        const label = (
+          <>
+            <span aria-hidden="true" className="resource-icon">{resourceIcon(resource)}</span>
+            <span className="resource-name">{resource.name}</span>
+          </>
+        );
+        return !openable
+          ? (
+              <div
+                className="resource resource-folder"
+                key={`${resource.sourceId}:${resource.entryId}`}
+                style={treeDepthStyle(depth + 1)}
+              >
+                {label}
+              </div>
+            )
+          : (
+              <button
+                className={`resource${resource.kind === 'folder' ? ' resource-folder' : ''}`}
+                draggable
+                key={`${resource.sourceId}:${resource.entryId}`}
+                onClick={() => onOpenResource(resource, false)}
+                onDoubleClick={() => onOpenResource(resource, true)}
+                onDragStart={(event) => event.dataTransfer.setData(RESOURCE_DRAG_TYPE, resourceIdentity(resource))}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  onOpenResource(resource, true);
+                }}
+                style={treeDepthStyle(depth + 1)}
+                type="button"
+              >
+                {label}
+              </button>
+            );
       })}
     </section>
   );
 }
 
-const treeDepthStyle = (depth: number) => ({ '--tree-depth-size': `${depth}rem` }) as CSSProperties;
+const treeDepthStyle = (depth: number) => ({ '--tree-depth': depth }) as CSSProperties;
 
 const resourceIcon = (resource: FsEntryRow) => {
   if (resource.kind === 'folder') return '📂';
@@ -116,30 +125,30 @@ const resourceIcon = (resource: FsEntryRow) => {
   return '📄';
 };
 
-function Viewer({ resourceRef, runtime }: {
+function Viewer({ contentRuntime, resourceRef }: {
+  readonly contentRuntime: ContentRuntime;
   readonly resourceRef: string;
-  readonly runtime: ContentRuntime;
 }) {
   const [resolution, setResolution] = useState<{
     readonly state: 'loading' | 'unavailable';
   } | {
     readonly state: 'ready';
-    readonly handle: NonNullable<Awaited<ReturnType<ContentRuntime['resolve']>>>;
+    readonly handle: NonNullable<Awaited<ReturnType<ContentRuntime['resolveResourceDocument']>>>;
   }>({ state: 'loading' });
   useEffect(() => {
-    let current = true;
+    const controller = new AbortController();
     setResolution({ state: 'loading' });
-    void runtime.resolve(resourceRef).then((resolved) => {
-      if (current) setResolution(resolved === undefined
+    void contentRuntime.resolveResourceDocument(resourceRef).then((resolved) => {
+      if (!controller.signal.aborted) setResolution(resolved === undefined
         ? { state: 'unavailable' }
         : { state: 'ready', handle: resolved });
     }, () => {
-      if (current) setResolution({ state: 'unavailable' });
+      if (!controller.signal.aborted) setResolution({ state: 'unavailable' });
     });
-    return () => { current = false; };
-  }, [resourceRef, runtime]);
+    return () => { controller.abort(); };
+  }, [contentRuntime, resourceRef]);
   const handle = resolution.state === 'ready' ? resolution.handle : undefined;
-  const doc = useSyncExternalStore(
+  const document = useSyncExternalStore(
     (listener) => {
       if (handle === undefined) return () => undefined;
       const changed = () => { listener(); };
@@ -150,24 +159,24 @@ function Viewer({ resourceRef, runtime }: {
     () => handle?.doc(),
   );
   if (resolution.state === 'unavailable') return <p role="alert">Resource unavailable.</p>;
-  return <pre className="viewer">{viewerContent(doc, resourceRef)}</pre>;
+  return <pre className="viewer">{formatViewerContent(document, resourceRef)}</pre>;
 }
 
-function SandboxApp({ host, rootEntryId, runtime }: {
-  readonly host: SandboxHost;
+function SandboxApp({ contentRuntime, rootEntryId, sandboxHost, title }: {
+  readonly contentRuntime: ContentRuntime;
   readonly rootEntryId: string;
-  readonly runtime: ContentRuntime;
+  readonly sandboxHost: SandboxHost;
+  readonly title: string;
 }) {
-  const [frame, setFrame] = useState<SandboxFrameAttributes>();
-  const [failed, setFailed] = useState(false);
+  const [frameAttributes, setFrameAttributes] = useState<SandboxFrameAttributes>();
+  const [installationFailed, setInstallationFailed] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    let close: (() => Promise<void>) | undefined;
-    setFrame(undefined);
-    setFailed(false);
-    void runtime.snapshotApp(rootEntryId, controller.signal).then(async (snapshot) => {
+    setFrameAttributes(undefined);
+    setInstallationFailed(false);
+    const mountPromise = contentRuntime.createAppSnapshot(rootEntryId, controller.signal).then(async (snapshot) => {
       if (snapshot.state !== 'ready') throw new Error('Sandbox app snapshot is unavailable');
-      const mount = await host.install({
+      return sandboxHost.install({
         entry: snapshot.entry,
         files: snapshot.files.map((file) => ({
           path: file.path,
@@ -177,26 +186,26 @@ function SandboxApp({ host, rootEntryId, runtime }: {
           }),
         })),
       }, controller.signal);
-      close = mount.close;
-      if (!controller.signal.aborted) setFrame(mount.frameAttributes);
-    }).catch(() => {
-      if (!controller.signal.aborted) setFailed(true);
+    });
+    void mountPromise.then((installedMount) => {
+      if (!controller.signal.aborted) setFrameAttributes(installedMount.frameAttributes);
+    }, () => {
+      if (!controller.signal.aborted) setInstallationFailed(true);
     });
     return () => {
       controller.abort();
-      void close?.();
+      void mountPromise.then((installedMount) => installedMount.close(), () => undefined);
     };
-  }, [host, rootEntryId, runtime]);
-  return frame === undefined
-    ? failed ? <p role="alert">App unavailable.</p> : null
-    : <iframe className="sandbox-app" title="App" {...frame} />;
+  }, [contentRuntime, rootEntryId, sandboxHost]);
+  return frameAttributes === undefined
+    ? installationFailed ? <p role="alert">App unavailable.</p> : null
+    : <iframe className="sandbox-app" title={`${title} app`} {...frameAttributes} />;
 }
 
-
-const viewerContent = (doc: object | undefined, resourceRef: string) => {
-  if (doc === undefined) return resourceRef;
-  const bytes = 'bytes' in doc ? doc.bytes : undefined;
+const formatViewerContent = (document: object | undefined, resourceRef: string) => {
+  if (document === undefined) return resourceRef;
+  const bytes = 'bytes' in document ? document.bytes : undefined;
   return bytes instanceof Uint8Array
     ? new TextDecoder().decode(bytes)
-    : JSON.stringify(doc, null, 2);
+    : JSON.stringify(document, null, 2);
 };

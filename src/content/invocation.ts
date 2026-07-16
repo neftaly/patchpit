@@ -1,14 +1,14 @@
 import type { FsEntryRow } from '@patchpit/fs';
 import {
-  resourceAt,
+  findResource,
   resourceIdentity,
   type ResourceProjection,
-} from './resources.ts';
+} from './resource-projection.ts';
 
 export const resourceBrowserUrl = 'files.html';
 
-const appContentPrefix = 'app.html#';
-const viewerContentPrefix = 'viewer.html#';
+const APP_CONTENT_PREFIX = 'app.html#';
+const VIEWER_CONTENT_PREFIX = 'viewer.html#';
 
 type ContentInvocation = {
   readonly kind: 'resources';
@@ -22,10 +22,10 @@ type ContentInvocation = {
 };
 
 export const appContentUrl = (rootEntryId: string) =>
-  `${appContentPrefix}${JSON.stringify({ rootEntryId })}`;
+  `${APP_CONTENT_PREFIX}${JSON.stringify({ rootEntryId })}`;
 
 export const viewerContentUrl = (sourceId: string, entryId: string) =>
-  `${viewerContentPrefix}${JSON.stringify({ sourceId, entryId })}`;
+  `${VIEWER_CONTENT_PREFIX}${JSON.stringify({ sourceId, entryId })}`;
 
 export const contentUrlForResource = (
   resource: FsEntryRow,
@@ -49,24 +49,24 @@ export const contentLabel = (
   }
   const resource = invocation?.kind !== 'viewer'
     ? undefined
-    : resourceAt(resources, invocation.sourceId, invocation.entryId);
+    : findResource(resources, invocation.sourceId, invocation.entryId);
   if (resource === undefined) return 'Resource unavailable';
   const parent = resource.parentId === null
     ? undefined
-    : resourceAt(resources, resource.sourceId, resource.parentId);
+    : findResource(resources, resource.sourceId, resource.parentId);
   return `${parent?.name ?? 'patchpit'} / ${resource.name}`;
 };
 
 export const parseContentInvocation = (contentUrl: string): ContentInvocation | undefined => {
   if (contentUrl === resourceBrowserUrl) return { kind: 'resources' };
-  if (contentUrl.startsWith(appContentPrefix)) {
-    const candidate = parseHashObject(contentUrl, appContentPrefix);
+  if (contentUrl.startsWith(APP_CONTENT_PREFIX)) {
+    const candidate = parseHashObject(contentUrl, APP_CONTENT_PREFIX);
     return typeof candidate?.rootEntryId === 'string' && candidate.rootEntryId !== ''
       ? { kind: 'app', rootEntryId: candidate.rootEntryId }
       : undefined;
   }
-  if (contentUrl.startsWith(viewerContentPrefix)) {
-    const candidate = parseHashObject(contentUrl, viewerContentPrefix);
+  if (contentUrl.startsWith(VIEWER_CONTENT_PREFIX)) {
+    const candidate = parseHashObject(contentUrl, VIEWER_CONTENT_PREFIX);
     return typeof candidate?.sourceId === 'string' && candidate.sourceId !== ''
       && typeof candidate.entryId === 'string' && candidate.entryId !== ''
       ? { kind: 'viewer', sourceId: candidate.sourceId, entryId: candidate.entryId }

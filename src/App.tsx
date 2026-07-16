@@ -2,7 +2,7 @@ import { useMemo, useRef, useSyncExternalStore } from 'react';
 import type { FsEntryRow } from '@patchpit/fs';
 import {
   ContentView,
-  resourceDragType,
+  RESOURCE_DRAG_TYPE,
 } from './content/ContentView.tsx';
 import {
   contentLabel,
@@ -11,21 +11,20 @@ import {
 } from './content/invocation.ts';
 import {
   composeWorkspacePresentation,
-  reconcileWorkspacePresence,
-} from './workspace/presence.ts';
+  reconcileWorkspaceViewState,
+} from './workspace/view-state.ts';
 import {
   planOpenWorkspaceContext,
   planWorkspaceAction,
   type WorkspacePlan,
-} from './workspace/controller.ts';
+} from './workspace/action-planner.ts';
 import { allocateWorkspaceIds } from './workspace/ids.ts';
-import type { WorkspaceState } from './workspace/model.ts';
+import type { WorkspaceState } from './workspace/durable-state.ts';
 import { WorkspaceView } from './workspace/WorkspaceView.tsx';
 import {
-  projectResources,
-  resourceByIdentity,
-  resourcesFromSnapshot,
-} from './content/resources.ts';
+  projectResourceTree,
+  resourceRowsFromQuerySnapshot,
+} from './content/resource-projection.ts';
 import type { PatchpitRuntime } from './root/runtime.ts';
 import type { BrowserSandboxHost } from './browser/sandbox-host.ts';
 import './app.css';
@@ -34,62 +33,62 @@ export function App({ runtime, sandboxHost }: {
   readonly runtime: PatchpitRuntime;
   readonly sandboxHost: BrowserSandboxHost;
 }) {
-  const resourceRuntime = runtime.resources;
-  const workspaceRuntime = runtime.workspace;
-  const workspacePresence = runtime.workspacePresence;
-  const pending = useRef(Promise.resolve());
+  const resourceQuery = runtime.resourceQuery;
+  const workspaceRuntime = runtime.workspaceRuntime;
+  const workspaceViewStateRuntime = runtime.workspaceViewStateRuntime;
+  const pendingWorkspacePlans = useRef(Promise.resolve());
   const resourceSnapshot = useSyncExternalStore(
-    (listener) => resourceRuntime.observer.subscribe(listener),
-    () => resourceRuntime.observer.getSnapshot(),
-    () => resourceRuntime.observer.getSnapshot(),
+    (listener) => resourceQuery.subscribe(listener),
+    () => resourceQuery.getSnapshot(),
+    () => resourceQuery.getSnapshot(),
   );
   const resources = useMemo(
-    () => projectResources(resourcesFromSnapshot(resourceSnapshot)),
+    () => projectResourceTree(resourceRowsFromQuerySnapshot(resourceSnapshot)),
     [resourceSnapshot],
   );
-  const projection = useSyncExternalStore(
+  const workspaceProjection = useSyncExternalStore(
     workspaceRuntime.subscribe,
     workspaceRuntime.getSnapshot,
     workspaceRuntime.getSnapshot,
   );
-  const presence = useSyncExternalStore(
-    workspacePresence.subscribe,
-    workspacePresence.getSnapshot,
-    workspacePresence.getSnapshot,
+  const viewState = useSyncExternalStore(
+    workspaceViewStateRuntime.subscribe,
+    workspaceViewStateRuntime.getSnapshot,
+    workspaceViewStateRuntime.getSnapshot,
   );
-  if (projection.state !== 'ready') {
+  if (workspaceProjection.state !== 'ready') {
     return <main className="workspace"><p role="alert">Workspace unavailable.</p></main>;
   }
-  const workspace = projection.workspace;
-  const presentation = composeWorkspacePresentation(workspace, presence);
-  const run = (plan: (
+  const workspace = workspaceProjection.workspace;
+  const workspacePresentation = composeWorkspacePresentation(workspace, viewState);
+  const enqueueWorkspacePlan = (plan: (
     workspace: WorkspaceState,
-    presence: ReturnType<typeof workspacePresence.getSnapshot>,
+    viewState: ReturnType<typeof workspaceViewStateRuntime.getSnapshot>,
   ) => WorkspacePlan) => {
-    const queued = pending.current.then(async () => {
-      const current = workspaceRuntime.getSnapshot();
-      if (current.state !== 'ready') return;
-      const planned = plan(current.workspace, workspacePresence.getSnapshot());
-      for (const operation of planned.operations) await workspaceRuntime.act(operation);
-      const latest = workspaceRuntime.getSnapshot();
-      if (latest.state !== 'ready') return;
-      workspacePresence.update(latest.workspace, () => reconcileWorkspacePresence(
-        latest.workspace,
-        planned.presence,
+    const queuedPlan = pendingWorkspacePlans.current.then(async () => {
+      const currentProjection = workspaceRuntime.getSnapshot();
+      if (currentProjection.state !== 'ready') return;
+      const workspacePlan = plan(currentProjection.workspace, workspaceViewStateRuntime.getSnapshot());
+      for (const operation of workspacePlan.operations) await workspaceRuntime.commitOperation(operation);
+      const committedProjection = workspaceRuntime.getSnapshot();
+      if (committedProjection.state !== 'ready') return;
+      workspaceViewStateRuntime.update(committedProjection.workspace, () => reconcileWorkspaceViewState(
+        committedProjection.workspace,
+        workspacePlan.viewState,
       ));
     });
-    pending.current = queued.then(() => undefined, () => undefined);
+    pendingWorkspacePlans.current = queuedPlan.then(() => undefined, () => undefined);
   };
   const openResource = (resource: FsEntryRow, pinned: boolean) => {
     const url = contentUrlForResource(resource, resources);
     if (url === undefined) return;
     const allocated = allocateWorkspaceIds();
-    run((currentWorkspace, currentPresence) => planOpenWorkspaceContext({
+    enqueueWorkspacePlan((currentWorkspace, currentViewState) => planOpenWorkspaceContext({
       contextId: allocated.contextId,
       isEditorContext,
       nodes: allocated.nodes,
       pinned,
-      presence: currentPresence,
+      viewState: currentViewState,
       url,
       workspace: currentWorkspace,
     }));
@@ -97,34 +96,34 @@ export function App({ runtime, sandboxHost }: {
 
   return (
     <WorkspaceView
-      canDrop={(action) => {
-        const planned = planWorkspaceAction({ action, isEditorContext, presence, workspace });
+      canApplyDrop={(action) => {
+        const planned = planWorkspaceAction({ action, isEditorContext, viewState, workspace });
         return planned.operations.length > 0;
       }}
-      act={(action) => {
-        run((currentWorkspace, currentPresence) => planWorkspaceAction({
+      dispatchAction={(action) => {
+        enqueueWorkspacePlan((currentWorkspace, currentViewState) => planWorkspaceAction({
           action,
           isEditorContext,
-          presence: currentPresence,
+          viewState: currentViewState,
           workspace: currentWorkspace,
         }));
       }}
-      contextLabel={(contextId) => contentLabel(resources, presentation.contexts[contextId]?.url)}
-      renderContext={(contextId) => (
-        <ContentView
-          contentUrl={presentation.contexts[contextId]?.url}
-          host={sandboxHost}
-          onOpenResource={openResource}
-          resources={resources}
-          runtime={runtime}
-        />
-      )}
-      resourceDragType={resourceDragType}
-      resourceUrl={(resourceId) => {
-        const resource = resourceByIdentity(resources, resourceId);
+      getContextLabel={(contextId) => contentLabel(resources, workspacePresentation.contexts[contextId]?.url)}
+      getResourceUrl={(resourceId) => {
+        const resource = resources.byIdentity.get(resourceId);
         return resource === undefined ? undefined : contentUrlForResource(resource, resources);
       }}
-      workspace={presentation}
+      renderContextContent={(contextId) => (
+        <ContentView
+          contentUrl={workspacePresentation.contexts[contextId]?.url}
+          onOpenResource={openResource}
+          resources={resources}
+          sandboxHost={sandboxHost}
+          contentRuntime={runtime}
+        />
+      )}
+      resourceDragType={RESOURCE_DRAG_TYPE}
+      workspacePresentation={workspacePresentation}
     />
   );
 }

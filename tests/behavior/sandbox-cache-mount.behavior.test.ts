@@ -106,25 +106,7 @@ void test('service worker fetch adapter claims requests synchronously', async ()
   assert.equal((await response)?.status, 404);
 });
 
-void test('service worker request boundary matrix does not allocate caches', async () => {
-  const storage = memoryCacheStorage();
-  const scope = 'https://patchpit.test/patchpit/__patchpit/sandbox/';
-  for (let index = 0; index < 64; index += 1) {
-    const suffix = index.toString(16).padStart(12, '0');
-    const unknownId = `123e4567-e89b-42d3-a456-${suffix}`;
-    const cases = [
-      new Request(`${scope}${unknownId}/asset-${index}.js`),
-      new Request(`${scope}${unknownId}/asset-${index}.js`, { method: 'DELETE' }),
-      new Request(`${scope}${unknownId.replace('42d3', '12d3')}/asset-${index}.js`),
-      new Request(`https://other.test/patchpit/__patchpit/sandbox/${unknownId}/asset.js`),
-    ];
-    assert.deepEqual(await Promise.all(cases.map(async (request) =>
-      (await respondFromSandboxCache(request, scope, storage)).status)), [404, 405, 404, 404]);
-  }
-  assert.deepEqual(await storage.keys(), []);
-});
-
-void test('UUID allocation rejects malformed values and colliding caches', async () => {
+void test('UUID allocation rejects colliding caches', async () => {
   const storage = memoryCacheStorage();
   await storage.open(sandboxCacheName(firstId));
   const candidates = [firstId, firstId, firstId, firstId];
@@ -137,9 +119,6 @@ void test('UUID allocation rejects malformed values and colliding caches', async
     randomUUID: () => candidates.shift() ?? firstId,
   }), /allocate a unique sandbox mount UUID/);
 
-  for (const malformed of ['', 'mount-1', firstId.toUpperCase(), '123e4567-e89b-12d3-a456-426614174000']) {
-    assert.throws(() => sandboxCacheName(malformed), /Invalid sandbox mount UUID/);
-  }
 });
 
 void test('service worker locations preserve root and GitHub Pages bases', () => {

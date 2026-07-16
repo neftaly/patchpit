@@ -9,6 +9,8 @@ import {
 import type { SandboxDocumentPath } from './path.ts';
 import { sandboxCacheName, type SandboxCacheStorage } from './cache-service-worker.ts';
 
+const MAX_MOUNT_ID_ATTEMPTS = 4;
+
 export type SandboxCacheSnapshot = {
   readonly entry: SandboxDocumentPath;
   readonly files: readonly SandboxFile[];
@@ -38,12 +40,13 @@ export const installSandboxCacheMount = async (
   const base = directoryUrl(baseUrl);
   const route = [...base.pathname.split('/').filter(Boolean).map(decodeURIComponent), '__patchpit', 'sandbox'];
   const existingCaches = new Set(await cacheStorage.keys());
-  let mountId: string | undefined;
-  for (let attempts = 0; attempts < 4 && mountId === undefined; attempts += 1) {
+  const allocateMountId = (attempts: number): string | undefined => {
+    if (attempts === 0) return undefined;
     const candidate = randomUUID();
     const name = sandboxCacheName(candidate);
-    if (!existingCaches.has(name)) mountId = candidate;
-  }
+    return existingCaches.has(name) ? allocateMountId(attempts - 1) : candidate;
+  };
+  const mountId = allocateMountId(MAX_MOUNT_ID_ATTEMPTS);
   if (mountId === undefined) throw new Error('Could not allocate a unique sandbox mount UUID');
 
   const files = indexSandboxFiles(snapshot.entry, snapshot.files);

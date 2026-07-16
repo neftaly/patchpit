@@ -60,7 +60,7 @@ const loadRoot = async () => {
     if (invocation.value.src === undefined) {
       history.replaceState(null, '', canonicalRootInvocationHash(opened.invocation));
     }
-    root.render(<App runtime={opened.runtime} sandboxHost={nextSandboxHost} />);
+    root.render(<App key={currentGeneration} runtime={opened.runtime} sandboxHost={nextSandboxHost} />);
   } catch {
     void nextSandboxHost?.close();
     if (generation === currentGeneration) {

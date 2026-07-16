@@ -37,7 +37,6 @@ export const loadBrowserDemoSeed = async (
       entryId: file.name,
       name: file.name,
       order: file.order,
-      resourceRef: `${manifest.rootEntryId}:${file.name}`,
     };
   }));
   return {
@@ -50,12 +49,10 @@ export const loadBrowserDemoSeed = async (
     }, {
       entryId: 'external-resources',
       files: [{
-        bytes: new Uint8Array(),
-        contentType: 'image/svg+xml',
         entryId: 'unresolved.svg',
         name: 'unresolved.svg',
         order: 0,
-        resourceRef: 'https://example.invalid/unresolved.svg',
+        resourceUrl: 'https://example.invalid/unresolved.svg',
       }],
       name: 'external',
       order: 2,

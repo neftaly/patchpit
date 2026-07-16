@@ -4,14 +4,24 @@ import {
   type Issue,
   type JsonValue,
 } from '@tarstate/core';
-import { createIncrementalDatabaseQueryMaintenance } from '@tarstate/core/database/incremental';
-import { AttachmentCatalog, DatabaseView, DatasetMembership } from '@tarstate/core/database';
+import type { AttachmentProjection } from '@tarstate/core/database';
+import {
+  openDatabaseQuery,
+  type DatabaseQuerySource,
+  type MountableDatabaseSource,
+} from '@tarstate/core/database/session';
 import { prepareManualReadOnlyAttachment } from '@tarstate/core/attachment/adapter';
 import type { RelationInput } from '@tarstate/core/query';
 import { prepareTypedQuery, typedFrom } from '@tarstate/core/query/authoring';
 import { relationLiteral, schemaLiteral, sealSchema } from '@tarstate/core/schema';
 import type { SourceSnapshot } from '@tarstate/core/source';
-import { openFsSubtree, type FsAttachment, type FsEntryRow } from '@patchpit/fs';
+import { openFsSubtreeQuery, type FsDatabaseSource } from '@patchpit/fs';
+import {
+  APP_ENTRY_PATH,
+  hasAppEntry,
+  projectAppFilePaths,
+  selectAppFiles,
+} from './app-files.ts';
 
 export type AppFileContent = {
   readonly bytes?: unknown;
@@ -70,74 +80,53 @@ const contentsPlan = await prepareTypedQuery(typedFrom(contentsRelation, 'conten
   authorityFingerprint: 'patchpit:authority:app-contents:1',
   datasetId: 'patchpit:app:contents',
 });
-const maxAppFiles = 4_096;
-const maxAppBytes = 256 * 1024 * 1024;
-const appEntry = ['index.html'] as const;
+const MAX_APP_FILES = 4_096;
+const MAX_APP_BYTES = 256 * 1024 * 1024;
+const MAX_SNAPSHOT_RETRIES = 2;
 
 export const snapshotFilesystemApp = async (options: {
-  readonly filesystem: FsAttachment;
+  readonly filesystem: FsDatabaseSource;
   readonly rootEntryId: string;
   readonly read: AppFileContentReader;
   readonly signal?: AbortSignal;
-}): Promise<AppSnapshotResult> => snapshotFilesystemAppAttempt(options, 2);
+}): Promise<AppSnapshotResult> => snapshotFilesystemAppAttempt(options, MAX_SNAPSHOT_RETRIES);
 
 const snapshotFilesystemAppAttempt = async (
   options: {
-    readonly filesystem: FsAttachment;
+    readonly filesystem: FsDatabaseSource;
     readonly rootEntryId: string;
     readonly read: AppFileContentReader;
     readonly signal?: AbortSignal;
   },
   retries: number,
 ): Promise<AppSnapshotResult> => {
-  const subtree = openFsSubtree(options.filesystem, options.rootEntryId);
+  const subtree = await openFsSubtreeQuery(options.filesystem, options.rootEntryId);
   try {
     options.signal?.throwIfAborted();
-    const subtreeSnapshot = subtree.observer.getSnapshot();
+    const subtreeSnapshot = subtree.getSnapshot();
     if (subtreeSnapshot.state === 'closed') throw new Error('Filesystem subtree observation closed');
     const subtreeResult = subtreeSnapshot.current;
-    const root = subtreeResult.rows.find(({ entryId }) => entryId === options.rootEntryId);
     if (!launchable(subtreeResult)) {
       return unavailable(subtreeResult);
     }
-    if (root?.kind !== 'folder') throw new Error('Filesystem app root is not an authorized folder');
-    const entries = subtreeResult.rows.filter(({ entryId }) => entryId !== root.entryId);
-    const files = entries.filter(({ kind }) => kind === 'file');
-    if (files.length > maxAppFiles) throw new Error('Filesystem app has too many files');
+    const { entries, files, resourceRefs, root } = selectAppFiles(subtreeResult.rows, options.rootEntryId);
     const subtreeBases = subtreeResult.basis.attachments;
     if (files.length === 0) return missingEntry(subtreeBases);
+    if (files.length > MAX_APP_FILES) throw new Error('Filesystem app has too many files');
 
-    const refs = [...new Set(files.map(({ resourceRef }) => resourceRef))];
     const reads = new Map<string, SourceSnapshot<AppFileContent> | undefined>();
-    for (const resourceRef of refs) {
+    for (const resourceRef of resourceRefs) {
       options.signal?.throwIfAborted();
       const snapshot = resourceRef.startsWith('https:')
         ? undefined
         : await options.read(resourceRef, options.signal).catch(() => undefined);
       reads.set(resourceRef, snapshot);
     }
-    const invalidContentIssues = [...reads.values()].flatMap((snapshot) =>
-      snapshot?.issues.filter(({ severity }) => severity === 'error') ?? []);
-    if (invalidContentIssues.length > 0) {
-      return Object.freeze({
-        state: 'invalid',
-        completeness: 'unknown',
-        issues: Object.freeze(invalidContentIssues),
-        sourceBases: Object.freeze([
-          ...subtreeBases,
-          ...[...reads.entries()].flatMap(([resourceRef, snapshot]) => snapshot === undefined ? [] : [{
-            attachmentId: contentAttachmentId(resourceRef),
-            sourceId: snapshot.sourceId,
-            basis: snapshot.basis,
-          }]),
-        ]),
-      });
-    }
     const totalBytes = files.reduce((total, file) => {
       const bytes = reads.get(file.resourceRef)?.storage?.bytes;
       return total + (bytes instanceof Uint8Array ? bytes.byteLength : 0);
     }, 0);
-    if (totalBytes > maxAppBytes) throw new Error('Filesystem app is too large');
+    if (totalBytes > MAX_APP_BYTES) throw new Error('Filesystem app is too large');
     const sourceRefs = new Map<string, string>();
     for (const [resourceRef, snapshot] of reads) {
       if (snapshot === undefined) continue;
@@ -147,11 +136,13 @@ const snapshotFilesystemAppAttempt = async (
       }
       sourceRefs.set(snapshot.sourceId, resourceRef);
     }
-    const contents = observeContents(refs, reads, `${root.sourceId}:${root.entryId}`);
-    const contentSnapshot = contents.observer.getSnapshot();
-    contents.close();
+    const contentSnapshot = await snapshotContents(
+      resourceRefs,
+      reads,
+      `${root.sourceId}:${root.entryId}`,
+    );
     if (contentSnapshot.state === 'closed') throw new Error('App content observation closed');
-    const latestSubtree = subtree.observer.getSnapshot();
+    const latestSubtree = subtree.getSnapshot();
     if (!sameOpenBasis(subtreeSnapshot, latestSubtree)) {
       if (retries === 0) throw new Error('Filesystem app changed while creating its snapshot');
       return snapshotFilesystemAppAttempt(options, retries - 1);
@@ -162,8 +153,8 @@ const snapshotFilesystemAppAttempt = async (
       return unavailable(contentResult, sourceBases);
     }
 
-    const paths = appFilePaths(root, entries);
-    if (!files.some((file) => samePath(paths.get(file.entryId), appEntry))) {
+    const paths = projectAppFilePaths(root, entries);
+    if (!hasAppEntry(files, paths)) {
       return missingEntry(sourceBases);
     }
     return ready(files.map((file) => {
@@ -187,96 +178,93 @@ const snapshotFilesystemAppAttempt = async (
 };
 
 const sameOpenBasis = (
-  left: ReturnType<ReturnType<typeof openFsSubtree>['observer']['getSnapshot']>,
-  right: ReturnType<ReturnType<typeof openFsSubtree>['observer']['getSnapshot']>,
+  left: ReturnType<Awaited<ReturnType<typeof openFsSubtreeQuery>>['getSnapshot']>,
+  right: ReturnType<Awaited<ReturnType<typeof openFsSubtreeQuery>>['getSnapshot']>,
 ) => left.state === 'open' && right.state === 'open'
   && canonicalizeJson(left.current.basis as unknown as JsonValue)
     === canonicalizeJson(right.current.basis as unknown as JsonValue);
 
-const observeContents = (
+const snapshotContents = async (
   refs: readonly string[],
   reads: ReadonlyMap<string, SourceSnapshot<AppFileContent> | undefined>,
   authorityScope: string,
 ) => {
-  const catalog = new AttachmentCatalog();
-  const attachmentIds = new Map(refs.map((ref) => [ref, contentAttachmentId(ref)]));
-  const sources = new Map<string, ReturnType<typeof staticSource>>();
-  const leases = refs.flatMap((resourceRef) => {
-    const snapshot = reads.get(resourceRef);
-    if (snapshot === undefined) return [];
-    const source = sources.get(snapshot.sourceId) ?? staticSource(snapshot);
-    sources.set(snapshot.sourceId, source);
-    return [catalog.attach({
-      attachmentId: attachmentIds.get(resourceRef)!,
-      incarnation: `patchpit:app-content:${resourceRef}:1`,
-      sourceId: source.sourceId,
-      source,
-      authorityScope,
-      discoveryEdges: [],
-      preparation: prepareManualReadOnlyAttachment<AppFileContent, readonly RelationInput[]>({
-        schemaViewIds: [contentSchema.id],
-        project: (current) => {
-          if (current.state !== 'ready' || current.storage === undefined) {
-            return { state: current.state === 'ready' ? 'failed' as const : current.state, issues: current.issues };
-          }
-          if (current.storage.kind !== 'patchpit.file-content@1'
-            || !(current.storage.bytes instanceof Uint8Array)
-            || current.sourceId !== resourceRef
-            || (current.storage.contentType !== undefined && typeof current.storage.contentType !== 'string')) {
-            throw new TypeError('App file content is invalid');
-          }
-          return {
-            state: 'ready',
-            value: [{
-              relation: contentsRelation,
-              rows: [{
-                resourceRef,
-                contentType: current.storage.contentType ?? null,
-                byteLength: current.storage.bytes.byteLength,
-              }],
-              occurrenceIds: [resourceRef],
-              completeness: 'exact',
-              sourceId: source.sourceId,
-              attachmentId: attachmentIds.get(resourceRef)!,
-              basis: current.basis,
-            }],
-            issues: current.issues,
-          };
-        },
-      }),
-    })];
-  });
-  const dataset = new DatasetMembership({
-    datasetId: contentsPlan.datasetId,
-    state: 'settled',
-    members: refs.map((resourceRef) => {
+  const observer = await openDatabaseQuery({
+    sources: refs.map((resourceRef): DatabaseQuerySource => {
       const snapshot = reads.get(resourceRef);
-      return {
-        attachmentId: attachmentIds.get(resourceRef)!,
-        sourceId: snapshot?.sourceId ?? resourceRef,
-        expectation: 'required' as const,
-        discoveryEdges: [],
-      };
+      return snapshot === undefined
+        ? { unresolved: { attachmentId: contentAttachmentId(resourceRef), sourceId: resourceRef } }
+        : { source: createContentDatabaseSource(resourceRef, snapshot, authorityScope) };
     }),
+    plan: contentsPlan,
+    queryAuthorityScope: authorityScope,
   });
-  const allowed = new Set(attachmentIds.values());
-  const database = new DatabaseView({
-    authorityScope,
-    authorityFingerprint: contentsPlan.authorityFingerprint,
-    registryFingerprint: contentsPlan.registryFingerprint,
-    attachments: catalog,
-    datasets: [dataset],
-    canRead: (_viewScope, attachmentScope, attachmentId) =>
-      attachmentScope === authorityScope && allowed.has(attachmentId),
-    createQueryMaintenance: createIncrementalDatabaseQueryMaintenance(),
-  });
-  const observer = database.observe({ plan: contentsPlan });
+  try {
+    return observer.getSnapshot();
+  } finally {
+    observer.close();
+  }
+};
+
+const createContentDatabaseSource = (
+  resourceRef: string,
+  snapshot: SourceSnapshot<AppFileContent>,
+  authorityScope: string,
+): MountableDatabaseSource => {
+  const attachmentId = contentAttachmentId(resourceRef);
+  const source = staticSource(snapshot);
   return {
-    observer,
-    close: () => {
-      observer.close();
-      database.close();
-      leases.forEach(({ close }) => close());
+    mount: (catalog, options) => {
+      const discoveryEdges = options?.discoveryEdges ?? [];
+      const lease = catalog.attach({
+        attachmentId,
+        incarnation: `${attachmentId}:1`,
+        sourceId: source.sourceId,
+        source,
+        authorityScope,
+        discoveryEdges,
+        preparation: prepareManualReadOnlyAttachment<AppFileContent, readonly RelationInput[]>({
+          schemaViewIds: [contentSchema.id],
+          project: (current): AttachmentProjection<readonly RelationInput[]> => {
+            if (current.state !== 'ready' || current.storage === undefined) {
+              return {
+                state: current.state === 'ready' ? 'failed' : current.state,
+                issues: current.issues,
+              };
+            }
+            if (current.storage.kind !== 'patchpit.file-content@1'
+              || !(current.storage.bytes instanceof Uint8Array)
+              || current.sourceId !== resourceRef
+              || (current.storage.contentType !== undefined
+                && typeof current.storage.contentType !== 'string')) {
+              throw new TypeError('App file content is invalid');
+            }
+            return {
+              state: 'ready',
+              value: [{
+                relation: contentsRelation,
+                rows: [{
+                  resourceRef,
+                  contentType: current.storage.contentType ?? null,
+                  byteLength: current.storage.bytes.byteLength,
+                }],
+                occurrenceIds: [resourceRef],
+                completeness: 'exact',
+                sourceId: source.sourceId,
+                attachmentId,
+                basis: current.basis,
+              }],
+              issues: current.issues,
+            };
+          },
+        }),
+      });
+      return {
+        attachmentId,
+        sourceId: source.sourceId,
+        discoveryEdges,
+        close: () => lease.close(),
+      };
     },
   };
 };
@@ -289,38 +277,15 @@ const staticSource = (snapshot: SourceSnapshot<AppFileContent>) => ({
 
 const contentAttachmentId = (resourceRef: string) => `patchpit:app-content:${resourceRef}`;
 
-const appFilePaths = (root: FsEntryRow, entries: readonly FsEntryRow[]) => {
-  const byId = new Map(entries.map((entry) => [entry.entryId, entry]));
-  const paths = new Map<string, readonly string[]>();
-  const resolving = new Set<string>();
-  const pathFor = (entry: FsEntryRow): readonly string[] => {
-    const known = paths.get(entry.entryId);
-    if (known !== undefined) return known;
-    if (resolving.has(entry.entryId)) throw new Error(`Filesystem parent cycle at: ${entry.entryId}`);
-    resolving.add(entry.entryId);
-    const parent = entry.parentId === null ? undefined : byId.get(entry.parentId);
-    if (entry.parentId !== root.entryId && parent === undefined) {
-      throw new Error(`Filesystem parent is outside the app subtree: ${entry.entryId}`);
-    }
-    const path = entry.parentId === root.entryId
-      ? [entry.name]
-      : [...pathFor(parent!), entry.name];
-    resolving.delete(entry.entryId);
-    paths.set(entry.entryId, Object.freeze(path));
-    return path;
-  };
-  for (const entry of entries) pathFor(entry);
-  const keys = entries.filter(({ kind }) => kind === 'file').map(({ entryId }) => JSON.stringify(pathFor(byId.get(entryId)!)));
-  if (new Set(keys).size !== keys.length) throw new Error('Filesystem app paths are not unique');
-  return paths;
-};
-
 const unavailable = (
   result: { readonly readiness: 'ready' | 'incomplete' | 'invalid'; readonly completeness: 'exact' | 'lower-bound' | 'unknown'; readonly freshness: 'current' | 'stale' | 'mixed' | 'none'; readonly issues: readonly Issue[]; readonly basis: { readonly attachments: ImmutableAppSnapshot['sourceBases'] } },
   sourceBases = result.basis.attachments,
 ): AppSnapshotResult => {
+  const state = result.readiness === 'ready'
+    ? result.issues.some(({ severity }) => severity === 'error') ? 'invalid' : 'incomplete'
+    : result.readiness;
   return Object.freeze({
-    state: result.readiness === 'ready' ? 'incomplete' : result.readiness,
+    state,
     completeness: result.completeness,
     issues: result.issues,
     sourceBases,
@@ -331,7 +296,11 @@ const launchable = (result: {
   readonly readiness: 'ready' | 'incomplete' | 'invalid';
   readonly completeness: 'exact' | 'lower-bound' | 'unknown';
   readonly freshness: 'current' | 'stale' | 'mixed' | 'none';
-}) => result.readiness === 'ready' && result.completeness === 'exact' && result.freshness === 'current';
+  readonly issues: readonly Issue[];
+}) => result.readiness === 'ready'
+  && result.completeness === 'exact'
+  && result.freshness === 'current'
+  && !result.issues.some(({ severity }) => severity === 'error');
 
 const ready = (
   files: ImmutableAppSnapshot['files'],
@@ -339,7 +308,7 @@ const ready = (
 ): ImmutableAppSnapshot => Object.freeze({
   state: 'ready',
   completeness: 'exact',
-  entry: appEntry,
+  entry: APP_ENTRY_PATH,
   files: Object.freeze(files.map((file) => Object.freeze(file))),
   sourceBases: Object.freeze(sourceBases),
 });
@@ -357,7 +326,3 @@ const missingEntry = (
   })],
   sourceBases: Object.freeze(sourceBases),
 });
-
-const samePath = (left: readonly string[] | undefined, right: readonly string[]) =>
-  left !== undefined && left.length === right.length
-  && left.every((segment, index) => segment === right[index]);

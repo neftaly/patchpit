@@ -6,20 +6,20 @@ import {
   type WorkspaceSplitEdge,
   type WorkspaceSplitIds,
   type WorkspaceState,
-} from './model.ts';
+} from './durable-state.ts';
 
 type WorkspacePreview = WorkspaceContext & {
   readonly contextId: string;
 };
 
-export type WorkspacePanePresence = {
+export type WorkspacePaneViewState = {
   readonly activeContextId: string | null;
   readonly preview: WorkspacePreview | null;
 };
 
-export type WorkspacePresence = {
+export type WorkspaceViewState = {
   readonly activePaneId: WorkspacePaneId | null;
-  readonly panes: Readonly<Record<WorkspacePaneId, WorkspacePanePresence>>;
+  readonly panes: Readonly<Record<WorkspacePaneId, WorkspacePaneViewState>>;
 };
 
 export type WorkspacePresentationPane = {
@@ -64,10 +64,10 @@ export type WorkspaceAction = {
   readonly ratio: number;
 };
 
-export const createWorkspacePresence = (
+export const createWorkspaceViewState = (
   workspace: WorkspaceState,
   activePaneId: WorkspacePaneId | null = null,
-): WorkspacePresence => {
+): WorkspaceViewState => {
   const paneIds = paneIdsInLayoutOrder(workspace);
   return {
     activePaneId: activePaneId !== null && paneIds.includes(activePaneId)
@@ -83,22 +83,22 @@ export const createWorkspacePresence = (
 
 export const composeWorkspacePresentation = (
   workspace: WorkspaceState,
-  inputPresence: WorkspacePresence,
+  inputViewState: WorkspaceViewState,
 ): WorkspacePresentation => {
-  const presence = reconcileWorkspacePresence(workspace, inputPresence);
+  const viewState = reconcileWorkspaceViewState(workspace, inputViewState);
   const contexts: Record<string, WorkspaceContext> = { ...workspace.contexts };
   const nodes = Object.fromEntries(Object.entries(workspace.nodes).map(([nodeId, node]) => {
     if (node.kind === 'split') return [nodeId, node];
-    const panePresence = presence.panes[nodeId]!;
-    const preview = panePresence.preview;
+    const paneViewState = viewState.panes[nodeId]!;
+    const preview = paneViewState.preview;
     const previewContext = preview !== null && contexts[preview.contextId] === undefined
       ? preview.contextId
       : null;
     if (previewContext !== null && preview !== null) contexts[previewContext] = { url: preview.url };
     const paneContexts = previewContext === null ? node.contexts : [...node.contexts, previewContext];
-    const activeContext = panePresence.activeContextId !== null
-      && paneContexts.includes(panePresence.activeContextId)
-      ? panePresence.activeContextId
+    const activeContext = paneViewState.activeContextId !== null
+      && paneContexts.includes(paneViewState.activeContextId)
+      ? paneViewState.activeContextId
       : previewContext ?? paneContexts[0] ?? null;
     return [nodeId, {
       kind: 'pane' as const,
@@ -108,22 +108,21 @@ export const composeWorkspacePresentation = (
     }];
   }));
   return {
-    activePaneId: presence.activePaneId,
+    activePaneId: viewState.activePaneId,
     contexts,
     nodes,
     rootNodeId: workspace.rootNodeId,
   };
 };
 
-export const reconcileWorkspacePresence = (
+export const reconcileWorkspaceViewState = (
   workspace: WorkspaceState,
-  presence: WorkspacePresence,
-): WorkspacePresence => {
+  viewState: WorkspaceViewState,
+): WorkspaceViewState => {
   const paneIds = paneIdsInLayoutOrder(workspace);
-  let changed = presence.activePaneId !== null && !paneIds.includes(presence.activePaneId);
-  const panes = Object.fromEntries(paneIds.map((paneId) => {
+  const reconciledPanes = paneIds.map((paneId) => {
     const pane = workspace.nodes[paneId];
-    const current = presence.panes[paneId];
+    const current = viewState.panes[paneId];
     const durableContexts = pane?.kind === 'pane' ? pane.contexts : [];
     const available = current?.preview === null || current?.preview === undefined
       ? durableContexts
@@ -134,64 +133,66 @@ export const reconcileWorkspacePresence = (
       ? current.activeContextId
       : current?.preview?.contextId ?? durableContexts[0] ?? null;
     const next = { activeContextId, preview: current?.preview ?? null };
-    if (current === undefined
-      || current.activeContextId !== next.activeContextId
-      || current.preview !== next.preview) changed = true;
-    return [paneId, next];
-  }));
-  if (Object.keys(presence.panes).length !== paneIds.length) changed = true;
-  const activePaneId = presence.activePaneId !== null && paneIds.includes(presence.activePaneId)
-    ? presence.activePaneId
+    return { current, next, paneId };
+  });
+  const panes = Object.fromEntries(reconciledPanes.map(({ next, paneId }) => [paneId, next]));
+  const activePaneId = viewState.activePaneId !== null && paneIds.includes(viewState.activePaneId)
+    ? viewState.activePaneId
     : paneIds[0] ?? null;
-  return changed ? { activePaneId, panes } : presence;
+  const changed = activePaneId !== viewState.activePaneId
+    || Object.keys(viewState.panes).length !== paneIds.length
+    || reconciledPanes.some(({ current, next }) => current === undefined
+      || current.activeContextId !== next.activeContextId
+      || current.preview !== next.preview);
+  return changed ? { activePaneId, panes } : viewState;
 };
 
 export const selectWorkspaceContext = (
   workspace: WorkspaceState,
-  presence: WorkspacePresence,
+  viewState: WorkspaceViewState,
   paneId: WorkspacePaneId,
   contextId: string,
   target: boolean,
-): WorkspacePresence => updatePanePresence(workspace, presence, paneId, (pane) => ({
+): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, (pane) => ({
   activeContextId: contextId,
   preview: pane.preview,
 }), target);
 
 export const previewWorkspaceContext = (
   workspace: WorkspaceState,
-  presence: WorkspacePresence,
+  viewState: WorkspaceViewState,
   paneId: WorkspacePaneId,
   preview: WorkspacePreview,
-): WorkspacePresence => updatePanePresence(workspace, presence, paneId, () => ({
+): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, () => ({
   activeContextId: preview.contextId,
   preview,
 }), true);
 
 export const clearWorkspacePreview = (
   workspace: WorkspaceState,
-  presence: WorkspacePresence,
+  viewState: WorkspaceViewState,
   paneId: WorkspacePaneId,
-): WorkspacePresence => updatePanePresence(workspace, presence, paneId, (pane) => ({
+): WorkspaceViewState => updatePaneViewState(workspace, viewState, paneId, (pane) => ({
   activeContextId: pane.preview?.contextId === pane.activeContextId ? null : pane.activeContextId,
   preview: null,
 }), false);
 
-const updatePanePresence = (
+const updatePaneViewState = (
   workspace: WorkspaceState,
-  inputPresence: WorkspacePresence,
+  inputViewState: WorkspaceViewState,
   paneId: WorkspacePaneId,
-  update: (pane: WorkspacePanePresence) => WorkspacePanePresence,
+  update: (pane: WorkspacePaneViewState) => WorkspacePaneViewState,
   target: boolean,
 ) => {
-  const presence = reconcileWorkspacePresence(workspace, inputPresence);
-  const pane = presence.panes[paneId];
-  if (pane === undefined) return presence;
+  const viewState = reconcileWorkspaceViewState(workspace, inputViewState);
+  const pane = viewState.panes[paneId];
+  if (pane === undefined) return viewState;
   const nextPane = update(pane);
-  const next = nextPane === pane && (!target || presence.activePaneId === paneId)
-    ? presence
+  const next = nextPane === pane && (!target || viewState.activePaneId === paneId)
+    ? viewState
     : {
-        activePaneId: target ? paneId : presence.activePaneId,
-        panes: { ...presence.panes, [paneId]: nextPane },
+        activePaneId: target ? paneId : viewState.activePaneId,
+        panes: { ...viewState.panes, [paneId]: nextPane },
       };
-  return reconcileWorkspacePresence(workspace, next);
+  return reconcileWorkspaceViewState(workspace, next);
 };

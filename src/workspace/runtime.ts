@@ -1,8 +1,8 @@
 import { getConflicts } from '@automerge/automerge';
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
-  openAutomergeAttachment,
-  type AutomergeAttachmentSnapshot,
+  openAutomergeDatabase,
+  type AutomergeDatabaseSnapshot,
 } from '@tarstate/automerge';
 import { adoptConflictFreeAutomergeJsonValue } from '@tarstate/automerge/values';
 import {
@@ -15,10 +15,11 @@ import {
   applyWorkspaceOperation,
   type WorkspaceOperation,
   type WorkspaceState,
-} from './model.ts';
+} from './durable-state.ts';
 import {
   workspaceFromLogicalRows,
-  workspaceLogicalRows,
+  workspaceFromTransactionSnapshot,
+  workspaceTransactionWithState,
   type WorkspaceDocument,
 } from './document.ts';
 import { workspaceDocumentMetadata } from './schema.ts';
@@ -41,11 +42,11 @@ type WorkspaceOperationResult = {
   readonly issues: readonly Issue[];
 };
 
-export const openWorkspace = async (handle: DocHandle<WorkspaceDocument>) => {
+export const openWorkspaceRuntime = async (handle: DocHandle<WorkspaceDocument>) => {
   const document = handle.doc();
   if (document === undefined) throw new Error('Patchpit workspace source is unavailable');
   const metadata = parseWorkspaceMetadata(document);
-  const opened = await openAutomergeAttachment({
+  const opened = await openAutomergeDatabase({
     handle,
     declaration: metadata.declaration,
     embeddedArtifacts: metadata.schemas,
@@ -56,7 +57,7 @@ export const openWorkspace = async (handle: DocHandle<WorkspaceDocument>) => {
     throw new Error('Patchpit workspace attachment is unavailable', { cause: opened.issues });
   }
   const attachment = opened.value;
-  let pending = Promise.resolve();
+  let pendingTransactions = Promise.resolve();
   let cachedAttachmentSnapshot = attachment.getSnapshot();
   let cachedProjection = projectAttachmentSnapshot(cachedAttachmentSnapshot);
 
@@ -69,34 +70,34 @@ export const openWorkspace = async (handle: DocHandle<WorkspaceDocument>) => {
     return cachedProjection;
   };
 
-  const act = (operation: WorkspaceOperation) => {
-    const queued = pending.then(async (): Promise<WorkspaceOperationResult> => {
-      let changed = false;
+  const commitOperation = (operation: WorkspaceOperation) => {
+    const queuedTransaction = pendingTransactions.then(async (): Promise<WorkspaceOperationResult> => {
+      let transactionChanged = false;
       const receipt = await attachment.transact(
         operation as unknown as JsonValue,
-        ({ rows }) => {
-          const decoded = workspaceFromLogicalRows(rows);
+        (snapshot) => {
+          const decoded = workspaceFromTransactionSnapshot(snapshot);
           if (decoded.workspace === undefined) {
             throw new Error('Patchpit workspace logical state is unavailable', {
               cause: decoded.issues,
             });
           }
           const next = applyWorkspaceOperation(decoded.workspace, operation);
-          changed = next !== decoded.workspace;
-          return changed ? workspaceLogicalRows(next) : rows;
+          transactionChanged = next !== decoded.workspace;
+          return transactionChanged ? workspaceTransactionWithState(snapshot, next) : snapshot;
         },
       );
       return {
-        outcome: receipt.outcome === 'committed' && !changed ? 'unchanged' : receipt.outcome,
+        outcome: receipt.outcome === 'committed' && !transactionChanged ? 'unchanged' : receipt.outcome,
         issues: receipt.issues,
       };
     });
-    pending = queued.then(() => undefined, () => undefined);
-    return queued;
+    pendingTransactions = queuedTransaction.then(() => undefined, () => undefined);
+    return queuedTransaction;
   };
 
   return {
-    act,
+    commitOperation,
     close: () => attachment.close(),
     getSnapshot,
     subscribe: (listener: () => void) => attachment.subscribe(listener),
@@ -104,7 +105,7 @@ export const openWorkspace = async (handle: DocHandle<WorkspaceDocument>) => {
 };
 
 const projectAttachmentSnapshot = (
-  snapshot: AutomergeAttachmentSnapshot,
+  snapshot: AutomergeDatabaseSnapshot,
 ): WorkspaceProjection => {
   if (snapshot.state === 'closed') {
     return { state: 'invalid', issues: [workspaceIssue('closed', {})] };

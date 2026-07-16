@@ -1,30 +1,21 @@
 import type { JsonValue } from '@tarstate/core';
-import { createWorkspace, type WorkspaceNode, type WorkspaceState } from './model.ts';
+import type { DatabaseTransactionSnapshot } from '@tarstate/core/transactions';
+import { createWorkspace, type WorkspaceNode, type WorkspaceState } from './durable-state.ts';
 import {
   workspaceDocumentMetadata,
   workspaceRelations,
+  type WorkspacePaneRelationRow,
+  type WorkspacePlacementRelationRow,
+  type WorkspaceSplitRelationRow,
+  type WorkspaceStateRelationRow,
 } from './schema.ts';
-
-type WorkspaceStateRow = { readonly rootNodeId: string };
-type WorkspacePaneRow = Record<never, never>;
-type WorkspacePlacementRow = {
-  readonly url: string;
-  readonly paneId: string;
-  readonly position: number;
-};
-type WorkspaceSplitRow = {
-  readonly axis: 'horizontal' | 'vertical';
-  readonly first: string;
-  readonly ratio: number;
-  readonly second: string;
-};
 
 export type WorkspaceDocument = {
   readonly '@patchpit': typeof workspaceDocumentMetadata;
-  readonly state: Readonly<Record<string, WorkspaceStateRow>>;
-  readonly panes: Readonly<Record<string, WorkspacePaneRow>>;
-  readonly placements: Readonly<Record<string, WorkspacePlacementRow>>;
-  readonly splits: Readonly<Record<string, WorkspaceSplitRow>>;
+  readonly state: Readonly<Record<string, Omit<WorkspaceStateRelationRow, 'id'>>>;
+  readonly panes: Readonly<Record<string, Omit<WorkspacePaneRelationRow, 'id'>>>;
+  readonly placements: Readonly<Record<string, Omit<WorkspacePlacementRelationRow, 'contextId'>>>;
+  readonly splits: Readonly<Record<string, Omit<WorkspaceSplitRelationRow, 'id'>>>;
 };
 
 type WorkspaceLogicalRow = {
@@ -43,7 +34,7 @@ type WorkspaceRelationRows = {
   readonly rows: readonly Readonly<Record<string, JsonValue>>[];
 };
 
-const workspaceStateId = 'workspace';
+const WORKSPACE_STATE_ID = 'workspace';
 
 export const createWorkspaceDocument = (
   initialContext: string,
@@ -57,89 +48,130 @@ export const workspaceFromLogicalRows = (
   readonly issues: readonly WorkspaceDocumentIssue[];
 } => {
   const issues: WorkspaceDocumentIssue[] = [];
-  const stateRows = relationRows(rows, workspaceRelations.state.relationId);
-  if (stateRows.length !== 1 || stateRows[0]?.id !== workspaceStateId) {
+  const stateRows = relationRows<WorkspaceStateRelationRow>(rows, workspaceRelations.state.relationId);
+  if (stateRows.length !== 1 || stateRows[0]?.id !== WORKSPACE_STATE_ID) {
     return {
       issues: [{ kind: 'state-cardinality', details: { rows: stateRows.length } }],
     };
   }
 
-  const contexts: Record<string, { url: string }> = {};
-  const paneContexts = new Map<string, { contextId: string; position: number }[]>();
-  for (const row of relationRows(rows, workspaceRelations.placements.relationId)) {
-    const contextId = row.contextId as string;
-    const paneId = row.paneId as string;
-    const current = paneContexts.get(paneId) ?? [];
-    current.push({ contextId, position: row.position as number });
-    paneContexts.set(paneId, current);
-    contexts[contextId] = { url: row.url as string };
-  }
-  const nodes: Record<string, WorkspaceNode> = {};
-  for (const row of relationRows(rows, workspaceRelations.panes.relationId)) {
-    const id = row.id as string;
-    nodes[id] = {
-      kind: 'pane',
-      contexts: [...paneContexts.get(id) ?? []]
-        .sort((left, right) => left.position - right.position || left.contextId.localeCompare(right.contextId))
-        .map(({ contextId }) => contextId),
-    };
-  }
-  for (const row of relationRows(rows, workspaceRelations.splits.relationId)) {
-    const id = row.id as string;
-    if (nodes[id] !== undefined) {
-      issues.push({ kind: 'node-id-collision', details: { nodeId: id } });
-      continue;
-    }
-    nodes[id] = {
-      kind: 'split',
-      axis: row.axis as 'horizontal' | 'vertical',
-      first: row.first as string,
-      ratio: row.ratio as number,
-      second: row.second as string,
-    };
-  }
+  const placements = relationRows<WorkspacePlacementRelationRow>(
+    rows,
+    workspaceRelations.placements.relationId,
+  );
+  const contexts = Object.fromEntries(placements.map((row) => [
+    row.contextId,
+    { url: row.url },
+  ]));
+  const paneContexts = placements.reduce((grouped, row) => {
+    const { contextId, paneId } = row;
+    const current = grouped.get(paneId) ?? [];
+    current.push({ contextId, position: row.position });
+    grouped.set(paneId, current);
+    return grouped;
+  }, new Map<string, { contextId: string; position: number }[]>());
+  const nodes: Record<string, WorkspaceNode> = Object.fromEntries(
+    relationRows<WorkspacePaneRelationRow>(rows, workspaceRelations.panes.relationId).map((row) => {
+      const { id } = row;
+      return [id, {
+        kind: 'pane',
+        contexts: [...paneContexts.get(id) ?? []]
+          .sort((left, right) => left.position - right.position || left.contextId.localeCompare(right.contextId))
+          .map(({ contextId }) => contextId),
+      }];
+    }),
+  );
+  const splits = relationRows<WorkspaceSplitRelationRow>(rows, workspaceRelations.splits.relationId);
+  issues.push(...splits
+    .filter((row) => nodes[row.id] !== undefined)
+    .map((row) => ({ kind: 'node-id-collision' as const, details: { nodeId: row.id } })));
+  Object.assign(nodes, Object.fromEntries(splits.flatMap((row) => {
+    const { id } = row;
+    return nodes[id] === undefined
+      ? [[id, {
+          kind: 'split',
+          axis: row.axis,
+          first: row.first,
+          ratio: row.ratio,
+          second: row.second,
+        } satisfies WorkspaceNode]]
+      : [];
+  })));
   return {
     workspace: {
       contexts,
       nodes,
-      rootNodeId: stateRows[0].rootNodeId as string,
+      rootNodeId: stateRows[0].rootNodeId,
     },
     issues,
   };
 };
 
+export const workspaceFromTransactionSnapshot = (snapshot: DatabaseTransactionSnapshot) =>
+  workspaceFromLogicalRows([
+    ...snapshot.rows(workspaceRelations.state).map((fields) => ({
+      relationId: workspaceRelations.state.relationId,
+      fields,
+    })),
+    ...snapshot.rows(workspaceRelations.panes).map((fields) => ({
+      relationId: workspaceRelations.panes.relationId,
+      fields,
+    })),
+    ...snapshot.rows(workspaceRelations.placements).map((fields) => ({
+      relationId: workspaceRelations.placements.relationId,
+      fields,
+    })),
+    ...snapshot.rows(workspaceRelations.splits).map((fields) => ({
+      relationId: workspaceRelations.splits.relationId,
+      fields,
+    })),
+  ]);
+
+export const workspaceTransactionWithState = (
+  snapshot: DatabaseTransactionSnapshot,
+  workspace: WorkspaceState,
+) => {
+  const rows = workspaceRowsFromState(workspace);
+  return snapshot
+    .withRows(workspaceRelations.state, rows.state)
+    .withRows(workspaceRelations.panes, rows.panes)
+    .withRows(workspaceRelations.placements, rows.placements)
+    .withRows(workspaceRelations.splits, rows.splits);
+};
+
 const workspaceRelationRows = (
   workspace: WorkspaceState,
 ): readonly WorkspaceRelationRows[] => {
-  const panes: Readonly<Record<string, JsonValue>>[] = [];
-  const placements: Readonly<Record<string, JsonValue>>[] = [];
-  const splits: Readonly<Record<string, JsonValue>>[] = [];
-  for (const [id, node] of sortedEntries(workspace.nodes)) {
-    if (node.kind === 'pane') {
-      panes.push({ id });
-      node.contexts.forEach((contextId, position) => {
-        placements.push({ contextId, paneId: id, position, url: workspace.contexts[contextId]!.url });
-      });
-    } else {
-      splits.push({
-        id,
-        axis: node.axis,
-        first: node.first,
-        ratio: node.ratio,
-        second: node.second,
-      });
-    }
-  }
-  placements.sort((left, right) => compareStrings(
-    left.contextId as string,
-    right.contextId as string,
-  ));
+  const rows = workspaceRowsFromState(workspace);
   return [
-    relationRowsFor(workspaceRelations.state, [{ id: workspaceStateId, rootNodeId: workspace.rootNodeId }]),
-    relationRowsFor(workspaceRelations.panes, panes),
-    relationRowsFor(workspaceRelations.placements, placements),
-    relationRowsFor(workspaceRelations.splits, splits),
+    relationRowsFor(workspaceRelations.state, rows.state),
+    relationRowsFor(workspaceRelations.panes, rows.panes),
+    relationRowsFor(workspaceRelations.placements, rows.placements),
+    relationRowsFor(workspaceRelations.splits, rows.splits),
   ];
+};
+
+const workspaceRowsFromState = (workspace: WorkspaceState) => {
+  const nodes = sortedEntries(workspace.nodes);
+  const panes = nodes.flatMap(([id, node]) => node.kind === 'pane' ? [{ id }] : []);
+  const placements = nodes.flatMap(([id, node]) => node.kind === 'pane'
+    ? node.contexts.map((contextId, position) => ({
+        contextId,
+        paneId: id,
+        position,
+        url: workspace.contexts[contextId]!.url,
+      }))
+    : []);
+  const splits = nodes.flatMap(([id, node]) => node.kind === 'split'
+    ? [{ id, axis: node.axis, first: node.first, ratio: node.ratio, second: node.second }]
+    : []);
+  placements.sort((left, right) => compareStrings(left.contextId, right.contextId));
+  return {
+    state: [{ id: WORKSPACE_STATE_ID, rootNodeId: workspace.rootNodeId }],
+    panes,
+    placements,
+    splits,
+  };
 };
 
 export const workspaceLogicalRows = (
@@ -153,13 +185,13 @@ const workspaceDocumentFromState = (workspace: WorkspaceState): WorkspaceDocumen
     .map((relation) => [relation.relationId, relation]));
   return {
     '@patchpit': workspaceDocumentMetadata,
-    state: objectMap(relations, workspaceRelations.state.relationId) as Record<string, WorkspaceStateRow>,
-    panes: objectMap(relations, workspaceRelations.panes.relationId) as Record<string, WorkspacePaneRow>,
+    state: objectMap(relations, workspaceRelations.state.relationId) as WorkspaceDocument['state'],
+    panes: objectMap(relations, workspaceRelations.panes.relationId) as WorkspaceDocument['panes'],
     placements: objectMap(
       relations,
       workspaceRelations.placements.relationId,
-    ) as Record<string, WorkspacePlacementRow>,
-    splits: objectMap(relations, workspaceRelations.splits.relationId) as Record<string, WorkspaceSplitRow>,
+    ) as WorkspaceDocument['placements'],
+    splits: objectMap(relations, workspaceRelations.splits.relationId) as WorkspaceDocument['splits'],
   };
 };
 
@@ -192,9 +224,12 @@ const objectMap = (
   }));
 };
 
-const relationRows = (rows: readonly WorkspaceLogicalRow[], relationId: string) => rows
+const relationRows = <Row extends Readonly<Record<string, JsonValue>>>(
+  rows: readonly WorkspaceLogicalRow[],
+  relationId: string,
+): readonly Row[] => rows
   .filter((row) => row.relationId === relationId)
-  .map(({ fields }) => fields);
+  .map(({ fields }) => fields as Row);
 
 const sortedEntries = <Value>(record: Readonly<Record<string, Value>>) => Object.entries(record)
   .sort(([left], [right]) => compareStrings(left, right));

@@ -1,8 +1,8 @@
 import { getConflicts } from '@automerge/automerge';
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
-  openAutomergeAttachment,
-  type AutomergeAttachment,
+  openAutomergeDatabase,
+  type AutomergeDatabase,
 } from '@tarstate/automerge';
 import { adoptConflictFreeAutomergeJsonValue } from '@tarstate/automerge/values';
 import { normalizeArtifactRef } from '@tarstate/core';
@@ -11,7 +11,7 @@ import { sealStorageMapping } from '@tarstate/core/schema';
 import {
   fsEntriesRelation,
   fsSchemaArtifact,
-  type FsAttachment,
+  type FsDatabaseSource,
   type FsEntry,
 } from '@patchpit/fs';
 
@@ -30,6 +30,19 @@ export const createAutomergeFileContentDocument = (
   kind: 'patchpit.file-content@1',
 });
 
+export const parseAutomergeFileContentDocument = (document: object):
+  | { readonly success: true; readonly value: AutomergeFileContentDoc }
+  | { readonly success: false; readonly reason: 'conflict' | 'invalid' } => {
+  if (['kind', 'bytes', 'contentType'].some((field) => getConflicts(document, field) !== undefined)) {
+    return { success: false, reason: 'conflict' };
+  }
+  return 'kind' in document && document.kind === 'patchpit.file-content@1'
+    && 'bytes' in document && document.bytes instanceof Uint8Array
+    && (!('contentType' in document) || document.contentType === undefined || typeof document.contentType === 'string')
+    ? { success: true, value: document as AutomergeFileContentDoc }
+    : { success: false, reason: 'invalid' };
+};
+
 type StoredFsEntry = Omit<FsEntry, 'entryId'>;
 
 export type AutomergeFsDocument = {
@@ -37,7 +50,7 @@ export type AutomergeFsDocument = {
   readonly entries: Record<string, StoredFsEntry>;
 };
 
-export type AutomergeFsAttachment = FsAttachment & Pick<AutomergeAttachment, 'close'>;
+export type AutomergeFsDatabase = FsDatabaseSource & Pick<AutomergeDatabase, 'close'>;
 
 export const automergeFsStorageMappingArtifact = await sealStorageMapping({
   id: 'urn:patchpit:mapping:automerge-fs@1',
@@ -81,11 +94,11 @@ export const automergeFsDocumentMetadata = {
 
 export const openAutomergeFsDocument = async (
   handle: DocHandle<AutomergeFsDocument>,
-): Promise<AutomergeFsAttachment> => {
+): Promise<AutomergeFsDatabase> => {
   const document = handle.doc();
   if (document === undefined) throw new Error('Automerge filesystem source is unavailable');
   const metadata = parseFilesystemMetadata(document);
-  const opened = await openAutomergeAttachment({
+  const opened = await openAutomergeDatabase({
     handle,
     declaration: metadata.declaration,
     embeddedArtifacts: metadata.schemas,

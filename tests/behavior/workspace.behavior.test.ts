@@ -5,15 +5,15 @@ import {
   createWorkspace,
   type WorkspaceOperation,
   type WorkspaceState,
-} from '../../src/workspace/model.ts';
+} from '../../src/workspace/durable-state.ts';
 import {
   composeWorkspacePresentation,
-  createWorkspacePresence,
+  createWorkspaceViewState,
   previewWorkspaceContext,
   selectWorkspaceContext,
-} from '../../src/workspace/presence.ts';
-import { openWorkspacePresence } from '../../src/workspace/presence-runtime.ts';
-import { planOpenWorkspaceContext, planWorkspaceAction } from '../../src/workspace/controller.ts';
+} from '../../src/workspace/view-state.ts';
+import { openWorkspaceViewState } from '../../src/workspace/view-state-runtime.ts';
+import { planOpenWorkspaceContext, planWorkspaceAction } from '../../src/workspace/action-planner.ts';
 import { workspaceInvariantViolations } from '../support/workspace-test-support.ts';
 
 const resourcesUrl = 'files.html';
@@ -71,10 +71,10 @@ void test('a context split with colliding node IDs is an atomic no-op', () => {
 
 void test('preview replacement and selection remain outside durable workspace state', () => {
   const workspace = createWorkspace(resourcesUrl, 'document');
-  let presence = createWorkspacePresence(workspace, 'right');
-  presence = previewWorkspaceContext(workspace, presence, 'right', { contextId: 'preview-a', url: 'a' });
-  presence = previewWorkspaceContext(workspace, presence, 'right', { contextId: 'preview-b', url: 'b' });
-  const presentation = composeWorkspacePresentation(workspace, presence);
+  let viewState = createWorkspaceViewState(workspace, 'right');
+  viewState = previewWorkspaceContext(workspace, viewState, 'right', { contextId: 'preview-a', url: 'a' });
+  viewState = previewWorkspaceContext(workspace, viewState, 'right', { contextId: 'preview-b', url: 'b' });
+  const presentation = composeWorkspacePresentation(workspace, viewState);
 
   assert.equal(workspace.contexts['preview-a'], undefined);
   assert.equal(workspace.contexts['preview-b'], undefined);
@@ -88,23 +88,23 @@ void test('preview replacement and selection remain outside durable workspace st
 
 void test('per-view state is owned by an exact external source with its own identity', () => {
   const workspace = createWorkspace(resourcesUrl, 'document');
-  const runtime = openWorkspacePresence({
-    sourceId: 'presence:client-a',
+  const runtime = openWorkspaceViewState({
+    sourceId: 'view-state:client-a',
     workspace,
     activePaneId: 'right',
   });
   let changes = 0;
   const unsubscribe = runtime.subscribe(() => { changes += 1; });
   const before = runtime.getSnapshot();
-  runtime.update(workspace, (presence) => previewWorkspaceContext(
+  runtime.update(workspace, (viewState) => previewWorkspaceContext(
     workspace,
-    presence,
+    viewState,
     'right',
     { contextId: 'preview', url: 'document-2' },
   ));
   const after = runtime.getSnapshot();
 
-  assert.equal(runtime.sourceId, 'presence:client-a');
+  assert.equal(runtime.sourceId, 'view-state:client-a');
   assert.notEqual(after, before);
   assert.equal(after.panes.right?.preview?.contextId, 'preview');
   assert.equal(changes, 1);
@@ -114,28 +114,28 @@ void test('per-view state is owned by an exact external source with its own iden
 
 void test('Resources selection does not replace the active editor target', () => {
   const workspace = createWorkspace(resourcesUrl, 'document');
-  let presence = createWorkspacePresence(workspace, 'right');
-  presence = selectWorkspaceContext(workspace, presence, 'left', 'context-0', false);
+  let viewState = createWorkspaceViewState(workspace, 'right');
+  viewState = selectWorkspaceContext(workspace, viewState, 'left', 'context-0', false);
   const plan = planOpenWorkspaceContext({
     contextId: 'preview',
     isEditorContext: isEditor,
     nodes: { paneId: 'unused-pane', splitId: 'unused-split' },
     pinned: false,
-    presence,
+    viewState,
     url: 'viewer.html#{"entryId":"notes"}',
     workspace,
   });
 
   assert.equal(plan.operations.length, 0);
-  assert.equal(plan.presence.activePaneId, 'right');
-  assert.equal(plan.presence.panes.right?.preview?.contextId, 'preview');
+  assert.equal(plan.viewState.activePaneId, 'right');
+  assert.equal(plan.viewState.panes.right?.preview?.contextId, 'preview');
 });
 
 void test('moving a preview promotes it and closing it collapses the destination pane', () => {
   let workspace = createWorkspace(resourcesUrl, 'document');
-  let presence = previewWorkspaceContext(
+  let viewState = previewWorkspaceContext(
     workspace,
-    createWorkspacePresence(workspace, 'right'),
+    createWorkspaceViewState(workspace, 'right'),
     'right',
     { contextId: 'preview', url: 'viewer.html#{"entryId":"notes"}' },
   );
@@ -149,18 +149,18 @@ void test('moving a preview promotes it and closing it collapses the destination
       url: null,
     },
     isEditorContext: isEditor,
-    presence,
+    viewState,
     workspace,
   });
   workspace = plan.workspace;
-  presence = plan.presence;
+  viewState = plan.viewState;
   assert.equal(workspace.contexts.preview?.url, 'viewer.html#{"entryId":"notes"}');
   assert.deepEqual(workspace.nodes.bottom, { kind: 'pane', contexts: ['preview'] });
 
   plan = planWorkspaceAction({
     action: { kind: 'workspace.context.close', paneId: 'bottom', contextId: 'preview' },
     isEditorContext: isEditor,
-    presence,
+    viewState,
     workspace,
   });
   assert.equal(plan.workspace.nodes.bottom, undefined);

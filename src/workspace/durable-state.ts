@@ -1,6 +1,9 @@
 export type WorkspacePaneId = string;
 export type WorkspaceSplitEdge = 'left' | 'right' | 'top' | 'bottom';
 
+const INITIAL_SPLIT_RATIO = 0.2;
+const NEW_SPLIT_RATIO = 0.5;
+
 export type WorkspaceContext = {
   readonly url: string;
 };
@@ -110,7 +113,7 @@ export const applyWorkspaceOperation = (
     case 'workspace.pane.close':
       return closePane(workspace, operation.paneId);
     case 'workspace.pane.split':
-      return splitPane(workspace, operation.targetPaneId, operation.edge, operation.ids);
+      return insertSplitPane(workspace, operation.targetPaneId, operation.edge, operation.ids, []);
     case 'workspace.split.resize':
       return resizeSplit(workspace, operation.splitId, operation.ratio);
   }
@@ -131,7 +134,9 @@ export const createWorkspace = (initialContext: string, documentContext?: string
         nodes: {
           left: { kind: 'pane', contexts: ['context-0'] },
           right: { kind: 'pane', contexts: ['context-1'] },
-          'split-0': { kind: 'split', axis: 'horizontal', first: 'left', ratio: 0.2, second: 'right' },
+          'split-0': {
+            kind: 'split', axis: 'horizontal', first: 'left', ratio: INITIAL_SPLIT_RATIO, second: 'right',
+          },
         },
         rootNodeId: 'split-0',
       };
@@ -256,13 +261,6 @@ const splitContext = (
   return insertSplitPane(withoutEmptySource, targetPaneId, edge, ids, [contextId]);
 };
 
-const splitPane = (
-  workspace: WorkspaceState,
-  targetPaneId: WorkspacePaneId,
-  edge: WorkspaceSplitEdge,
-  ids: WorkspaceSplitIds,
-): WorkspaceState => insertSplitPane(workspace, targetPaneId, edge, ids, []);
-
 const insertSplitPane = (
   workspace: WorkspaceState,
   targetPaneId: WorkspacePaneId,
@@ -284,7 +282,7 @@ const insertSplitPane = (
         kind: 'split',
         axis: edge === 'left' || edge === 'right' ? 'horizontal' : 'vertical',
         first: targetFirst ? targetPaneId : ids.paneId,
-        ratio: 0.5,
+        ratio: NEW_SPLIT_RATIO,
         second: targetFirst ? ids.paneId : targetPaneId,
       },
     },
@@ -298,9 +296,9 @@ const closePane = (workspace: WorkspaceState, paneId: WorkspacePaneId): Workspac
   if (parent === undefined) return workspace;
   const siblingId = parent.node.first === paneId ? parent.node.second : parent.node.first;
   const collapsed = replaceNodeReference(workspace, parent.id, siblingId);
-  const nodes = { ...collapsed.nodes };
-  delete nodes[parent.id];
-  delete nodes[paneId];
+  const removed = new Set([parent.id, paneId]);
+  const nodes = Object.fromEntries(Object.entries(collapsed.nodes)
+    .filter(([nodeId]) => !removed.has(nodeId)));
   return { ...collapsed, nodes };
 };
 
@@ -309,10 +307,9 @@ const insertContext = (
   contextId: string,
   beforeContext?: string,
 ) => {
-  const next = [...contexts];
-  const index = beforeContext === undefined ? -1 : next.indexOf(beforeContext);
-  next.splice(index < 0 ? next.length : index, 0, contextId);
-  return next;
+  const requestedIndex = beforeContext === undefined ? -1 : contexts.indexOf(beforeContext);
+  const insertionIndex = requestedIndex < 0 ? contexts.length : requestedIndex;
+  return [...contexts.slice(0, insertionIndex), contextId, ...contexts.slice(insertionIndex)];
 };
 
 const paneAt = (workspace: WorkspaceState, paneId: WorkspacePaneId) => {
@@ -368,10 +365,9 @@ const parentNode = (
   workspace: WorkspaceState,
   nodeId: string,
 ): { readonly id: string; readonly node: Extract<WorkspaceNode, { readonly kind: 'split' }> } | undefined => {
-  for (const [id, node] of Object.entries(workspace.nodes)) {
-    if (node.kind === 'split' && (node.first === nodeId || node.second === nodeId)) return { id, node };
-  }
-  return undefined;
+  const parent = Object.entries(workspace.nodes).find(([, node]) =>
+    node.kind === 'split' && (node.first === nodeId || node.second === nodeId));
+  return parent === undefined ? undefined : { id: parent[0], node: parent[1] as Extract<WorkspaceNode, { kind: 'split' }> };
 };
 
 const sameStrings = (left: readonly string[], right: readonly string[]) =>

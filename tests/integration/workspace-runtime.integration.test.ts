@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Repo } from '@automerge/automerge-repo';
-import { createWorkspaceDocument, openWorkspace } from '../../src/workspace/runtime.ts';
+import { createWorkspaceDocument, openWorkspaceRuntime } from '../../src/workspace/runtime.ts';
 import {
   workspaceConstraintSetArtifact,
   workspaceSchemaArtifact,
@@ -10,7 +10,7 @@ import {
 void test('workspace runtime projects relation-shaped storage and applies named operations', async () => {
   const repo = new Repo();
   const handle = repo.create(createWorkspaceDocument('home'));
-  const workspace = await openWorkspace(handle);
+  const workspace = await openWorkspaceRuntime(handle);
   let changes = 0;
   const unsubscribe = workspace.subscribe(() => {
     changes += 1;
@@ -39,7 +39,7 @@ void test('workspace runtime projects relation-shaped storage and applies named 
     assert.deepEqual(Object.keys(handle.doc().panes), ['left']);
     assert.deepEqual(handle.doc().placements['context-0'], { paneId: 'left', position: 0, url: 'home' });
 
-    const result = await workspace.act({
+    const result = await workspace.commitOperation({
       kind: 'workspace.context.pin',
       contextId: 'file',
       url: 'viewer.html#{"src":"file"}',
@@ -74,19 +74,19 @@ void test('workspace runtime projects relation-shaped storage and applies named 
 void test('named workspace operations replan after a concurrent stale basis', async () => {
   const repo = new Repo({ network: [] });
   const handle = repo.create(createWorkspaceDocument('home'));
-  const first = await openWorkspace(handle);
-  const second = await openWorkspace(handle);
+  const first = await openWorkspaceRuntime(handle);
+  const second = await openWorkspaceRuntime(handle);
 
   try {
     const results = await Promise.all([
-      first.act({
+      first.commitOperation({
         kind: 'workspace.context.pin',
         contextId: 'first',
         url: 'first',
         targetPaneId: 'left',
         beforeContext: null,
       }),
-      second.act({
+      second.commitOperation({
         kind: 'workspace.context.pin',
         contextId: 'second',
         url: 'second',
@@ -114,7 +114,7 @@ void test('named workspace operations replan after a concurrent stale basis', as
 void test('malformed workspace relations produce an invalid projection without throwing', async () => {
   const repo = new Repo({ network: [] });
   const handle = repo.create(createWorkspaceDocument('home'));
-  const workspace = await openWorkspace(handle);
+  const workspace = await openWorkspaceRuntime(handle);
   try {
     handle.change((doc) => {
       (doc.placements['context-0'] as { paneId: string }).paneId = 'missing';
@@ -131,7 +131,7 @@ void test('malformed workspace relations produce an invalid projection without t
 void test('query-backed constraints reject unreachable layout nodes on read', async () => {
   const repo = new Repo({ network: [] });
   const handle = repo.create(createWorkspaceDocument('home'));
-  const workspace = await openWorkspace(handle);
+  const workspace = await openWorkspaceRuntime(handle);
   try {
     handle.change((doc) => {
       (doc.panes as Record<string, object>).detached = {};

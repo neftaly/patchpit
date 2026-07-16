@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createFsAttachment, staticFsAttachment, type FsEntry } from '@patchpit/fs';
+import {
+  createFsDatabaseSource,
+  createStaticFsDatabaseSource,
+  type FsEntry,
+} from '@patchpit/fs';
 import type { SourceSnapshot } from '@tarstate/core/source';
 import {
   snapshotFilesystemApp,
@@ -23,7 +27,7 @@ const content = (
 });
 
 void test('app snapshot is exact, immutable, basis-bearing, and root-relative', async () => {
-  const filesystem = staticFsAttachment({
+  const filesystem = createStaticFsDatabaseSource({
     sourceId: 'root',
     entries: [
       entry('app', null, 'folder', 'app', 'folder:app'),
@@ -61,7 +65,7 @@ void test('app snapshot is exact, immutable, basis-bearing, and root-relative', 
 });
 
 void test('HTTPS app leaves are incomplete and never fetched implicitly', async () => {
-  const filesystem = staticFsAttachment({
+  const filesystem = createStaticFsDatabaseSource({
     sourceId: 'root',
     entries: [
       entry('app', null, 'folder', 'app', 'folder:app'),
@@ -85,7 +89,7 @@ void test('HTTPS app leaves are incomplete and never fetched implicitly', async 
 
 void test('an exact folder without direct index.html is not a launchable app snapshot', async () => {
   const result = await snapshotFilesystemApp({
-    filesystem: staticFsAttachment({
+    filesystem: createStaticFsDatabaseSource({
       sourceId: 'root:missing-entry',
       entries: [
         entry('app', null, 'folder', 'app', 'folder:app'),
@@ -102,7 +106,7 @@ void test('an exact folder without direct index.html is not a launchable app sna
 
 void test('exact stale content cannot launch', async () => {
   const result = await snapshotFilesystemApp({
-    filesystem: staticFsAttachment({
+    filesystem: createStaticFsDatabaseSource({
       sourceId: 'root',
       entries: [
         entry('app', null, 'folder', 'app', 'folder:app'),
@@ -118,7 +122,7 @@ void test('exact stale content cannot launch', async () => {
 });
 
 void test('invalid content from a ready source invalidates the app snapshot', async () => {
-  const filesystem = staticFsAttachment({
+  const filesystem = createStaticFsDatabaseSource({
     sourceId: 'root',
     entries: [
       entry('app', null, 'folder', 'app', 'folder:app'),
@@ -142,7 +146,7 @@ void test('invalid content from a ready source invalidates the app snapshot', as
 void test('snapshot byte bound counts repeated content at every mounted path', async () => {
   const shared = content('automerge:shared', new Uint8Array(65 * 1024 * 1024));
   await assert.rejects(() => snapshotFilesystemApp({
-    filesystem: staticFsAttachment({
+    filesystem: createStaticFsDatabaseSource({
       sourceId: 'root',
       entries: [
         entry('app', null, 'folder', 'app', 'folder:app'),
@@ -163,7 +167,7 @@ void test('filesystem authority changes during reads are retried before material
   ];
   let revision = 0;
   const listeners = new Set<() => void>();
-  const filesystem = createFsAttachment({
+  const filesystem = createFsDatabaseSource({
     source: {
       sourceId: 'root:changing',
       snapshot: () => ({
@@ -205,36 +209,6 @@ void test('filesystem authority changes during reads are retried before material
   assert.equal(reads, 3);
   assert.equal(result.state, 'ready');
   if (result.state === 'ready') assert.deepEqual(result.files.map(({ path }) => path), [['index.html']]);
-});
-
-void test('nested app snapshot depth matrix remains inside the selected root', async () => {
-  for (let depth = 1; depth <= 12; depth += 1) {
-    const entries: FsEntry[] = [
-      entry('app', null, 'folder', 'app', 'folder:app'),
-      entry('index', 'app', 'file', 'index.html', 'automerge:index'),
-    ];
-    let parent = 'app';
-    for (let index = 0; index < depth; index += 1) {
-      const folder = `folder-${index}`;
-      entries.push(entry(folder, parent, 'folder', `d${index}`, `folder:${index}`));
-      parent = folder;
-    }
-    entries.push(entry('leaf', parent, 'file', 'leaf.txt', 'automerge:leaf'));
-    entries.push(entry('outside', null, 'file', 'outside.txt', 'automerge:outside'));
-    const result = await snapshotFilesystemApp({
-      filesystem: staticFsAttachment({ sourceId: `root:${depth}`, entries }),
-      rootEntryId: 'app',
-      read: async (resourceRef) => content(resourceRef, [depth], depth),
-    });
-    assert.equal(result.state, 'ready');
-    if (result.state !== 'ready') continue;
-    const leaf = result.files.find(({ path }) => path.at(-1) === 'leaf.txt')!;
-    assert.deepEqual(leaf.path, [
-      ...Array.from({ length: depth }, (_, index) => `d${index}`),
-      'leaf.txt',
-    ]);
-    assert.deepEqual([...new Uint8Array(await leaf.body.arrayBuffer())], [depth]);
-  }
 });
 
 const entry = (

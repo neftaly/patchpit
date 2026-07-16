@@ -101,6 +101,7 @@ async function proveWorkspaceBehavior(page) {
   assert(Math.abs((leftBounds.width / rootBounds.width) - 0.2) < 0.02);
   assert(frameBounds.width > 0);
   assert.equal(await page.locator('.sandbox-app').getAttribute('sandbox'), 'allow-scripts allow-same-origin');
+  assert.equal(await page.locator('.sandbox-app').getAttribute('title'), 'sandbox-compat app');
   const sandboxSrc = await page.locator('.sandbox-app').getAttribute('src');
   assert.match(sandboxSrc ?? '', /\/__patchpit\/sandbox\/[0-9a-f-]{36}\/index\.html$/);
   assert.equal(sandboxSrc?.includes('placeholder:beelay'), false);
@@ -111,8 +112,10 @@ async function proveWorkspaceBehavior(page) {
   await tab('sandbox-compat / index.html').waitFor();
   assert.notEqual(await tab('sandbox-compat / index.html').getAttribute('data-context'), null);
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
-  await resource('external', 'unresolved.svg').click();
+  await resource('external', 'unresolved.svg').focus();
+  await resource('external', 'unresolved.svg').press('Enter');
   await page.getByRole('alert').getByText('Resource unavailable.').waitFor();
+  assert.equal(await tab('external / unresolved.svg').getAttribute('data-preview'), null);
   await page.getByRole('button', { name: 'Close external / unresolved.svg' }).click();
   await tab('sandbox-compat / index.html').click();
   await drag(
@@ -126,6 +129,16 @@ async function proveWorkspaceBehavior(page) {
   assert.equal(await tab('sandbox-compat / data.json').count(), 0);
   await resource('sandbox-compat', 'data.json').click();
   await page.getByText('{"ok":true}', { exact: true }).waitFor();
+  const appTab = rightPane.getByRole('tab', { name: 'sandbox-compat / index.html' });
+  const dataTab = rightPane.getByRole('tab', { name: 'sandbox-compat / data.json' });
+  assert.equal(await dataTab.getAttribute('aria-selected'), 'true');
+  assert.equal(await dataTab.getAttribute('tabindex'), '0');
+  assert.equal(await appTab.getAttribute('tabindex'), '-1');
+  const dataPanelId = await dataTab.getAttribute('aria-controls');
+  assert(dataPanelId !== null);
+  assert.equal(await page.evaluate((id) => document.getElementById(id)?.role, dataPanelId), 'tabpanel');
+  await dataTab.press('ArrowLeft');
+  assert.equal(await appTab.getAttribute('aria-selected'), 'true');
   await tab('sandbox-compat / index.html').click();
   await drag(
     tab('sandbox-compat / index.html'),
@@ -161,6 +174,13 @@ async function proveWorkspaceBehavior(page) {
   assert(await workspaceViewer.evaluate((viewer) => viewer.scrollTop > 0));
 
   const resizeHandle = rootSplit.locator(':scope > .resize-handle');
+  assert.equal(await resizeHandle.getAttribute('role'), 'separator');
+  assert.equal(await resizeHandle.getAttribute('aria-orientation'), 'vertical');
+  assert.equal(await resizeHandle.getAttribute('aria-valuemin'), '10');
+  assert.equal(await resizeHandle.getAttribute('aria-valuemax'), '90');
+  const controlledNodeId = await resizeHandle.getAttribute('aria-controls');
+  assert(controlledNodeId !== null);
+  assert.equal(await page.evaluate((id) => document.getElementById(id) !== null, controlledNodeId), true);
   const handleBounds = await resizeHandle.boundingBox();
   assert(handleBounds !== null, 'Resize handle must be visible');
   await page.mouse.move(handleBounds.x + (handleBounds.width / 2), handleBounds.y + (handleBounds.height / 2));
@@ -174,6 +194,11 @@ async function proveWorkspaceBehavior(page) {
   ) > 0.25);
   await page.locator('.viewer', { hasText: '"ratio": 0.3' }).waitFor();
   assert(JSON.parse(await workspaceViewer.textContent()).splits['split-0'].ratio > 0.25);
+  const pointerRatio = Number(await rootSplit.getAttribute('data-ratio'));
+  await resizeHandle.press('ArrowRight');
+  await page.waitForFunction(({ ratio }) => Number(
+    document.querySelector('[data-node="split-0"]')?.getAttribute('data-ratio'),
+  ) > ratio, { ratio: pointerRatio });
   await page.getByRole('button', { name: 'Close patchpit / workspace.am' }).click();
   await tab('sandbox-compat / index.html').click();
 
@@ -230,6 +255,10 @@ async function proveWorkspaceBehavior(page) {
     0.99,
   );
   assert.equal(await page.locator('.pane').count(), 4);
+  assert.equal(await page.locator('[role="separator"]').evaluateAll((separators) => separators.every((separator) => {
+    const controlled = separator.getAttribute('aria-controls');
+    return controlled !== null && document.getElementById(controlled) !== null;
+  })), true);
   const workerPane = page.locator('.pane', { has: tab('sandbox-compat / worker.js') });
   const workerPaneId = await workerPane.getAttribute('data-pane');
   assert(workerPaneId !== null);

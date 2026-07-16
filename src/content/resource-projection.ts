@@ -1,6 +1,6 @@
-import { openFsEntries, type FsAttachment, type FsEntryRow } from '@patchpit/fs';
+import { openFsEntriesQuery, type FsDatabaseSource, type FsEntryRow } from '@patchpit/fs';
 
-export const openResources = (attachment: FsAttachment) => openFsEntries([attachment]);
+export const openResourceQuery = (source: FsDatabaseSource) => openFsEntriesQuery([source]);
 
 export const resourceIdentity = ({ entryId, sourceId }: Pick<FsEntryRow, 'entryId' | 'sourceId'>) =>
   JSON.stringify([sourceId, entryId]);
@@ -17,15 +17,12 @@ type ResourceTreeRow = {
   readonly resource: FsEntryRow;
 };
 
-export const resourceByIdentity = (resources: ResourceProjection, identity: string) =>
-  resources.byIdentity.get(identity);
-
-export const resourceAt = (resources: ResourceProjection, sourceId: string, entryId: string) =>
+export const findResource = (resources: ResourceProjection, sourceId: string, entryId: string) =>
   resources.byIdentity.get(resourceIdentity({ sourceId, entryId }));
 
-type ResourceSnapshot = ReturnType<ReturnType<typeof openFsEntries>['observer']['getSnapshot']>;
+type ResourceSnapshot = ReturnType<Awaited<ReturnType<typeof openFsEntriesQuery>>['getSnapshot']>;
 
-export const resourcesFromSnapshot = (snapshot: ResourceSnapshot): readonly FsEntryRow[] => {
+export const resourceRowsFromQuerySnapshot = (snapshot: ResourceSnapshot): readonly FsEntryRow[] => {
   if (snapshot.state === 'closed') return [];
   return snapshot.current.rows.map((row) => {
     if (row.sourceId === undefined) throw new Error('Filesystem row is missing source provenance');
@@ -33,7 +30,7 @@ export const resourcesFromSnapshot = (snapshot: ResourceSnapshot): readonly FsEn
   });
 };
 
-export const projectResources = (resources: readonly FsEntryRow[]): ResourceProjection => {
+export const projectResourceTree = (resources: readonly FsEntryRow[]): ResourceProjection => {
   const byIdentity = new Map<string, FsEntryRow>();
   const byEntryId = new Map<string, FsEntryRow>();
   const identities = new Map<FsEntryRow, string>();

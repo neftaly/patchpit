@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { openFsEntries, openFsSubtree, staticFsAttachment } from '@patchpit/fs';
+import {
+  createStaticFsDatabaseSource,
+  openFsEntriesQuery,
+  openFsSubtreeQuery,
+} from '@patchpit/fs';
 
-void test('filesystem query keeps stable local IDs scoped by source', () => {
-  const runtime = openFsEntries([
-    staticFsAttachment({
+void test('filesystem query keeps stable local IDs scoped by source', async () => {
+  const query = await openFsEntriesQuery([
+    createStaticFsDatabaseSource({
       sourceId: 'personal',
       entries: [{ entryId: 'readme', parentId: null, order: 0, kind: 'file', name: 'readme.md', resourceRef: 'content:personal' }],
     }),
-    staticFsAttachment({
+    createStaticFsDatabaseSource({
       sourceId: 'shared',
       entries: [
         { entryId: 'folder', parentId: null, order: 2, kind: 'folder', name: 'archive', resourceRef: 'folder:archive' },
@@ -18,7 +22,7 @@ void test('filesystem query keeps stable local IDs scoped by source', () => {
       ],
     }),
   ]);
-  const snapshot = runtime.observer.getSnapshot();
+  const snapshot = query.getSnapshot();
 
   assert.equal(snapshot.state, 'open');
   assert.deepEqual(snapshot.current.rows, [
@@ -30,11 +34,11 @@ void test('filesystem query keeps stable local IDs scoped by source', () => {
   ]);
   assert.equal(new Set(snapshot.current.resultKeys).size, 5);
 
-  runtime.close();
+  query.close();
 });
 
-void test('filesystem subtree query is recursive and source-authority scoped', () => {
-  const selected = staticFsAttachment({
+void test('filesystem subtree query is recursive and source-authority scoped', async () => {
+  const selected = createStaticFsDatabaseSource({
     sourceId: 'selected',
     entries: [
       { entryId: 'app', parentId: null, order: 0, kind: 'folder', name: 'app', resourceRef: 'folder:app' },
@@ -44,8 +48,8 @@ void test('filesystem subtree query is recursive and source-authority scoped', (
       { entryId: 'outside', parentId: null, order: 1, kind: 'file', name: 'outside.txt', resourceRef: 'content:outside' },
     ],
   });
-  const runtime = openFsSubtree(selected, 'app');
-  const snapshot = runtime.observer.getSnapshot();
+  const query = await openFsSubtreeQuery(selected, 'app');
+  const snapshot = query.getSnapshot();
 
   assert.equal(snapshot.state, 'open');
   assert.equal(snapshot.current.readiness, 'ready');
@@ -56,5 +60,5 @@ void test('filesystem subtree query is recursive and source-authority scoped', (
     ['icon', 'selected'],
     ['index', 'selected'],
   ]);
-  runtime.close();
+  query.close();
 });

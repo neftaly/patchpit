@@ -67,7 +67,6 @@ const rootEntry = pipe(
   from(portableEntriesRelation, 'entry'),
   where(and(
     equals(entryField('entryId'), parameter('rootEntryId')),
-    equals(sourceOf('entry'), parameter('rootSourceId')),
     equals(entryField('kind'), literal('folder')),
   )),
 );

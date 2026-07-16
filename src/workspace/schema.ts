@@ -10,6 +10,7 @@ import {
   schemaLiteral,
   sealStorageMapping,
   sealSchema,
+  type SchemaRow,
 } from '@tarstate/core/schema';
 import type { DocumentDeclaration } from '@tarstate/core/attachment';
 import { sealWorkspaceConstraintSet } from './constraints.ts';
@@ -64,6 +65,11 @@ const workspaceSchemaBody = schemaLiteral({
     },
   },
 });
+
+export type WorkspaceStateRelationRow = SchemaRow<typeof workspaceSchemaBody, 'state'>;
+export type WorkspacePaneRelationRow = SchemaRow<typeof workspaceSchemaBody, 'panes'>;
+export type WorkspacePlacementRelationRow = SchemaRow<typeof workspaceSchemaBody, 'placements'>;
+export type WorkspaceSplitRelationRow = SchemaRow<typeof workspaceSchemaBody, 'splits'>;
 
 export const workspaceSchemaArtifact = await sealSchema({
   id: 'patchpit.workspace.state@1',

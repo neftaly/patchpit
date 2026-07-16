@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canonicalRootInvocationHash,
-  defaultRootSync,
+  DEFAULT_ROOT_SYNC,
   parseRootInvocationHash,
 } from '../../src/root/invocation.ts';
 
@@ -10,10 +10,10 @@ const validSrc = 'automerge:4NMNnkMhL8jXrdJ9jamS58PAVdXu';
 const parse = (hash: string) => parseRootInvocationHash(hash, (value) => value === validSrc);
 
 void test('root invocation defaults sync and preserves opaque delegation', () => {
-  assert.deepEqual(parse(''), { ok: true, value: { sync: defaultRootSync } });
+  assert.deepEqual(parse(''), { ok: true, value: { sync: DEFAULT_ROOT_SYNC } });
   assert.deepEqual(parse(`#${JSON.stringify({ src: validSrc, delegation: 'opaque%20%7B' })}`), {
     ok: true,
-    value: { src: validSrc, sync: defaultRootSync, delegation: 'opaque%20%7B' },
+    value: { src: validSrc, sync: DEFAULT_ROOT_SYNC, delegation: 'opaque%20%7B' },
   });
   assert.deepEqual(parse(encodeURIComponent(JSON.stringify({ sync: ['wss://example.test'], delegation: 'encoded' }))), {
     ok: true,
@@ -27,10 +27,10 @@ void test('root invocation canonicalizes its complete recognized shape', () => {
   if (result.ok) {
     const canonical = canonicalRootInvocationHash({ ...result.value, delegation: '50% %7B' });
     assert.equal(canonical,
-      `#${JSON.stringify({ src: validSrc, sync: defaultRootSync, delegation: '50% %7B' })}`);
+      `#${JSON.stringify({ src: validSrc, sync: DEFAULT_ROOT_SYNC, delegation: '50% %7B' })}`);
     assert.deepEqual(parse(canonical), {
       ok: true,
-      value: { src: validSrc, sync: defaultRootSync, delegation: '50% %7B' },
+      value: { src: validSrc, sync: DEFAULT_ROOT_SYNC, delegation: '50% %7B' },
     });
   }
 });

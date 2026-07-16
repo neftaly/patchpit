@@ -1,5 +1,5 @@
-import type { WorkspacePaneId } from './model.ts';
-import type { WorkspacePresentation, WorkspacePresentationPane } from './presence.ts';
+import type { WorkspacePaneId } from './durable-state.ts';
+import type { WorkspacePresentation, WorkspacePresentationPane } from './view-state.ts';
 
 export type LayoutRect = {
   readonly height: number;
@@ -15,6 +15,7 @@ export const projectWorkspaceLayout = (
   const panes: Array<{ pane: WorkspacePresentationPane; paneId: WorkspacePaneId; rect: LayoutRect }> = [];
   const splits: Array<{
     axis: 'horizontal' | 'vertical';
+    first: string;
     ratio: number;
     rect: LayoutRect;
     splitId: string;
@@ -30,7 +31,7 @@ export const projectWorkspaceLayout = (
     }
     if (node?.kind !== 'split') return;
     const ratio = draftRatios[nodeId] ?? node.ratio;
-    splits.push({ axis: node.axis, ratio, rect, splitId: nodeId });
+    splits.push({ axis: node.axis, first: node.first, ratio, rect, splitId: nodeId });
     if (node.axis === 'horizontal') {
       visit(node.first, { ...rect, width: rect.width * ratio });
       visit(node.second, {

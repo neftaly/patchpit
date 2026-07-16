@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as Automerge from '@automerge/automerge';
 import { Repo } from '@automerge/automerge-repo';
-import { createWorkspaceDocument, openWorkspace } from '../../src/workspace/runtime.ts';
+import { createWorkspaceDocument, openWorkspaceRuntime } from '../../src/workspace/runtime.ts';
 import {
   workspaceConstraintSetArtifact,
   workspaceStorageMappingArtifact,
@@ -19,7 +19,7 @@ void test('workspace opening resolves its declared artifacts by exact identity',
   });
 
   try {
-    await assert.rejects(openWorkspace(handle), /workspace attachment is unavailable/);
+    await assert.rejects(openWorkspaceRuntime(handle), /workspace attachment is unavailable/);
   } finally {
     await repo.shutdown();
   }
@@ -36,7 +36,7 @@ void test('workspace opening resolves its constraint set by exact identity', asy
   });
 
   try {
-    await assert.rejects(openWorkspace(handle), /workspace attachment is unavailable/);
+    await assert.rejects(openWorkspaceRuntime(handle), /workspace attachment is unavailable/);
   } finally {
     await repo.shutdown();
   }
@@ -63,7 +63,7 @@ void test('workspace opening rejects conflicted Patchpit metadata without select
   handle.update(() => Automerge.merge(left, right));
 
   try {
-    await assert.rejects(openWorkspace(handle), /workspace metadata is invalid/);
+    await assert.rejects(openWorkspaceRuntime(handle), /workspace metadata is invalid/);
   } finally {
     await repo.shutdown();
   }
@@ -72,7 +72,7 @@ void test('workspace opening rejects conflicted Patchpit metadata without select
 void test('workspace writes preserve the identity of surviving logical rows', async () => {
   const repo = new Repo({ network: [] });
   const handle = repo.create(createWorkspaceDocument('home'));
-  const workspace = await openWorkspace(handle);
+  const workspace = await openWorkspaceRuntime(handle);
   const survivingIds = () => ({
     placement: Automerge.getObjectId(handle.doc().placements['context-0']!),
     pane: Automerge.getObjectId(handle.doc().panes.left!),
@@ -80,7 +80,7 @@ void test('workspace writes preserve the identity of surviving logical rows', as
   const initialIds = survivingIds();
 
   try {
-    assert.equal((await workspace.act({
+    assert.equal((await workspace.commitOperation({
       kind: 'workspace.context.pin',
       contextId: 'file',
       url: 'viewer.html#{"src":"file"}',
@@ -89,7 +89,7 @@ void test('workspace writes preserve the identity of surviving logical rows', as
     })).outcome, 'committed');
     assert.deepEqual(survivingIds(), initialIds);
 
-    assert.equal((await workspace.act({
+    assert.equal((await workspace.commitOperation({
       kind: 'workspace.context.close',
       paneId: 'left',
       contextId: 'file',

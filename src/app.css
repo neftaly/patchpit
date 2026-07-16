@@ -240,7 +240,6 @@ button {
 .pane-content[data-drop-zone]::after {
   position: absolute;
   inset: 0;
-  z-index: 3;
   content: "";
   pointer-events: none;
   background: var(--color-hover);
@@ -268,7 +267,8 @@ button {
 }
 
 .app,
-.sandbox-app {
+.sandbox-app,
+.viewer {
   width: 100%;
   height: 100%;
 }
@@ -308,10 +308,10 @@ button {
   align-items: baseline;
   gap: 0.36em;
   border: 0;
-  padding: 0.125rem 0.5rem 0.125rem calc(var(--tree-depth-size) + 0.5rem);
+  padding: 0.125rem 0.5rem 0.125rem calc((var(--tree-depth) * var(--tree-indent)) + 0.5rem);
   background-image: var(--tree-guides);
   background-repeat: no-repeat;
-  background-size: max(var(--tree-depth-size), var(--hairline)) 100%;
+  background-size: max(calc(var(--tree-depth) * var(--tree-indent)), var(--hairline)) 100%;
   background-color: transparent;
   color: var(--color-text);
   cursor: default;
@@ -348,8 +348,6 @@ button {
 }
 
 .viewer {
-  width: 100%;
-  height: 100%;
   margin: 0;
   overflow: auto;
   padding: 0.75rem;

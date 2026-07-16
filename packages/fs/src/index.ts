@@ -1,12 +1,12 @@
 export {
-  createFsAttachment,
-  openFsEntries,
-  openFsSubtree,
-  staticFsAttachment,
-  type FsAttachment,
+  createFsDatabaseSource,
+  createStaticFsDatabaseSource,
+  openFsEntriesQuery,
+  openFsSubtreeQuery,
+  type FsDatabaseSource,
   type FsDocument,
   type FsEntryRow,
-} from './database.ts';
+} from './database-source.ts';
 export {
   fsEntriesRelation,
   fsSchemaArtifact,

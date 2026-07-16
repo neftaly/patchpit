@@ -62,9 +62,13 @@ const registerSandboxWorker = async (baseUrl: URL) => {
   }
   if (worker.state === 'activated') return registration;
   await new Promise<void>((resolve, reject) => {
+    const finish = (result: 'activated' | 'redundant') => {
+      worker.removeEventListener('statechange', changed);
+      if (result === 'activated') resolve();
+      else reject(new Error('Sandbox service worker became redundant'));
+    };
     const changed = () => {
-      if (worker.state === 'activated') resolve();
-      if (worker.state === 'redundant') reject(new Error('Sandbox service worker became redundant'));
+      if (worker.state === 'activated' || worker.state === 'redundant') finish(worker.state);
     };
     worker.addEventListener('statechange', changed);
     changed();

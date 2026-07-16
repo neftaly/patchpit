@@ -21,29 +21,29 @@ restricted to entries from that same source.
 
 ## Exports
 
-- `fsSchemaArtifact`, `fsEntriesRelation`, and `parseFsEntry` describe and
-  validate relation rows.
-- `createFsAttachment` adapts an observable source and projection into a
-  filesystem attachment.
-- `staticFsAttachment` creates an exact attachment from a `FsDocument`.
-- `openFsEntries` observes entries across a list of attachments.
-- `openFsSubtree` observes one folder and its recursive descendants within one
-  attachment.
-- `FsAttachment`, `FsDocument`, `FsEntry`, and `FsEntryRow` are the exported
+- `fsSchemaArtifact` and `fsEntriesRelation` describe the logical relation;
+  `parseFsEntry` parses rows at its boundary.
+- `createFsDatabaseSource` adapts an observable source and projection into a
+  mountable filesystem database source.
+- `createStaticFsDatabaseSource` creates an exact source from an `FsDocument`.
+- `openFsEntriesQuery` observes entries across a list of sources.
+- `openFsSubtreeQuery` observes one folder and its recursive descendants within
+  one source.
+- `FsDatabaseSource`, `FsDocument`, `FsEntry`, and `FsEntryRow` are the exported
   public types.
 
-`FsAttachment` is deliberately only a Tarstate mount capability. Source and
+`FsDatabaseSource` is deliberately only a Tarstate mount capability. Source and
 attachment identities are obtained from its mount lease rather than exposed as
 parallel Patchpit state.
 
-Both query functions return `{ observer, close }`. Consumers read readiness,
-completeness, issues, basis, and rows from `observer.getSnapshot()` and call
-`close()` when finished.
+Both query functions return a query observer. Consumers read readiness,
+completeness, issues, basis, and rows from `getSnapshot()` and call `close()`
+when finished.
 
 ```ts
-import { openFsEntries, staticFsAttachment } from '@patchpit/fs';
+import { createStaticFsDatabaseSource, openFsEntriesQuery } from '@patchpit/fs';
 
-const attachment = staticFsAttachment({
+const source = createStaticFsDatabaseSource({
   sourceId: 'workspace',
   entries: [
     {
@@ -56,7 +56,7 @@ const attachment = staticFsAttachment({
     },
   ],
 });
-const query = openFsEntries([attachment]);
-const snapshot = query.observer.getSnapshot();
+const query = await openFsEntriesQuery([source]);
+const snapshot = query.getSnapshot();
 query.close();
 ```

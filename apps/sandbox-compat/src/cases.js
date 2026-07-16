@@ -1,4 +1,4 @@
-const caseTimeoutMs = 500;
+const CASE_TIMEOUT_MS = 500;
 
 const caseDefinitions = [
   compatCase('image-file-backed', 'pass', () => imageLoads('./relative-file.svg')),
@@ -166,6 +166,6 @@ function finishWithin(start, timeoutDetail) {
       resolve(result);
     };
     start(finish);
-    window.setTimeout(() => finish(fail(timeoutDetail)), caseTimeoutMs);
+    window.setTimeout(() => finish(fail(timeoutDetail)), CASE_TIMEOUT_MS);
   });
 }

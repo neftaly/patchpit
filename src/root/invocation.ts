@@ -1,4 +1,4 @@
-export const defaultRootSync = ['wss://sync.automerge.org'] as const;
+export const DEFAULT_ROOT_SYNC = ['wss://sync.automerge.org'] as const;
 
 export type RootInvocation = {
   readonly src?: string;
@@ -15,22 +15,9 @@ export const parseRootInvocationHash = (
   isAutomergeUrl: (value: string) => boolean,
 ): RootInvocationResult => {
   const raw = hash.startsWith('#') ? hash.slice(1) : hash;
-  let candidate: unknown = {};
-  try {
-    if (raw !== '') candidate = JSON.parse(raw);
-  } catch {
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(raw);
-    } catch {
-      return { ok: false, error: 'decode' };
-    }
-    try {
-      candidate = JSON.parse(decoded);
-    } catch {
-      return { ok: false, error: 'json' };
-    }
-  }
+  const parsed = parseInvocationJson(raw);
+  if (!parsed.ok) return parsed;
+  const candidate = parsed.value;
   if (!isRecord(candidate)) return { ok: false, error: 'object' };
   if (Object.keys(candidate).some((key) => !['src', 'sync', 'delegation'].includes(key))) {
     return { ok: false, error: 'unknown' };
@@ -52,7 +39,7 @@ export const parseRootInvocationHash = (
     ok: true,
     value: {
       ...(candidate.src === undefined ? {} : { src: candidate.src }),
-      sync: candidate.sync === undefined ? defaultRootSync : candidate.sync as [string, ...string[]],
+      sync: candidate.sync === undefined ? DEFAULT_ROOT_SYNC : candidate.sync as [string, ...string[]],
       ...(typeof candidate.delegation === 'string' ? { delegation: candidate.delegation } : {}),
     },
   };
@@ -63,3 +50,26 @@ export const canonicalRootInvocationHash = (invocation: RootInvocation) =>
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const parseInvocationJson = (raw: string):
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly error: 'decode' | 'json' } => {
+  if (raw === '') return { ok: true, value: {} };
+  const direct = parseJson(raw);
+  if (direct.ok) return direct;
+  try {
+    return parseJson(decodeURIComponent(raw));
+  } catch {
+    return { ok: false, error: 'decode' };
+  }
+};
+
+const parseJson = (input: string):
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly error: 'json' } => {
+  try {
+    return { ok: true, value: JSON.parse(input) as unknown };
+  } catch {
+    return { ok: false, error: 'json' };
+  }
+};

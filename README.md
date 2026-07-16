@@ -33,7 +33,7 @@ host boundary rather than inside Patchpit's runtime.
 - `src/root/` owns root-document lifecycle and invocation.
 - `src/content/` projects filesystem resources and renders resource, viewer, and
   sandbox-app content.
-- `src/workspace/` owns the durable model, per-view presence, action planning,
+- `src/workspace/` owns the durable model, per-client view state, action planning,
   relational document boundary, and workspace view.
 - `packages/fs/` is the Tarstate filesystem relation and query boundary.
 - `packages/automerge-fs/` attaches canonical Automerge filesystem documents.

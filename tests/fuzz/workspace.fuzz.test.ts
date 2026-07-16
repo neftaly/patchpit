@@ -1,22 +1,29 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fc from 'fast-check';
-import { planOpenWorkspaceContext, planWorkspaceAction } from '../../src/workspace/controller.ts';
+import { planOpenWorkspaceContext, planWorkspaceAction } from '../../src/workspace/action-planner.ts';
 import { workspaceFromLogicalRows, workspaceLogicalRows } from '../../src/workspace/document.ts';
 import { projectWorkspaceLayout, type LayoutRect } from '../../src/workspace/layout.ts';
 import {
+  contentDropZone,
+  operationForDrop,
+  pointInRect,
+  splitRatio,
+  tabDropIndex,
+} from '../../src/workspace/interaction.ts';
+import {
   composeWorkspacePresentation,
-  createWorkspacePresence,
-  reconcileWorkspacePresence,
+  createWorkspaceViewState,
+  reconcileWorkspaceViewState,
   type WorkspaceAction,
-  type WorkspacePresence,
-} from '../../src/workspace/presence.ts';
+  type WorkspaceViewState,
+} from '../../src/workspace/view-state.ts';
 import {
   applyWorkspaceOperation,
   createWorkspace,
   paneIdsInLayoutOrder,
   type WorkspaceState,
-} from '../../src/workspace/model.ts';
+} from '../../src/workspace/durable-state.ts';
 import {
   presentationInvariantViolations,
   workspaceInvariantViolations,
@@ -40,20 +47,20 @@ const stepArbitrary = fc.record({
   ratio: fc.integer({ min: -20, max: 120 }).map((value) => value / 100),
 });
 
-void test('workspace actions preserve the complete durable/presence/document model', () => {
+void test('workspace actions preserve the complete durable/view-state/document model', () => {
   fc.assert(fc.property(
     fc.array(stepArbitrary, { minLength: 1, maxLength: 60 }),
     (steps) => {
       let workspace = createWorkspace('files.html', 'editor:initial');
-      let presence = createWorkspacePresence(workspace, 'right');
+      let viewState = createWorkspaceViewState(workspace, 'right');
 
       for (const step of steps) {
         const beforeWorkspace = structuredClone(workspace);
-        const beforePresence = structuredClone(presence);
-        const plan = planStep(workspace, presence, step);
+        const beforeViewState = structuredClone(viewState);
+        const plan = planStep(workspace, viewState, step);
 
         assert.deepEqual(workspace, beforeWorkspace, 'planning mutated durable input');
-        assert.deepEqual(presence, beforePresence, 'planning mutated presence input');
+        assert.deepEqual(viewState, beforeViewState, 'planning mutated view-state input');
         assert.deepEqual(
           plan.operations.reduce(applyWorkspaceOperation, workspace),
           plan.workspace,
@@ -61,12 +68,12 @@ void test('workspace actions preserve the complete durable/presence/document mod
         );
 
         workspace = plan.workspace;
-        presence = plan.presence;
+        viewState = plan.viewState;
         assert.deepEqual(workspaceInvariantViolations(workspace), []);
-        assert.equal(reconcileWorkspacePresence(workspace, presence), presence);
+        assert.equal(reconcileWorkspaceViewState(workspace, viewState), viewState);
 
-        const presentation = composeWorkspacePresentation(workspace, presence);
-        assert.deepEqual(presentationInvariantViolations(workspace, presence, presentation), []);
+        const presentation = composeWorkspacePresentation(workspace, viewState);
+        assert.deepEqual(presentationInvariantViolations(workspace, viewState, presentation), []);
         assertWorkspaceLayoutProjection(presentation);
         assertWorkspaceRelationRoundTrip(workspace);
       }
@@ -74,7 +81,44 @@ void test('workspace actions preserve the complete durable/presence/document mod
   ), { numRuns: 100 });
 });
 
-const planStep = (workspace: WorkspaceState, presence: WorkspacePresence, step: Step) => {
+void test('workspace pointer geometry lowers to bounded deterministic intent', () => {
+  const coordinate = fc.double({ min: -4, max: 4, noNaN: true, noDefaultInfinity: true });
+  fc.assert(fc.property(
+    coordinate,
+    coordinate,
+    fc.double({ min: -1_000, max: 1_000, noNaN: true, noDefaultInfinity: true }),
+    fc.double({ min: -1_000, max: 1_000, noNaN: true, noDefaultInfinity: true }),
+    fc.double({ min: 0.01, max: 1_000, noNaN: true, noDefaultInfinity: true }),
+    fc.double({ min: 0.01, max: 1_000, noNaN: true, noDefaultInfinity: true }),
+    fc.nat(100),
+    fc.boolean(),
+    (x, y, left, top, width, height, index, open) => {
+      const point = pointInRect(
+        { x: left + (width * x), y: top + (height * y) },
+        { left, top, width, height },
+      );
+      assert.ok(Math.abs(point.x - x) < 1e-9);
+      assert.ok(Math.abs(point.y - y) < 1e-9);
+      assert.ok(splitRatio('horizontal', point) >= 0.1 && splitRatio('horizontal', point) <= 0.9);
+      assert.ok(splitRatio('vertical', point) >= 0.1 && splitRatio('vertical', point) <= 0.9);
+      assert.equal(tabDropIndex(point.x, index), point.x < 0.5 ? index : index + 1);
+      const zone = contentDropZone(point);
+      assert.ok(['left', 'right', 'top', 'bottom', 'center'].includes(zone));
+      const operation = operationForDrop({
+        allocatedSplitIds: { paneId: 'created-pane', splitId: 'created-split' },
+        contentUrl: 'viewer',
+        contextId: 'context',
+        fromResource: false,
+        pinOnDrop: open,
+        sourcePaneId: null,
+      }, 'target-pane', { zone });
+      assert.equal(operation.kind, zone === 'center' ? 'workspace.context.move' : 'workspace.context.split');
+      if (operation.kind === 'workspace.context.move') assert.equal(operation.pin, open);
+    },
+  ), { numRuns: 200 });
+});
+
+const planStep = (workspace: WorkspaceState, viewState: WorkspaceViewState, step: Step) => {
   const paneIds = paneIdsInLayoutOrder(workspace);
   const targetPaneId = select(paneIds, step.first);
   if (targetPaneId === undefined || step.kind === 0) {
@@ -83,13 +127,13 @@ const planStep = (workspace: WorkspaceState, presence: WorkspacePresence, step: 
       isEditorContext,
       nodes: { paneId: `pane-${step.first}`, splitId: `split-${step.first}` },
       pinned: step.pinned,
-      presence,
+      viewState,
       url: step.pinned ? `editor:${step.second}` : `viewer:${step.second}`,
       workspace,
     });
   }
 
-  const presentation = composeWorkspacePresentation(workspace, presence);
+  const presentation = composeWorkspacePresentation(workspace, viewState);
   const mounted = Object.entries(presentation.nodes).flatMap(([paneId, node]) => node.kind === 'pane'
     ? node.contexts.map((contextId) => ({ contextId, paneId }))
     : []);
@@ -128,14 +172,14 @@ const planStep = (workspace: WorkspaceState, presence: WorkspacePresence, step: 
         isEditorContext,
         nodes: { paneId: `pane-${step.first}`, splitId: `split-${step.second}` },
         pinned: step.pinned,
-        presence,
+        viewState,
         url: `viewer:${step.second}`,
         workspace,
       });
     }
     action = { kind: 'workspace.split.resize', splitId: selectedSplit[0], ratio: step.ratio };
   }
-  return planWorkspaceAction({ action, isEditorContext, presence, workspace });
+  return planWorkspaceAction({ action, isEditorContext, viewState, workspace });
 };
 
 const assertWorkspaceRelationRoundTrip = (workspace: WorkspaceState) => {

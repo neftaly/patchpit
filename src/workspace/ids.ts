@@ -1,4 +1,4 @@
-import type { WorkspaceSplitIds } from './model.ts';
+import type { WorkspaceSplitIds } from './durable-state.ts';
 
 export const allocateWorkspaceIds = (): {
   readonly contextId: string;

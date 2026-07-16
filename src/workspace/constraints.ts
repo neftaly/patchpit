@@ -1,8 +1,7 @@
 import {
   type ArtifactRef,
-  type JsonValue,
 } from '@tarstate/core';
-import { sealConstraintSet } from '@tarstate/core/schema';
+import { sealConstraintSet } from '@tarstate/core/artifacts/constraint-set';
 import {
   type Expr,
   type QueryNode,
@@ -224,7 +223,7 @@ const constraint = (
   id,
   code,
   dependencyRelations,
-  violationQuery: violationQuery as unknown as JsonValue,
+  violationQuery,
 });
 
 const portableRelation = ({ relationId, schemaView }: RelationUse): RelationUse => ({ relationId, schemaView });
