@@ -50,6 +50,7 @@ try {
   assert.match(entryHeaders?.['content-security-policy'] ?? '', /sandbox allow-scripts allow-same-origin/);
   await proveOfflineSandboxReload(page);
   await proveFolderAppLaunch(page);
+  await proveRootReplacementLifecycle(page);
   console.log(JSON.stringify({ cases: report.cases.length, entryHeaders: 'pass', mode: development ? 'dev' : 'preview', workspace: 'pass' }, null, 2));
 } finally {
   await browser?.close();
@@ -344,13 +345,44 @@ async function proveOfflineSandboxReload(page) {
 }
 
 async function proveFolderAppLaunch(page) {
+  const previousCaches = await sandboxCacheNames(page);
+  assert.equal(previousCaches.length, 1);
   await page.getByRole('button', { name: 'Close sandbox-compat / index.html' }).click();
   assert.equal(await page.locator('.sandbox-app').count(), 0);
+  await page.waitForFunction(() => caches.keys().then((names) =>
+    names.every((name) => !name.startsWith('@patchpit/sandbox-cache/'))));
   await page.evaluate(() => { window.__sandboxCompatReport = undefined; });
   await page.locator('button.resource', { hasText: 'sandbox-compat' }).click();
   await page.locator('.sandbox-app').waitFor();
   await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2_000 });
   assert.equal(await page.locator('.tab', { hasText: 'sandbox-compat / index.html' }).getAttribute('data-preview'), 'true');
+  const currentCaches = await sandboxCacheNames(page);
+  assert.equal(currentCaches.length, 1);
+  assert.notEqual(currentCaches[0], previousCaches[0]);
+}
+
+async function proveRootReplacementLifecycle(page) {
+  const previousFrameSrc = await page.locator('.sandbox-app').getAttribute('src');
+  const previousCaches = await sandboxCacheNames(page);
+  assert(previousFrameSrc !== null && previousCaches.length === 1);
+  await page.evaluate(() => {
+    window.__sandboxCompatReport = undefined;
+    const invocation = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+    location.hash = JSON.stringify({ ...invocation, delegation: 'https://example.com/replaced' });
+  });
+  await page.waitForFunction((oldCache) => caches.keys().then((names) => !names.includes(oldCache)), previousCaches[0]);
+  await page.locator('button.resource', { hasText: 'sandbox-compat' }).waitFor();
+  assert.equal(await page.locator('.sandbox-app').count(), 0);
+  await page.locator('button.resource', { hasText: 'sandbox-compat' }).click();
+  await page.locator('.sandbox-app').waitFor();
+  await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2_000 });
+  assert.notEqual(await page.locator('.sandbox-app').getAttribute('src'), previousFrameSrc);
+  assert.equal((await sandboxCacheNames(page)).length, 1);
+}
+
+function sandboxCacheNames(page) {
+  return page.evaluate(() => caches.keys().then((names) =>
+    names.filter((name) => name.startsWith('@patchpit/sandbox-cache/'))));
 }
 
 async function dragWithTargetPreview(

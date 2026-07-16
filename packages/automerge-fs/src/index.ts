@@ -73,7 +73,7 @@ export const automergeFsStorageMappingArtifact = await sealStorageMapping({
   },
 });
 
-export const automergeFsDocumentDeclaration: DocumentDeclaration = {
+const automergeFsDocumentDeclaration: DocumentDeclaration = {
   formatVersion: 1,
   storageSchema: normalizeArtifactRef(fsSchemaArtifact),
   projection: {

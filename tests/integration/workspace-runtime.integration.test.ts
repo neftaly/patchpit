@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as Automerge from '@automerge/automerge';
 import { Repo } from '@automerge/automerge-repo';
 import { createWorkspaceDocument, openWorkspaceRuntime } from '../../src/workspace/runtime.ts';
 import {
@@ -71,11 +72,16 @@ void test('workspace runtime projects relation-shaped storage and applies named 
   }
 });
 
-void test('named workspace operations replan after a concurrent stale basis', async () => {
-  const repo = new Repo({ network: [] });
-  const handle = repo.create(createWorkspaceDocument('home'));
-  const first = await openWorkspaceRuntime(handle);
-  const second = await openWorkspaceRuntime(handle);
+void test('concurrent workspace replicas merge named operations without replacing either branch', async () => {
+  const firstRepo = new Repo({ network: [] });
+  const secondRepo = new Repo({ network: [] });
+  const firstHandle = firstRepo.create(createWorkspaceDocument('home'));
+  const secondHandle = secondRepo.import<ReturnType<typeof createWorkspaceDocument>>(
+    Automerge.save(firstHandle.doc()),
+    { docId: firstHandle.documentId },
+  );
+  const first = await openWorkspaceRuntime(firstHandle);
+  const second = await openWorkspaceRuntime(secondHandle);
 
   try {
     const results = await Promise.all([
@@ -95,19 +101,27 @@ void test('named workspace operations replan after a concurrent stale basis', as
       }),
     ]);
     assert.deepEqual(results.map(({ outcome }) => outcome), ['committed', 'committed']);
-    const projection = first.getSnapshot();
-    assert.equal(projection.state, 'ready');
-    if (projection.state !== 'ready') throw new Error('Workspace projection is unavailable');
-    assert.deepEqual(
-      projection.workspace.nodes.left?.kind === 'pane'
-        ? [...projection.workspace.nodes.left.contexts].sort()
-        : undefined,
-      ['context-0', 'first', 'second'],
-    );
+    assert.equal(firstHandle.doc().placements.second, undefined);
+    assert.equal(secondHandle.doc().placements.first, undefined);
+
+    const merged = Automerge.merge(firstHandle.doc(), secondHandle.doc());
+    firstHandle.update(() => merged);
+    secondHandle.update(() => merged);
+    for (const projection of [first.getSnapshot(), second.getSnapshot()]) {
+      assert.equal(projection.state, 'ready');
+      if (projection.state !== 'ready') throw new Error('Workspace projection is unavailable');
+      assert.deepEqual(
+        projection.workspace.nodes.left?.kind === 'pane'
+          ? [...projection.workspace.nodes.left.contexts].sort()
+          : undefined,
+        ['context-0', 'first', 'second'],
+      );
+    }
   } finally {
     first.close();
     second.close();
-    await repo.shutdown();
+    await firstRepo.shutdown();
+    await secondRepo.shutdown();
   }
 });
 

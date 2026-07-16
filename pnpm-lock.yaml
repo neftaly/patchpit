@@ -138,6 +138,9 @@ importers:
 
   packages/automerge-fs:
     dependencies:
+      '@automerge/automerge':
+        specifier: 3.2.6
+        version: 3.2.6
       '@patchpit/fs':
         specifier: workspace:*
         version: link:../fs
