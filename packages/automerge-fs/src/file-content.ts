@@ -6,26 +6,28 @@ import {
 } from '@tarstate/automerge';
 import { adoptConflictFreeAutomergeJsonValue } from '@tarstate/automerge/values';
 import {
-  builtInCapabilityRefs,
   createIssue,
-  normalizeArtifactRef,
-  type ArtifactRef,
   type Issue,
   type ParseResult,
 } from '@tarstate/core';
-import type { DocumentDeclaration } from '@tarstate/core/attachment';
 import {
-  sealStorageMapping,
-  type StoredFieldMapping,
-  type StorageMappingBody,
-} from '@tarstate/core/schema';
+  safeParseDocumentDeclaration,
+  type DocumentDeclaration,
+} from '@tarstate/core/attachment/declaration';
 import {
-  fileRelation,
+  fileBinaryAttachment,
+  fileForeignBinaryAttachment,
+  fileForeignTextAttachment,
+  fileTextAttachment,
+} from '@patchpit/artifacts';
+import {
   fileSchemaArtifact,
-  type FileRow,
 } from '@patchpit/fs';
 import {
   hasPatchworkFileShape,
+  isRecord,
+  sameArtifactRef,
+  sameUnconstrainedMappingDeclaration,
   selectFilesystemDocumentKind,
 } from './document-selection.ts';
 
@@ -35,56 +37,24 @@ export {
 } from '@patchpit/fs';
 
 const patchworkFileMetadata = { type: 'file' } as const;
-const replaceContent = {
-  kind: 'replace',
-  capability: builtInCapabilityRefs.fieldReplace,
-} as const;
-const readOnly = { kind: 'read-only' } as const;
-const absentContent = { kind: 'absent' } as const;
 
 type SelectedFileAttachment = {
   readonly declaration: DocumentDeclaration;
   readonly artifacts: Readonly<Record<string, unknown>>;
 };
-type FileContentKind = FileRow['contentKind'];
-
-const binaryFileAttachment = await createFileAttachment({
-  kind: 'binary',
-  mappingId: 'urn:patchpit:mapping:binary-file@1',
-  schema: fileSchemaArtifact,
-  write: replaceContent,
-});
-const textFileAttachment = await createFileAttachment({
-  kind: 'text',
-  mappingId: 'urn:patchpit:mapping:text-file@1',
-  schema: fileSchemaArtifact,
-  write: replaceContent,
-});
-const foreignBinaryFileAttachment = await createFileAttachment({
-  kind: 'binary',
-  mappingId: 'urn:patchpit:mapping:foreign-binary-file@1',
-  schema: fileSchemaArtifact,
-  write: readOnly,
-});
-const foreignTextFileAttachment = await createFileAttachment({
-  kind: 'text',
-  mappingId: 'urn:patchpit:mapping:foreign-text-file@1',
-  schema: fileSchemaArtifact,
-  write: readOnly,
-});
 
 export const automergeBinaryFileDocumentMetadata = {
   type: 'file',
-  schema: normalizeArtifactRef(fileSchemaArtifact),
-  declaration: binaryFileAttachment.declaration,
-  schemas: binaryFileAttachment.artifacts,
+  schema: fileBinaryAttachment.declaration.storageSchema,
+  declaration: fileBinaryAttachment.declaration,
+  schemas: fileBinaryAttachment.artifacts,
 } as const;
 
 export const automergeTextFileDocumentMetadata = {
   type: 'file',
-  schema: normalizeArtifactRef(fileSchemaArtifact),
-  declaration: textFileAttachment.declaration,
-  schemas: textFileAttachment.artifacts,
+  schema: fileTextAttachment.declaration.storageSchema,
+  declaration: fileTextAttachment.declaration,
+  schemas: fileTextAttachment.artifacts,
 } as const;
 
 type AutomergeFileDocument<Metadata, Content> = {
@@ -172,17 +142,14 @@ const selectFileAttachment = (
 ): { readonly attachment: SelectedFileAttachment; readonly issues: readonly Issue[] }
   | { readonly attachment?: undefined; readonly issues: readonly Issue[] } => {
   if ('@patchpit' in document) return selectOwnedFileAttachment(document, sourceId);
-  if (getConflicts(document, 'content') !== undefined) {
-    return { issues: [fileIssue('content-conflicted', sourceId)] };
-  }
   if (!hasPatchworkFileShape(document)) {
     return { issues: [fileIssue('shape-invalid', sourceId)] };
   }
   const interopIssue = patchworkMetadataIssue(document, sourceId);
   return {
     attachment: document.content instanceof Uint8Array
-      ? foreignBinaryFileAttachment
-      : foreignTextFileAttachment,
+      ? fileForeignBinaryAttachment
+      : fileForeignTextAttachment,
     issues: interopIssue === undefined ? [] : [interopIssue],
   };
 };
@@ -200,16 +167,16 @@ const selectOwnedFileAttachment = (
     return { issues: [...adopted.issues, fileIssue('metadata-invalid', sourceId)] };
   }
   const metadata = adopted.value;
-  if (!isRecord(metadata.declaration) || !isRecord(metadata.schemas)) {
+  if (!isRecord(metadata.schemas) || !sameArtifactRef(metadata.schema, fileSchemaArtifact)) {
     return { issues: [fileIssue('metadata-invalid', sourceId)] };
   }
-  if (!sameArtifactRef(metadata.schema, fileSchemaArtifact)
-    || !sameArtifactRef(metadata.declaration.storageSchema, metadata.schema)) {
-    return { issues: [fileIssue('metadata-invalid', sourceId)] };
+  const parsedDeclaration = safeParseDocumentDeclaration(metadata.declaration);
+  if (!parsedDeclaration.success) {
+    return { issues: [...parsedDeclaration.issues, fileIssue('metadata-invalid', sourceId)] };
   }
-  const declaration = metadata.declaration as DocumentDeclaration;
-  const attachment = [binaryFileAttachment, textFileAttachment].find((candidate) =>
-    sameStorageMapping(declaration, candidate.declaration));
+  const declaration = parsedDeclaration.value;
+  const attachment = [fileBinaryAttachment, fileTextAttachment].find((candidate) =>
+    sameUnconstrainedMappingDeclaration(declaration, candidate.declaration));
   if (attachment === undefined) return { issues: [fileIssue('metadata-invalid', sourceId)] };
   const interopIssue = patchworkMetadataIssue(document, sourceId);
   return {
@@ -233,73 +200,6 @@ const patchworkMetadataIssue = (document: object, sourceId: string): Issue | und
     : fileIssue('interop-metadata-invalid', sourceId, {}, 'warning');
 };
 
-async function createFileAttachment(input: {
-  readonly kind: FileContentKind;
-  readonly mappingId: string;
-  readonly schema: typeof fileSchemaArtifact;
-  readonly write: StoredFieldMapping['write'];
-}): Promise<SelectedFileAttachment> {
-  const schema = normalizeArtifactRef(input.schema);
-  const mapping = await sealStorageMapping({
-    id: input.mappingId,
-    body: fileStorageMapping(schema, input.kind, input.write),
-  });
-  return {
-    declaration: fileDeclaration(schema, normalizeArtifactRef(mapping)),
-    artifacts: {
-      [input.schema.id]: input.schema,
-      [mapping.id]: mapping,
-    },
-  };
-}
-
-const sameStorageMapping = (left: DocumentDeclaration, right: DocumentDeclaration) =>
-  left.projection.kind === 'storage-mapping'
-  && right.projection.kind === 'storage-mapping'
-  && sameArtifactRef(left.projection.storageMapping, right.projection.storageMapping);
-
-function fileStorageMapping(
-  schema: ArtifactRef,
-  contentKind: FileContentKind,
-  contentWrite: StoredFieldMapping['write'],
-): StorageMappingBody {
-  return {
-    schema,
-    model: 'json-tree-v1',
-    relations: {
-      [fileRelation.relationId]: {
-        collection: { kind: 'singleton', path: [], absent: 'invalid' },
-        keys: {
-          id: { kind: 'literal', value: 'file' },
-          contentKind: { kind: 'literal', value: contentKind },
-        },
-        fields: {
-          binaryContent: contentKind === 'binary'
-            ? { path: ['content'], write: contentWrite }
-            : absentContent,
-          textContent: contentKind === 'text'
-            ? { path: ['content'], write: contentWrite }
-            : absentContent,
-          extension: { path: ['extension'], write: readOnly },
-          mimeType: { path: ['mimeType'], write: readOnly },
-          name: { path: ['name'], write: readOnly },
-        },
-      },
-    },
-  };
-}
-
-function fileDeclaration(
-  storageSchema: ArtifactRef,
-  storageMapping: ArtifactRef,
-): DocumentDeclaration {
-  return {
-    formatVersion: 1,
-    storageSchema,
-    projection: { kind: 'storage-mapping', storageMapping },
-  };
-}
-
 const extensionOf = (name: string) => {
   const separator = name.lastIndexOf('.');
   return separator > 0 && separator < name.length - 1 ? name.slice(separator + 1) : '';
@@ -317,10 +217,3 @@ const fileIssue = (
   sourceId,
   details,
 });
-
-const sameArtifactRef = (input: unknown, expected: unknown) =>
-  isRecord(input) && isRecord(expected)
-  && input.id === expected.id && input.contentHash === expected.contentHash;
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);

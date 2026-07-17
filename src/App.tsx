@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -44,10 +45,15 @@ export function App({ runtime, sandboxHost }: {
   const workspaceRuntime = runtime.workspaceRuntime;
   const workspaceViewStateRuntime = runtime.workspaceViewStateRuntime;
   const pendingWorkspacePlans = useRef(Promise.resolve());
+  const subscribeResourceQuery = useCallback(
+    (listener: () => void) => resourceQuery.subscribe(listener),
+    [resourceQuery],
+  );
+  const getResourceSnapshot = useCallback(() => resourceQuery.getSnapshot(), [resourceQuery]);
   const resourceSnapshot = useSyncExternalStore(
-    (listener) => resourceQuery.subscribe(listener),
-    () => resourceQuery.getSnapshot(),
-    () => resourceQuery.getSnapshot(),
+    subscribeResourceQuery,
+    getResourceSnapshot,
+    getResourceSnapshot,
   );
   const resources = useMemo(
     () => projectResourceTree(

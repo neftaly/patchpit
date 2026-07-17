@@ -10,6 +10,10 @@ import {
   type Issue,
   type JsonValue,
 } from '@tarstate/core';
+import {
+  safeParseDocumentDeclaration,
+  type DocumentDeclaration,
+} from '@tarstate/core/attachment/declaration';
 import type { SourceBasis } from '@tarstate/core/source';
 import {
   applyWorkspaceOperation,
@@ -129,7 +133,7 @@ const projectAttachmentSnapshot = (
 };
 
 const parseWorkspaceMetadata = (document: WorkspaceDocument) => {
-  if (Object.keys(getConflicts(document, '@patchpit') ?? {}).length > 1) {
+  if (getConflicts(document, '@patchpit') !== undefined) {
     throw invalidWorkspaceMetadata();
   }
   const adopted = adoptConflictFreeAutomergeJsonValue(document['@patchpit']);
@@ -138,13 +142,27 @@ const parseWorkspaceMetadata = (document: WorkspaceDocument) => {
   if (!isRecord(input)
     || input.type !== workspaceDocumentMetadata.type
     || !sameArtifactRef(input.schema, workspaceDocumentMetadata.schema)
-    || !isRecord(input.declaration)
-    || !sameArtifactRef(input.declaration.storageSchema, workspaceDocumentMetadata.schema)
     || !isRecord(input.schemas)) {
     throw invalidWorkspaceMetadata();
   }
-  return { declaration: input.declaration, schemas: input.schemas };
+  const declaration = safeParseDocumentDeclaration(input.declaration);
+  if (!declaration.success) throw invalidWorkspaceMetadata(declaration.issues);
+  if (!sameWorkspaceDeclaration(declaration.value, workspaceDocumentMetadata.declaration)) {
+    throw invalidWorkspaceMetadata();
+  }
+  return { declaration: declaration.value, schemas: input.schemas };
 };
+
+const sameWorkspaceDeclaration = (
+  input: DocumentDeclaration,
+  expected: typeof workspaceDocumentMetadata.declaration,
+) => input.projection.kind === 'storage-mapping'
+  && expected.projection.kind === 'storage-mapping'
+  && expected.constraints !== undefined
+  && sameArtifactRef(input.storageSchema, expected.storageSchema)
+  && sameArtifactRef(input.projection.storageMapping, expected.projection.storageMapping)
+  && input.constraints?.mode === expected.constraints.mode
+  && sameArtifactRef(input.constraints?.set, expected.constraints.set);
 
 const invalidWorkspaceMetadata = (cause: readonly Issue[] = [workspaceIssue('metadata-invalid', {})]) =>
   new Error('Patchpit workspace metadata is invalid', { cause });

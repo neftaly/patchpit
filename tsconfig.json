@@ -11,6 +11,7 @@
     "noUnusedParameters": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "moduleDetection": "force",
@@ -19,5 +20,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["apps", "packages/*/src", "src", "tests", "vite.config.ts"]
+  "include": ["apps", "packages/*/src", "scripts", "src", "tests", "vite.config.ts"]
 }

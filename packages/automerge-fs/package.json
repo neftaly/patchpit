@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@automerge/automerge": "3.2.6",
+    "@patchpit/artifacts": "workspace:*",
     "@patchpit/fs": "workspace:*",
     "@tarstate/automerge": "catalog:tarstate",
     "@tarstate/core": "catalog:tarstate"

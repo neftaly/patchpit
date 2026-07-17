@@ -1,0 +1,26 @@
+{
+  "description": "One document-centric folder and its ordered resource links.",
+  "relations": {
+    "folder": {
+      "relationId": "patchpit.folder",
+      "key": ["id"],
+      "fields": {
+        "id": { "type": { "kind": "string", "values": ["folder"] } },
+        "title": { "type": { "kind": "string" } }
+      }
+    },
+    "links": {
+      "relationId": "patchpit.folder.link",
+      "key": ["linkId"],
+      "fields": {
+        "linkId": { "type": { "kind": "string" } },
+        "order": { "type": { "kind": "integer" }, "optional": true },
+        "name": { "type": { "kind": "string" } },
+        "typeHint": { "type": { "kind": "string" } },
+        "resourceRef": { "type": { "kind": "string" } },
+        "icon": { "type": { "kind": "string" }, "optional": true },
+        "copyOf": { "type": { "kind": "string" }, "optional": true }
+      }
+    }
+  }
+}

@@ -1,6 +1,4 @@
-import {
-  type ArtifactRef,
-} from '@tarstate/core';
+import type { ArtifactRef } from '@tarstate/core';
 import { sealConstraintSet } from '@tarstate/core/artifacts/constraint-set';
 import {
   type Expr,

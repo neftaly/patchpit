@@ -5,8 +5,19 @@ import {
   type Issue,
   type ParseResult,
 } from '@tarstate/core';
+import type { DocumentDeclaration } from '@tarstate/core/attachment/declaration';
 
 export type FilesystemDocumentKind = 'folder' | 'file';
+
+export const sameUnconstrainedMappingDeclaration = (
+  left: DocumentDeclaration,
+  right: DocumentDeclaration,
+) => sameArtifactRef(left.storageSchema, right.storageSchema)
+  && left.projection.kind === 'storage-mapping'
+  && right.projection.kind === 'storage-mapping'
+  && sameArtifactRef(left.projection.storageMapping, right.projection.storageMapping)
+  && left.constraints === undefined
+  && right.constraints === undefined;
 
 export const selectFilesystemDocumentKind = (
   document: object,
@@ -99,5 +110,9 @@ export const filesystemSelectionIssue = (
   sourceId,
 });
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+export const sameArtifactRef = (input: unknown, expected: unknown) =>
+  isRecord(input) && isRecord(expected)
+  && input.id === expected.id && input.contentHash === expected.contentHash;
+
+export const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

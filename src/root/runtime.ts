@@ -208,10 +208,10 @@ const openRootHandle = async (
     workspace: initialWorkspace.workspace,
     activePaneId: initialPaneIds.at(-1) ?? null,
   });
-  const resolveResourceDocument = async (resourceRef: string) => {
+  const resolveResourceDocument = async (resourceRef: string, documentSignal?: AbortSignal) => {
     if (closed || !rootReferencesResource(resourceQuery, resourceRef)
       || !isValidAutomergeUrl(resourceRef)) return undefined;
-    const handle = await findResourceHandle(resourceRef);
+    const handle = await findResourceHandle(resourceRef, documentSignal);
     if (closed || !rootReferencesResource(resourceQuery, resourceRef)) return undefined;
     handles.set(resourceRef, handle);
     return handle;

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
+    "@patchpit/artifacts": "workspace:*",
     "@tarstate/core": "catalog:tarstate"
   }
 }

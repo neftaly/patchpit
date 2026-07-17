@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useState,
   useSyncExternalStore,
@@ -149,15 +150,10 @@ const resourceSourceProblemMessage = (
   return problem.issueCodes.join(', ');
 };
 
-const resourceNotice = (folderTraversal: 'already-expanded' | 'cycle' | undefined) => {
-  const notices = [
-    folderTraversal === 'already-expanded' ? 'contents shown above'
-      : folderTraversal === 'cycle' ? 'folder cycle'
-      : undefined,
-  ].filter((notice) => notice !== undefined);
-  if (notices.length > 0) return notices.join('; ');
-  return undefined;
-};
+const resourceNotice = (folderTraversal: 'already-expanded' | 'cycle' | undefined) =>
+  folderTraversal === 'already-expanded' ? 'contents shown above'
+    : folderTraversal === 'cycle' ? 'folder cycle'
+    : undefined;
 
 const resourceIcon = (resource: FolderLinkRow) => {
   if (resource.typeHint === 'folder') return '📂';
@@ -186,7 +182,7 @@ function Viewer({ contentRuntime, resourceRef }: {
   useEffect(() => {
     const controller = new AbortController();
     setResolution({ state: 'loading' });
-    void contentRuntime.resolveResourceDocument(resourceRef).then((resolved) => {
+    void contentRuntime.resolveResourceDocument(resourceRef, controller.signal).then((resolved) => {
       if (!controller.signal.aborted) setResolution(resolved === undefined
         ? { state: 'unavailable' }
         : { state: 'ready', handle: resolved });
@@ -196,15 +192,17 @@ function Viewer({ contentRuntime, resourceRef }: {
     return () => { controller.abort(); };
   }, [contentRuntime, resourceRef]);
   const handle = resolution.state === 'ready' ? resolution.handle : undefined;
+  const subscribeDocument = useCallback((listener: () => void) => {
+    if (handle === undefined) return () => undefined;
+    const changed = () => { listener(); };
+    handle.on('heads-changed', changed);
+    return () => { handle.off('heads-changed', changed); };
+  }, [handle]);
+  const getDocument = useCallback(() => handle?.doc(), [handle]);
   const document = useSyncExternalStore(
-    (listener) => {
-      if (handle === undefined) return () => undefined;
-      const changed = () => { listener(); };
-      handle.on('heads-changed', changed);
-      return () => { handle.off('heads-changed', changed); };
-    },
-    () => handle?.doc(),
-    () => handle?.doc(),
+    subscribeDocument,
+    getDocument,
+    getDocument,
   );
   if (resolution.state === 'unavailable') return <p role="alert">Resource unavailable.</p>;
   return <pre className="viewer">{formatViewerContent(document, resourceRef)}</pre>;

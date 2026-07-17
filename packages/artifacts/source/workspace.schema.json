@@ -1,0 +1,98 @@
+{
+  "description": "Patchpit workspace configuration and state.",
+  "relations": {
+    "state": {
+      "relationId": "patchpit.workspace.state",
+      "key": ["id"],
+      "fields": {
+        "id": { "type": { "kind": "string" } },
+        "rootNodeId": {
+          "type": { "kind": "string" },
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        }
+      }
+    },
+    "placements": {
+      "relationId": "patchpit.workspace.placement",
+      "key": ["contextId"],
+      "fields": {
+        "contextId": { "type": { "kind": "string" } },
+        "url": {
+          "type": { "kind": "string" },
+          "description": "App invocation URL.",
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        },
+        "paneId": {
+          "type": { "kind": "string" },
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        },
+        "position": {
+          "type": { "kind": "integer" },
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        }
+      }
+    },
+    "panes": {
+      "relationId": "patchpit.workspace.pane",
+      "key": ["id"],
+      "fields": {
+        "id": { "type": { "kind": "string" } }
+      }
+    },
+    "splits": {
+      "relationId": "patchpit.workspace.split",
+      "key": ["id"],
+      "fields": {
+        "id": { "type": { "kind": "string" } },
+        "axis": {
+          "type": { "kind": "string", "values": ["horizontal", "vertical"] },
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        },
+        "first": {
+          "type": { "kind": "string" },
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        },
+        "ratio": {
+          "type": { "kind": "number" },
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        },
+        "second": {
+          "type": { "kind": "string" },
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        }
+      }
+    }
+  }
+}

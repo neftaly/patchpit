@@ -8,10 +8,12 @@
     "node": ">=24.12.0"
   },
   "scripts": {
-    "build": "vite build",
+    "artifacts:build": "node scripts/build-artifacts.mts",
+    "artifacts:check": "node scripts/build-artifacts.mts --check",
+    "build": "pnpm artifacts:check && vite build",
     "build:sandbox-compat": "vite build --config apps/sandbox-compat/vite.config.ts",
     "dev": "vite",
-    "lint": "oxlint apps packages src tests vite.config.ts --deny-warnings --type-aware",
+    "lint": "oxlint apps packages scripts src tests vite.config.ts --deny-warnings --type-aware",
     "test": "node tests/run.mjs",
     "test:behavior": "node tests/run.mjs behavior",
     "test:dev": "node --import ./tests/support/register-ts-loader.mjs tests/browser/prototype-preview.mjs --dev",
@@ -19,12 +21,13 @@
     "test:integration": "node tests/run.mjs integration",
     "test:preview": "node --import ./tests/support/register-ts-loader.mjs tests/browser/prototype-preview.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc"
+    "typecheck": "pnpm artifacts:check && tsc"
   },
   "dependencies": {
     "@automerge/automerge": "3.2.6",
     "@automerge/automerge-repo": "2.5.6",
     "@patchpit/automerge-fs": "workspace:*",
+    "@patchpit/artifacts": "workspace:*",
     "@patchpit/fs": "workspace:*",
     "@patchpit/sandbox": "workspace:*",
     "@patchpit/sandbox-fs": "workspace:*",
@@ -40,6 +43,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@tarstate/schema-tools": "catalog:tarstate",
     "@vitejs/plugin-react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
     "fast-check": "catalog:",

@@ -422,6 +422,7 @@ async function dragWithTargetPreview(
     dataTransfer,
   };
   await target.dispatchEvent('dragover', position);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   assert.equal(await target.getAttribute(attribute), expectedTarget);
   await target.dispatchEvent('drop', position);
   await sourceElement.dispatchEvent('dragend', { dataTransfer });

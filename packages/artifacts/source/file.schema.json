@@ -1,0 +1,34 @@
+{
+  "description": "One Patchwork-compatible binary or collaborative text file.",
+  "relations": {
+    "file": {
+      "relationId": "patchpit.file",
+      "key": ["id", "contentKind"],
+      "fields": {
+        "id": { "type": { "kind": "string", "values": ["file"] } },
+        "extension": { "type": { "kind": "string" } },
+        "mimeType": { "type": { "kind": "string" } },
+        "name": { "type": { "kind": "string" } },
+        "contentKind": { "type": { "kind": "string", "values": ["binary", "text"] } },
+        "binaryContent": {
+          "type": { "kind": "bytes" },
+          "optional": true,
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        },
+        "textContent": {
+          "type": { "kind": "string" },
+          "optional": true,
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        }
+      }
+    }
+  }
+}
