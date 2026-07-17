@@ -1,471 +1,279 @@
-# Patchpit direction
+# Patchpit roadmap
 
-Patchpit targets a lightweight, document-centric local-first environment with
-substantial behavioral and file-primitive overlap with Patchwork. Patchwork is
-the reference for mature document and filesystem semantics. Patchpit diverges
-only for an explicit product behavior, security boundary, or stronger
-consistency guarantee; Tarstate/FRelP replaces bespoke projection, authority,
-readiness, and write plumbing. Patchwork-compatible Automerge documents are a
-target; Patchwork's tool runtime and host APIs are not.
+This document contains future work only. Goal identifiers are stable references,
+not release numbers. Each goal is complete only when its acceptance evidence is
+executable; implementation details and already-delivered behavior do not belong
+here.
 
-## Decided model
+## Near-term work goals
 
-### C1. Document identity
+### W1. Explicit presence source
 
-An Automerge document URL is durable resource identity. Files, folders,
-workspaces, and future application data are documents. In the canonical model,
-tabs and views target documents rather than filesystem projection rows.
-Open contexts observe document-owned titles through focused Tarstate queries;
-unsupported or unavailable title projections fall back to the first occurrence
-in deterministic visible-tree order without changing document identity.
+Give per-client active-pane, active-context, and preview state an explicitly
+attached ephemeral source with its own identity and exact Tarstate schema.
 
-### C2. Folder placement
+The source must remain distinct from durable workspace state. Its lifecycle is
+owned by the viewing client, and reconnecting or opening another client must not
+pretend that transient focus is shared durable state. Inline the sealed presence
+schema in `@patchpit.schemas` only once the real source reference and attachment
+exist.
 
-A folder document uses the Patchwork-compatible physical shape `title` plus an
-ordered `docs` collection. Each link contains `name`, `type`, and an Automerge
-`url`, with optional interoperable hints such as `icon` and `copyOf`. Link name,
-order, and derived path are placement facts. Link type and presentation hints
-are not authoritative for the target document. A link occurrence has stable
-source-local identity but is not global resource identity or an app-facing
-primitive. Patchpit-owned links store an explicit occurrence ID; foreign
-Patchwork links derive it from source-native Automerge object identity when
-available. Writers store the best known Patchwork type hint, but retyping a
-linked document cannot atomically update every inbound link; stale hints remain
-diagnosable hints rather than changing the target's logical type.
+Acceptance evidence:
 
-Owned folders expose relational rename, unlink, and alias operations. Reorder
-is deliberately separate because preserving an Automerge list object's
-identity is a source capability, not equivalent to sorting projected rows.
+1. Two clients can hold different active and preview state over the same durable
+   workspace without writing the workspace document.
+2. Closing the presence source removes only that client's transient state.
+3. Ready, incomplete, and invalid presence projections remain distinguishable.
+4. Behavior fuzzing covers reconciliation after concurrent durable workspace
+   changes, removed panes, removed contexts, and source replacement.
 
-One occurrence of a placement name per folder is the desired resolved state.
-It is not a coordination-free invariant: concurrent replicas may create
-duplicates. Those links remain representable and queryable while path
-resolution reports ambiguity instead of silently selecting a winner. A
-document URL may deliberately occur more than once under distinct placement
-names; those occurrences are aliases, not path conflicts.
+### W2. Durable reopening
 
-The resource pane preserves every occurrence without presenting ordinary name
-collisions as broken links. Consumers that require a unique path, such as app
-materialization, reject ambiguity rather than silently selecting a winner.
-Aliases within or between folders are independent and are not treated as
-conflicts. The pane also preserves graph readiness and lists each non-current, unavailable,
-unauthorized, or invalid contributing source instead of presenting partial
-membership as an empty folder.
+Persist and reopen the root Automerge document through the injectable Repo
+boundary. The root invocation's `src` remains document identity; missing `src`
+creates a root and canonicalizes the hash, while replacing `src` replaces the
+active root lifecycle.
 
-### C3. File content
+Persistence must distinguish a document that is unavailable, evicted, invalid,
+or unsupported from a newly created document. Multiple browser tabs must either
+use a convergent storage/network protocol or report an explicit ownership
+conflict. Durable reopening must not persist W1 presence state or pass root
+`sync` and `delegation` values into sandbox application hashes.
 
-A file uses the Patchwork-compatible physical fields `name`, `extension`,
-`mimeType`, and `content`. Writable collaborative text is stored as Automerge
-text; binary content is stored as bytes. Patchpit uses one exact logical file
-relation with a discriminated text or binary content branch. Separate storage
-mappings preserve each physical representation, and changing representation is
-an explicit document retype. Sandbox launch materializes either branch as
-immutable bytes.
+Acceptance evidence:
 
-The document name is its default title while each folder link owns its
-placement name, so aliases may deliberately differ. Foreign compatible files
-may also contain an Automerge immutable string, which is readable text without
-implying write capability. Reading a foreign file does not claim ownership or
-mutate it. Concurrent binary replacements or representation changes may
-produce conflict evidence; no adapter selects a winning value implicitly.
-Inline bytes are the Patchwork-compatible binary profile, not a claim that
-arbitrarily large blobs belong in Automerge history. Explicit attached content
-stores may advertise different identity, offline, and write capabilities; they
-do not masquerade as fully round-trip-compatible Patchwork file documents.
+1. A browser behavior case creates, closes, and reopens the same root identity
+   with its durable workspace and folder graph intact.
+2. Missing storage, local eviction, adapter failure, and invalid bytes produce
+   distinct evidence.
+3. Root replacement closes subscriptions, attachments, presence, and sandbox
+   mounts belonging to the previous lifecycle.
+4. Multi-tab behavior has an executable convergence or explicit-rejection case.
 
-### C4. Metadata ownership
+### W3. Patchwork interoperability corpus
 
-`@patchpit` declares that the document uses a Patchpit-owned format and names
-its exact primary Tarstate schema. It is a semantic declaration, not proof of
-provenance, trust, or write authority. Self-contained documents inline exact
-sealed artifacts.
+Establish golden Automerge documents produced and edited by both Patchwork and
+Patchpit for every compatibility level Patchpit claims. Begin with folders,
+text files, binary files, immutable strings, unknown-field preservation, aliases,
+duplicate placement names, unavailable links, and owned metadata failures.
 
-Patchpit-owned interoperable documents also store a minimal physical
-`@patchwork.type` discriminator so Patchwork can recognize them. A Tarstate
-storage mapping or attachment adapter interprets that physical convention; it
-is not a logical relation field. Foreign namespaced metadata is preserved and
-ignored unless an explicit adapter supports it. Normal content writes do not
-rewrite metadata. Missing, conflicted, or inconsistent `@patchwork` metadata
-impairs interoperability and produces an issue, but cannot override an exact
-valid `@patchpit` declaration.
+Compatibility evidence must distinguish identify, read, preserve, write without
+representation loss, and create. A read-only adapter is not round-trip support.
+Foreign documents remain foreign; reading or writing through an adapter must not
+silently adopt them.
 
-Only Patchpit-owned durable documents require this envelope. Attachment uses
-the following precedence:
+Acceptance evidence:
 
-1. Any present `@patchpit` envelope must be conflict-free and parse exactly or
-   the document is invalid; typed attachment never falls through to foreign
-   metadata or shape inference, but raw inspection remains available.
-2. A conflict-free recognized `@patchwork.type` may nominate a foreign
-   compatibility adapter, which must still parse the physical shape.
-3. An exact, versioned, unambiguous physical-shape predicate may nominate a
-   conservative foreign adapter, normally read-only. Adapter selection never
-   uses heuristic scoring.
-4. Everything else remains raw or unknown.
+1. Patchwork-produced fixtures open through the intended Patchpit adapters.
+2. Supported Patchpit edits reopen in Patchwork without losing unknown fields.
+3. Patchpit-produced compatible documents are recognized by Patchwork.
+4. Malformed, conflicted, ambiguous, and representation-changing cases remain
+   inspectable rather than selecting a winner or becoming empty data.
 
-Inference never grants authority, claims ownership, or mutates the document.
-It considers only the host's explicitly installed compatibility adapters. An
-inferred adapter is evidence for the current source snapshot and may be
-replaced when the foreign representation changes. It exposes writes only when
-its current attachment explicitly preserves them and the caller separately has
-write authority. Reading or writing through a foreign adapter is not adoption.
-Multiple matching adapters produce ambiguity evidence and fall back to raw
-inspection.
+### W4. Markdown acceptance application
 
-Adding or changing `@patchpit` is an explicit adoption or migration operation
-with a source basis and receipt, not a side effect of reading. In-place adoption
-requires write authority and a representation-preserving mapping, and is
-re-projected and validated after concurrent changes merge. Transformation
-defaults to copy/import with new document identity. Concurrent incompatible
-adoptions may produce metadata conflicts, which remain inspectable and require
-explicit repair rather than winner selection.
+Build the first real editing application around a Patchwork-compatible Markdown
+document with `@patchwork.type: markdown` and collaborative Automerge text.
 
-### C5. App launch
+The application must drive the smallest useful host boundary for:
 
-A folder whose direct link name is `index.html` is an app. This is an explicit
-web-application convention, distinct from Patchwork's host-loaded
-`package.json` tool modules. Launch captures an immutable, authority-scoped set
-of files and records every contributing source basis. Exactness is relative to
-that settled membership and those per-source bases; it does not imply a global
-cross-document transaction. Missing sources remain incomplete rather than
-becoming empty folders.
-
-### C6. Interoperability boundary
-
-Patchpit and Patchwork should share file, folder, directory, Markdown, and
-selected application documents. Compatibility is capability-specific:
-identify, read, preserve, write without representation loss, and create are
-separate levels. An adapter advertises only the levels it actually supplies;
-read-only compatibility is not described as round-trip support.
-
-Patchpit-owned documents carry both authoritative `@patchpit` declarations and
-minimal `@patchwork` dispatch metadata. Foreign Patchwork documents use
-host-supplied adapters selected from their observed physical shape, preserve
-unknown fields, and remain foreign. Patchwork plugin execution, raw handles,
-and host protocol compatibility are outside this boundary.
-
-### C7. External resources
-
-Direct `https:` leaves are external resources, not Automerge documents or
-implicitly executable applications. Folder metadata, resolution state, and
-fetched bytes remain separate. Discovery applies authority before any resolver
-may cause network access, and absent explicit resource authority an app
-snapshot remains incomplete rather than fetching a URL.
-
-## Distributed semantics
-
-### S1. Available convergence
-
-Automerge permits local work during partitions and converges replicas later.
-Patchpit may gate a particular action on readiness or authority, but does not
-claim global linearizability or prevent remote changes from existing.
-
-### S2. Atomic boundary
-
-One Automerge document is one atomic write boundary. Multi-document move, copy,
-lineage, and lifecycle operations are explicit sequences with partial outcomes,
-not transactions disguised by the UI.
-
-### S3. Merge-aware constraints
-
-Simulation can reject a locally invalid intent, but a concurrent merge may
-still violate uniqueness, reachability, or application constraints. Tarstate
-projects the merged state, reports issues, and keeps repairable facts visible.
-Constraints never turn an invalid remote state into an empty relation or a
-silently chosen winner.
-
-### S4. Basis-relative snapshots
-
-Every multi-source result identifies settled membership and each contributing
-source basis. Readiness and exactness apply to that captured set. A later
-network discovery or remote change produces a replacement projection rather
-than retroactively changing an issued snapshot.
-
-### S5. Eventually available references
-
-A valid link may target a source that is unauthorized, offline, not yet
-replicated, or permanently unavailable. Referential integrity is represented
-as readiness and issue evidence rather than a synchronous foreign-key promise.
-
-### S6. Authority outside replicated claims
-
-CRDT convergence does not authenticate document metadata. Artifact hashes name
-exact content but do not grant authority. Hosts apply trust and capability
-policy before attachment, discovery, reading, writing, or launch.
-
-### S7. Relative synchronization
-
-Offline, syncing, and synchronized states are relative to named adapters,
-peers, and known heads. Patchpit never presents synchronization with one server
-as proof that every replica has received the document.
-
-### S8. Causal history
-
-Automerge history is a causal graph. Preview pins explicit heads; restore
-creates a new change expressing selected historical state; copy creates new
-document identity. Neither operation rewinds shared history.
-
-### S9. Causal ordering
-
-Heads and change dependencies establish causal order. Wall-clock timestamps are
-presentation metadata and may be skewed, absent, or equal; they never choose a
-conflict winner, establish authority, or define a total history.
-
-### S10. Replication privacy
-
-An Automerge URL is identity, not a secret or authorization token. Network
-adapters define share policy, peer authentication, transport protection, and
-at-rest guarantees. Patchpit does not describe a document as private or
-encrypted merely because it is local-first or currently unavailable.
-
-## Foundation constraints
-
-### F1. Canonical folder documents
-
-Canonical filesystem storage is an ordered Patchwork-compatible folder graph:
-folder documents contain `title` and `docs`, while links contain document URLs
-and placement facts. Patchpit-owned folders additionally carry exact
-`@patchpit` declarations and minimal `@patchwork.type: folder` metadata. The
-root `src` identifies the root folder document, nested folders are linked
-documents, and the workspace is an ordinary root link. Tarstate's bounded live
-source-link query owns recursive membership, readiness, provenance, and
-authority. There is no durable flat entry table or second filesystem ontology.
-
-### F2. Untrusted application isolation
-
-The same-origin sandbox profile remains restricted to explicitly trusted
-applications. Before untrusted applications are accepted, mounts move to an
-authority-free runner origin and no Repo, source handle, credential, or host
-capability crosses that boundary. App discovery or document compatibility does
-not confer trust.
-
-## Next behaviors
-
-### N1. Durable reopening
-
-Use the injectable Repo boundary to persist and reopen the root folder document
-across browser lifetimes. Root `src` continues to identify that document.
-Concurrent browser tabs either share a storage/network protocol that converges
-normally or report an unsupported ownership conflict; they never assume a hash
-alone proves that document bytes remain locally available.
-
-### N3. Scoped application data
-
-The first real editing application is a Patchwork-compatible Markdown editor.
-It should drive a minimal host protocol for:
-
-1. Receiving an authority-scoped Tarstate projection.
-2. Observing replacement projections and their readiness.
-3. Simulating and submitting semantic operations.
+1. Receiving an immutable authority-scoped Tarstate projection with readiness,
+   exact completeness, and contributing source bases.
+2. Observing replacement projections.
+3. Simulating and submitting semantic edits.
 4. Asking the host to open or create a document.
 
-Applications do not receive a Repo, raw `DocHandle`, foreign source handles, or
-a generic provider registry.
+The application must not receive a Repo, raw `DocHandle`, foreign source handle,
+iframe state, credential, or generic provider registry. It may initially use the
+trusted same-origin runner; W7 gates untrusted applications.
 
-### N4. Cross-source move and copy
+Acceptance evidence:
 
-Moving a link between folders removes and adds occurrences across two atomic
-sources, so its receipt exposes partial completion and retry/repair state. A
-copy creates a new document identity, writes `@patchwork.copyOf` on the copy,
-and may add a best-effort `@patchwork.copies` backlink to the source. One-sided
-lineage is valid evidence rather than corruption.
+1. Two replicas can edit the same Markdown document and converge.
+2. Incomplete and invalid projections disable unsafe editing without appearing
+   as empty content.
+3. Simulation and commit use the same semantic operation path.
+4. The document round-trips through the W3 compatibility corpus.
 
-## Later behaviors
+### W5. Cross-source copy and move
 
-### L1. Alternate directory sources
+Implement cross-folder operations as explicit sequences over independent atomic
+sources. Moving a link removes and adds occurrences across two folder documents;
+copying creates new document identity and records compatible lineage metadata.
 
-Mount Patchwork `@patchwork.type: directory` documents, including flat, nested,
-and mixed longest-prefix path forms, or other filesystem stores through source
-adapters. A source advertises only the identity and write capabilities it can
-actually preserve. Compatible path materialization handles conflict-free file
-shapes, strings, bytes, immutable strings, and logical JSON; conflicts,
-unavailable references, or unsupported values produce evidence instead of a
-silently selected representation.
+Receipts must expose partial completion, retry, repair, and idempotency evidence.
+One-sided `copyOf` or `copies` lineage is valid partial evidence rather than
+corruption. The UI must not describe these operations as atomic transactions.
 
-### L2. Open With
+Acceptance evidence:
 
-Offer compatible views based on the target document's exact logical schema and
-media type. The raw viewer remains a fallback. Editable Markdown and rendered
-Markdown preview supply the first real alternative views. Word and character
-count is an auxiliary view feature, not a reason to introduce host registry
-machinery.
+1. Every interruption point has a behavior case with an actionable receipt.
+2. Retrying an already-applied step does not duplicate an occurrence or document.
+3. Concurrent source changes are re-projected before the next step.
+4. Copy and move preserve the compatibility level advertised for each source.
 
-### L3. Typed creation
+### W6. Identity-preserving reorder
 
-Create a canonical, Patchwork-compatible document of a selected logical type,
-place a link to it in a folder, and open it with a compatible application.
+Add semantic link reorder after the generic source capability exists in
+Tarstate. Do not build a Patchpit-local transaction or identity workaround.
 
-### L4. Sync status
+Until Automerge exposes native object moves, the Automerge adapter records move
+lineage on the document root in `__automergeMoves`, keyed by source object
+identity. The physical list order remains readable by ordinary Patchwork
+clients, while Patchpit and Tarstate depend on the semantic move guarantee
+rather than the journal representation. Native identity-preserving moves,
+fallback semantic moves, and copy/relocate remain distinct capabilities.
 
-Expose ready, incomplete, invalid, offline, synchronizing, and synchronized
-state once persistent/network adapters make those distinctions real. Always
-name or make inspectable the adapter, peer set, and heads to which sync status
+Acceptance evidence:
+
+1. Reorder preserves logical occurrence identity through local and merged edits.
+2. Ordinary Patchwork readers observe the resulting physical order while safely
+   ignoring private bookkeeping.
+3. Concurrent reorder, rename, insert, unlink, and duplicate-name cases converge
+   to equivalent source state and Tarstate evidence in every delivery order.
+4. A later native Automerge move can replace the fallback without changing the
+   Patchpit schema or semantic operation.
+
+### W7. Authority-free runner origin
+
+Before accepting untrusted applications, move sandbox execution and mounts to a
+separate authority-free origin. Define only the transfer protocol required by a
+real untrusted application acceptance case.
+
+No Repo, source handle, host credential, ambient same-origin storage, or host
+capability may cross the boundary. Content Security Policy, service-worker scope,
+mount cleanup, navigation, and failure behavior must be exercised in a real
+browser.
+
+## Later work goals
+
+### W8. Alternate directory sources
+
+Mount Patchwork directory documents and other filesystem stores through source
+adapters. Support flat, nested, mixed longest-prefix, string, byte, immutable
+string, and logical JSON representations only to the capability level each
+adapter actually preserves. Conflicts and unsupported values remain evidence.
+
+### W9. Generalized views and typed creation
+
+Generalize only the view-selection and creation behavior demonstrated by W4.
+Offer compatible views using exact logical schema and media type, retain raw
+inspection as fallback, and create canonical documents of selected logical
+types without introducing a generic renderer or provider registry.
+
+### W10. Relative sync status
+
+Expose offline, ready, incomplete, invalid, synchronizing, and synchronized
+states only after persistent or network adapters make them observable. Every
+sync claim must name or expose the adapter, peer set, and known heads to which it
 is relative.
 
-### L5. Presence
+### W11. History, preview, and restore
 
-Attach ephemeral per-client viewing and editing state to documents. Presence is
-not durable workspace state.
+Provide bounded, authority-scoped Automerge history inspection. Preview pins
+explicit heads; restore creates a new change expressing selected historical
+state; copy creates new document identity. Wall-clock timestamps remain
+presentation metadata rather than conflict resolution or total ordering.
 
-### L6. History
+### W12. Application discovery and import
 
-Provide generic Automerge history inspection, heads-pinned preview, and
-explicit restore or copy operations without presenting a concurrent history as
-falsely linear. Restore records a new change; copy lineage metadata is advisory
-and may be one-sided. History and lineage traversal remain authority-scoped and
-bounded before following additional document references.
+Allow a static catalogue to locate independently hosted application packages.
+Import creates an ordinary linked document graph and running the imported app no
+longer depends on the catalogue. Catalogue presence grants no execution
+authority; untrusted catalogue applications depend on W7.
 
-### L7. App discovery and import
+### W13. Document lifecycle and retention
 
-A static catalogue may locate independently hosted app packages. Importing an
-app creates an ordinary linked document graph rooted at a folder; running the
-app does not depend on the catalogue afterward. Catalogue presence grants no
-execution authority, and only trusted applications use the temporary
-same-origin runner.
+Keep unlinking, semantic tombstoning, stopping advertisement or sync, local
+eviction, and host garbage collection distinct. Receipts state the host-local
+action performed and never promise global erasure of replicated data.
 
-### L8. Document lifecycle and retention
+### W14. Portable import and export
 
-Keep unlinking, semantic tombstoning, stopping advertisement/sync, local
-eviction, and host garbage collection distinct. Replication means Patchpit
-cannot promise global erasure of a document already received by another peer.
-Lifecycle receipts state which host-local action actually occurred.
+Convert native directories and supported directory-map documents to and from
+linked document graphs. Reports must preserve conflict, ambiguity, encoding,
+readiness, and identity-loss evidence instead of presenting conversion as the
+canonical storage model.
 
-### L9. Portable import and export
+### W15. Large content stores
 
-Import native directories and supported directory-map documents as linked
-document graphs without confusing host paths with document identity. Export a
-captured folder graph to ordinary files with explicit conflict, ambiguity,
-encoding, and identity-loss reports. Import/export is a boundary conversion,
-not the canonical storage model.
+Support explicit attached blob or filesystem content stores when inline
+Automerge bytes would make history or replication unreasonable. Adapters expose
+offline availability, content identity, replacement, export, and readiness
+capabilities. No implicit size threshold may silently change a document's
+storage model.
 
-### L10. Large content stores
+## Requirements for every goal
 
-Support explicitly attached blob or filesystem content stores when inline
-Automerge bytes would make replication or history unreasonable. File metadata
-and content readiness remain relationally visible, while the adapter reports
-whether it preserves offline availability, content identity, replacement, and
-export. No transparent threshold silently changes a document's storage model.
+### R1. State ownership
 
-## Operational constraints
+Choose canonical storage, Tarstate relational machinery, or Patchpit
+product/runtime semantics before adding state. Cross-layer projections and
+writers must not create a second source of truth.
 
-### O1. Schema evolution
+### R2. Distributed semantics
 
-Exact artifact identities make schema and mapping versions explicit. New
-readers retain old adapters while supported documents exist; migrations are
-semantic operations with receipts, never incidental reads. Unknown foreign
-fields and metadata survive compatible writes.
+One source is one atomic write boundary. Incomplete sources are not empty
+relations. Multi-source results identify exact membership and every contributing
+source basis. Metadata and document URLs do not grant authority, availability,
+privacy, or global synchronization.
 
-### O2. Bounded work
+### R3. Exact evolution
 
-Recursive discovery, artifact parsing, relation projection, snapshot byte
-materialization, history inspection, and sandbox installation have explicit
-budgets and cancellation. Exceeding a bound produces incomplete or invalid
-evidence rather than blocking the browser or truncating silently. Metadata and
-link queries do not materialize file bodies until a content view, export, or
-authorized app snapshot requires them.
+Schema, mapping, constraint, and capability identities are exact. Readers retain
+supported old adapters; migrations are explicit semantic operations with
+receipts, never incidental reads. Generated artifacts come only from canonical
+sources.
 
-### O3. Name semantics
+### R4. Bounded work
 
-Canonical link names are non-empty case-sensitive Unicode path segments; exact
-string equality applies, `/`, `.`, and `..` are not canonical link names, and
-Patchpit performs no implicit case folding or Unicode normalization. Foreign
-unaddressable names remain inspectable with issues. Adapters own case folding,
-normalization, reserved names, separators, and identity loss for their external
-store. A source never advertises stronger rename or move preservation than it
-supplies.
+Discovery, parsing, projection, history, materialization, import, export, and
+installation have explicit budgets and cancellation. Exhaustion produces
+incomplete or invalid evidence rather than silent truncation or an unresponsive
+browser.
 
-### O4. Persistence and recovery
+### R5. Interoperability evidence
 
-An Automerge URL identifies a document but does not guarantee that a browser
-still stores or can retrieve it. Durable reopening reports local eviction,
-adapter failure, and network unavailability distinctly. Export and later sync
-provide recovery paths without changing document identity.
+Compatibility claims require W3 fixtures and behavior evidence. Unknown fields
+survive compatible writes. Metadata/shape disagreement, multiple adapters,
+representation changes, and incompatible concurrent adoption remain explicit.
 
-### O5. Interoperability evidence
-
-Compatibility is tested with golden Automerge documents created and edited by
-both Patchwork and Patchpit. Acceptance covers unknown-field preservation,
-text and binary files, immutable strings, folder ambiguity, directory maps,
-copy lineage, unavailable links, and edits returning to the originating
-system. Attachment cases include malformed and conflicted owned envelopes,
-untrusted but structurally valid declarations, foreign metadata/shape
-disagreement, multiple matching adapters, representation changes after
-inference, and compatible and incompatible concurrent adoption.
-
-### O6. Visible repair state
+### R6. Visible and accessible repair
 
 Incomplete, conflicted, ambiguous, read-only, and partially completed states
-remain inspectable and actionable. Their controls work by keyboard and assistive
-technology and do not rely on color alone. Product UI summarizes Tarstate
-evidence without hiding its source or inventing a resolved value.
+remain inspectable and actionable. Controls work by keyboard and assistive
+technology and never rely on color alone.
 
-### O7. Content interpretation
+### R7. Convergence testing
 
-Names, extensions, media types, and document type hints are untrusted metadata.
-Viewers use bounded parsing, executable HTML runs only through the authorized
-sandbox path, and media fallback never turns an unknown document or direct URL
-into executable host content.
+New correctness coverage favors behavior fuzzing, browser behavior cases, and
+small benchmarks. Replica tests vary concurrent edits, merge order, delayed
+discovery, metadata conflicts, and partial multi-source operations; they assert
+equivalent converged state and evidence rather than one privileged delivery
+order.
 
-### O8. Convergence evidence
+### R8. Content security
 
-Behavior fuzzing exercises concurrent edits, reorder/move fallbacks, duplicate
-links, metadata conflicts, partial cross-source operations, delayed discovery,
-and replica merge order. Replicas that receive the same changes must converge
-to equivalent source state, Tarstate issues, and authority-scoped projections;
-tests do not assert one privileged delivery order.
-
-## Candidate applications
-
-### A1. Markdown
-
-A collaborative Markdown document and editor is the acceptance case for scoped
-application reads and semantic writes. It uses `@patchwork.type: markdown` and
-an Automerge text `content` field. This document type remains distinct from a
-generic Patchwork file whose media type is Markdown; views may support both
-through their respective adapters without relabelling either document on read.
-
-### A2. Relational tools
-
-Todo, table, spreadsheet, Kanban, contact, and collection applications are
-good Tarstate/FRelP demonstrations. Preserve compatible logical document types
-where useful, but use keyed relational structures rather than storage layouts
-with poor concurrent merge behavior.
-
-### A3. Document canvas
-
-A canvas may embed live links to ordinary documents and offer alternate views
-over them. It remains an application rather than becoming workspace or host
-machinery.
-
-### A4. Rich applications
-
-Chat, calls, maps, media sequencing, games, conversion tools, and AI-assisted
-tools are possible applications. None defines a generic host capability until
-an implemented application demonstrates that requirement.
+Names, extensions, media types, document hints, catalogue entries, and external
+URLs are untrusted metadata. Executable content runs only through its authorized
+sandbox path, and discovery applies authority before any resolver may cause
+network access.
 
 ## Explicitly deferred
 
-### D1. Patchwork tool compatibility
+### D1. Patchwork tool runtime compatibility
 
-Patchwork plugin, provider, command, package, frame, and raw-handle runtime
-compatibility is not a Patchpit goal. This does not defer the compatible
-document formats in C6.
+Do not implement Patchwork plugin, provider, command, package, frame, or raw
+handle runtime compatibility. Compatible document formats and file primitives
+remain in scope through W3.
 
 ### D2. Framework machinery
 
-Do not add account systems, configurable frames, provider registries, command
-registries, or separate base/experiments distributions without concrete
-product requirements.
+Do not add accounts, configurable frames, provider registries, command
+registries, or separate base/experiments distributions without a demonstrated
+product requirement.
 
-### D3. Premature app contracts
+### D3. Premature application contracts
 
 Do not add a general capability manifest, renderer registry, or app-data
-protocol before a real application supplies its acceptance case.
-
-### D4. Identity-preserving reorder
-
-Do not implement link reorder until Automerge exposes a genuine
-identity-preserving list move. Delete and reinsert changes the list element's
-identity, while an adapter-private move journal would not be understood by
-ordinary Patchwork readers. Tarstate rejects reorder until the source can
-provide that capability without weakening Automerge or interoperability
-semantics. Rename, unlink, and alias remain independent supported behaviors.
+protocol before W4 supplies its concrete acceptance case.
