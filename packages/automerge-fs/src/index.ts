@@ -27,6 +27,14 @@ import {
   type FolderDatabaseSource,
   type FolderLink,
 } from '@patchpit/fs';
+import {
+  openAutomergeFileDatabase,
+} from './file-content.ts';
+import {
+  filesystemSelectionIssue,
+  hasPatchworkFolderShape,
+  selectFilesystemDocumentKind,
+} from './document-selection.ts';
 
 export {
   automergeBinaryFileDocumentMetadata,
@@ -64,6 +72,14 @@ export type AutomergeFolderDocument = {
 };
 
 export type AutomergeFolderDatabase = AutomergeDatabase & FolderDatabaseSource;
+
+export type AutomergeFilesystemDatabase = {
+  readonly kind: 'folder';
+  readonly database: AutomergeFolderDatabase;
+} | {
+  readonly kind: 'file';
+  readonly database: AutomergeDatabase;
+};
 
 type SelectedFolderAttachment = {
   readonly declaration: DocumentDeclaration;
@@ -114,6 +130,11 @@ export const openAutomergeFolderDatabase = async (
   if (document === undefined) {
     return { success: false, issues: [folderIssue('source-unavailable', sourceId)] };
   }
+  const kind = selectFilesystemDocumentKind(document, sourceId);
+  if (!kind.success) return kind;
+  if (kind.value !== 'folder') {
+    return { success: false, issues: [...kind.issues, folderIssue('type-mismatch', sourceId)] };
+  }
   const selected = selectFolderAttachment(document, sourceId);
   if (selected.attachment === undefined) return { success: false, issues: selected.issues };
   const opened = await openAutomergeDatabase({
@@ -130,6 +151,30 @@ export const openAutomergeFolderDatabase = async (
         issues: [...selected.issues, ...opened.issues],
       }
     : { success: false, issues: [...selected.issues, ...opened.issues] };
+};
+
+export const openAutomergeFilesystemDatabase = async (
+  handle: DocHandle<object>,
+  authorityScope = 'public',
+): Promise<ParseResult<AutomergeFilesystemDatabase>> => {
+  const sourceId = handle.url;
+  const document = handle.doc();
+  if (document === undefined) {
+    return { success: false, issues: [filesystemSelectionIssue('source-unavailable', sourceId)] };
+  }
+  const selected = selectFilesystemDocumentKind(document, sourceId);
+  if (!selected.success) return selected;
+  const opened = selected.value === 'folder'
+    ? await openAutomergeFolderDatabase(handle, authorityScope)
+    : await openAutomergeFileDatabase(handle, authorityScope);
+  if (!opened.success) {
+    return { success: false, issues: [...selected.issues, ...opened.issues] };
+  }
+  return {
+    success: true,
+    value: { kind: selected.value, database: opened.value },
+    issues: [...selected.issues, ...opened.issues],
+  };
 };
 
 const selectFolderAttachment = (
@@ -235,18 +280,6 @@ function folderStorageMapping(
     },
   };
 }
-
-const hasPatchworkFolderShape = (document: object): document is {
-  readonly title: string;
-  readonly docs: readonly object[];
-} => 'title' in document && typeof document.title === 'string'
-  && 'docs' in document && Array.isArray(document.docs)
-  && document.docs.every((link) => isRecord(link)
-    && typeof link.name === 'string'
-    && typeof link.type === 'string'
-    && typeof link.url === 'string'
-    && (link.icon === undefined || typeof link.icon === 'string')
-    && (link.copyOf === undefined || typeof link.copyOf === 'string'));
 
 const patchworkMetadataIssue = (document: object, sourceId: string): Issue | undefined => {
   if (!('@patchwork' in document)) return undefined;

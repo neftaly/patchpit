@@ -18,6 +18,7 @@ export const projectWorkspaceLayout = (
     first: string;
     ratio: number;
     rect: LayoutRect;
+    second: string;
     splitId: string;
   }> = [];
   const visited = new Set<string>();
@@ -31,7 +32,7 @@ export const projectWorkspaceLayout = (
     }
     if (node?.kind !== 'split') return;
     const ratio = draftRatios[nodeId] ?? node.ratio;
-    splits.push({ axis: node.axis, first: node.first, ratio, rect, splitId: nodeId });
+    splits.push({ axis: node.axis, first: node.first, ratio, rect, second: node.second, splitId: nodeId });
     if (node.axis === 'horizontal') {
       visit(node.first, { ...rect, width: rect.width * ratio });
       visit(node.second, {

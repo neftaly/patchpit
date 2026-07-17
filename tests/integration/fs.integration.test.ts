@@ -6,7 +6,7 @@ import {
   openFolderLinksQuery,
 } from '@patchpit/fs';
 
-void test('folder links keep stable local IDs scoped by their document', async () => {
+void test('folder links keep source-scoped identities when placement names repeat', async () => {
   const query = await openFolderLinksQuery([
     createStaticFolderDatabaseSource({
       sourceId: 'personal',
@@ -16,18 +16,28 @@ void test('folder links keep stable local IDs scoped by their document', async (
     createStaticFolderDatabaseSource({
       sourceId: 'shared',
       title: 'Shared',
-      links: [{ linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:shared', typeHint: 'file' }],
+      links: [
+        { linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:shared', typeHint: 'file' },
+        { linkId: 'copy', name: 'copy.md', order: 1, resourceRef: 'content:shared', typeHint: 'file' },
+        { linkId: 'other', name: 'readme.md', order: 2, resourceRef: 'content:other', typeHint: 'file' },
+      ],
     }),
   ]);
 
   try {
     const snapshot = query.getSnapshot();
     assert.equal(snapshot.state, 'open');
-    assert.deepEqual(snapshot.current.rows, [
-      { linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:personal', sourceId: 'personal', typeHint: 'file' },
-      { linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:shared', sourceId: 'shared', typeHint: 'file' },
-    ]);
-    assert.equal(new Set(snapshot.current.resultKeys).size, 2);
+    assert.deepEqual(
+      [...snapshot.current.rows].sort((left, right) =>
+        left.sourceId.localeCompare(right.sourceId) || left.linkId.localeCompare(right.linkId)),
+      [
+        { linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:personal', sourceId: 'personal', typeHint: 'file' },
+        { linkId: 'copy', name: 'copy.md', order: 1, resourceRef: 'content:shared', sourceId: 'shared', typeHint: 'file' },
+        { linkId: 'other', name: 'readme.md', order: 2, resourceRef: 'content:other', sourceId: 'shared', typeHint: 'file' },
+        { linkId: 'readme', name: 'readme.md', order: 0, resourceRef: 'content:shared', sourceId: 'shared', typeHint: 'file' },
+      ],
+    );
+    assert.equal(new Set(snapshot.current.resultKeys).size, 4);
   } finally {
     query.close();
   }

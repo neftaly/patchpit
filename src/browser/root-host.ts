@@ -10,7 +10,7 @@ import type { RootInvocation } from '../root/invocation.ts';
 export const createBrowserRootHost = (options: {
   readonly repo?: Repo;
   readonly seed: (signal?: AbortSignal) => Promise<{
-    readonly documentContext?: string;
+    readonly documentContextFolderId?: string;
     readonly folders: readonly RootSeedFolder[];
     readonly initialContext: string;
   }>;
@@ -36,7 +36,9 @@ export const createBrowserRootHost = (options: {
           repo,
           folders: seed.folders,
           initialContext: seed.initialContext,
-          ...(seed.documentContext === undefined ? {} : { documentContext: seed.documentContext }),
+          ...(seed.documentContextFolderId === undefined
+            ? {}
+            : { documentContextFolderId: seed.documentContextFolderId }),
         }))
       : await openRoot({ repo, rootUrl: invocation.src, ...(signal === undefined ? {} : { signal }) });
     if (closed || generation !== currentGeneration || signal?.aborted === true) {

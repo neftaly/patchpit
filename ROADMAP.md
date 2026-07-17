@@ -15,6 +15,9 @@ target; Patchwork's tool runtime and host APIs are not.
 An Automerge document URL is durable resource identity. Files, folders,
 workspaces, and future application data are documents. In the canonical model,
 tabs and views target documents rather than filesystem projection rows.
+Open contexts observe document-owned titles through focused Tarstate queries;
+unsupported or unavailable title projections fall back to the first occurrence
+in deterministic visible-tree order without changing document identity.
 
 ### C2. Folder placement
 
@@ -34,11 +37,20 @@ Owned folders expose relational rename, unlink, and alias operations. Reorder
 is deliberately separate because preserving an Automerge list object's
 identity is a source capability, not equivalent to sorting projected rows.
 
-One name and one occurrence of a document URL per folder is the desired
-resolved state, matching Patchwork's normal folder behavior. It is not a
-coordination-free invariant: concurrent replicas may create duplicates. Those
-links remain representable and queryable while path resolution reports
-ambiguity instead of silently selecting a winner.
+One occurrence of a placement name per folder is the desired resolved state.
+It is not a coordination-free invariant: concurrent replicas may create
+duplicates. Those links remain representable and queryable while path
+resolution reports ambiguity instead of silently selecting a winner. A
+document URL may deliberately occur more than once under distinct placement
+names; those occurrences are aliases, not path conflicts.
+
+The resource pane preserves every occurrence without presenting ordinary name
+collisions as broken links. Consumers that require a unique path, such as app
+materialization, reject ambiguity rather than silently selecting a winner.
+Aliases within or between folders are independent and are not treated as
+conflicts. The pane also preserves graph readiness and lists each non-current, unavailable,
+unauthorized, or invalid contributing source instead of presenting partial
+membership as an empty folder.
 
 ### C3. File content
 
@@ -235,18 +247,6 @@ across browser lifetimes. Root `src` continues to identify that document.
 Concurrent browser tabs either share a storage/network protocol that converges
 normally or report an unsupported ownership conflict; they never assume a hash
 alone proves that document bytes remain locally available.
-
-### N2. Complete link semantics
-
-Add the remaining single-folder behaviors without weakening their semantics:
-
-1. Reorder a link while preserving its source-native occurrence identity.
-2. Detect and expose concurrently created duplicate names or targets without
-   dropping either fact.
-
-Rename, unlink, and alias are already source-routed relational operations.
-Identity-preserving link movement remains a separate capability from preserving
-the linked document's identity.
 
 ### N3. Scoped application data
 
@@ -460,3 +460,12 @@ product requirements.
 
 Do not add a general capability manifest, renderer registry, or app-data
 protocol before a real application supplies its acceptance case.
+
+### D4. Identity-preserving reorder
+
+Do not implement link reorder until Automerge exposes a genuine
+identity-preserving list move. Delete and reinsert changes the list element's
+identity, while an adapter-private move journal would not be understood by
+ordinary Patchwork readers. Tarstate rejects reorder until the source can
+provide that capability without weakening Automerge or interoperability
+semantics. Rename, unlink, and alias remain independent supported behaviors.

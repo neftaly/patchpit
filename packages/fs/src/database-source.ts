@@ -11,6 +11,8 @@ import {
 import type { Completeness, RelationInput } from '@tarstate/core/query';
 import type { ObservableSource, SourceSnapshot } from '@tarstate/core/source';
 import {
+  fileDocumentTitlePlan,
+  folderDocumentTitlePlan,
   folderLinksPlan,
   nestedFolderSourceLinksPlan,
 } from './queries.ts';
@@ -31,6 +33,7 @@ export type FolderDocument = {
 
 export type FolderLinkRow = FolderLink & { readonly sourceId: string };
 export type FolderDatabaseSource = MountableDatabaseSource;
+export type DocumentTitleRow = { readonly title: string };
 
 type FolderStorage = {
   readonly title: string;
@@ -149,6 +152,18 @@ export const openFolderGraphQuery = (options: {
     openSource: options.openSource,
   },
 }) as Promise<DatabaseQuerySession<FolderLinkRow>>;
+
+export const openFolderDocumentTitleQuery = (source: MountableDatabaseSource) => openDatabaseQuery({
+  sources: [{ source }],
+  plan: folderDocumentTitlePlan,
+  queryAuthorityScope: 'public',
+}) as Promise<DatabaseQuerySession<DocumentTitleRow>>;
+
+export const openFileDocumentTitleQuery = (source: MountableDatabaseSource) => openDatabaseQuery({
+  sources: [{ source }],
+  plan: fileDocumentTitlePlan,
+  queryAuthorityScope: 'public',
+}) as Promise<DatabaseQuerySession<DocumentTitleRow>>;
 
 const staticSource = (sourceId: string, title: string, links: readonly FolderLink[]) => ({
   sourceId,

@@ -1,4 +1,8 @@
-import { useMemo, useRef, useSyncExternalStore } from 'react';
+import {
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import type { FolderLinkRow } from '@patchpit/fs';
 import {
   ContentView,
@@ -9,6 +13,7 @@ import {
   contentUrlForResource,
   resourceBrowserUrl,
 } from './content/invocation.ts';
+import { useResourceTitles } from './content/use-resource-titles.ts';
 import {
   composeWorkspacePresentation,
   reconcileWorkspaceViewState,
@@ -23,7 +28,9 @@ import type { WorkspaceState } from './workspace/durable-state.ts';
 import { WorkspaceView } from './workspace/WorkspaceView.tsx';
 import {
   projectResourceTree,
+  resourceGraphStateFromQuerySnapshot,
   resourceRowsFromQuerySnapshot,
+  resourceSourceProblemsFromQuerySnapshot,
 } from './content/resource-projection.ts';
 import type { PatchpitRuntime } from './root/runtime.ts';
 import type { BrowserSandboxHost } from './browser/sandbox-host.ts';
@@ -43,7 +50,14 @@ export function App({ runtime, sandboxHost }: {
     () => resourceQuery.getSnapshot(),
   );
   const resources = useMemo(
-    () => projectResourceTree(resourceRowsFromQuerySnapshot(resourceSnapshot), runtime.rootUrl),
+    () => projectResourceTree(
+      resourceRowsFromQuerySnapshot(resourceSnapshot),
+      runtime.rootUrl,
+      {
+        graphState: resourceGraphStateFromQuerySnapshot(resourceSnapshot),
+        sourceProblems: resourceSourceProblemsFromQuerySnapshot(resourceSnapshot),
+      },
+    ),
     [resourceSnapshot, runtime.rootUrl],
   );
   const workspaceProjection = useSyncExternalStore(
@@ -56,11 +70,16 @@ export function App({ runtime, sandboxHost }: {
     workspaceViewStateRuntime.getSnapshot,
     workspaceViewStateRuntime.getSnapshot,
   );
-  if (workspaceProjection.state !== 'ready') {
+  const workspacePresentation = useMemo(() => workspaceProjection.state === 'ready'
+    ? composeWorkspacePresentation(workspaceProjection.workspace, viewState)
+    : undefined, [viewState, workspaceProjection]);
+  const resourceTitles = useResourceTitles(runtime, workspacePresentation === undefined
+    ? []
+    : Object.values(workspacePresentation.contexts).map(({ url }) => url));
+  if (workspaceProjection.state !== 'ready' || workspacePresentation === undefined) {
     return <main className="workspace"><p role="alert">Workspace unavailable.</p></main>;
   }
   const workspace = workspaceProjection.workspace;
-  const workspacePresentation = composeWorkspacePresentation(workspace, viewState);
   const enqueueWorkspacePlan = (plan: (
     workspace: WorkspaceState,
     viewState: ReturnType<typeof workspaceViewStateRuntime.getSnapshot>,
@@ -108,7 +127,11 @@ export function App({ runtime, sandboxHost }: {
           workspace: currentWorkspace,
         }));
       }}
-      getContextLabel={(contextId) => contentLabel(resources, workspacePresentation.contexts[contextId]?.url)}
+      getContextLabel={(contextId) => contentLabel(
+        resources,
+        workspacePresentation.contexts[contextId]?.url,
+        resourceTitles,
+      )}
       getResourceUrl={(resourceId) => {
         const resource = resources.byIdentity.get(resourceId);
         return resource === undefined ? undefined : contentUrlForResource(resource, resources);
@@ -118,6 +141,7 @@ export function App({ runtime, sandboxHost }: {
           contentUrl={workspacePresentation.contexts[contextId]?.url}
           onOpenResource={openResource}
           resources={resources}
+          resourceTitles={resourceTitles}
           sandboxHost={sandboxHost}
           contentRuntime={runtime}
         />

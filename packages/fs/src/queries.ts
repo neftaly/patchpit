@@ -10,7 +10,8 @@ import {
   sourceOf,
   where,
 } from '@tarstate/core/query/authoring';
-import { folderLinksRelation } from './schema.ts';
+import { fileRelation } from './file-content.ts';
+import { folderLinksRelation, folderRelation } from './schema.ts';
 
 const QUERY_IDENTITY = {
   registryFingerprint: 'patchpit:registry:1',
@@ -48,6 +49,22 @@ export const nestedFolderSourceLinksPlan = await prepareQuery({
       targetSourceId: field('link', 'resourceRef'),
     }),
     orderBy([{ value: field('sourceLink', 'linkId'), direction: 'asc' }]),
+  ),
+  ...QUERY_IDENTITY,
+});
+
+export const folderDocumentTitlePlan = await prepareQuery({
+  root: pipe(
+    from(folderRelation, 'folder'),
+    select('title', { title: field('folder', 'title') }),
+  ),
+  ...QUERY_IDENTITY,
+});
+
+export const fileDocumentTitlePlan = await prepareQuery({
+  root: pipe(
+    from(fileRelation, 'file'),
+    select('title', { title: field('file', 'name') }),
   ),
   ...QUERY_IDENTITY,
 });

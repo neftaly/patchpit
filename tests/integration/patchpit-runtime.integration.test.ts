@@ -52,6 +52,13 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
   assert.equal(tiger.resourceRef, externalUrl);
   assert.equal(await runtime.resolveResourceDocument(externalUrl), undefined);
 
+  const folderTitle = await runtime.openResourceTitle(sandbox.resourceRef);
+  const fileTitle = await runtime.openResourceTitle(index.resourceRef);
+  assert.deepEqual(folderTitle?.getSnapshot(), { state: 'ready', title: 'sandbox-compat' });
+  assert.deepEqual(fileTitle?.getSnapshot(), { state: 'ready', title: 'index.html' });
+  folderTitle?.close();
+  fileTitle?.close();
+
   const contentHandle = (await runtime.resolveResourceDocument(index.resourceRef))!;
   const contentDocument = contentHandle.doc() as AutomergeBinaryFileDocument;
   assert.equal(contentDocument['@patchpit'].type, 'file');

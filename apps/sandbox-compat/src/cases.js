@@ -2,7 +2,7 @@ const CASE_TIMEOUT_MS = 500;
 
 const caseDefinitions = [
   compatCase('image-file-backed', 'pass', () => imageLoads('./relative-file.svg')),
-  compatCase('image-url-backed-file', 'pass', () => imageLoads('./ghostscript-tiger.svg')),
+  compatCase('image-html-file', 'pass', () => imageElementLoads('ghostscript-tiger')),
   compatCase('fetch-relative-json', 'pass', fetchRelativeJson),
   compatCase('css-import-relative', 'pass', cssImportRelative),
   compatCase('css-url-relative', 'pass', cssUrlRelative),
@@ -144,6 +144,17 @@ function imageLoads(src, srcset) {
     if (src !== undefined) image.src = src;
     document.body.append(image);
   }, `${src ?? srcset} image did not load`);
+}
+
+function imageElementLoads(id) {
+  const image = document.getElementById(id);
+  if (!(image instanceof HTMLImageElement)) return fail(`#${id} image missing`);
+  return finishWithin((finish) => {
+    const loaded = () => finish(image.naturalWidth > 0 ? pass() : fail(`#${id} image error`));
+    image.addEventListener('load', loaded, { once: true });
+    image.addEventListener('error', () => finish(fail(`#${id} image error`)), { once: true });
+    if (image.complete) loaded();
+  }, `#${id} image did not load`);
 }
 
 function loadStyle(href) {

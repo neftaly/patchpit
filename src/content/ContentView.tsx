@@ -24,11 +24,12 @@ export const RESOURCE_DRAG_TYPE = 'application/x-patchpit-resource';
 type ContentRuntime = Pick<PatchpitRuntime, 'createAppSnapshot' | 'resolveResourceDocument'>;
 type SandboxHost = Pick<BrowserSandboxHost, 'install'>;
 
-export function ContentView({ contentRuntime, contentUrl, onOpenResource, resources, sandboxHost }: {
+export function ContentView({ contentRuntime, contentUrl, onOpenResource, resources, resourceTitles, sandboxHost }: {
   readonly contentRuntime: ContentRuntime;
   readonly contentUrl: string | undefined;
   readonly onOpenResource: (resource: FolderLinkRow, pinned: boolean) => void;
   readonly resources: ResourceProjection;
+  readonly resourceTitles: ReadonlyMap<string, string>;
   readonly sandboxHost: SandboxHost;
 }): ReactNode {
   const invocation = contentUrl === undefined ? undefined : parseContentInvocation(contentUrl);
@@ -45,7 +46,7 @@ export function ContentView({ contentRuntime, contentUrl, onOpenResource, resour
             key={invocation.resourceRef}
             rootFolderRef={invocation.resourceRef}
             contentRuntime={contentRuntime}
-            title={root.name}
+            title={resourceTitles.get(invocation.resourceRef) ?? root.name}
           />
         );
   }
@@ -64,12 +65,37 @@ function ResourceBrowser({ onOpenResource, resources }: {
         <span aria-hidden="true" className="resource-icon">📂</span>
         <span className="resource-name">patchpit</span>
       </div>
-      {resources.rows.map(({ depth, resource }) => {
+      {resources.graphState !== 'ready' && (
+        <div
+          className="resource"
+          role={resources.graphState === 'invalid' || resources.graphState === 'closed' ? 'alert' : 'status'}
+          style={treeDepthStyle(1)}
+        >
+          <span aria-hidden="true" className="resource-icon">⚠</span>
+          <span className="resource-name">{resourceGraphMessage(resources.graphState)}</span>
+        </div>
+      )}
+      {resources.sourceProblems.map((problem) => (
+        <div
+          className="resource"
+          key={`${problem.attachmentId}:${problem.sourceId}`}
+          style={treeDepthStyle(2)}
+        >
+          <span aria-hidden="true" className="resource-icon">↳</span>
+          <span className="resource-name">
+            {problem.sourceId} — {resourceSourceProblemMessage(problem)}
+          </span>
+        </div>
+      ))}
+      {resources.rows.map(({ depth, folderTraversal, resource }) => {
         const openable = contentUrlForResource(resource, resources) !== undefined;
+        const notice = resourceNotice(folderTraversal);
         const label = (
           <>
             <span aria-hidden="true" className="resource-icon">{resourceIcon(resource)}</span>
-            <span className="resource-name">{resource.name}</span>
+            <span className="resource-name">
+              {notice === undefined ? resource.name : `⚠ ${resource.name} — ${notice}`}
+            </span>
           </>
         );
         return !openable
@@ -87,8 +113,7 @@ function ResourceBrowser({ onOpenResource, resources }: {
                 className={`resource${resource.typeHint === 'folder' ? ' resource-folder' : ''}`}
                 draggable
                 key={resourceIdentity(resource)}
-                onClick={() => onOpenResource(resource, false)}
-                onDoubleClick={() => onOpenResource(resource, true)}
+                onClick={(event) => onOpenResource(resource, event.detail > 1)}
                 onDragStart={(event) => event.dataTransfer.setData(RESOURCE_DRAG_TYPE, resourceIdentity(resource))}
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter') return;
@@ -107,6 +132,32 @@ function ResourceBrowser({ onOpenResource, resources }: {
 }
 
 const treeDepthStyle = (depth: number) => ({ '--tree-depth': depth }) as CSSProperties;
+
+const resourceGraphMessage = (state: Exclude<ResourceProjection['graphState'], 'ready'>) => ({
+  closed: 'Resource list unavailable.',
+  incomplete: 'Resource list incomplete.',
+  invalid: 'Resource list invalid.',
+  stale: 'Resource list not current.',
+})[state];
+
+const resourceSourceProblemMessage = (
+  problem: ResourceProjection['sourceProblems'][number],
+) => {
+  if (!problem.authorized) return 'unauthorized';
+  if (problem.state !== 'ready') return problem.state;
+  if (problem.freshness !== 'current') return problem.freshness;
+  return problem.issueCodes.join(', ');
+};
+
+const resourceNotice = (folderTraversal: 'already-expanded' | 'cycle' | undefined) => {
+  const notices = [
+    folderTraversal === 'already-expanded' ? 'contents shown above'
+      : folderTraversal === 'cycle' ? 'folder cycle'
+      : undefined,
+  ].filter((notice) => notice !== undefined);
+  if (notices.length > 0) return notices.join('; ');
+  return undefined;
+};
 
 const resourceIcon = (resource: FolderLinkRow) => {
   if (resource.typeHint === 'folder') return '📂';

@@ -39,6 +39,10 @@ export const loadBrowserDemoSeed = async (
       order: file.order,
     };
   }));
+  const duplicateNameFiles = [
+    copyDemoFile(files, 'relative-file.svg', 'duplicate-relative', 'duplicate.svg', 0),
+    copyDemoFile(files, 'srcset-file.svg', 'duplicate-srcset', 'duplicate.svg', 1),
+  ];
   return {
     documentContextFolderId: manifest.rootFolderId,
     folders: [{
@@ -47,17 +51,41 @@ export const loadBrowserDemoSeed = async (
       name: manifest.rootFolderId,
       order: 1,
     }, {
-      folderId: 'external-resources',
+      folderId: 'web-resources',
       files: [{
-        linkId: 'unresolved.svg',
-        name: 'unresolved.svg',
+        linkId: 'ghostscript-tiger-web.svg',
+        name: 'ghostscript-tiger-web.svg',
         order: 0,
-        resourceUrl: 'https://example.com/unresolved.svg',
+        resourceUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg',
       }],
-      name: 'external',
+      name: 'web resources',
       order: 2,
+    }, {
+      folderId: 'duplicate-names',
+      files: duplicateNameFiles,
+      name: 'duplicate names',
+      order: 3,
     }] satisfies readonly RootSeedFolder[],
     initialContext: resourceBrowserUrl,
+  };
+};
+
+const copyDemoFile = (
+  files: readonly RootSeedFile[],
+  sourceName: string,
+  linkId: string,
+  name: string,
+  order: number,
+): RootSeedFile => {
+  const source = files.find((file) => file.name === sourceName);
+  if (source?.bytes === undefined) throw new Error(`Demo source file is unavailable: ${sourceName}`);
+  return {
+    bytes: source.bytes,
+    ...(source.contentType === undefined ? {} : { contentType: source.contentType }),
+    documentName: source.name,
+    linkId,
+    name,
+    order,
   };
 };
 

@@ -35,12 +35,15 @@ export const contentUrlForResource = (
 export const contentLabel = (
   resources: ResourceProjection,
   contentUrl: string | undefined,
+  resourceTitles?: ReadonlyMap<string, string>,
 ) => {
   const invocation = contentUrl === undefined ? undefined : parseContentInvocation(contentUrl);
   if (invocation?.kind === 'resources') return 'Resources';
-  const resource = invocation === undefined ? undefined : resources.byResourceRef.get(invocation.resourceRef);
-  if (resource === undefined) return invocation?.kind === 'app' ? 'App unavailable' : 'Resource unavailable';
-  return invocation?.kind === 'app' ? `${resource.name} / index.html` : resource.name;
+  if (invocation === undefined) return 'Resource unavailable';
+  const resource = resources.byResourceRef.get(invocation.resourceRef);
+  if (resource === undefined) return invocation.kind === 'app' ? 'App unavailable' : 'Resource unavailable';
+  const title = resourceTitles?.get(invocation.resourceRef) ?? resource.name;
+  return invocation.kind === 'app' ? `${title} / index.html` : title;
 };
 
 export const parseContentInvocation = (contentUrl: string): ContentInvocation | undefined => {

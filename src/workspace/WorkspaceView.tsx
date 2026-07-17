@@ -109,10 +109,14 @@ export function WorkspaceView({
             id={contextDomId('panel', contextId)}
             key={contextId}
             onFocusCapture={() => {
-              if (active) dispatchAction({ kind: 'workspace.context.activate', paneId, contextId });
+              if (active && workspacePresentation.activePaneId !== paneId) {
+                dispatchAction({ kind: 'workspace.context.activate', paneId, contextId });
+              }
             }}
             onPointerDown={() => {
-              if (active) dispatchAction({ kind: 'workspace.context.activate', paneId, contextId });
+              if (active && workspacePresentation.activePaneId !== paneId) {
+                dispatchAction({ kind: 'workspace.context.activate', paneId, contextId });
+              }
             }}
             role="tabpanel"
             style={rectStyle(rect)}
@@ -145,10 +149,10 @@ export function WorkspaceView({
           rect={rect}
         />
       ))}
-      {layout.splits.map(({ axis, first, ratio, rect, splitId }) => (
+      {layout.splits.map(({ axis, first, ratio, rect, second, splitId }) => (
         <SplitBoundary
           axis={axis}
-          firstChildNodeId={first}
+          childNodeIds={[first, second]}
           key={splitId}
           onCommitRatio={(ratio) => {
             dispatchAction({ kind: 'workspace.split.resize', splitId, ratio });
@@ -174,9 +178,9 @@ const contextDomId = (kind: 'panel' | 'tab', contextId: string) =>
   `workspace-${kind}-${encodeURIComponent(contextId)}`;
 const nodeDomId = (nodeId: string) => `workspace-node-${encodeURIComponent(nodeId)}`;
 
-function SplitBoundary({ axis, firstChildNodeId, onCommitRatio, onDraftRatioChange, ratio, rect, splitId }: {
+function SplitBoundary({ axis, childNodeIds, onCommitRatio, onDraftRatioChange, ratio, rect, splitId }: {
   readonly axis: 'horizontal' | 'vertical';
-  readonly firstChildNodeId: string;
+  readonly childNodeIds: readonly [string, string];
   readonly onCommitRatio: (ratio: number) => void;
   readonly onDraftRatioChange: (ratio: number | undefined) => void;
   readonly ratio: number;
@@ -212,7 +216,7 @@ function SplitBoundary({ axis, firstChildNodeId, onCommitRatio, onDraftRatioChan
       style={rectStyle(rect)}
     >
       <div
-        aria-controls={nodeDomId(firstChildNodeId)}
+        aria-controls={childNodeIds.map(nodeDomId).join(' ')}
         aria-label="Resize panes"
         aria-orientation={axis === 'horizontal' ? 'vertical' : 'horizontal'}
         aria-valuemax={MAX_SPLIT_RATIO * 100}

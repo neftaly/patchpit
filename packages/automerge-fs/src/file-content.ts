@@ -1,4 +1,4 @@
-import { getConflicts, isImmutableString } from '@automerge/automerge';
+import { getConflicts } from '@automerge/automerge';
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
   openAutomergeDatabase,
@@ -24,6 +24,10 @@ import {
   fileSchemaArtifact,
   type FileRow,
 } from '@patchpit/fs';
+import {
+  hasPatchworkFileShape,
+  selectFilesystemDocumentKind,
+} from './document-selection.ts';
 
 export {
   fileRelation,
@@ -140,6 +144,11 @@ export const openAutomergeFileDatabase = async (
   if (document === undefined) {
     return { success: false, issues: [fileIssue('source-unavailable', sourceId)] };
   }
+  const kind = selectFilesystemDocumentKind(document, sourceId);
+  if (!kind.success) return kind;
+  if (kind.value !== 'file') {
+    return { success: false, issues: [...kind.issues, fileIssue('type-mismatch', sourceId)] };
+  }
   const selected = selectFileAttachment(document, sourceId);
   if (selected.attachment === undefined) return { success: false, issues: selected.issues };
   const opened = await openAutomergeDatabase({
@@ -212,19 +221,6 @@ const selectOwnedFileAttachment = (
     issues: interopIssue === undefined ? [] : [interopIssue],
   };
 };
-
-const hasPatchworkFileShape = (document: object): document is {
-  readonly content: Uint8Array | string | object;
-  readonly extension: string;
-  readonly mimeType: string;
-  readonly name: string;
-} => 'content' in document
-  && (document.content instanceof Uint8Array
-    || typeof document.content === 'string'
-    || isImmutableString(document.content))
-  && 'extension' in document && typeof document.extension === 'string'
-  && 'mimeType' in document && typeof document.mimeType === 'string'
-  && 'name' in document && typeof document.name === 'string';
 
 const patchworkMetadataIssue = (document: object, sourceId: string): Issue | undefined => {
   if (!('@patchwork' in document)) return undefined;

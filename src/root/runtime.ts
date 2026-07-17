@@ -7,15 +7,22 @@ import {
 import {
   createAutomergeBinaryFileDocument,
   createAutomergeFolderDocument,
-  openAutomergeFileDatabase,
+  openAutomergeFilesystemDatabase,
   openAutomergeFolderDatabase,
   type AutomergeFolderDocument,
 } from '@patchpit/automerge-fs';
 import {
+  openFileDocumentTitleQuery,
+  openFolderDocumentTitleQuery,
   openFolderLinksQuery,
+  type DocumentTitleRow,
   type FolderLink,
   type FolderLinkRow,
 } from '@patchpit/fs';
+import type {
+  DatabaseQuerySession,
+  MountableDatabaseSource,
+} from '@tarstate/core/database/session';
 import {
   APP_FILE_AUTHORITY_SCOPE,
   snapshotFilesystemApp,
@@ -41,10 +48,12 @@ export type RootSeedFile = {
 } & ({
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly contentType?: string;
+  readonly documentName?: string;
   readonly resourceUrl?: never;
 } | {
   readonly bytes?: never;
   readonly contentType?: never;
+  readonly documentName?: never;
   readonly resourceUrl: `https:${string}`;
 });
 
@@ -71,7 +80,7 @@ export const createRoot = async (options: RootOptions) => {
       order: file.order,
       resourceRef: file.resourceUrl
         ?? options.repo.create(createAutomergeBinaryFileDocument(file.bytes, {
-          name: file.name,
+          name: file.documentName ?? file.name,
           ...(file.contentType === undefined ? {} : { mimeType: file.contentType }),
         })).url,
       typeHint: 'file',
@@ -124,19 +133,23 @@ const openRootHandle = async (
 ) => {
   const handles = new Map<string, DocHandle<object>>([[rootHandle.url, asObjectHandle(rootHandle)]]);
   const pendingHandles = new Map<string, Promise<DocHandle<object>>>();
+  const titleObservers = new Set<{ readonly close: () => void }>();
   const resolver = new AbortController();
   let closed = false;
-  const findResourceHandle = async (resourceRef: string, findSignal = resolver.signal) => {
+  const findResourceHandle = (resourceRef: string, findSignal?: AbortSignal) => {
     const current = handles.get(resourceRef);
-    if (current !== undefined) return current;
-    const loading = pendingHandles.get(resourceRef)
-      ?? repo.find<object>(resourceRef as AutomergeUrl, { signal: findSignal });
-    pendingHandles.set(resourceRef, loading);
-    try {
-      return await loading;
-    } finally {
-      if (pendingHandles.get(resourceRef) === loading) pendingHandles.delete(resourceRef);
+    if (current !== undefined) return abortable(Promise.resolve(current), findSignal);
+    let loading = pendingHandles.get(resourceRef);
+    if (loading === undefined) {
+      const requested = repo.find<object>(resourceRef as AutomergeUrl, { signal: resolver.signal });
+      loading = requested;
+      pendingHandles.set(resourceRef, requested);
+      const clearPending = () => {
+        if (pendingHandles.get(resourceRef) === requested) pendingHandles.delete(resourceRef);
+      };
+      void requested.then(clearPending, clearPending);
     }
+    return abortable(loading, findSignal);
   };
   const rootOpened = await openAutomergeFolderDatabase(asObjectHandle(rootHandle));
   if (!rootOpened.success) {
@@ -148,7 +161,7 @@ const openRootHandle = async (
     readonly signal: AbortSignal;
   }) => {
     if (closed || !isValidAutomergeUrl(sourceId)) return undefined;
-    const handle = await abortable(findResourceHandle(sourceId, openSignal), openSignal);
+    const handle = await findResourceHandle(sourceId, openSignal);
     const opened = await openAutomergeFolderDatabase(handle);
     if (!opened.success) return { state: 'failed' as const, issues: opened.issues };
     if (closed || openSignal.aborted) {
@@ -203,7 +216,22 @@ const openRootHandle = async (
     handles.set(resourceRef, handle);
     return handle;
   };
+  const openResourceTitle = async (resourceRef: string, titleSignal?: AbortSignal) => {
+    if (closed || !rootReferencesResource(resourceQuery, resourceRef)
+      || !isValidAutomergeUrl(resourceRef)) return undefined;
+    const handle = await findResourceHandle(resourceRef, titleSignal);
+    if (closed || !rootReferencesResource(resourceQuery, resourceRef)) return undefined;
+    const opened = await openAutomergeFilesystemDatabase(handle);
+    if (!opened.success) return undefined;
+    const observer = await openTitleObserver(
+      opened.value.database,
+      opened.value.kind === 'folder' ? openFolderDocumentTitleQuery : openFileDocumentTitleQuery,
+      titleObservers,
+    );
+    return retainOpenTitleObserver(observer, closed, titleSignal);
+  };
   const createAppSnapshot = async (rootFolderRef: string, snapshotSignal?: AbortSignal) => {
+    if (closed) throw new Error('Patchpit root is closed');
     if (!isValidAutomergeUrl(rootFolderRef)) throw new Error('App folder reference is invalid');
     const folderHandle = await findResourceHandle(rootFolderRef, snapshotSignal);
     const folderOpened = await openAutomergeFolderDatabase(folderHandle, APP_FILE_AUTHORITY_SCOPE);
@@ -217,11 +245,11 @@ const openRootHandle = async (
         ...(snapshotSignal === undefined ? {} : { signal: snapshotSignal }),
         openSource: async ({ sourceId, signal: openSignal }) => {
           if (closed || !isValidAutomergeUrl(sourceId)) return undefined;
-          const handle = await abortable(findResourceHandle(sourceId, openSignal), openSignal);
-          const folder = await openAutomergeFolderDatabase(handle, APP_FILE_AUTHORITY_SCOPE);
-          if (folder.success) return folder.value;
-          const file = await openAutomergeFileDatabase(handle, APP_FILE_AUTHORITY_SCOPE);
-          return file.success ? file.value : { state: 'failed' as const, issues: file.issues };
+          const handle = await findResourceHandle(sourceId, openSignal);
+          const opened = await openAutomergeFilesystemDatabase(handle, APP_FILE_AUTHORITY_SCOPE);
+          return opened.success
+            ? opened.value.database
+            : { state: 'failed' as const, issues: opened.issues };
         },
       });
     } finally {
@@ -234,12 +262,15 @@ const openRootHandle = async (
     workspaceRuntime,
     workspaceViewStateRuntime,
     resolveResourceDocument,
+    openResourceTitle,
     createAppSnapshot,
     close: () => {
       if (closed) return;
       closed = true;
       resolver.abort();
       pendingHandles.clear();
+      for (const observer of titleObservers) observer.close();
+      titleObservers.clear();
       resourceQuery.close();
       filesystem.close();
       workspaceRuntime.close();
@@ -316,5 +347,53 @@ const abortable = async <Value>(promise: Promise<Value>, abortSignal?: AbortSign
       },
     );
   });
+};
+
+const openTitleObserver = async (
+  source: MountableDatabaseSource & { readonly close: () => void },
+  openQuery: (source: MountableDatabaseSource) => Promise<DatabaseQuerySession<DocumentTitleRow>>,
+  owners: Set<{ readonly close: () => void }>,
+) => {
+  let query: DatabaseQuerySession<DocumentTitleRow>;
+  try {
+    query = await openQuery(source);
+  } catch (error) {
+    source.close();
+    throw error;
+  }
+  let closed = false;
+  const observer = {
+    getSnapshot: () => {
+      const snapshot = query.getSnapshot();
+      if (snapshot.state === 'closed') return { state: 'unavailable' as const };
+      const { completeness, freshness, readiness, rows } = snapshot.current;
+      const title = rows.length === 1 ? rows[0]?.title : undefined;
+      return readiness === 'ready' && completeness === 'exact' && freshness === 'current'
+        && typeof title === 'string'
+        ? { state: 'ready' as const, title }
+        : { state: 'unavailable' as const };
+    },
+    subscribe: (listener: () => void) => query.subscribe(() => listener()),
+    close: () => {
+      if (closed) return;
+      closed = true;
+      owners.delete(observer);
+      query.close();
+      source.close();
+    },
+  };
+  owners.add(observer);
+  return observer;
+};
+
+const retainOpenTitleObserver = <Observer extends { readonly close: () => void }>(
+  observer: Observer,
+  rootClosed: boolean,
+  signal?: AbortSignal,
+): Observer | undefined => {
+  if (!rootClosed && signal?.aborted !== true) return observer;
+  observer.close();
+  signal?.throwIfAborted();
+  return undefined;
 };
 export type PatchpitRuntime = Awaited<ReturnType<typeof createRoot>>;

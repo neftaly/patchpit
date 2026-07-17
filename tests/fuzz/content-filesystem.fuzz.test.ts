@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fc from 'fast-check';
+import * as Automerge from '@automerge/automerge';
+import { Repo } from '@automerge/automerge-repo';
+import {
+  openAutomergeFileDatabase,
+  openAutomergeFilesystemDatabase,
+  openAutomergeFolderDatabase,
+} from '@patchpit/automerge-fs';
 import type { FolderLinkRow } from '@patchpit/fs';
 import {
   hasAppEntry,
@@ -17,6 +24,7 @@ import {
   parseRootInvocationHash,
   type RootInvocation,
 } from '../../src/root/invocation.ts';
+import { selectFilesystemDocumentKind } from '../../packages/automerge-fs/src/document-selection.ts';
 
 const nonEmptyString = fc.string({ minLength: 1, maxLength: 80 });
 const validSrc = 'automerge:4NMNnkMhL8jXrdJ9jamS58PAVdXu';
@@ -73,6 +81,23 @@ void test('resource graph projection preserves every source-scoped link exactly 
       const projected = projectResourceTree(resources, 'source-0');
       assert.equal(projected.rows.length, resources.length);
       assert.equal(projected.byIdentity.size, resources.length);
+      const expandedFolders = new Set(['source-0']);
+      const activeFolders: string[] = [];
+      projected.rows.forEach(({ depth, folderTraversal, resource }) => {
+        activeFolders.length = depth + 1;
+        activeFolders[depth] = resource.sourceId;
+        expandedFolders.add(resource.sourceId);
+        if (folderTraversal !== undefined) {
+          assert.equal(resource.typeHint, 'folder');
+          assert.equal(expandedFolders.has(resource.resourceRef), true);
+          assert.equal(
+            activeFolders.includes(resource.resourceRef),
+            folderTraversal === 'cycle',
+          );
+        } else if (resource.typeHint === 'folder') {
+          expandedFolders.add(resource.resourceRef);
+        }
+      });
       resources.forEach((resource) => {
         assert.equal(projected.byIdentity.get(resourceIdentity(resource)), resource);
       });
@@ -110,3 +135,114 @@ void test('app projection preserves root-relative unique paths through folder do
     },
   ), { numRuns: 80 });
 });
+
+void test('filesystem adapter selection obeys owned metadata, nominations, and unambiguous shapes', () => {
+  fc.assert(fc.property(
+    fc.constantFrom('absent', 'folder', 'file', 'unknown'),
+    fc.constantFrom('absent', 'folder', 'file', 'unknown'),
+    fc.boolean(),
+    fc.boolean(),
+    fc.boolean(),
+    nonEmptyString,
+    (patchpitKind, patchworkKind, folderShape, fileShape, patchpitConflicted, label) => {
+      const document: Record<string, unknown> = {};
+      if (folderShape) Object.assign(document, { title: label, docs: [] });
+      if (fileShape) Object.assign(document, {
+        content: label,
+        extension: 'txt',
+        mimeType: 'text/plain',
+        name: `${label}.txt`,
+      });
+      if (patchworkKind !== 'absent') document['@patchwork'] = { type: patchworkKind };
+      if (!patchpitConflicted && patchpitKind !== 'absent') {
+        document['@patchpit'] = { type: patchpitKind };
+      }
+
+      const expectedKind = expectedFilesystemKind({
+        fileShape,
+        folderShape,
+        patchpitConflicted,
+        patchpitKind,
+        patchworkKind,
+      });
+      const base = Automerge.from(document, { actor: 'c'.repeat(64) });
+      const input = patchpitConflicted ? withConflictedPatchpitMetadata(base) : base;
+      const selected = selectFilesystemDocumentKind(input, 'fuzz:document');
+      assert.equal(selected.success, expectedKind !== undefined);
+      if (selected.success) {
+        assert.equal(selected.value, expectedKind);
+      } else if (patchpitConflicted) {
+        assert.equal(selected.issues.some(({ code }) =>
+          code === 'patchpit.filesystem.metadata-conflicted'), true);
+      } else if (patchpitKind === 'absent' && patchworkKind !== 'folder'
+        && patchworkKind !== 'file' && folderShape && fileShape) {
+        assert.equal(selected.issues.some(({ code }) =>
+          code === 'patchpit.filesystem.adapter-ambiguous'), true);
+        if (patchworkKind === 'unknown') {
+          assert.equal(selected.issues.some(({ code }) =>
+            code === 'patchpit.filesystem.interop-metadata-invalid'), true);
+        }
+      }
+    },
+  ), { numRuns: 100 });
+});
+
+void test('typed filesystem openers cannot bypass adapter selection', async () => {
+  const folderShape = { title: 'Folder', docs: [] };
+  const fileShape = { content: 'text', extension: 'txt', mimeType: 'text/plain', name: 'file.txt' };
+  const cases = [
+    { document: { ...folderShape, ...fileShape }, expected: undefined },
+    { document: { '@patchwork': { type: 'file' }, ...folderShape, ...fileShape }, expected: 'file' },
+    { document: { '@patchwork': { type: 'folder' }, ...folderShape, ...fileShape }, expected: 'folder' },
+    { document: { '@patchwork': { type: 'file' }, ...folderShape }, expected: undefined },
+    { document: { '@patchwork': { type: 'folder' }, ...fileShape }, expected: undefined },
+  ] as const;
+  const repo = new Repo({ network: [] });
+  try {
+    for (const { document, expected } of cases) {
+      const handle = repo.create<Record<string, unknown>>(document);
+      const opened = await openAutomergeFilesystemDatabase(handle);
+      assert.equal(opened.success ? opened.value.kind : undefined, expected);
+      if (opened.success) opened.value.database.close();
+      const folder = await openAutomergeFolderDatabase(handle);
+      assert.equal(folder.success, expected === 'folder');
+      if (folder.success) folder.value.close();
+      const file = await openAutomergeFileDatabase(handle, 'public');
+      assert.equal(file.success, expected === 'file');
+      if (file.success) file.value.close();
+    }
+  } finally {
+    await repo.shutdown();
+  }
+});
+
+const withConflictedPatchpitMetadata = (base: Automerge.Doc<Record<string, unknown>>) => {
+  const folder = Automerge.change(
+    Automerge.clone(base, { actor: 'a'.repeat(64) }),
+    (draft) => { draft['@patchpit'] = { type: 'folder' }; },
+  );
+  const file = Automerge.change(
+    Automerge.clone(base, { actor: 'b'.repeat(64) }),
+    (draft) => { draft['@patchpit'] = { type: 'file' }; },
+  );
+  return Automerge.merge(folder, file);
+};
+
+const expectedFilesystemKind = ({ fileShape, folderShape, patchpitConflicted, patchpitKind, patchworkKind }: {
+  readonly fileShape: boolean;
+  readonly folderShape: boolean;
+  readonly patchpitConflicted: boolean;
+  readonly patchpitKind: 'absent' | 'folder' | 'file' | 'unknown';
+  readonly patchworkKind: 'absent' | 'folder' | 'file' | 'unknown';
+}): 'folder' | 'file' | undefined => {
+  if (patchpitConflicted) return undefined;
+  if (patchpitKind === 'unknown') return undefined;
+  if (patchpitKind === 'folder' || patchpitKind === 'file') {
+    return patchpitKind;
+  }
+  if (patchworkKind === 'folder' || patchworkKind === 'file') {
+    return patchworkKind;
+  }
+  if (folderShape === fileShape) return undefined;
+  return folderShape ? 'folder' : 'file';
+};
