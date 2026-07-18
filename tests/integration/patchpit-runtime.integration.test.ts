@@ -142,7 +142,10 @@ void test('Patchpit runtime snapshots valid app bytes and retains invalid conten
     assert.deepEqual([...new Uint8Array(await ready.files[0]!.body.arrayBuffer())], [1, 2, 3]);
   }
 
-  const handle = (await runtime.resolveResourceDocument(resourceRef))!;
+  runtime.close();
+  const reopened = await openRoot({ repo, rootUrl: runtime.rootUrl });
+  assert.equal((await reopened.createAppSnapshot(folderRef)).state, 'ready');
+  const handle = (await reopened.resolveResourceDocument(resourceRef))!;
   const base = handle.doc() as Automerge.Doc<AutomergeBinaryFileDocument>;
   const left = Automerge.change(
     Automerge.clone(base, { actor: '6'.repeat(64) }),
@@ -153,8 +156,8 @@ void test('Patchpit runtime snapshots valid app bytes and retains invalid conten
     (doc) => { (doc as { content: Uint8Array }).content = new Uint8Array([5]); },
   );
   handle.update(() => Automerge.merge(left, right) as Automerge.Doc<object>);
-  assert.equal((await runtime.createAppSnapshot(folderRef)).state, 'invalid');
+  assert.equal((await reopened.createAppSnapshot(folderRef)).state, 'invalid');
 
-  runtime.close();
+  reopened.close();
   await repo.shutdown();
 });

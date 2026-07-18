@@ -9,9 +9,11 @@ import { canonicalRootInvocationHash, parseRootInvocationHash } from './root/inv
 const container = document.querySelector('#root');
 if (container === null) throw new Error('Missing root element.');
 const root = createRoot(container);
+const browserBaseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
 const rootHost = createBrowserRootHost({
+  broadcastChannelName: `patchpit:${browserBaseUrl.href}`,
   seed: (signal) => loadBrowserDemoSeed(
-    new URL(import.meta.env.BASE_URL, window.location.origin),
+    browserBaseUrl,
     signal,
   ),
 });
@@ -41,7 +43,7 @@ const loadRoot = async () => {
 
   let nextSandboxHost: BrowserSandboxHost | undefined;
   try {
-    const builtRunner = new URL(import.meta.env.BASE_URL, window.location.origin);
+    const builtRunner = browserBaseUrl;
     const configuredRunner = new URL(
       import.meta.env.VITE_PATCHPIT_RUNNER_URL ?? import.meta.env.BASE_URL,
       window.location.origin,

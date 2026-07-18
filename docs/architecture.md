@@ -8,11 +8,15 @@
 | Logical relations, authority, readiness, queries, and source-routed writes | Tarstate | Attachments, projections, and transactions |
 | Selection, previews, and recent context history | Patchpit presence | Per-client Tarstate relational external-store database |
 | Pointer resize drafts and drag sessions | React component runtime | Local ephemeral state |
+| Live same-origin replica transport | Browser host | Deployment-scoped Automerge Repo BroadcastChannel adapter |
 | Immutable launched application files | Sandbox boundary | Authority-scoped snapshot and cache mount |
 
 State crosses an owner boundary through a projection, canonical writer, or
 explicit attached source. Patchpit does not mirror Tarstate readiness or raw
 Automerge handles inside application state.
+
+The browser root host owns the Repo it creates for its default transport. A
+Repo supplied by a container remains owned and shut down by that container.
 
 ## A2. Workspace update flow
 

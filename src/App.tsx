@@ -93,7 +93,9 @@ export function App({ runtime, sandboxHost }: {
     const queuedPlan = pendingWorkspacePlans.current.then(async () => {
       const currentProjection = workspaceRuntime.getSnapshot();
       if (currentProjection.state !== 'ready') return;
-      const workspacePlan = plan(currentProjection.workspace, workspacePresence.getSnapshot());
+      const currentViewState = workspacePresence.getSnapshot();
+      const workspacePlan = plan(currentProjection.workspace, currentViewState);
+      if (workspacePlan.durableOperation === undefined && workspacePlan.viewState === currentViewState) return;
       if (workspacePlan.durableOperation !== undefined) {
         const receipt = await workspaceRuntime.commitOperation(workspacePlan.durableOperation);
         if (receipt.outcome === 'rejected' || receipt.outcome === 'unknown') return;

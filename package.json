@@ -20,6 +20,7 @@
     "test:dev": "node --import ./tests/support/register-ts-loader.mjs tests/browser/prototype-preview.mjs --dev",
     "test:fuzz": "node tests/run.mjs fuzz",
     "test:integration": "node tests/run.mjs integration",
+    "test:markdown-editor": "node tests/browser/markdown-editor.mjs",
     "test:preview": "node --import ./tests/support/register-ts-loader.mjs tests/browser/prototype-preview.mjs",
     "preview": "vite preview",
     "typecheck": "pnpm artifacts:check && tsc"
@@ -27,8 +28,10 @@
   "dependencies": {
     "@automerge/automerge": "3.2.6",
     "@automerge/automerge-repo": "2.5.6",
-    "@patchpit/automerge-fs": "workspace:*",
+    "@automerge/automerge-repo-network-broadcastchannel": "catalog:",
+    "@neftaly/editcontext-polyfill": "0.1.1",
     "@patchpit/artifacts": "workspace:*",
+    "@patchpit/automerge-fs": "workspace:*",
     "@patchpit/fs": "workspace:*",
     "@patchpit/sandbox": "workspace:*",
     "@patchpit/sandbox-fs": "workspace:*",
@@ -40,11 +43,11 @@
   "devDependencies": {
     "@babel/core": "catalog:",
     "@rolldown/plugin-babel": "catalog:",
+    "@tarstate/schema-tools": "catalog:tarstate",
     "@types/babel__core": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@tarstate/schema-tools": "catalog:tarstate",
     "@vitejs/plugin-react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
     "fast-check": "catalog:",

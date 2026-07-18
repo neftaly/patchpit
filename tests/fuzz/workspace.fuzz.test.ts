@@ -20,7 +20,10 @@ import {
   composeWorkspacePresentation,
   createWorkspaceViewState,
   reconcileWorkspaceViewState,
+  selectWorkspaceContext,
+  workspaceContextPaneId,
   workspaceContextForUrl,
+  workspaceFocusTargetAfterClose,
   type WorkspaceAction,
   type WorkspaceViewState,
 } from '../../src/workspace/view-state.ts';
@@ -79,12 +82,14 @@ void test('workspace actions preserve the complete durable/view-state/document m
         viewState = plan.viewState;
         assert.deepEqual(workspaceInvariantViolations(workspace), []);
         assert.equal(reconcileWorkspaceViewState(workspace, viewState), viewState);
+        assertMostRecentSelectionIsIdempotent(workspace, viewState);
         assertActiveEditorFallback(workspace, viewState);
         assertContextIdCollisionIsNoOp(workspace, viewState, step.first + step.second, step.pinned);
         assertMountedUrlReuse(workspace, viewState, step.first + step.second, step.pinned);
 
         const presentation = composeWorkspacePresentation(workspace, viewState, isEditorContext);
         assert.deepEqual(presentationInvariantViolations(workspace, viewState, presentation), []);
+        assertCloseFocusTarget(presentation, step.first + step.second);
         assertWorkspaceLayoutProjection(presentation);
         assertWorkspaceRelationRoundTrip(workspace);
       }
@@ -159,7 +164,7 @@ const planStep = (workspace: WorkspaceState, viewState: WorkspaceViewState, step
   if (step.kind === 1 && selected !== undefined) {
     action = { kind: 'workspace.context.select', contextId: selected.contextId };
   } else if (step.kind === 2 && selected !== undefined) {
-    action = { kind: 'workspace.context.close', ...selected };
+    action = { kind: 'workspace.context.close', contextId: selected.contextId };
   } else if (step.kind === 3 && selected !== undefined) {
     const target = workspace.nodes[targetPaneId];
     action = {
@@ -228,6 +233,17 @@ const assertActiveEditorFallback = (
   assert.deepEqual(activeWorkspaceEditor(workspace, withoutHistory, isEditorContext), expected);
 };
 
+const assertMostRecentSelectionIsIdempotent = (
+  workspace: WorkspaceState,
+  viewState: WorkspaceViewState,
+) => {
+  const contextId = viewState.recentContextIds[0];
+  if (contextId === undefined) return;
+  const paneId = workspaceContextPaneId(workspace, viewState, contextId);
+  if (paneId === undefined || viewState.panes[paneId]?.selectedContextId !== contextId) return;
+  assert.equal(selectWorkspaceContext(workspace, viewState, paneId, contextId), viewState);
+};
+
 const assertMountedUrlReuse = (
   workspace: WorkspaceState,
   viewState: WorkspaceViewState,
@@ -287,6 +303,20 @@ const assertContextIdCollisionIsNoOp = (
 const mountedContextIds = (
   presentation: ReturnType<typeof composeWorkspacePresentation>,
 ) => Object.values(presentation.nodes).flatMap((node) => node.kind === 'pane' ? node.contexts : []);
+
+const assertCloseFocusTarget = (
+  presentation: ReturnType<typeof composeWorkspacePresentation>,
+  seed: number,
+) => {
+  const contextId = select(mountedContextIds(presentation), seed);
+  if (contextId === undefined) return;
+  const paneId = Object.entries(presentation.nodes).find(([, node]) =>
+    node.kind === 'pane' && node.contexts.includes(contextId))?.[0];
+  if (paneId === undefined) return;
+  const target = workspaceFocusTargetAfterClose(presentation, paneId, contextId);
+  assert.notEqual(target, contextId);
+  if (target !== undefined) assert.notEqual(presentation.contexts[target], undefined);
+};
 
 const assertWorkspaceLayoutProjection = (
   presentation: ReturnType<typeof composeWorkspacePresentation>,

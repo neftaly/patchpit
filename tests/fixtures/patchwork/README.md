@@ -20,3 +20,9 @@ an alias, duplicate placement names, an unavailable Automerge link, valid
 Patchwork optional fields, and fields unknown to Patchpit. File fixtures cover
 plain text, bytes, and Automerge immutable text. The fixture-only
 `suggestedImportUrl` values use IANA's reserved `example.com` domain.
+
+The generator also executes both directions of claimed folder compatibility:
+Patchpit unlinks an occurrence from an upstream folder before pinned Patchwork
+reopens it; pinned Patchwork then identifies, reads, and renames a folder
+created by Patchpit before Patchpit reopens it. The resulting histories are
+pinned beside their source fixtures.

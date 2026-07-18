@@ -4,16 +4,13 @@ export const observeSameOriginFrameInteractions = (
 ) => {
   const boundDocuments = new WeakSet<Document>();
   const boundFrames = new WeakSet<HTMLIFrameElement>();
-  const cleanups: Array<() => void> = [];
+  const listeners = new AbortController();
+  const observers = new Set<MutationObserver>();
   const bindDocument = (document: Document) => {
     if (boundDocuments.has(document)) return;
     boundDocuments.add(document);
-    document.addEventListener('focusin', onInteract, true);
-    document.addEventListener('pointerdown', onInteract, true);
-    cleanups.push(() => {
-      document.removeEventListener('focusin', onInteract, true);
-      document.removeEventListener('pointerdown', onInteract, true);
-    });
+    document.addEventListener('focusin', onInteract, { capture: true, signal: listeners.signal });
+    document.addEventListener('pointerdown', onInteract, { capture: true, signal: listeners.signal });
     const bindFrame = (nestedFrame: HTMLIFrameElement) => {
       if (boundFrames.has(nestedFrame)) return;
       boundFrames.add(nestedFrame);
@@ -24,8 +21,7 @@ export const observeSameOriginFrameInteractions = (
           // Cross-origin frames cannot join this temporary trusted same-origin bridge.
         }
       };
-      nestedFrame.addEventListener('load', bindLoadedDocument);
-      cleanups.push(() => { nestedFrame.removeEventListener('load', bindLoadedDocument); });
+      nestedFrame.addEventListener('load', bindLoadedDocument, { signal: listeners.signal });
       bindLoadedDocument();
     };
     const bindDescendants = (root: ParentNode) => {
@@ -41,8 +37,12 @@ export const observeSameOriginFrameInteractions = (
         });
     });
     observer.observe(document, { childList: true, subtree: true });
-    cleanups.push(() => { observer.disconnect(); });
+    observers.add(observer);
   };
   if (frame.contentDocument !== null) bindDocument(frame.contentDocument);
-  return () => { cleanups.forEach((cleanup) => { cleanup(); }); };
+  return () => {
+    listeners.abort();
+    observers.forEach((observer) => { observer.disconnect(); });
+    observers.clear();
+  };
 };

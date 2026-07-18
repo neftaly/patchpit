@@ -65,6 +65,7 @@ pnpm test:fuzz
 pnpm test:integration
 pnpm test
 pnpm test:dev
+pnpm test:markdown-editor
 pnpm test:preview
 ```
 

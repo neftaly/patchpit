@@ -1,4 +1,5 @@
 import { Repo } from '@automerge/automerge-repo';
+import { BroadcastChannelNetworkAdapter } from '@automerge/automerge-repo-network-broadcastchannel';
 import {
   createRoot,
   openRoot,
@@ -8,6 +9,7 @@ import {
 import type { RootInvocation } from '../root/invocation.ts';
 
 export const createBrowserRootHost = (options: {
+  readonly broadcastChannelName?: string;
   readonly repo?: Repo;
   readonly seed: (signal?: AbortSignal) => Promise<{
     readonly documentContextFolderId?: string;
@@ -15,7 +17,12 @@ export const createBrowserRootHost = (options: {
     readonly initialContext: string;
   }>;
 }) => {
-  const repo = options.repo ?? new Repo({ network: [] });
+  const ownsRepo = options.repo === undefined;
+  const repo = options.repo ?? new Repo({
+    network: [new BroadcastChannelNetworkAdapter({
+      channelName: options.broadcastChannelName ?? 'patchpit',
+    })],
+  });
   let active: PatchpitRuntime | undefined;
   let generation = 0;
   let closed = false;
@@ -59,7 +66,7 @@ export const createBrowserRootHost = (options: {
     if (closed) return;
     closed = true;
     release();
-    await repo.shutdown();
+    if (ownsRepo) await repo.shutdown();
   };
 
   return { close, open, release };

@@ -127,15 +127,17 @@ void test('concurrent workspace replicas merge named operations without replacin
 
 void test('malformed workspace relations produce an invalid projection without throwing', async () => {
   const repo = new Repo({ network: [] });
-  const handle = repo.create(createWorkspaceDocument('home'));
+  const handle = repo.create(createWorkspaceDocument('home', 'document'));
   const workspace = await openWorkspaceRuntime(handle);
   try {
     handle.change((doc) => {
       (doc.placements['context-0'] as { paneId: string }).paneId = 'missing';
+      (doc.splits['split-0'] as { ratio: number }).ratio = 0.05;
     });
     const projection = workspace.getSnapshot();
     assert.equal(projection.state, 'invalid');
     assert.equal(projection.issues.some(({ code }) => code === 'patchpit.workspace.context-unmounted'), true);
+    assert.equal(projection.issues.some(({ code }) => code === 'patchpit.workspace.split-ratio-invalid'), true);
   } finally {
     workspace.close();
     await repo.shutdown();

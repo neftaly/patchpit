@@ -7,12 +7,28 @@
       "read": "exact",
       "preserve": "unknown-fields",
       "write": "partial",
+      "upstreamReopen": "supported",
+      "roundTrips": [
+        { "file": "folder-after-patchpit-unlink.am", "operation": "unlink" }
+      ],
       "operations": {
         "rename": "unsupported",
         "unlink": "supported",
         "alias": "unsupported"
       },
       "create": "unsupported"
+    },
+    "owned-folder": {
+      "fixtures": [{ "file": "patchpit-folder.am" }],
+      "identify": "supported",
+      "read": "exact",
+      "preserve": "unknown-fields",
+      "write": "supported",
+      "create": "supported",
+      "upstreamReopen": "supported",
+      "roundTrips": [
+        { "file": "patchpit-folder-after-patchwork-rename.am", "operation": "rename" }
+      ]
     },
     "foreign-file": {
       "fixtures": [
@@ -24,7 +40,8 @@
       "read": "exact",
       "preserve": "not-exercised",
       "write": "read-only",
-      "create": "unsupported"
+      "create": "unsupported",
+      "upstreamReopen": "not-applicable"
     }
   }
 }

@@ -1,0 +1,39 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  width: min(52rem, calc(100% - 2rem));
+  margin: 2rem auto;
+}
+
+.editor {
+  min-height: 20rem;
+  padding: 1rem;
+  border: 1px solid currentColor;
+  font-family: ui-monospace, monospace;
+  line-height: 1.5;
+  outline-offset: 2px;
+  touch-action: pan-y;
+  white-space: pre-wrap;
+}
+
+.caret {
+  border-inline-start: 1px solid currentColor;
+}
+
+.selection {
+  background: Highlight;
+  color: HighlightText;
+}
+
+output,
+pre {
+  display: block;
+  margin-block-start: 1rem;
+}

@@ -221,8 +221,9 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
     readonly frameAttributes: SandboxFrameAttributes;
   }>({ state: 'loading' });
   const removeInteractionListeners = useRef<() => void>(() => undefined);
-  useEffect(() => () => { removeInteractionListeners.current(); }, []);
   useEffect(() => {
+    removeInteractionListeners.current();
+    removeInteractionListeners.current = () => undefined;
     const controller = new AbortController();
     setInstallation({ state: 'loading' });
     const mountPromise = contentRuntime.createAppSnapshot(rootFolderRef, controller.signal).then(async (snapshot) => {
@@ -246,6 +247,8 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
       if (!controller.signal.aborted) setInstallation({ state: 'unavailable' });
     });
     return () => {
+      removeInteractionListeners.current();
+      removeInteractionListeners.current = () => undefined;
       controller.abort();
       void mountPromise.then((installedMount) => installedMount.close(), () => undefined);
     };

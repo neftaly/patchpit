@@ -1,8 +1,12 @@
+import { workspaceSplitRatioBounds } from '@patchpit/artifacts';
+
 export type WorkspacePaneId = string;
 export type WorkspaceSplitEdge = 'left' | 'right' | 'top' | 'bottom';
 
 const INITIAL_SPLIT_RATIO = 0.2;
 const NEW_SPLIT_RATIO = 0.5;
+export const MIN_SPLIT_RATIO = workspaceSplitRatioBounds.minimum;
+export const MAX_SPLIT_RATIO = workspaceSplitRatioBounds.maximum;
 
 export type WorkspaceContext = {
   readonly url: string;
@@ -34,7 +38,6 @@ export type WorkspaceState = {
 
 export type WorkspaceOperation = {
   readonly kind: 'workspace.context.close';
-  readonly paneId: WorkspacePaneId;
   readonly contextId: string;
 } | {
   readonly kind: 'workspace.context.pin';
@@ -80,7 +83,7 @@ export const applyWorkspaceOperation = (
 ): WorkspaceState => {
   switch (operation.kind) {
     case 'workspace.context.close':
-      return closeContext(workspace, operation.paneId, operation.contextId);
+      return closeContext(workspace, operation.contextId);
     case 'workspace.context.pin':
       return pinContext(
         workspace,
@@ -191,11 +194,12 @@ const pinContext = (
 
 const closeContext = (
   workspace: WorkspaceState,
-  paneId: WorkspacePaneId,
   contextId: string,
 ): WorkspaceState => {
+  const paneId = paneContaining(workspace, contextId);
+  if (paneId === undefined) return workspace;
   const pane = paneAt(workspace, paneId);
-  if (pane === undefined || !pane.contexts.includes(contextId)) return workspace;
+  if (pane === undefined) return workspace;
   const removed = pruneContexts(updatePane(workspace, paneId, {
     kind: 'pane',
     contexts: pane.contexts.filter((candidate) => candidate !== contextId),
@@ -328,7 +332,11 @@ const pruneContexts = (workspace: WorkspaceState): WorkspaceState => {
 
 const resizeSplit = (workspace: WorkspaceState, nodeId: string, ratio: number): WorkspaceState => {
   const node = workspace.nodes[nodeId];
-  if (node?.kind !== 'split' || !Number.isFinite(ratio) || ratio <= 0 || ratio >= 1 || node.ratio === ratio) {
+  if (node?.kind !== 'split'
+    || !Number.isFinite(ratio)
+    || ratio < MIN_SPLIT_RATIO
+    || ratio > MAX_SPLIT_RATIO
+    || node.ratio === ratio) {
     return workspace;
   }
   return { ...workspace, nodes: { ...workspace.nodes, [nodeId]: { ...node, ratio } } };

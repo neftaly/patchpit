@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -11,6 +12,14 @@ import {
   Repo,
   type DocHandle,
 } from '@automerge/automerge-repo';
+import {
+  createAutomergeFolderDocument,
+  openAutomergeFolderDatabase,
+} from '@patchpit/automerge-fs';
+import {
+  commitFolderOperation,
+  openFolderLinksQuery,
+} from '@patchpit/fs';
 
 const PATCHWORK_COMMIT = '4742ae09ce406c89e13711dab57d15ec69a5c77f';
 const PATCHWORK_BASE_COMMIT = '371b677978d00c4bcaf7b9831c24cc28479179d7';
@@ -56,6 +65,7 @@ requireCommit(patchworkBase, PATCHWORK_BASE_COMMIT);
 const packageUrls = new Map([
   ['@automerge/automerge', import.meta.resolve('@automerge/automerge')],
   ['@automerge/automerge-repo', import.meta.resolve('@automerge/automerge-repo')],
+  ['@automerge/automerge-repo/slim', import.meta.resolve('@automerge/automerge-repo/slim')],
 ]);
 
 registerHooks({
@@ -78,6 +88,8 @@ type PatchworkDocument = {
 
 type Datatype = {
   init(document: Record<string, unknown>, repo: Repo): void;
+  getTitle(document: Record<string, unknown>, repo: Repo): string;
+  setTitle?(document: Record<string, unknown>, title: string): void;
 };
 
 type LoadedDatatype = {
@@ -98,6 +110,9 @@ const importUpstream = async <Module,>(checkout: string, path: string) =>
 const { createDocOfDatatype2 } = await importUpstream<{
   createDocOfDatatype2: CreateDocOfDatatype;
 }>(patchwork, 'core/plugins/src/datatypes.ts');
+const { getType } = await importUpstream<{
+  getType: (document: Readonly<Record<string, unknown>>) => string | undefined;
+}>(patchwork, 'core/filesystem/src/metadata.ts');
 const { FolderDatatype } = await importUpstream<{ FolderDatatype: Datatype }>(
   patchworkBase,
   'folder/src/datatype.js',
@@ -169,17 +184,76 @@ folder.change((document) => {
   (links[0] as Record<string, unknown>).fixtureLinkExtension = 'retained';
 });
 
+const foreignFolderBeforePatchpit = Automerge.save(folder.doc());
+const folderOpened = await openAutomergeFolderDatabase(folder);
+assert.equal(folderOpened.success, true);
+if (!folderOpened.success) throw new Error('Patchpit could not reopen the upstream folder fixture.');
+const folderLinks = await openFolderLinksQuery([folderOpened.value]);
+try {
+  const settled = await folderLinks.whenSettled();
+  const firstLinkId = settled.rows[0]?.linkId;
+  assert.equal(typeof firstLinkId, 'string');
+  const receipt = await commitFolderOperation(folderOpened.value, {
+    kind: 'folder.link.unlink',
+    linkId: firstLinkId ?? '',
+  });
+  assert.equal(receipt.outcome, 'committed');
+} finally {
+  folderLinks.close();
+  folderOpened.value.close();
+}
+
+const foreignFolderAfterPatchpit = Automerge.save(folder.doc());
+
+const patchpitFolder = repo.create(createAutomergeFolderDocument('Patchpit compatible folder', [{
+  linkId: 'notes',
+  name: 'notes.txt',
+  order: 0,
+  resourceRef: text.url,
+  typeHint: 'file',
+}]));
+const patchpitFolderDocument = Automerge.save(patchpitFolder.doc());
+
+const upstreamReopenRepo = new Repo({ network: [] });
+const reopenUpstream = (bytes: Uint8Array) => {
+  const handle = upstreamReopenRepo.create<Record<string, unknown>>();
+  handle.update(() => Automerge.load<Record<string, unknown>>(bytes));
+  return handle;
+};
+const reopenedForeignFolder = reopenUpstream(foreignFolderAfterPatchpit).doc();
+assert.equal(getType(reopenedForeignFolder), 'folder');
+assert.equal(FolderDatatype.getTitle(reopenedForeignFolder, upstreamReopenRepo), 'Patchwork interoperability');
+const reopenedForeignLinks = reopenedForeignFolder.docs;
+assert.ok(Array.isArray(reopenedForeignLinks));
+assert.equal(reopenedForeignLinks.length, 4);
+assert.deepEqual(reopenedForeignFolder.fixtureExtension, { retained: true });
+
+const reopenedPatchpitFolderHandle = reopenUpstream(patchpitFolderDocument);
+const reopenedPatchpitFolder = reopenedPatchpitFolderHandle.doc();
+assert.equal(getType(reopenedPatchpitFolder), 'folder');
+assert.equal(FolderDatatype.getTitle(reopenedPatchpitFolder, upstreamReopenRepo), 'Patchpit compatible folder');
+const reopenedPatchpitLinks = reopenedPatchpitFolder.docs;
+assert.ok(Array.isArray(reopenedPatchpitLinks));
+assert.equal(reopenedPatchpitLinks.length, 1);
+assert.equal(typeof FolderDatatype.setTitle, 'function');
+reopenedPatchpitFolderHandle.change((document) => {
+  FolderDatatype.setTitle?.(document, 'Patchwork renamed folder');
+});
+const patchpitFolderAfterPatchwork = Automerge.save(reopenedPatchpitFolderHandle.doc());
+
 const documents = [
-  ['folder.am', folder],
-  ['text-file.am', text],
-  ['binary-file.am', binary],
-  ['immutable-string-file.am', immutable],
+  ['folder.am', foreignFolderBeforePatchpit],
+  ['folder-after-patchpit-unlink.am', foreignFolderAfterPatchpit],
+  ['patchpit-folder.am', patchpitFolderDocument],
+  ['patchpit-folder-after-patchwork-rename.am', patchpitFolderAfterPatchwork],
+  ['text-file.am', Automerge.save(text.doc())],
+  ['binary-file.am', Automerge.save(binary.doc())],
+  ['immutable-string-file.am', Automerge.save(immutable.doc())],
 ] as const;
 
 await mkdir(FIXTURE_DIRECTORY, { recursive: true });
 
-const fixtures = await Promise.all(documents.map(async ([name, handle]) => {
-  const bytes = Automerge.save(handle.doc());
+const fixtures = await Promise.all(documents.map(async ([name, bytes]) => {
   await writeFile(join(FIXTURE_DIRECTORY, name), bytes);
   return {
     file: name,
@@ -193,7 +267,10 @@ await writeFile(join(FIXTURE_DIRECTORY, 'manifest.json'), `${JSON.stringify({
     patchwork: {
       commit: PATCHWORK_COMMIT,
       repository: 'https://github.com/inkandswitch/patchwork',
-      sources: ['core/plugins/src/datatypes.ts'],
+      sources: [
+        'core/filesystem/src/metadata.ts',
+        'core/plugins/src/datatypes.ts',
+      ],
     },
     patchworkBase: {
       commit: PATCHWORK_BASE_COMMIT,
@@ -212,4 +289,5 @@ await writeFile(join(FIXTURE_DIRECTORY, 'manifest.json'), `${JSON.stringify({
   fixtures,
 }, undefined, 2)}\n`);
 
+await upstreamReopenRepo.shutdown();
 await repo.shutdown();

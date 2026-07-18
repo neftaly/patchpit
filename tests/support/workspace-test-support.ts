@@ -1,5 +1,9 @@
 import type { WorkspacePresentation, WorkspaceViewState } from '../../src/workspace/view-state.ts';
-import type { WorkspaceState } from '../../src/workspace/durable-state.ts';
+import {
+  MAX_SPLIT_RATIO,
+  MIN_SPLIT_RATIO,
+  type WorkspaceState,
+} from '../../src/workspace/durable-state.ts';
 
 export const workspaceInvariantViolations = (workspace: WorkspaceState): readonly string[] => {
   const violations: string[] = [];
@@ -17,7 +21,9 @@ export const workspaceInvariantViolations = (workspace: WorkspaceState): readonl
       violations.push(`missing child ${nodeId}`);
     }
     if (node.first === node.second) violations.push(`duplicate child ${nodeId}`);
-    if (!Number.isFinite(node.ratio) || node.ratio <= 0 || node.ratio >= 1) {
+    if (!Number.isFinite(node.ratio)
+      || node.ratio < MIN_SPLIT_RATIO
+      || node.ratio > MAX_SPLIT_RATIO) {
       violations.push(`invalid ratio ${nodeId}`);
     }
   }

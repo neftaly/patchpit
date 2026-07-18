@@ -20,7 +20,10 @@ IDs; names, order, paths, and parent folders are mutable facts. Duplicate names
 remain distinct links. Direct `https:` leaves are external resources rather
 than Automerge documents, apps, or implicit fetch requests. Unavailable,
 incomplete, invalid, stale, and closed source state never appears as an empty
-filesystem.
+filesystem. Claimed Patchwork folder compatibility is two-way: supported
+Patchpit edits reopen in pinned Patchwork, and Patchwork edits to compatible
+Patchpit folders reopen without losing Patchpit or unknown metadata. Foreign
+file profiles remain read-only.
 
 ## B3. Application launch
 
@@ -63,10 +66,14 @@ a preview does not create durable workspace state; moving or pinning it does.
 
 ## B7. Closing panes and contexts
 
-Closing a context removes that context, not a path-derived substitute. Closing
-the final context in a non-root pane collapses that pane and its parent split.
-The root pane may remain empty. Splitting a pane by moving its own final context
-to the new child may leave the original child pane empty.
+Closing a context removes that stable context ID, not a selected, active, or
+path-derived substitute. Every tab has a labeled close control. Auxiliary mouse
+button 1 over a tab issues the same close intent without first selecting the
+tab; it suppresses the browser's auxiliary default. Other mouse buttons, touch,
+and pen input do not gain close behavior. Closing the final context in a
+non-root pane collapses that pane and its parent split. The root pane may remain
+empty. Splitting a pane by moving its own final context to the new child may
+leave the original child pane empty.
 
 ## B8. Drag and drop
 
@@ -89,8 +96,13 @@ within ten to ninety percent.
 ## B10. Keyboard and accessibility
 
 Tabs use the tablist, tab, and tabpanel pattern. Left and right arrow keys move
-selection within a tablist. Close controls have context labels. Split handles
-are focusable separators with orientation, value, and controlled-pane
+selection within a tablist. Every close action remains available through a
+labeled button. Activating that button moves focus to the surviving selected
+tab in the same pane; if the pane collapses, focus moves to the surviving active
+editor when it is not being closed, then the first selected tab in layout
+order, or the empty workspace.
+Middle-click is only a pointer convenience and does not transfer focus. Split
+handles are focusable separators with orientation, value, and controlled-pane
 relationships. Native button activation supplies resource keyboard behavior;
 Patchpit defines no independent shortcut system.
 
@@ -105,8 +117,12 @@ retried within a fixed bound or fail explicitly.
 ## B12. Replication and atomicity
 
 Automerge documents are canonical CRDT storage and merge ordinary concurrent
-changes. A single attached source is the atomic write boundary. Work spanning
-multiple sources is non-atomic and must expose partial completion when such
-operations are implemented. Per-client presence does not derive from Automerge
-change history because clicks and focus can change interaction intent without
-changing a durable document.
+changes. Live browser clients in the same origin and Patchpit deployment
+exchange document changes through a deployment-scoped BroadcastChannel. This is
+ephemeral replication, not persistence: a document becomes unavailable once no
+live or otherwise attached replica can supply it. A single attached source is
+the atomic write boundary. Work spanning multiple sources is non-atomic and
+must expose partial completion when such operations are implemented. Per-client
+presence remains separate and does not derive from Automerge change history
+because clicks and focus can change interaction intent without changing a
+durable document.

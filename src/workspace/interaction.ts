@@ -1,14 +1,14 @@
 import type {
   WorkspaceAction,
 } from './view-state.ts';
-import type {
-  WorkspacePaneId,
-  WorkspaceSplitEdge,
-  WorkspaceSplitIds,
+import {
+  MAX_SPLIT_RATIO,
+  MIN_SPLIT_RATIO,
+  type WorkspacePaneId,
+  type WorkspaceSplitEdge,
+  type WorkspaceSplitIds,
 } from './durable-state.ts';
 
-export const MIN_SPLIT_RATIO = 0.1;
-export const MAX_SPLIT_RATIO = 0.9;
 const EDGE_DROP_THRESHOLD = 1 / 3;
 const SPLIT_KEYBOARD_STEP = 0.05;
 

@@ -20,6 +20,7 @@ import {
   unionAll,
   where,
 } from '@tarstate/core/query/authoring';
+import { workspaceSplitRatioBounds } from '../src/workspace-semantics.ts';
 
 type WorkspaceConstraintRelations = Readonly<Record<
   'panes' | 'placements' | 'splits' | 'state',
@@ -173,9 +174,9 @@ const workspaceConstraintQueries = (relations: WorkspaceConstraintRelations) => 
   ), rowSubject(relations.splits.relationId, field('split', 'id')), 'duplicate');
 
   const invalidSplitRatios = violation(pipe(splits, where(or(
-    compare('lte', field('split', 'ratio'), literal(0)),
-    compare('gte', field('split', 'ratio'), literal(1)),
-  ))), rowSubject(relations.splits.relationId, field('split', 'id')), 'outside-open-unit-interval');
+    compare('lt', field('split', 'ratio'), literal(workspaceSplitRatioBounds.minimum)),
+    compare('gt', field('split', 'ratio'), literal(workspaceSplitRatioBounds.maximum)),
+  ))), rowSubject(relations.splits.relationId, field('split', 'id')), 'outside-supported-range');
 
   const missingRoots = violation(pipe(
     state,

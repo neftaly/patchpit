@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@automerge/automerge-repo-network-broadcastchannel':
+      specifier: 2.5.6
+      version: 2.5.6
     '@babel/core':
       specifier: ^8.0.1
       version: 8.0.1
@@ -75,6 +78,12 @@ importers:
       '@automerge/automerge-repo':
         specifier: 2.5.6
         version: 2.5.6
+      '@automerge/automerge-repo-network-broadcastchannel':
+        specifier: 'catalog:'
+        version: 2.5.6
+      '@neftaly/editcontext-polyfill':
+        specifier: 0.1.1
+        version: 0.1.1
       '@patchpit/artifacts':
         specifier: workspace:*
         version: link:packages/artifacts
@@ -201,6 +210,9 @@ importers:
         version: https://github.com/neftaly/tarstate/releases/download/v0.4.12/tarstate-core-0.4.12.tgz
 
 packages:
+
+  '@automerge/automerge-repo-network-broadcastchannel@2.5.6':
+    resolution: {integrity: sha512-eHE8edlYRfwFnQ1JBKuAyxqKg7TNVFbloe5QgbM1CH8khAunLdeYJcpAAxWkPEU1iQOUjU5oLowDm7BQbsfEJw==}
 
   '@automerge/automerge-repo@2.5.6':
     resolution: {integrity: sha512-ZXM6TOAwm192g3+zIxYvlB+Z3O00NP+psErOwvbSype8fFO+dhc8tB/jPwfZJqmn1ULUz5w7gssKEynwcYFRSA==}
@@ -498,6 +510,9 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
+
+  '@neftaly/editcontext-polyfill@0.1.1':
+    resolution: {integrity: sha512-QLxxfcywSLYEUb5GgkPHniTmacu26kYElFV01qsWtq9/HIolfkgaTbNOtxhVd49k4v1g2+31P8fsk3eDgGhlAg==}
 
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
@@ -1326,6 +1341,12 @@ packages:
 
 snapshots:
 
+  '@automerge/automerge-repo-network-broadcastchannel@2.5.6':
+    dependencies:
+      '@automerge/automerge-repo': 2.5.6
+    transitivePeerDependencies:
+      - supports-color
+
   '@automerge/automerge-repo@2.5.6':
     dependencies:
       '@automerge/automerge': 3.2.6
@@ -1573,6 +1594,8 @@ snapshots:
       '@emnapi/runtime': 1.11.1
       '@tybys/wasm-util': 0.10.3
     optional: true
+
+  '@neftaly/editcontext-polyfill@0.1.1': {}
 
   '@noble/hashes@1.8.0': {}
 

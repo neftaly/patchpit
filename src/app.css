@@ -103,7 +103,17 @@ button {
 
 .resize-handle:is(:hover, :focus-visible) {
   color: var(--color-muted);
-  outline: 0;
+}
+
+.resize-handle:focus,
+.resource:focus {
+  outline: var(--hairline) solid currentColor;
+  outline-offset: calc(-1 * var(--hairline));
+}
+
+.workspace:focus-visible {
+  outline: var(--hairline) solid var(--color-muted);
+  outline-offset: calc(-1 * var(--hairline));
 }
 
 .resize-line {
@@ -159,7 +169,7 @@ button {
   font-size: var(--font-code-size);
 }
 
-.tab:is(:hover, :focus-visible) {
+.tab:is(:hover, :focus-within) {
   background: var(--color-hover);
   outline: 0;
 }
@@ -323,7 +333,6 @@ button {
 
 .resource:is(:hover, :focus-visible) {
   background: var(--color-hover);
-  outline: 0;
 }
 
 .resource-folder {

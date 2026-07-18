@@ -91,7 +91,6 @@ void test('workspace writes preserve the identity of surviving logical rows', as
 
     assert.equal((await workspace.commitOperation({
       kind: 'workspace.context.close',
-      paneId: 'left',
       contextId: 'file',
     })).outcome, 'committed');
     assert.deepEqual(survivingIds(), initialIds);

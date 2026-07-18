@@ -32,11 +32,11 @@ void test('durable workspace stores topology and pinned placements without per-v
 
 void test('closing the last tab explicitly collapses its pane while empty root panes remain valid', () => {
   let workspace = createWorkspace(resourcesUrl, 'document');
-  workspace = apply(workspace, { kind: 'workspace.context.close', paneId: 'right', contextId: 'context-1' });
+  workspace = apply(workspace, { kind: 'workspace.context.close', contextId: 'context-1' });
   assert.equal(workspace.nodes.right, undefined);
   assert.equal(workspace.rootNodeId, 'left');
 
-  workspace = apply(workspace, { kind: 'workspace.context.close', paneId: 'left', contextId: 'context-0' });
+  workspace = apply(workspace, { kind: 'workspace.context.close', contextId: 'context-0' });
   assert.deepEqual(workspace.nodes.left, { kind: 'pane', contexts: [] });
   assertWorkspace(workspace);
 });
@@ -176,7 +176,7 @@ void test('moving a preview promotes it and closing it collapses the destination
   assert.deepEqual(workspace.nodes.bottom, { kind: 'pane', contexts: ['preview'] });
 
   plan = planWorkspaceAction({
-    action: { kind: 'workspace.context.close', paneId: 'bottom', contextId: 'preview' },
+    action: { kind: 'workspace.context.close', contextId: 'preview' },
     viewState,
     workspace,
   });

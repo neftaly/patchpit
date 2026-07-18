@@ -47,18 +47,23 @@ export const planWorkspaceAction = (options: {
     return reconcilePlan(withDurableOperation(plan, action));
   }
   if (action.kind === 'workspace.context.close') {
-    const preview = plan.viewState.panes[action.paneId]?.preview;
+    const paneId = workspaceContextPaneId(plan.workspace, plan.viewState, action.contextId);
+    if (paneId === undefined) return plan;
+    const preview = plan.viewState.panes[paneId]?.preview;
     if (preview?.contextId === action.contextId) {
       const cleared = {
         ...plan,
-        viewState: clearWorkspacePreview(plan.workspace, plan.viewState, action.paneId),
+        viewState: clearWorkspacePreview(plan.workspace, plan.viewState, paneId),
       };
-      const pane = plan.workspace.nodes[action.paneId];
+      const pane = plan.workspace.nodes[paneId];
       return reconcilePlan(pane?.kind === 'pane' && pane.contexts.length === 0
-        ? withDurableOperation(cleared, { kind: 'workspace.pane.close', paneId: action.paneId })
+        ? withDurableOperation(cleared, { kind: 'workspace.pane.close', paneId })
         : cleared);
     }
-    return reconcilePlan(withDurableOperation(plan, action));
+    return reconcilePlan(withDurableOperation(plan, {
+      kind: 'workspace.context.close',
+      contextId: action.contextId,
+    }));
   }
 
   const preview = Object.entries(plan.viewState.panes)

@@ -15,10 +15,12 @@ creates a root and canonicalizes the hash, while replacing `src` replaces the
 active root lifecycle.
 
 Persistence must distinguish a document that is unavailable, evicted, invalid,
-or unsupported from a newly created document. Multiple browser tabs must either
-use a convergent storage/network protocol or report an explicit ownership
-conflict. Durable reopening must not persist per-client presence state or pass
-root `sync` and `delegation` values into sandbox application hashes.
+or unsupported from a newly created document. Before the implicit demo root is
+persisted, its root declaration must distinguish bootstrap generation from user
+document identity. Opening never silently reseeds, migrates, or replaces an old
+root; requesting a fresh demo creates new identity. Durable reopening must not
+persist per-client presence state or pass root `sync` and `delegation` values
+into sandbox application hashes.
 
 Acceptance evidence:
 
@@ -28,24 +30,12 @@ Acceptance evidence:
    distinct evidence.
 3. Root replacement closes subscriptions, attachments, presence, and sandbox
    mounts belonging to the previous lifecycle.
-4. Multi-tab behavior has an executable convergence or explicit-rejection case.
-
-### W3. Two-way Patchwork interoperability corpus
-
-Finish two-way Automerge fixtures produced and edited by both Patchwork and
-Patchpit for every compatibility level Patchpit claims. A read-only adapter is
-not round-trip support and foreign documents remain foreign.
-
-Prioritize actual upstream reopening after Patchpit writes, Patchpit-created
-documents opened by upstream Patchwork, lineage metadata, and adversarial
-metadata/representation cases.
-
-Acceptance evidence:
-
-1. Supported Patchpit edits reopen in Patchwork without losing unknown fields.
-2. Patchpit-produced compatible documents are recognized by Patchwork.
-3. Malformed, conflicted, ambiguous, and representation-changing cases remain
-   inspectable rather than selecting a winner or becoming empty data.
+4. A bootstrap version change reopens the old root unchanged with explicit
+   supported or unsupported evidence, while an explicit fresh bootstrap gets a
+   new root identity.
+5. Abrupt peer loss cannot indefinitely block readiness for documents already
+   held by a surviving replica; adapter liveness failure produces bounded,
+   explicit evidence.
 
 ### W4. Markdown acceptance application
 
@@ -70,7 +60,7 @@ Acceptance evidence:
 2. Incomplete and invalid projections disable unsafe editing without appearing
    as empty content.
 3. Simulation and commit use the same semantic operation path.
-4. The document round-trips through the W3 compatibility corpus.
+4. The document round-trips through the pinned Patchwork compatibility corpus.
 
 ### W5. Cross-source copy and move
 
@@ -211,9 +201,10 @@ browser.
 
 ### R5. Interoperability evidence
 
-Compatibility claims require W3 fixtures and behavior evidence. Unknown fields
-survive compatible writes. Metadata/shape disagreement, multiple adapters,
-representation changes, and incompatible concurrent adoption remain explicit.
+Compatibility claims require pinned upstream fixtures and behavior evidence.
+Unknown fields survive compatible writes. Metadata/shape disagreement,
+multiple adapters, representation changes, and incompatible concurrent
+adoption remain explicit.
 
 ### R6. Visible and accessible repair
 
@@ -242,7 +233,7 @@ network access.
 
 Do not implement Patchwork plugin, provider, command, package, frame, or raw
 handle runtime compatibility. Compatible document formats and file primitives
-remain in scope through W3.
+remain in scope through pinned interoperability fixtures and concrete apps.
 
 ### D2. Framework machinery
 

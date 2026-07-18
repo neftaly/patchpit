@@ -52,7 +52,6 @@ export type WorkspaceAction = {
   readonly contextId: string;
 } | {
   readonly kind: 'workspace.context.close';
-  readonly paneId: WorkspacePaneId;
   readonly contextId: string;
 } | {
   readonly kind: 'workspace.context.move';
@@ -157,6 +156,31 @@ export const workspaceContextUrl = (
     ? viewState.panes[paneId]?.preview?.url
     : undefined);
 
+export const workspaceFocusTargetAfterClose = (
+  presentation: WorkspacePresentation,
+  paneId: WorkspacePaneId,
+  contextId: string,
+): string | undefined => {
+  const pane = presentation.nodes[paneId];
+  if (pane?.kind === 'pane') {
+    const remaining = pane.contexts.filter((candidate) => candidate !== contextId);
+    if (pane.selectedContext !== contextId && pane.selectedContext !== null
+      && remaining.includes(pane.selectedContext)) return pane.selectedContext;
+    if (pane.previewContext !== null && pane.previewContext !== contextId
+      && remaining.includes(pane.previewContext)) return pane.previewContext;
+    if (remaining[0] !== undefined) return remaining[0];
+  }
+  if (presentation.activeEditorContextId !== null
+    && presentation.activeEditorContextId !== contextId) return presentation.activeEditorContextId;
+  return paneIdsInLayoutOrder(presentation).flatMap((candidatePaneId) => {
+    const candidate = presentation.nodes[candidatePaneId];
+    return candidate?.kind === 'pane' && candidate.selectedContext !== null
+      && candidate.selectedContext !== contextId
+      ? [candidate.selectedContext]
+      : [];
+  })[0];
+};
+
 export const reconcileWorkspaceViewState = (
   workspace: WorkspaceState,
   viewState: WorkspaceViewState,
@@ -244,6 +268,7 @@ const updatePaneViewState = (
   if (pane === undefined) return viewState;
   const nextPane = update(pane);
   const recentContextIds = interactedContextId === undefined
+    || viewState.recentContextIds[0] === interactedContextId
     ? viewState.recentContextIds
     : [
         interactedContextId,

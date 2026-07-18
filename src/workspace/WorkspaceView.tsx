@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type CSSProperties,
@@ -7,12 +9,15 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  MAX_SPLIT_RATIO,
+  MIN_SPLIT_RATIO,
   type WorkspacePaneId,
 } from './durable-state.ts';
 import {
   type WorkspaceAction,
   type WorkspacePresentation,
   type WorkspacePresentationPane,
+  workspaceFocusTargetAfterClose,
 } from './view-state.ts';
 import { allocateWorkspaceIds } from './ids.ts';
 import { projectWorkspaceLayout, type LayoutRect } from './layout.ts';
@@ -20,8 +25,6 @@ import {
   adjacentTabIndex,
   canStartResize,
   contentDropZone,
-  MAX_SPLIT_RATIO,
-  MIN_SPLIT_RATIO,
   operationForDrop,
   pointInRect,
   splitRatio,
@@ -61,6 +64,7 @@ export function WorkspaceView({
 }) {
   const [dragSession, setDragSession] = useState<WorkspaceDragSession>();
   const [draftRatios, setDraftRatios] = useState<Readonly<Record<string, number>>>({});
+  const workspaceElement = useRef<HTMLElement>(null);
   const layout = projectWorkspaceLayout(workspacePresentation, draftRatios);
   const drag = dragSession?.drag;
   const operationForCurrentDrop = (paneId: WorkspacePaneId, target: PaneDropTarget) =>
@@ -102,24 +106,23 @@ export function WorkspaceView({
           : null;
         const resourceId = event.dataTransfer.getData(resourceDragType);
         const url = resourceId === '' ? undefined : getResourceUrl(resourceId);
+        const draggedContextId = event.dataTransfer.getData(TAB_DRAG_TYPE);
+        if (url === undefined && draggedContextId === '') return;
         const allocated = allocateWorkspaceIds();
-        const contextId = url === undefined
-          ? event.dataTransfer.getData(TAB_DRAG_TYPE)
-          : allocated.contextId;
-        if (contextId !== '') {
-          setDragSession({
-            drag: {
-              allocatedSplitIds: allocated.nodes,
-              contentUrl: url,
-              contextId,
-              fromResource: resourceId !== '',
-              sourcePaneId: resourceId === ''
-                ? null
-                : source?.dataset.pane ?? source?.dataset.contextPane ?? null,
-            },
-          });
-        }
+        setDragSession({
+          drag: {
+            allocatedSplitIds: allocated.nodes,
+            contentUrl: url,
+            contextId: url === undefined ? draggedContextId : allocated.contextId,
+            fromResource: resourceId !== '',
+            sourcePaneId: resourceId === ''
+              ? null
+              : source?.dataset.pane ?? source?.dataset.contextPane ?? null,
+          },
+        });
       }}
+      ref={workspaceElement}
+      tabIndex={-1}
     >
       <div className="context-layer">
         {layout.contexts.map(({ contextId, paneId, rect, selected }) => {
@@ -156,12 +159,22 @@ export function WorkspaceView({
           getContextLabel={getContextLabel}
           activeEditorContextId={workspacePresentation.activeEditorContextId}
           isDragging={drag !== undefined}
-          isRootPane={workspacePresentation.rootNodeId === paneId}
           onActivateContext={(contextId) => {
             dispatchAction({ kind: 'workspace.context.select', contextId });
           }}
           onCloseContext={(contextId) => {
-            dispatchAction({ kind: 'workspace.context.close', paneId, contextId });
+            dispatchAction({ kind: 'workspace.context.close', contextId });
+          }}
+          onFocusAfterClose={(contextId) => {
+            const targetContextId = workspaceFocusTargetAfterClose(
+              workspacePresentation,
+              paneId,
+              contextId,
+            );
+            const target = targetContextId === undefined
+              ? workspaceElement.current
+              : document.getElementById(contextDomId('tab', targetContextId));
+            target?.focus();
           }}
           onClearDropPreview={() => clearDropPreview(paneId)}
           onDrop={(target) => dropContext(paneId, target)}
@@ -211,6 +224,10 @@ function SplitBoundary({ axis, childNodeIds, onCommitRatio, onDraftRatioChange, 
 }) {
   const splitBoundary = useRef<HTMLDivElement>(null);
   const activePointerId = useRef<number | undefined>(undefined);
+  const discardActiveDraft = useEffectEvent(() => {
+    if (activePointerId.current !== undefined) onDraftRatioChange(undefined);
+  });
+  useEffect(() => () => { discardActiveDraft(); }, []);
   const pointerRatio = (event: PointerEvent<HTMLElement>) => {
     const bounds = splitBoundary.current?.getBoundingClientRect();
     if (bounds === undefined) return ratio;
@@ -285,11 +302,11 @@ function Pane({
   dropTarget,
   getContextLabel,
   isDragging,
-  isRootPane,
   onActivateContext,
   onCloseContext,
   onClearDropPreview,
   onDrop,
+  onFocusAfterClose,
   onPreviewDrop,
   pane,
   paneId,
@@ -300,11 +317,11 @@ function Pane({
   readonly dropTarget: number | ContentDropZone | undefined;
   readonly getContextLabel: (contextId: string) => string;
   readonly isDragging: boolean;
-  readonly isRootPane: boolean;
   readonly onActivateContext: (contextId: string) => void;
   readonly onCloseContext: (contextId: string) => void;
   readonly onClearDropPreview: () => void;
   readonly onDrop: (target: PaneDropTarget) => void;
+  readonly onFocusAfterClose: (contextId: string) => void;
   readonly onPreviewDrop: (preview: number | ContentDropZone) => void;
   readonly pane: WorkspacePresentationPane;
   readonly paneId: WorkspacePaneId;
@@ -363,6 +380,12 @@ function Pane({
               data-preview={pane.previewContext === contextId || undefined}
               data-active-editor={activeEditorContextId === contextId || undefined}
               key={contextId}
+              onAuxClick={(event) => {
+                if (event.button !== 1) return;
+                event.preventDefault();
+                event.stopPropagation();
+                onCloseContext(contextId);
+              }}
               onDragOver={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -398,19 +421,18 @@ function Pane({
               >
                 {label}
               </button>
-              {(pane.contexts.length > 1 || !isRootPane) && (
-                <button
-                  aria-label={`Close ${label}`}
-                  className="tab-close"
-                  draggable={false}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onCloseContext(contextId);
-                  }}
-                  title="Close"
-                  type="button"
-                />
-              )}
+              <button
+                aria-label={`Close ${label}`}
+                className="tab-close"
+                draggable={false}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onFocusAfterClose(contextId);
+                  onCloseContext(contextId);
+                }}
+                title="Close"
+                type="button"
+              />
             </div>
           );
         })}

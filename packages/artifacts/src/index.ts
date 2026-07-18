@@ -37,6 +37,8 @@ import {
   type WorkspaceStateRow,
 } from './generated/bindings.ts';
 
+export { workspaceSplitRatioBounds } from './workspace-semantics.ts';
+
 const catalog = value(await prepareArtifactBundle(bundle));
 export const fileBinaryAttachment = attachment(artifactDeclarationNames.fileBinary);
 export const fileTextAttachment = attachment(artifactDeclarationNames.fileText);

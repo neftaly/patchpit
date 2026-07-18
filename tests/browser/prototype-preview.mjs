@@ -21,11 +21,15 @@ try {
   assert(address !== null && typeof address !== 'string', 'Prototype preview did not bind to a TCP port');
   const url = `http://127.0.0.1:${address.port}/`;
   browser = await chromium.launch({ executablePath: chromiumPath });
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
   const pageErrors = [];
   let entryHeaders;
 
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  context.on('page', (openedPage) => {
+    openedPage.on('pageerror', (error) => pageErrors.push(error.message));
+  });
   page.on('response', (response) => {
     if (/\/__patchpit\/sandbox\/[0-9a-f-]{36}\/index\.html$/.test(new URL(response.url()).pathname)) {
       entryHeaders = response.headers();
@@ -137,16 +141,36 @@ async function proveWorkspaceBehavior(page) {
   await page.locator('.viewer').filter({ hasText: '<circle' }).waitFor();
   await page.locator('.tab:not([data-preview])', { hasText: 'relative-file.svg' }).waitFor();
   assert.equal(await tab('relative-file.svg').getAttribute('data-preview'), null);
-  await page.getByRole('button', { name: 'Close relative-file.svg' }).click();
+  await tab('sandbox-compat / index.html').click();
+  assert.equal(await tab('relative-file.svg').getAttribute('data-selected'), null);
+  const peerPage = await page.context().newPage();
+  await peerPage.goto(page.url());
+  const peerRelativeTab = peerPage.locator('.tab', { hasText: 'relative-file.svg' });
+  await peerRelativeTab.waitFor();
+  await tab('relative-file.svg').click({ button: 'middle' });
+  assert.equal(await tab('relative-file.svg').count(), 0);
+  await peerRelativeTab.waitFor({ state: 'detached' });
+  assert.equal(await tab('sandbox-compat / index.html').getAttribute('data-selected'), 'true');
   const unavailableResource = page.getByRole('button', {
     name: 'ghostscript-tiger-web.svg',
     exact: true,
   });
   await unavailableResource.focus();
+  assert.equal(await unavailableResource.evaluate((resource) => {
+    const style = getComputedStyle(resource);
+    return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0;
+  }), true);
   await unavailableResource.press('Enter');
   await page.getByRole('alert').getByText('Resource unavailable.').waitFor();
   assert.equal(await tab('ghostscript-tiger-web.svg').getAttribute('data-preview'), null);
-  await page.getByRole('button', { name: 'Close ghostscript-tiger-web.svg' }).click();
+  await tab('ghostscript-tiger-web.svg').click({ button: 'right' });
+  assert.equal(await tab('ghostscript-tiger-web.svg').count(), 1);
+  const closeUnavailableResource = page.getByRole('button', { name: 'Close ghostscript-tiger-web.svg' });
+  await closeUnavailableResource.focus();
+  await closeUnavailableResource.press('Enter');
+  await tab('ghostscript-tiger-web.svg').waitFor({ state: 'detached' });
+  assert.equal(await page.getByRole('tab', { name: 'sandbox-compat / index.html' })
+    .evaluate((tabElement) => document.activeElement === tabElement), true);
   await tab('sandbox-compat / index.html').click();
   await drag(
     resource('sandbox-compat', 'data.json'),
@@ -208,6 +232,11 @@ async function proveWorkspaceBehavior(page) {
   assert.equal(await resizeHandle.getAttribute('aria-orientation'), 'vertical');
   assert.equal(await resizeHandle.getAttribute('aria-valuemin'), '10');
   assert.equal(await resizeHandle.getAttribute('aria-valuemax'), '90');
+  await resizeHandle.focus();
+  assert.equal(await resizeHandle.evaluate((handle) => {
+    const style = getComputedStyle(handle);
+    return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0;
+  }), true);
   const controlledNodeIds = (await resizeHandle.getAttribute('aria-controls'))?.split(' ');
   assert.equal(controlledNodeIds?.length, 2);
   assert.equal(await page.evaluate((ids) => ids.every((id) => document.getElementById(id) !== null), controlledNodeIds), true);
@@ -457,44 +486,54 @@ async function proveOfflineSandboxReload(page) {
 }
 
 async function proveFolderAppLaunch(page) {
-  const previousCaches = await sandboxCacheNames(page);
-  assert.equal(previousCaches.length, 1);
+  const previousCache = await sandboxCacheNameForFrame(page);
+  assert((await sandboxCacheNames(page)).includes(previousCache));
   await page.getByRole('button', { name: 'Close sandbox-compat / index.html' }).click();
   assert.equal(await page.locator('.sandbox-app').count(), 0);
-  await page.waitForFunction(() => caches.keys().then((names) =>
-    names.every((name) => !name.startsWith('@patchpit/sandbox-cache/'))));
+  await page.waitForFunction((cacheName) => caches.has(cacheName).then((present) => !present), previousCache);
   await page.evaluate(() => { window.__sandboxCompatReport = undefined; });
   await page.locator('button.resource', { hasText: 'sandbox-compat' }).click();
   await page.locator('.sandbox-app').waitFor();
   await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2_000 });
   assert.equal(await page.locator('.tab', { hasText: 'sandbox-compat / index.html' }).getAttribute('data-preview'), 'true');
-  const currentCaches = await sandboxCacheNames(page);
-  assert.equal(currentCaches.length, 1);
-  assert.notEqual(currentCaches[0], previousCaches[0]);
+  const currentCache = await sandboxCacheNameForFrame(page);
+  assert.notEqual(currentCache, previousCache);
+  assert((await sandboxCacheNames(page)).includes(currentCache));
 }
 
 async function proveRootReplacementLifecycle(page) {
   const previousFrameSrc = await page.locator('.sandbox-app').getAttribute('src');
-  const previousCaches = await sandboxCacheNames(page);
-  assert(previousFrameSrc !== null && previousCaches.length === 1);
+  const previousCache = await sandboxCacheNameForFrame(page);
+  assert(previousFrameSrc !== null && (await sandboxCacheNames(page)).includes(previousCache));
   await page.evaluate(() => {
     window.__sandboxCompatReport = undefined;
     const invocation = JSON.parse(decodeURIComponent(location.hash.slice(1)));
     location.hash = JSON.stringify({ ...invocation, delegation: 'https://example.com/replaced' });
   });
-  await page.waitForFunction((oldCache) => caches.keys().then((names) => !names.includes(oldCache)), previousCaches[0]);
+  await page.waitForFunction((oldCache) => caches.has(oldCache).then((present) => !present), previousCache);
   await page.locator('button.resource', { hasText: 'sandbox-compat' }).waitFor();
   assert.equal(await page.locator('.sandbox-app').count(), 0);
   await page.locator('button.resource', { hasText: 'sandbox-compat' }).click();
   await page.locator('.sandbox-app').waitFor();
   await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2_000 });
   assert.notEqual(await page.locator('.sandbox-app').getAttribute('src'), previousFrameSrc);
-  assert.equal((await sandboxCacheNames(page)).length, 1);
+  const currentCache = await sandboxCacheNameForFrame(page);
+  assert.notEqual(currentCache, previousCache);
+  assert((await sandboxCacheNames(page)).includes(currentCache));
 }
 
 function sandboxCacheNames(page) {
   return page.evaluate(() => caches.keys().then((names) =>
     names.filter((name) => name.startsWith('@patchpit/sandbox-cache/'))));
+}
+
+async function sandboxCacheNameForFrame(page) {
+  const frameSrc = await page.locator('.sandbox-app').getAttribute('src');
+  const mountId = frameSrc === null
+    ? undefined
+    : new URL(frameSrc).pathname.match(/\/__patchpit\/sandbox\/([0-9a-f-]{36})\//)?.[1];
+  assert.notEqual(mountId, undefined, 'Sandbox frame must identify its cache mount');
+  return `@patchpit/sandbox-cache/v1/${mountId}`;
 }
 
 async function dragWithTargetPreview(

@@ -5,6 +5,7 @@
       "commit": "4742ae09ce406c89e13711dab57d15ec69a5c77f",
       "repository": "https://github.com/inkandswitch/patchwork",
       "sources": [
+        "core/filesystem/src/metadata.ts",
         "core/plugins/src/datatypes.ts"
       ]
     },
@@ -25,19 +26,31 @@
   "fixtures": [
     {
       "file": "folder.am",
-      "sha256": "8037b765e8c697b76e07407db0fa75d62822651bcb65f084d1b166e09d4664ff"
+      "sha256": "27d8b0fc60b0a9d7e2ed322a7b4ebe254ea84fde7ca99631c7d31ae62b659444"
+    },
+    {
+      "file": "folder-after-patchpit-unlink.am",
+      "sha256": "f3c5b2869c47c8abbb765c8dbb4174302302c1b800e09ec88dd802b9b5b72dbe"
+    },
+    {
+      "file": "patchpit-folder.am",
+      "sha256": "e7ec4bb55817e1f5b0ec6c037fd05a2d32656f6c2c31f02b331793c9c5b4faa5"
+    },
+    {
+      "file": "patchpit-folder-after-patchwork-rename.am",
+      "sha256": "66c4b158811e1cabb17ec1d1cdfd1087b7411d2a8df049e98dc4cabc600f27bf"
     },
     {
       "file": "text-file.am",
-      "sha256": "c68c7b0b0be0b07a873a2222faab454ee121bc3678cd8b6dce7720dc195c4ef2"
+      "sha256": "d2520cd0859892b970fc35693f707c15b65d95dcfdf2bd5dd7820fce70ba0360"
     },
     {
       "file": "binary-file.am",
-      "sha256": "f551ec14e9ca4d31514b61b6a10508cb43a520e5c7a036f2c4eef35bd0688ed3"
+      "sha256": "07a113337d1c67f148562260c403208276eedb4cdf12d81f530e188ef96b66b9"
     },
     {
       "file": "immutable-string-file.am",
-      "sha256": "e898073b362a8b4dff21d978585cf7f2e291d9e23b6901677ab0f2cc317e9adb"
+      "sha256": "e68f54db5bb31ecd588f6ab3692fcf089e99247a285a0ae2b5fe77e7e5fbd33a"
     }
   ]
 }

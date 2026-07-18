@@ -44,4 +44,6 @@ truth or a source-line budget.
 Use `pnpm typecheck` and `pnpm lint` for the fast static loop. `pnpm
 test:behavior`, `pnpm test:fuzz`, and `pnpm test:integration` run individual
 evidence layers; `pnpm test` runs all Node layers. `pnpm test:dev` and `pnpm
-test:preview` run browser behavior against development and production builds.
+test:preview` run workspace browser behavior against development and production
+builds; `pnpm test:markdown-editor` exercises native and forced-polyfill text
+input behavior.
