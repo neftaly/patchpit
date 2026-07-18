@@ -2,16 +2,74 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as Automerge from '@automerge/automerge';
 import { Repo } from '@automerge/automerge-repo';
+import { mappedRelationRows } from '@tarstate/automerge';
 import {
   commitFolderOperation,
+  commitTextFileSplice,
+  fileRelation,
   openFileDocumentTitleQuery,
   openFolderLinksQuery,
+  simulateTextFileSplice,
 } from '@patchpit/fs';
 import {
   createAutomergeFolderDocument,
+  createAutomergeTextFileDocument,
   openAutomergeFileDatabase,
   openAutomergeFolderDatabase,
 } from '@patchpit/automerge-fs';
+
+void test('owned text files simulate and commit basis-aware semantic splices', async () => {
+  const repo = new Repo({ network: [] });
+  const handle = repo.create(createAutomergeTextFileDocument('Hello world', {
+    name: 'notes.md',
+    mimeType: 'text/markdown',
+  }));
+  const opened = await openAutomergeFileDatabase(handle, 'public');
+  assert.equal(opened.success, true);
+  if (!opened.success) return;
+  const database = opened.value;
+
+  try {
+    const snapshot = database.getSnapshot();
+    assert.equal(snapshot.state, 'open');
+    if (snapshot.state !== 'open') return;
+    assert.equal(snapshot.current.readiness, 'ready');
+    assert.deepEqual(mappedRelationRows(snapshot.current, fileRelation), [{
+      contentKind: 'text',
+      textContent: 'Hello world',
+      extension: 'md',
+      mimeType: 'text/markdown',
+      name: 'notes.md',
+    }]);
+    const relationCapabilities = database.capabilities(fileRelation);
+    assert.deepEqual(relationCapabilities.keyFields, ['contentKind']);
+    const capabilities = relationCapabilities.fields.textContent;
+    assert.equal(capabilities?.replace, undefined);
+    assert.deepEqual(capabilities?.textSplice, {
+      concurrency: 'merge-captured-intent',
+      indexUnit: 'utf16-code-unit',
+    });
+    const operation = {
+      kind: 'file.text.splice',
+      index: 6,
+      deleteCount: 5,
+      insert: 'Tarstate',
+    } as const;
+    const options = { observedBasis: snapshot.current.basis };
+    handle.change((document) => {
+      Automerge.splice(document, ['content'], document.content.length, 0, '!');
+    });
+    const simulation = await simulateTextFileSplice(database, operation, options);
+    assert.equal(simulation.outcome, 'would-commit', JSON.stringify(simulation));
+    assert.equal(handle.doc().content, 'Hello world!');
+    const receipt = await commitTextFileSplice(database, operation, options);
+    assert.equal(receipt.outcome, 'committed');
+    assert.equal(handle.doc().content, 'Hello Tarstate!');
+  } finally {
+    database.close();
+    await repo.shutdown();
+  }
+});
 
 void test('owned Automerge folders support relational rename, alias, and unlink', async () => {
   const repo = new Repo({ network: [] });

@@ -26,31 +26,31 @@
   "fixtures": [
     {
       "file": "folder.am",
-      "sha256": "27d8b0fc60b0a9d7e2ed322a7b4ebe254ea84fde7ca99631c7d31ae62b659444"
+      "sha256": "e4cc1eef8492ab15a2d7bb5927dad9184b1f2a4f385dfe301c2f746c5012c092"
     },
     {
       "file": "folder-after-patchpit-unlink.am",
-      "sha256": "f3c5b2869c47c8abbb765c8dbb4174302302c1b800e09ec88dd802b9b5b72dbe"
+      "sha256": "91d3cfeead470827fedd377a2da226c1a5d52d0207b4cd923eb1e26c0c05589f"
     },
     {
       "file": "patchpit-folder.am",
-      "sha256": "e7ec4bb55817e1f5b0ec6c037fd05a2d32656f6c2c31f02b331793c9c5b4faa5"
+      "sha256": "de89278bf8fb10ba0159ffefbc4373ea1e8c9eb4f41e76bd6d34db7a03cb64b6"
     },
     {
       "file": "patchpit-folder-after-patchwork-rename.am",
-      "sha256": "66c4b158811e1cabb17ec1d1cdfd1087b7411d2a8df049e98dc4cabc600f27bf"
+      "sha256": "81efa065ed23aa55be4d77bf9a8d7c5f64063a39975c3140cf81b52b8513c41f"
     },
     {
       "file": "text-file.am",
-      "sha256": "d2520cd0859892b970fc35693f707c15b65d95dcfdf2bd5dd7820fce70ba0360"
+      "sha256": "f671aee39ea004faf08403d600938e0368b51ff40cfa5abd66cf38d61eac6a7f"
     },
     {
       "file": "binary-file.am",
-      "sha256": "07a113337d1c67f148562260c403208276eedb4cdf12d81f530e188ef96b66b9"
+      "sha256": "7d344aca0bc4dd4122a50fbb1d2bcad3f97a453b4f5d71b1f589d20419ccd375"
     },
     {
       "file": "immutable-string-file.am",
-      "sha256": "e68f54db5bb31ecd588f6ab3692fcf089e99247a285a0ae2b5fe77e7e5fbd33a"
+      "sha256": "4d9d49bb878f39dfd9fc41afe965e7f017ef3f4c8f87f0ac8d9ff0e3e8d6dc68"
     }
   ]
 }

@@ -3,9 +3,8 @@
   "relations": {
     "file": {
       "relationId": "patchpit.file",
-      "key": ["id", "contentKind"],
+      "key": ["contentKind"],
       "fields": {
-        "id": { "type": { "kind": "string", "values": ["file"] } },
         "extension": { "type": { "kind": "string" } },
         "mimeType": { "type": { "kind": "string" } },
         "name": { "type": { "kind": "string" } },
@@ -23,9 +22,9 @@
           "type": { "kind": "string" },
           "optional": true,
           "editCapabilities": [{
-            "id": "urn:tarstate:capability:field/replace",
-            "version": "1",
-            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+            "id": "urn:tarstate:capability:field/text-splice",
+            "version": "2",
+            "contractHash": "sha256:ae0866fcfeb00dadbb0e837987adb9c41e5532abf0b387d5f17afe79fabddfa4"
           }]
         }
       }

@@ -23,7 +23,10 @@ export {
 export {
   applyFolderOperation,
   commitFolderOperation,
+  commitTextFileSplice,
+  simulateTextFileSplice,
   type FolderOperation,
+  type TextFileSpliceOperation,
 } from './operations.ts';
 export {
   fileRelation,

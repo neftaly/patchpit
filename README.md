@@ -25,10 +25,17 @@ than embedding its bytes in the shell JavaScript. The memory-only browser host
 imports that artifact when it creates its demo root, and the browser harness
 executes the same built app.
 
-The browser prototype currently supplies neither a persistent storage adapter
-nor a network adapter to its Automerge Repo. Root hashes select documents only
-for that Repo's page lifetime; durable reopening begins at the injectable Repo
-host boundary rather than inside Patchpit's runtime.
+The same demo root contains one `Markdown editor` app folder and its visible
+`demo.md`. The app loads that file through its immutable relative mount. It is
+currently an input experiment: edits report semantic splices but do not persist.
+There is no separate Markdown example page; the browser harness launches it
+through the main Patchpit file manager.
+
+The browser prototype supplies deployment-scoped, same-origin BroadcastChannel
+replication but no persistent storage or externally configured network adapter.
+Root hashes select documents only while a live replica can supply them; durable
+reopening begins at the injectable Repo host boundary rather than inside
+Patchpit's runtime.
 
 ## Code map
 
@@ -56,7 +63,6 @@ harnesses.
 pnpm install
 pnpm dev
 pnpm build
-pnpm build:sandbox-compat
 pnpm preview
 pnpm typecheck
 pnpm lint
@@ -79,15 +85,15 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium` when Chromium is not at
 `/usr/bin/chromium`.
 
 `pnpm build` produces the static site in `dist`, including the sandbox service
-worker. `pnpm build:sandbox-compat` builds the standalone compatibility fixture.
-Set `PATCHPIT_BASE` for a subpath deployment:
+worker and demo app artifacts. Set `PATCHPIT_BASE` for a subpath deployment:
 
 ```sh
 PATCHPIT_BASE=/patchpit/ pnpm build
 ```
 
-The Pages workflow runs typecheck, lint, Node tests, and a `/patchpit/` browser
-preview before uploading `dist` to GitHub Pages.
+The Pages workflow runs typecheck, lint, Node tests, both browser behavior
+harnesses, and a `/patchpit/` production build before uploading `dist` to
+GitHub Pages.
 
 Workspace packages export TypeScript source. Direct Node imports use the repo
 loader:

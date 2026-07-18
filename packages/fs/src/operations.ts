@@ -1,4 +1,9 @@
-import type { DatabaseTransactionService } from '@tarstate/core/transactions';
+import type {
+  DatabaseTransactionOptions,
+  DatabaseTransactionService,
+  DatabaseTransactionSnapshot,
+} from '@tarstate/core/transactions';
+import { fileRelation } from '@patchpit/artifacts';
 import { folderLinksRelation, type FolderLink } from './schema.ts';
 
 export type FolderOperation = {
@@ -13,6 +18,13 @@ export type FolderOperation = {
   readonly link: Omit<FolderLink, 'order'>;
 };
 
+export type TextFileSpliceOperation = {
+  readonly kind: 'file.text.splice';
+  readonly index: number;
+  readonly deleteCount: number;
+  readonly insert: string;
+};
+
 export const commitFolderOperation = (
   database: DatabaseTransactionService,
   operation: FolderOperation,
@@ -25,6 +37,34 @@ export const commitFolderOperation = (
   ),
   signal === undefined ? undefined : { signal },
 );
+
+export const commitTextFileSplice = (
+  database: DatabaseTransactionService,
+  operation: TextFileSpliceOperation,
+  options?: DatabaseTransactionOptions,
+) => database.transact(
+  operation,
+  textFileSplice(operation),
+  options,
+);
+
+export const simulateTextFileSplice = (
+  database: DatabaseTransactionService,
+  operation: TextFileSpliceOperation,
+  options?: DatabaseTransactionOptions,
+) => database.simulate(
+  operation,
+  textFileSplice(operation),
+  options,
+);
+
+const textFileSplice = (operation: TextFileSpliceOperation) =>
+  (snapshot: DatabaseTransactionSnapshot) => snapshot.spliceText(
+    fileRelation,
+    ['text'],
+    'textContent',
+    operation,
+  );
 
 export const applyFolderOperation = (
   links: readonly FolderLink[],

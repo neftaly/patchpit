@@ -21,12 +21,29 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => { errors.push(error.message); });
-    await page.goto(`http://127.0.0.1:${port}/apps/markdown-editor/${mode === 'forced-polyfill' ? '?force-polyfill' : ''}`);
-    assert.equal(await page.locator('html').getAttribute('data-experiment-mode'), mode);
-    const editor = page.getByRole('textbox', { name: 'Markdown source' });
+    await page.goto(`http://127.0.0.1:${port}/`);
+    await page.locator('button.resource', { hasText: 'demo.md' }).waitFor();
+    await page.locator('button.resource', { hasText: 'Markdown editor' }).click();
+    const appFrame = page.locator('iframe[title="Markdown editor app"]');
+    await appFrame.waitFor();
+    const frame = appFrame.contentFrame();
+    if (mode === 'forced-polyfill') {
+      const frameHandle = await appFrame.elementHandle();
+      const browsingContext = await frameHandle.contentFrame();
+      assert.notEqual(browsingContext, null);
+      await browsingContext.goto(`${browsingContext.url()}?force-polyfill`);
+    }
+    const editor = frame.getByRole('textbox', { name: 'Markdown source' });
+    await editor.waitFor({ timeout: 10_000 }).catch(async (cause) => {
+      throw new Error(JSON.stringify({
+        errors,
+        frameBody: await frame.locator('body').textContent().catch(() => undefined),
+      }), { cause });
+    });
+    assert.equal(await frame.locator('html').getAttribute('data-experiment-mode'), mode);
     await editor.focus();
     await page.keyboard.insertText('Hello 😀');
-    await page.getByText('Hello 😀# Collaborative Markdown', { exact: false }).waitFor();
+    await frame.getByText('Hello 😀# Collaborative Markdown', { exact: false }).waitFor();
     assert.equal(Number(await editor.getAttribute('data-intent-count')), 1);
     const client = await page.context().newCDPSession(page);
     await client.send('Input.imeSetComposition', {
@@ -34,7 +51,7 @@ try {
       selectionStart: 1,
       selectionEnd: 1,
     });
-    await page.getByText('Hello 😀に# Collaborative Markdown', { exact: false }).waitFor();
+    await frame.getByText('Hello 😀に# Collaborative Markdown', { exact: false }).waitFor();
     assert.equal(Number(await editor.getAttribute('data-intent-count')), 1);
     await client.send('Input.imeSetComposition', {
       text: '日本',
@@ -43,12 +60,12 @@ try {
     });
     assert.equal(Number(await editor.getAttribute('data-intent-count')), 1);
     await client.send('Input.insertText', { text: '日本' });
-    await page.getByText('Hello 😀日本# Collaborative Markdown', { exact: false }).waitFor();
-    await page.getByText('2 semantic splices', { exact: false }).waitFor();
+    await frame.getByText('Hello 😀日本# Collaborative Markdown', { exact: false }).waitFor();
+    await frame.getByText('2 semantic splices', { exact: false }).waitFor();
     assert.equal(Number(await editor.getAttribute('data-intent-count')), 2);
     await editor.press('ArrowLeft');
     await page.keyboard.insertText('!');
-    await page.getByText('Hello 😀日!本# Collaborative Markdown', { exact: false }).waitFor();
+    await frame.getByText('Hello 😀日!本# Collaborative Markdown', { exact: false }).waitFor();
     assert.equal(Number(await editor.getAttribute('data-intent-count')), 3);
     const hashPoint = await editor.evaluate((root) => {
       const target = root.textContent?.indexOf('#') ?? -1;
@@ -69,9 +86,13 @@ try {
       }
       throw new Error('Markdown heading marker has no rendered position');
     });
-    await page.mouse.click(hashPoint.x, hashPoint.y);
+    const frameBounds = await appFrame.boundingBox();
+    assert.notEqual(frameBounds, null);
+    const pagePoint = ({ x, y }) => ({ x: x + frameBounds.x, y: y + frameBounds.y });
+    const headingPoint = pagePoint(hashPoint);
+    await page.mouse.click(headingPoint.x, headingPoint.y);
     await page.keyboard.insertText('@');
-    await page.getByText('Hello 😀日!本@# Collaborative Markdown', { exact: false }).waitFor();
+    await frame.getByText('Hello 😀日!本@# Collaborative Markdown', { exact: false }).waitFor();
     assert.equal(Number(await editor.getAttribute('data-intent-count')), 4);
     const drag = await editor.evaluate((root) => {
       const value = root.textContent ?? '';
@@ -102,9 +123,11 @@ try {
       };
       return { start, end, from: pointAt(start, 'start'), to: pointAt(end, 'end') };
     });
-    await page.mouse.move(drag.from.x, drag.from.y);
+    const dragFrom = pagePoint(drag.from);
+    const dragTo = pagePoint(drag.to);
+    await page.mouse.move(dragFrom.x, dragFrom.y);
     await page.mouse.down();
-    await page.mouse.move(drag.to.x, drag.to.y);
+    await page.mouse.move(dragTo.x, dragTo.y);
     await page.mouse.up();
     assert.deepEqual({
       start: Number(await editor.getAttribute('data-selection-start')),
@@ -133,20 +156,21 @@ try {
       start: await editor.getAttribute('data-selection-start'),
       end: await editor.getAttribute('data-selection-end'),
     };
-    await page.mouse.click(hashPoint.x + 20, hashPoint.y, { button: 'middle' });
+    const auxiliaryPoint = pagePoint({ x: hashPoint.x + 20, y: hashPoint.y });
+    await page.mouse.click(auxiliaryPoint.x, auxiliaryPoint.y, { button: 'middle' });
     assert.deepEqual({
       start: await editor.getAttribute('data-selection-start'),
       end: await editor.getAttribute('data-selection-end'),
     }, selected);
-    await page.mouse.click(hashPoint.x + 20, hashPoint.y, { button: 'right' });
+    await page.mouse.click(auxiliaryPoint.x, auxiliaryPoint.y, { button: 'right' });
     assert.deepEqual({
       start: await editor.getAttribute('data-selection-start'),
       end: await editor.getAttribute('data-selection-end'),
     }, selected);
     await page.keyboard.insertText('shared');
-    await page.getByText('Hello 😀日!本@# shared Markdown', { exact: false }).waitFor();
+    await frame.getByText('Hello 😀日!本@# shared Markdown', { exact: false }).waitFor();
     assert.equal(Number(await editor.getAttribute('data-intent-count')), 5);
-    assert.deepEqual(JSON.parse(await page.getByLabel('Last semantic splice').textContent()), {
+    assert.deepEqual(JSON.parse(await frame.getByLabel('Last semantic splice').textContent()), {
       index: drag.start,
       deleteCount: 'Collaborative'.length,
       insert: 'shared',

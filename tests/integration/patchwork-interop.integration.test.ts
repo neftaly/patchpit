@@ -93,8 +93,8 @@ void test('pinned Patchwork histories satisfy their claimed compatibility levels
         snapshot.current.rows[0]?.resourceRef,
         snapshot.current.rows[1]?.resourceRef,
       );
-      const capabilities = database.writeCapabilities(folderLinksRelation);
-      assert.equal(capabilities.replaceableFields.includes('name'), false);
+      const capabilities = database.capabilities(folderLinksRelation);
+      assert.equal(capabilities.fields.name?.replace, undefined);
       const receipt = await commitFolderOperation(database, {
         kind: 'folder.link.rename',
         linkId: snapshot.current.rows[0]?.linkId ?? '',
@@ -229,7 +229,8 @@ void test('pinned Patchwork histories satisfy their claimed compatibility levels
       assert.equal(databaseSnapshot.current.readiness, 'ready', fileCase.file);
       assert.equal(databaseSnapshot.current.completeness, 'exact', fileCase.file);
     }
-    assert.deepEqual(fileOpened.value.writeCapabilities(fileRelation).replaceableFields, []);
+    assert.equal(Object.values(fileOpened.value.capabilities(fileRelation).fields)
+      .some(({ replace }) => replace !== undefined), false);
     const titleQuery = await openFileDocumentTitleQuery(fileOpened.value);
     try {
       const snapshot = titleQuery.getSnapshot();

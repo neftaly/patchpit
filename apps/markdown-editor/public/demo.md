@@ -14,7 +14,7 @@ composition, wrapping, and Unicode text.
 
 | Person | Status | Note |
 | --- | --- | --- |
-| Aroha | editing | Kia ora 👋 |
+| Tumeke | editing | not even ow 😅 |
 | Ren | reviewing | 日本語も編集できます |
 | Noor | ready | مرحبًا |
 

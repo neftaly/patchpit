@@ -26,6 +26,9 @@ delete/reinsert or private journal semantics.
 
 The separate exact file relation describes logical text or binary content.
 Storage mappings retain each physical representation and its write capability.
+Owned collaborative text exposes basis-aware semantic splices through
+`simulateTextFileSplice` and `commitTextFileSplice`; it does not expose whole
+text replacement. Foreign text remains read-only.
 
 ```ts
 import { createStaticFolderDatabaseSource, openFolderGraphQuery } from '@patchpit/fs';

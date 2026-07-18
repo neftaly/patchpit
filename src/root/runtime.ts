@@ -7,6 +7,7 @@ import {
 import {
   createAutomergeBinaryFileDocument,
   createAutomergeFolderDocument,
+  createAutomergeTextFileDocument,
   openAutomergeFilesystemDatabase,
   openAutomergeFolderDatabase,
   type AutomergeFolderDocument,
@@ -45,11 +46,19 @@ export type RootSeedFile = {
   readonly order: number;
 } & ({
   readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly text?: never;
   readonly contentType?: string;
   readonly documentName?: string;
   readonly resourceUrl?: never;
 } | {
   readonly bytes?: never;
+  readonly text: string;
+  readonly contentType?: string;
+  readonly documentName?: string;
+  readonly resourceUrl?: never;
+} | {
+  readonly bytes?: never;
+  readonly text?: never;
   readonly contentType?: never;
   readonly documentName?: never;
   readonly resourceUrl: `https:${string}`;
@@ -77,10 +86,9 @@ export const createRoot = async (options: RootOptions) => {
       name: file.name,
       order: file.order,
       resourceRef: file.resourceUrl
-        ?? options.repo.create(createAutomergeBinaryFileDocument(file.bytes, {
-          name: file.documentName ?? file.name,
-          ...(file.contentType === undefined ? {} : { mimeType: file.contentType }),
-        })).url,
+        ?? options.repo.create(file.text === undefined
+          ? createAutomergeBinaryFileDocument(file.bytes, fileMetadata(file))
+          : createAutomergeTextFileDocument(file.text, fileMetadata(file))).url,
       typeHint: 'file',
     })),
   )));
@@ -107,6 +115,11 @@ export const createRoot = async (options: RootOptions) => {
   ]));
   return openRootHandle(options.repo, rootHandle);
 };
+
+const fileMetadata = (file: RootSeedFile) => ({
+  name: file.documentName ?? file.name,
+  ...(file.contentType === undefined ? {} : { mimeType: file.contentType }),
+});
 
 export const openRoot = async (options: {
   readonly repo: Repo;

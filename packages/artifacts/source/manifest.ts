@@ -23,8 +23,9 @@ import folderSchemaSource from './folder.schema.json' with { type: 'json' };
 import workspacePresenceSchemaSource from './workspace-presence.schema.json' with { type: 'json' };
 import workspaceSchemaSource from './workspace.schema.json' with { type: 'json' };
 
-const replace = { kind: 'replace', capability: builtInCapabilityRefs.fieldReplace } as const;
-const readOnly = { kind: 'read-only' } as const;
+const replace = { replace: builtInCapabilityRefs.fieldReplace } as const;
+const textSplice = { textSplice: builtInCapabilityRefs.textSplice } as const;
+const readOnly = {} as const;
 const absent = { kind: 'absent' } as const;
 
 const folderSchema = await sealSchemaSource('urn:patchpit:schema:folder@1', folderSchemaSource);
@@ -64,7 +65,7 @@ const fileBinaryMapping = await sealFileMapping(
   'urn:patchpit:mapping:binary-file@1', 'binary', replace,
 );
 const fileTextMapping = await sealFileMapping(
-  'urn:patchpit:mapping:text-file@1', 'text', replace,
+  'urn:patchpit:mapping:text-file@1', 'text', textSplice,
 );
 const fileForeignBinaryMapping = await sealFileMapping(
   'urn:patchpit:mapping:foreign-binary-file@1', 'binary', readOnly,
@@ -181,7 +182,6 @@ async function sealFileMapping(
         [fileRelation.relationId]: {
           collection: { kind: 'singleton', path: [], absent: 'invalid' },
           keys: {
-            id: { kind: 'literal', value: 'file' },
             contentKind: { kind: 'literal', value: contentKind },
           },
           fields: {

@@ -5,16 +5,15 @@ import {
   type TextInputSession,
   type TextSpliceIntent,
 } from './input-session.ts';
-import exampleMarkdown from './example.md?raw';
 
 type IntentReport = {
   readonly count: number;
   readonly last?: TextSpliceIntent;
 };
 
-export function MarkdownEditorExperiment() {
+export function MarkdownEditorExperiment({ initialText }: { readonly initialText: string }) {
   const editor = useRef<HTMLDivElement>(null);
-  const [session, setSession] = useState(() => createTextInputSession(exampleMarkdown));
+  const [session, setSession] = useState(() => createTextInputSession(initialText));
   const [intentReport, setIntentReport] = useState<IntentReport>({ count: 0 });
   const [status, setStatus] = useState('ready');
   const onSessionChange = useEffectEvent((next: TextInputSession) => { setSession(next); });
@@ -26,13 +25,13 @@ export function MarkdownEditorExperiment() {
 
   useEffect(() => {
     if (editor.current === null) return;
-    return attachEditContextInput(editor.current, exampleMarkdown, {
+    return attachEditContextInput(editor.current, initialText, {
       onCompositionInterrupted,
       onInputIssue,
       onSessionChange,
       onSpliceIntent,
     });
-  }, []);
+  }, [initialText]);
 
   const selectionStart = Math.min(session.selection.start, session.selection.end);
   const selectionEnd = Math.max(session.selection.start, session.selection.end);

@@ -126,3 +126,18 @@ must expose partial completion when such operations are implemented. Per-client
 presence remains separate and does not derive from Automerge change history
 because clicks and focus can change interaction intent without changing a
 durable document.
+
+## B13. Demo Markdown editor
+
+A freshly bootstrapped demo root contains one launchable Markdown editor folder
+with an ordinary visible Automerge text document named `demo.md`. The launched
+app reads that file from its immutable sandbox snapshot and supports text input,
+selection, composition, and semantic UTF-16 splice reporting through native
+EditContext or the pinned polyfill. The two input paths have the same observable
+editing behavior.
+
+This is an input experiment, not yet a document editor: edits are session-local,
+remounting reloads `demo.md`, and no persistence, replication, presence, undo,
+or save claim is shown. The demo artifact is imported only when creating a fresh
+root. Changing a built-in demo never mutates or reseeds an existing root
+identity.

@@ -11,7 +11,6 @@
     "artifacts:build": "node scripts/build-artifacts.mts",
     "artifacts:check": "node scripts/build-artifacts.mts --check",
     "build": "pnpm artifacts:check && vite build",
-    "build:sandbox-compat": "vite build --config apps/sandbox-compat/vite.config.ts",
     "dev": "vite",
     "fixtures:patchwork": "node --import ./tests/support/register-ts-loader.mjs scripts/generate-patchwork-fixtures.mts",
     "lint": "oxlint apps packages scripts src tests vite.config.ts --deny-warnings --type-aware",

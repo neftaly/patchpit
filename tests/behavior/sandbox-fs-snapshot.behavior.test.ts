@@ -161,7 +161,6 @@ const fileSource = (input: {
                   value: [{
                     relation: fileRelation,
                     rows: [{
-                      id: 'file',
                       contentKind: 'binary',
                       binaryContent: current.storage.content,
                       extension: 'bin',

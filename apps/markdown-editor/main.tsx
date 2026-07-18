@@ -8,10 +8,14 @@ const forcedPolyfill = new URL(location.href).searchParams.has('force-polyfill')
 if (forcedPolyfill) install({ force: true });
 document.documentElement.dataset.experimentMode = forcedPolyfill ? 'forced-polyfill' : 'default';
 
+const demoResponse = await fetch('./demo.md');
+if (!demoResponse.ok) throw new Error(`Markdown demo is unavailable: ${demoResponse.status}`);
+const initialText = await demoResponse.text();
+
 const root = document.querySelector('#root');
 if (root === null) throw new Error('Markdown editor root is unavailable');
 createRoot(root).render(
   <StrictMode>
-    <MarkdownEditorExperiment />
+    <MarkdownEditorExperiment initialText={initialText} />
   </StrictMode>,
 );

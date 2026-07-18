@@ -4,9 +4,11 @@ import * as Automerge from '@automerge/automerge';
 import { isValidAutomergeUrl, Repo, type AutomergeUrl } from '@automerge/automerge-repo';
 import {
   automergeBinaryFileDocumentMetadata,
+  automergeTextFileDocumentMetadata,
   createAutomergeBinaryFileDocument,
   type AutomergeBinaryFileDocument,
   type AutomergeFolderDocument,
+  type AutomergeTextFileDocument,
 } from '@patchpit/automerge-fs';
 import { createRoot, openRoot } from '../../src/root/runtime.ts';
 
@@ -28,9 +30,15 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
         name: 'index.html',
         order: 0,
       }, {
+        contentType: 'text/markdown',
+        linkId: 'demo.md',
+        name: 'demo.md',
+        order: 1,
+        text: '# Demo',
+      }, {
         linkId: 'tiger.svg',
         name: 'tiger.svg',
-        order: 1,
+        order: 2,
         resourceUrl: externalUrl,
       }],
     }],
@@ -42,6 +50,8 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
     linkId === 'sandbox-compat' && sourceId === runtime.rootUrl)!;
   const index = rows.find(({ linkId, sourceId }) =>
     linkId === 'index.html' && sourceId === sandbox.resourceRef)!;
+  const demo = rows.find(({ linkId, sourceId }) =>
+    linkId === 'demo.md' && sourceId === sandbox.resourceRef)!;
   const tiger = rows.find(({ linkId, sourceId }) =>
     linkId === 'tiger.svg' && sourceId === sandbox.resourceRef)!;
 
@@ -66,6 +76,12 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
   assert.equal(contentDocument['@patchwork'].type, 'file');
   assert.equal(contentDocument.name, 'index.html');
   assert.equal(contentDocument.mimeType, 'text/html');
+
+  const demoHandle = (await runtime.resolveResourceDocument(demo.resourceRef))!;
+  const demoDocument = demoHandle.doc() as AutomergeTextFileDocument;
+  assert.deepEqual(demoDocument['@patchpit'].schema, automergeTextFileDocumentMetadata.schema);
+  assert.equal(demoDocument.content, '# Demo');
+  assert.equal(demoDocument.mimeType, 'text/markdown');
 
   const folderHandle = await repo.find<AutomergeFolderDocument>(sandbox.resourceRef as AutomergeUrl);
   const addedHandle = repo.create(createAutomergeBinaryFileDocument(new Uint8Array([10]), { name: 'added.bin' }));
