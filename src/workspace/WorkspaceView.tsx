@@ -18,6 +18,7 @@ import { allocateWorkspaceIds } from './ids.ts';
 import { projectWorkspaceLayout, type LayoutRect } from './layout.ts';
 import {
   adjacentTabIndex,
+  canStartResize,
   contentDropZone,
   MAX_SPLIT_RATIO,
   MIN_SPLIT_RATIO,
@@ -33,6 +34,14 @@ import {
 
 const TAB_DRAG_TYPE = 'application/x-patchpit-context';
 
+type WorkspaceDragSession = {
+  readonly drag: WorkspaceDrag;
+  readonly preview?: {
+    readonly paneId: WorkspacePaneId;
+    readonly target: number | ContentDropZone;
+  };
+};
+
 export function WorkspaceView({
   canApplyDrop,
   dispatchAction,
@@ -46,21 +55,32 @@ export function WorkspaceView({
   readonly dispatchAction: (operation: WorkspaceAction) => void;
   readonly getContextLabel: (contextId: string) => string;
   readonly getResourceUrl: (resourceRef: string) => string | undefined;
-  readonly renderContextContent: (contextId: string) => ReactNode;
+  readonly renderContextContent: (contextId: string, onInteract: () => void) => ReactNode;
   readonly resourceDragType: string;
   readonly workspacePresentation: WorkspacePresentation;
 }) {
-  const [drag, setDrag] = useState<WorkspaceDrag>();
+  const [dragSession, setDragSession] = useState<WorkspaceDragSession>();
   const [draftRatios, setDraftRatios] = useState<Readonly<Record<string, number>>>({});
   const layout = projectWorkspaceLayout(workspacePresentation, draftRatios);
+  const drag = dragSession?.drag;
   const operationForCurrentDrop = (paneId: WorkspacePaneId, target: PaneDropTarget) =>
     drag === undefined || (drag.fromResource && drag.sourcePaneId === paneId)
       ? undefined
       : operationForDrop(drag, paneId, target);
   const dropContext = (paneId: WorkspacePaneId, target: PaneDropTarget) => {
     const operation = operationForCurrentDrop(paneId, target);
-    setDrag(undefined);
+    setDragSession(undefined);
     if (operation !== undefined) dispatchAction(operation);
+  };
+  const previewDrop = (paneId: WorkspacePaneId, preview: number | ContentDropZone) => {
+    setDragSession((current) => current === undefined
+      ? current
+      : { ...current, preview: { paneId, target: preview } });
+  };
+  const clearDropPreview = (paneId: WorkspacePaneId) => {
+    setDragSession((current) => current?.preview?.paneId === paneId
+      ? { drag: current.drag }
+      : current);
   };
   const setDraftRatio = (splitId: string, ratio: number | undefined) => {
     setDraftRatios((current) => {
@@ -75,7 +95,7 @@ export function WorkspaceView({
   return (
     <main
       className="workspace"
-      onDragEnd={() => setDrag(undefined)}
+      onDragEnd={() => setDragSession(undefined)}
       onDragStart={(event) => {
         const source = event.target instanceof Element
           ? event.target.closest<HTMLElement>('[data-pane], [data-context-pane]')
@@ -87,44 +107,43 @@ export function WorkspaceView({
           ? event.dataTransfer.getData(TAB_DRAG_TYPE)
           : allocated.contextId;
         if (contextId !== '') {
-          setDrag({
-            allocatedSplitIds: allocated.nodes,
-            contentUrl: url,
-            contextId,
-            fromResource: resourceId !== '',
-            sourcePaneId: resourceId === ''
-              ? null
-              : source?.dataset.pane ?? source?.dataset.contextPane ?? null,
+          setDragSession({
+            drag: {
+              allocatedSplitIds: allocated.nodes,
+              contentUrl: url,
+              contextId,
+              fromResource: resourceId !== '',
+              sourcePaneId: resourceId === ''
+                ? null
+                : source?.dataset.pane ?? source?.dataset.contextPane ?? null,
+            },
           });
         }
       }}
     >
       <div className="context-layer">
-        {layout.contexts.map(({ active, contextId, paneId, rect }) => (
-          <div
-            aria-labelledby={contextDomId('tab', contextId)}
-            className="app"
-            data-context-pane={paneId}
-            hidden={!active}
-            id={contextDomId('panel', contextId)}
-            key={contextId}
-            onFocusCapture={() => {
-              if (active && workspacePresentation.activePaneId !== paneId) {
-                dispatchAction({ kind: 'workspace.context.activate', paneId, contextId });
-              }
-            }}
-            onPointerDown={() => {
-              if (active && workspacePresentation.activePaneId !== paneId) {
-                dispatchAction({ kind: 'workspace.context.activate', paneId, contextId });
-              }
-            }}
-            role="tabpanel"
-            style={rectStyle(rect)}
-            tabIndex={0}
-          >
-            {renderContextContent(contextId)}
-          </div>
-        ))}
+        {layout.contexts.map(({ contextId, paneId, rect, selected }) => {
+          const selectContext = () => {
+            if (selected) dispatchAction({ kind: 'workspace.context.select', contextId });
+          };
+          return (
+            <div
+              aria-labelledby={contextDomId('tab', contextId)}
+              className="app"
+              data-context-pane={paneId}
+              hidden={!selected}
+              id={contextDomId('panel', contextId)}
+              key={contextId}
+              onFocusCapture={selectContext}
+              onPointerDownCapture={selectContext}
+              role="tabpanel"
+              style={rectStyle(rect)}
+              tabIndex={0}
+            >
+              {renderContextContent(contextId, selectContext)}
+            </div>
+          );
+        })}
       </div>
       {layout.panes.map(({ pane, paneId, rect }) => (
         <Pane
@@ -133,17 +152,20 @@ export function WorkspaceView({
             const operation = operationForCurrentDrop(paneId, target);
             return operation !== undefined && canApplyDrop(operation);
           }}
+          dropTarget={dragSession?.preview?.paneId === paneId ? dragSession.preview.target : undefined}
           getContextLabel={getContextLabel}
-          isActivePane={workspacePresentation.activePaneId === paneId}
+          activeEditorContextId={workspacePresentation.activeEditorContextId}
           isDragging={drag !== undefined}
           isRootPane={workspacePresentation.rootNodeId === paneId}
           onActivateContext={(contextId) => {
-            dispatchAction({ kind: 'workspace.context.activate', paneId, contextId });
+            dispatchAction({ kind: 'workspace.context.select', contextId });
           }}
           onCloseContext={(contextId) => {
             dispatchAction({ kind: 'workspace.context.close', paneId, contextId });
           }}
+          onClearDropPreview={() => clearDropPreview(paneId)}
           onDrop={(target) => dropContext(paneId, target)}
+          onPreviewDrop={(preview) => previewDrop(paneId, preview)}
           pane={pane}
           paneId={paneId}
           rect={rect}
@@ -204,6 +226,11 @@ function SplitBoundary({ axis, childNodeIds, onCommitRatio, onDraftRatioChange, 
     onDraftRatioChange(undefined);
     onCommitRatio(nextRatio);
   };
+  const cancelPointerResize = (event: PointerEvent<HTMLElement>) => {
+    if (activePointerId.current !== event.pointerId) return;
+    activePointerId.current = undefined;
+    onDraftRatioChange(undefined);
+  };
 
   return (
     <div
@@ -229,15 +256,11 @@ function SplitBoundary({ axis, childNodeIds, onCommitRatio, onDraftRatioChange, 
           event.preventDefault();
           onCommitRatio(nextRatio);
         }}
-        onPointerCancel={(event) => {
-          if (activePointerId.current !== event.pointerId) return;
-          activePointerId.current = undefined;
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
-          onDraftRatioChange(undefined);
-        }}
+        onLostPointerCapture={cancelPointerResize}
+        onPointerCancel={cancelPointerResize}
         onPointerDown={(event) => {
+          if (activePointerId.current !== undefined
+            || !canStartResize(event.pointerType, event.button, event.isPrimary)) return;
           activePointerId.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
           onDraftRatioChange(pointerRatio(event));
@@ -257,33 +280,39 @@ function SplitBoundary({ axis, childNodeIds, onCommitRatio, onDraftRatioChange, 
 }
 
 function Pane({
+  activeEditorContextId,
   canAcceptDrop,
+  dropTarget,
   getContextLabel,
-  isActivePane,
   isDragging,
   isRootPane,
   onActivateContext,
   onCloseContext,
+  onClearDropPreview,
   onDrop,
+  onPreviewDrop,
   pane,
   paneId,
   rect,
 }: {
+  readonly activeEditorContextId: string | null;
   readonly canAcceptDrop: (target: PaneDropTarget) => boolean;
+  readonly dropTarget: number | ContentDropZone | undefined;
   readonly getContextLabel: (contextId: string) => string;
-  readonly isActivePane: boolean;
   readonly isDragging: boolean;
   readonly isRootPane: boolean;
   readonly onActivateContext: (contextId: string) => void;
   readonly onCloseContext: (contextId: string) => void;
+  readonly onClearDropPreview: () => void;
   readonly onDrop: (target: PaneDropTarget) => void;
+  readonly onPreviewDrop: (preview: number | ContentDropZone) => void;
   readonly pane: WorkspacePresentationPane;
   readonly paneId: WorkspacePaneId;
   readonly rect: LayoutRect;
 }) {
-  const [dropTarget, setDropTarget] = useState<number | ContentDropZone>();
   const showDropPreview = (preview: number | ContentDropZone, target: PaneDropTarget) => {
-    setDropTarget(canAcceptDrop(target) ? preview : undefined);
+    if (canAcceptDrop(target)) onPreviewDrop(preview);
+    else onClearDropPreview();
   };
   const tabDropTarget = (event: DragEvent<HTMLElement>, index: number) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -299,7 +328,7 @@ function Pane({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    setDropTarget(undefined);
+    onClearDropPreview();
     onDrop(target);
   };
   return (
@@ -309,7 +338,7 @@ function Pane({
       id={nodeDomId(paneId)}
       onDragLeave={(event) => {
         const related = event.relatedTarget;
-        if (!(related instanceof Node) || !event.currentTarget.contains(related)) setDropTarget(undefined);
+        if (!(related instanceof Node) || !event.currentTarget.contains(related)) onClearDropPreview();
       }}
       onDragOver={(event) => {
         event.preventDefault();
@@ -324,7 +353,7 @@ function Pane({
           return (
             <div
               className="tab"
-              data-active={pane.activeContext === contextId || undefined}
+              data-selected={pane.selectedContext === contextId || undefined}
               data-context={contextId}
               data-drop-target={dropTarget === index
                 ? 'before'
@@ -332,7 +361,7 @@ function Pane({
                   ? 'after'
                   : undefined}
               data-preview={pane.previewContext === contextId || undefined}
-              data-targeted={isActivePane && pane.activeContext === contextId || undefined}
+              data-active-editor={activeEditorContextId === contextId || undefined}
               key={contextId}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -346,7 +375,10 @@ function Pane({
             >
               <button
                 aria-controls={contextDomId('panel', contextId)}
-                aria-selected={pane.activeContext === contextId}
+                aria-description={activeEditorContextId === contextId
+                  ? 'Active editor'
+                  : undefined}
+                aria-selected={pane.selectedContext === contextId}
                 className="tab-label"
                 draggable
                 id={contextDomId('tab', contextId)}
@@ -361,7 +393,7 @@ function Pane({
                     ?.querySelectorAll<HTMLElement>('[role="tab"]')[nextIndex]?.focus();
                 }}
                 role="tab"
-                tabIndex={pane.activeContext === contextId ? 0 : -1}
+                tabIndex={pane.selectedContext === contextId ? 0 : -1}
                 type="button"
               >
                 {label}

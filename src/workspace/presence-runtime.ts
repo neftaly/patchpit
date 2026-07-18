@@ -3,7 +3,7 @@ import {
   workspacePresenceSourceMetadata,
   type WorkspacePresencePaneRelationRow,
   type WorkspacePresencePreviewRelationRow,
-  type WorkspacePresenceSessionRelationRow,
+  type WorkspacePresenceRecentContextRelationRow,
 } from '@patchpit/artifacts';
 import {
   createWorkspaceViewState,
@@ -14,17 +14,17 @@ import type { WorkspacePaneId, WorkspaceState } from './durable-state.ts';
 
 type WorkspacePresenceStorage = {
   readonly '@patchpit': typeof workspacePresenceSourceMetadata;
-  readonly session: Omit<WorkspacePresenceSessionRelationRow, 'id'>;
   readonly panes: Readonly<Record<WorkspacePaneId, Omit<WorkspacePresencePaneRelationRow, 'paneId'>>>;
   readonly previews: Readonly<Record<WorkspacePaneId, Omit<WorkspacePresencePreviewRelationRow, 'paneId'>>>;
+  readonly recentContexts: Readonly<Record<string, Omit<WorkspacePresenceRecentContextRelationRow, 'contextId'>>>;
 };
 
 export const openWorkspacePresence = (options: {
   readonly sourceId: string;
   readonly workspace: WorkspaceState;
-  readonly activePaneId?: WorkspacePaneId | null;
+  readonly recentContextIds?: readonly string[];
 }) => {
-  const initialViewState = createWorkspaceViewState(options.workspace, options.activePaneId);
+  const initialViewState = createWorkspaceViewState(options.workspace, options.recentContextIds);
   const store = createAtomicStore(presenceStorageFromViewState(initialViewState));
   const runtime = new ExternalStoreRuntime(options.sourceId, store);
   let cachedStorage = store.getState();
@@ -69,29 +69,34 @@ const presenceStorageFromViewState = (viewState: WorkspaceViewState): WorkspaceP
   const panes = Object.entries(viewState.panes);
   return {
     '@patchpit': workspacePresenceSourceMetadata,
-    session: { activePaneId: viewState.activePaneId },
     panes: Object.fromEntries(panes.map(([paneId, pane]) => [
       paneId,
-      { activeContextId: pane.activeContextId },
+      { selectedContextId: pane.selectedContextId },
     ])),
     previews: Object.fromEntries(panes.flatMap(([paneId, pane]) => pane.preview === null
       ? []
       : [[paneId, { contextId: pane.preview.contextId, url: pane.preview.url }]])),
+    recentContexts: Object.fromEntries(viewState.recentContextIds.map((contextId, position) => [
+      contextId,
+      { position },
+    ])),
   };
 };
 
 const viewStateFromPresenceStorage = (storage: WorkspacePresenceStorage): WorkspaceViewState => ({
-  activePaneId: storage.session.activePaneId,
   panes: Object.fromEntries(Object.entries(storage.panes).map(([paneId, pane]) => {
     const preview = storage.previews[paneId];
     return [paneId, {
-      activeContextId: pane.activeContextId,
+      selectedContextId: pane.selectedContextId,
       preview: preview === undefined ? null : {
         contextId: preview.contextId,
         url: preview.url,
       },
     }];
   })),
+  recentContextIds: Object.entries(storage.recentContexts)
+    .sort(([leftId, left], [rightId, right]) => left.position - right.position || leftId.localeCompare(rightId))
+    .map(([contextId]) => contextId),
 });
 
 const createAtomicStore = <State>(initial: State): AtomicExternalStore<State> => {

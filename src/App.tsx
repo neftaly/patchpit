@@ -77,7 +77,7 @@ export function App({ runtime, sandboxHost }: {
     workspacePresence.getSnapshot,
   );
   const workspacePresentation = useMemo(() => workspaceProjection.state === 'ready'
-    ? composeWorkspacePresentation(workspaceProjection.workspace, viewState)
+    ? composeWorkspacePresentation(workspaceProjection.workspace, viewState, isEditorContext)
     : undefined, [viewState, workspaceProjection]);
   const resourceTitles = useResourceTitles(runtime, workspacePresentation === undefined
     ? []
@@ -125,13 +125,12 @@ export function App({ runtime, sandboxHost }: {
   return (
     <WorkspaceView
       canApplyDrop={(action) => {
-        const planned = planWorkspaceAction({ action, isEditorContext, viewState, workspace });
+        const planned = planWorkspaceAction({ action, viewState, workspace });
         return planned.durableOperation !== undefined;
       }}
       dispatchAction={(action) => {
         enqueueWorkspacePlan((currentWorkspace, currentViewState) => planWorkspaceAction({
           action,
-          isEditorContext,
           viewState: currentViewState,
           workspace: currentWorkspace,
         }));
@@ -145,9 +144,10 @@ export function App({ runtime, sandboxHost }: {
         const resource = resources.byIdentity.get(resourceId);
         return resource === undefined ? undefined : contentUrlForResource(resource, resources);
       }}
-      renderContextContent={(contextId) => (
+      renderContextContent={(contextId, onInteract) => (
         <ContentView
           contentUrl={workspacePresentation.contexts[contextId]?.url}
+          onInteract={onInteract}
           onOpenResource={openResource}
           resources={resources}
           resourceTitles={resourceTitles}

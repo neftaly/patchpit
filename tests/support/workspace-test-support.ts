@@ -63,8 +63,9 @@ export const presentationInvariantViolations = (
 ): readonly string[] => {
   const violations: string[] = [];
   if (presentation.rootNodeId !== workspace.rootNodeId) violations.push('presentation root differs');
-  if (presentation.activePaneId !== null && presentation.nodes[presentation.activePaneId]?.kind !== 'pane') {
-    violations.push('active pane is unavailable');
+  if (presentation.activeEditorContextId !== null
+    && presentation.contexts[presentation.activeEditorContextId] === undefined) {
+    violations.push('active editor context is unavailable');
   }
   for (const paneId of Object.keys(viewState.panes)) {
     const pane = presentation.nodes[paneId];
@@ -72,8 +73,8 @@ export const presentationInvariantViolations = (
       violations.push(`view-state pane is unavailable ${paneId}`);
       continue;
     }
-    if (pane.activeContext !== null && !pane.contexts.includes(pane.activeContext)) {
-      violations.push(`active context is unavailable ${paneId}`);
+    if (pane.selectedContext !== null && !pane.contexts.includes(pane.selectedContext)) {
+      violations.push(`selected context is unavailable ${paneId}`);
     }
     for (const contextId of pane.contexts) {
       if (presentation.contexts[contextId] === undefined) violations.push(`presentation context is unavailable ${contextId}`);

@@ -50,6 +50,9 @@ export const adjacentTabIndex = (key: string, index: number, length: number) => 
   return undefined;
 };
 
+export const canStartResize = (pointerType: string, button: number, isPrimary: boolean) =>
+  isPrimary && (pointerType === 'touch' || (pointerType === 'mouse' && button === 0));
+
 export const splitRatioForArrow = (axis: 'horizontal' | 'vertical', ratio: number, key: string) => {
   const direction = axis === 'horizontal'
     ? { ArrowLeft: -1, ArrowRight: 1 }[key]

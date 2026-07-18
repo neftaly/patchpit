@@ -23,8 +23,8 @@ import {
   workspacePresenceMappingArtifactRef,
   workspacePresencePanesRelation,
   workspacePresencePreviewsRelation,
+  workspacePresenceRecentContextsRelation,
   workspacePresenceSchemaArtifactRef,
-  workspacePresenceSessionRelation,
   workspaceSchemaArtifactRef,
   workspaceSplitsRelation,
   workspaceStateRelation,
@@ -32,7 +32,7 @@ import {
   type WorkspacePlacementsRow,
   type WorkspacePresencePanesRow,
   type WorkspacePresencePreviewsRow,
-  type WorkspacePresenceSessionRow,
+  type WorkspacePresenceRecentContextsRow,
   type WorkspaceSplitsRow,
   type WorkspaceStateRow,
 } from './generated/bindings.ts';
@@ -62,7 +62,7 @@ export type {
   WorkspaceStateRow as WorkspaceStateRelationRow,
   WorkspacePresencePanesRow as WorkspacePresencePaneRelationRow,
   WorkspacePresencePreviewsRow as WorkspacePresencePreviewRelationRow,
-  WorkspacePresenceSessionRow as WorkspacePresenceSessionRelationRow,
+  WorkspacePresenceRecentContextsRow as WorkspacePresenceRecentContextRelationRow,
 };
 
 export const workspaceRelations = {
@@ -75,7 +75,7 @@ export const workspaceRelations = {
 export const workspacePresenceRelations = {
   panes: workspacePresencePanesRelation,
   previews: workspacePresencePreviewsRelation,
-  session: workspacePresenceSessionRelation,
+  recentContexts: workspacePresenceRecentContextsRelation,
 } as const;
 
 export const fileSchemaArtifact = artifact<SchemaArtifact>(fileSchemaArtifactRef, 'schema');

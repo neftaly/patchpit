@@ -114,6 +114,7 @@ async function proveWorkspaceBehavior(page) {
   assert.notEqual(await tab('sandbox-compat / index.html').getAttribute('data-context'), null);
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
   await page.frameLocator('.sandbox-app').getByText('image-html-file: PASS').waitFor();
+  await proveActiveEditorInteractions({ drag, leftPane, page, resource, rightPane, tab });
   const duplicateNames = page.getByRole('button', {
     name: 'duplicate.svg',
     exact: true,
@@ -146,14 +147,14 @@ async function proveWorkspaceBehavior(page) {
   await resource('sandbox-compat', 'data.json').click();
   await page.getByText('{"ok":true}', { exact: true }).waitFor();
   const appTab = rightPane.getByRole('tab', { name: 'sandbox-compat / index.html' });
-  const dataTab = rightPane.getByRole('tab', { name: 'data.json' });
-  assert.equal(await dataTab.getAttribute('aria-selected'), 'true');
-  assert.equal(await dataTab.getAttribute('tabindex'), '0');
+  const openedDataTab = rightPane.getByRole('tab', { name: 'data.json' });
+  assert.equal(await openedDataTab.getAttribute('aria-selected'), 'true');
+  assert.equal(await openedDataTab.getAttribute('tabindex'), '0');
   assert.equal(await appTab.getAttribute('tabindex'), '-1');
-  const dataPanelId = await dataTab.getAttribute('aria-controls');
-  assert(dataPanelId !== null);
-  assert.equal(await page.evaluate((id) => document.getElementById(id)?.role, dataPanelId), 'tabpanel');
-  await dataTab.press('ArrowLeft');
+  const openedDataPanelId = await openedDataTab.getAttribute('aria-controls');
+  assert(openedDataPanelId !== null);
+  assert.equal(await page.evaluate((id) => document.getElementById(id)?.role, openedDataPanelId), 'tabpanel');
+  await openedDataTab.press('ArrowLeft');
   assert.equal(await appTab.getAttribute('aria-selected'), 'true');
   await tab('sandbox-compat / index.html').click();
   await drag(
@@ -198,7 +199,19 @@ async function proveWorkspaceBehavior(page) {
   assert.equal(controlledNodeIds?.length, 2);
   assert.equal(await page.evaluate((ids) => ids.every((id) => document.getElementById(id) !== null), controlledNodeIds), true);
   const handleBounds = await resizeHandle.boundingBox();
-  assert(handleBounds !== null, 'Resize handle must be visible');
+  const lineBounds = await resizeHandle.locator('.resize-line').boundingBox();
+  assert(handleBounds !== null && lineBounds !== null, 'Resize handle and line must be visible');
+  assert(Math.abs(handleBounds.width - lineBounds.width) < 0.1);
+  assert(Math.abs(handleBounds.x - lineBounds.x) < 0.1);
+  const initialPointerRatio = Number(await rootSplit.getAttribute('data-ratio'));
+  for (const button of ['middle', 'right']) {
+    await page.mouse.move(handleBounds.x + (handleBounds.width / 2), handleBounds.y + (handleBounds.height / 2));
+    await page.mouse.down({ button });
+    await page.mouse.move(rootBounds.x + (rootBounds.width * 0.4), handleBounds.y + (handleBounds.height / 2));
+    await page.mouse.up({ button });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    assert.equal(Number(await rootSplit.getAttribute('data-ratio')), initialPointerRatio);
+  }
   await page.mouse.move(handleBounds.x + (handleBounds.width / 2), handleBounds.y + (handleBounds.height / 2));
   await page.mouse.down();
   await page.mouse.move(rootBounds.x + (rootBounds.width * 0.3), handleBounds.y + (handleBounds.height / 2), {
@@ -273,7 +286,14 @@ async function proveWorkspaceBehavior(page) {
   assert.equal(await page.locator('.pane').count(), 4);
   assert.equal(await page.locator('[role="separator"]').evaluateAll((separators) => separators.every((separator) => {
     const controlled = separator.getAttribute('aria-controls');
-    return controlled !== null && controlled.split(' ').every((id) => document.getElementById(id) !== null);
+    const line = separator.querySelector('.resize-line');
+    if (controlled === null || line === null
+      || !controlled.split(' ').every((id) => document.getElementById(id) !== null)) return false;
+    const handleBounds = separator.getBoundingClientRect();
+    const lineBounds = line.getBoundingClientRect();
+    return separator.getAttribute('aria-orientation') === 'vertical'
+      ? Math.abs(handleBounds.x - lineBounds.x) < 0.1 && Math.abs(handleBounds.width - lineBounds.width) < 0.1
+      : Math.abs(handleBounds.y - lineBounds.y) < 0.1 && Math.abs(handleBounds.height - lineBounds.height) < 0.1;
   })), true);
   const workerPane = page.locator('.pane', { has: tab('worker.js') });
   const workerPaneId = await workerPane.getAttribute('data-pane');
@@ -342,10 +362,54 @@ async function proveWorkspaceBehavior(page) {
   await assertSandboxIdentity(page);
 }
 
+async function proveActiveEditorInteractions({ drag, leftPane, page, resource, rightPane, tab }) {
+  await resource('sandbox-compat', 'data.json').click();
+  await page.getByText('{"ok":true}', { exact: true }).waitFor();
+  await drag(
+    tab('data.json'),
+    leftPane.locator('.pane-content'),
+    'data-drop-zone',
+    'center',
+    0.5,
+  );
+  const dataTab = leftPane.getByRole('tab', { name: 'data.json' });
+  const sandboxTab = rightPane.getByRole('tab', { name: 'sandbox-compat / index.html' });
+  await sandboxTab.click();
+  await assertActiveEditorTab(dataTab, false);
+  await assertActiveEditorTab(sandboxTab, true);
+
+  await page.getByText('{"ok":true}', { exact: true }).click();
+  await assertActiveEditorTab(dataTab, true);
+  await assertActiveEditorTab(sandboxTab, false);
+
+  await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').click();
+  await assertActiveEditorTab(dataTab, false);
+  await assertActiveEditorTab(sandboxTab, true);
+  await assertSandboxIdentity(page);
+
+  const dataPanelId = await dataTab.getAttribute('aria-controls');
+  assert(dataPanelId !== null);
+  await page.locator(`[id="${dataPanelId}"]`).focus();
+  await assertActiveEditorTab(dataTab, true);
+  await assertActiveEditorTab(sandboxTab, false);
+  await page.frameLocator('.sandbox-app').frameLocator('iframe').getByText('iframe relative: loaded').click();
+  await assertActiveEditorTab(dataTab, false);
+  await assertActiveEditorTab(sandboxTab, true);
+  await page.getByRole('button', { name: 'Close data.json' }).click();
+  await sandboxTab.click();
+}
+
 async function assertSandboxIdentity(page) {
   assert.equal(await page.evaluate(() => (
     document.querySelector('.sandbox-app') === window.__patchpitIdentityFrame
   )), true, 'Workspace placement changes must preserve the live sandbox iframe');
+}
+
+async function assertActiveEditorTab(tab, active) {
+  const tabContainer = tab.locator('..');
+  await tabContainer.locator(active ? ':scope[data-active-editor="true"]' : ':scope:not([data-active-editor])').waitFor();
+  assert.equal(await tabContainer.getAttribute('data-active-editor'), active ? 'true' : null);
+  assert.equal(await tab.getAttribute('aria-description'), active ? 'Active editor' : null);
 }
 
 async function proveOfflineSandboxReload(page) {

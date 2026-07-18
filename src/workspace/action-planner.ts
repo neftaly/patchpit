@@ -10,6 +10,8 @@ import {
   previewWorkspaceContext,
   reconcileWorkspaceViewState,
   selectWorkspaceContext,
+  workspaceContextPaneId,
+  activeWorkspaceEditor,
   type WorkspaceAction,
   type WorkspaceViewState,
 } from './view-state.ts';
@@ -22,23 +24,22 @@ export type WorkspacePlan = {
 
 export const planWorkspaceAction = (options: {
   readonly action: WorkspaceAction;
-  readonly isEditorContext: (url: string) => boolean;
   readonly viewState: WorkspaceViewState;
   readonly workspace: WorkspaceState;
 }): WorkspacePlan => {
-  const { action, isEditorContext } = options;
+  const { action } = options;
   const plan = emptyPlan(options.workspace, options.viewState);
 
-  if (action.kind === 'workspace.context.activate') {
-    const url = contextUrl(plan.workspace, plan.viewState, action.paneId, action.contextId);
+  if (action.kind === 'workspace.context.select') {
+    const paneId = workspaceContextPaneId(plan.workspace, plan.viewState, action.contextId);
+    if (paneId === undefined) return plan;
     return {
       ...plan,
       viewState: selectWorkspaceContext(
         plan.workspace,
         plan.viewState,
-        action.paneId,
+        paneId,
         action.contextId,
-        url !== undefined && isEditorContext(url),
       ),
     };
   }
@@ -77,7 +78,6 @@ export const planWorkspaceAction = (options: {
       withoutPreview,
       targetPaneId,
       action.contextId,
-      true,
     ),
   });
 };
@@ -101,7 +101,7 @@ export const planOpenWorkspaceContext = (options: OpenWorkspaceContextOptions): 
   if (existing !== undefined) {
     return {
       ...plan,
-      viewState: selectWorkspaceContext(plan.workspace, plan.viewState, targetPaneId, existing, true),
+      viewState: selectWorkspaceContext(plan.workspace, plan.viewState, targetPaneId, existing),
     };
   }
   const currentPreview = plan.viewState.panes[targetPaneId]?.preview;
@@ -119,7 +119,7 @@ export const planOpenWorkspaceContext = (options: OpenWorkspaceContextOptions): 
     const withoutPreview = clearWorkspacePreview(pinned.workspace, pinned.viewState, targetPaneId);
     return reconcilePlan({
       ...pinned,
-      viewState: selectWorkspaceContext(pinned.workspace, withoutPreview, targetPaneId, contextId, true),
+      viewState: selectWorkspaceContext(pinned.workspace, withoutPreview, targetPaneId, contextId),
     });
   }
   return reconcilePlan({
@@ -190,7 +190,11 @@ const planEditorTarget = (
   options: OpenWorkspaceContextOptions,
   plan: WorkspacePlan,
 ): { readonly paneId: string; readonly plan: WorkspacePlan } | undefined => {
-  const currentEditorPaneId = editorPaneId(plan.workspace, plan.viewState, options.isEditorContext);
+  const currentEditorPaneId = activeWorkspaceEditor(
+    plan.workspace,
+    plan.viewState,
+    options.isEditorContext,
+  )?.paneId;
   if (currentEditorPaneId !== undefined) return { paneId: currentEditorPaneId, plan };
   const firstPaneId = paneIdsInLayoutOrder(plan.workspace)[0];
   if (firstPaneId === undefined) return undefined;
@@ -211,42 +215,3 @@ const planEditorTarget = (
       };
   return { paneId: options.nodes.paneId, plan: withDurableOperation(plan, operation) };
 };
-
-const editorPaneId = (
-  workspace: WorkspaceState,
-  viewState: WorkspaceViewState,
-  isEditorContext: (url: string) => boolean,
-) => {
-  const candidates = [viewState.activePaneId, ...paneIdsInLayoutOrder(workspace)];
-  return candidates.find((paneId, index) => paneId !== null
-    && candidates.indexOf(paneId) === index
-    && paneHasEditorContext(workspace, viewState, paneId, isEditorContext)) ?? undefined;
-};
-
-const paneHasEditorContext = (
-  workspace: WorkspaceState,
-  viewState: WorkspaceViewState,
-  paneId: string,
-  isEditorContext: (url: string) => boolean,
-) => {
-  const pane = workspace.nodes[paneId];
-  if (pane?.kind !== 'pane') return false;
-  const preview = viewState.panes[paneId]?.preview;
-  const ids = preview === null || preview === undefined
-    ? pane.contexts
-    : [...pane.contexts, preview.contextId];
-  return ids.some((contextId) => {
-    const url = contextUrl(workspace, viewState, paneId, contextId);
-    return url !== undefined && isEditorContext(url);
-  });
-};
-
-const contextUrl = (
-  workspace: WorkspaceState,
-  viewState: WorkspaceViewState,
-  paneId: string,
-  contextId: string,
-) => workspace.contexts[contextId]?.url
-  ?? (viewState.panes[paneId]?.preview?.contextId === contextId
-    ? viewState.panes[paneId]?.preview?.url
-    : undefined);

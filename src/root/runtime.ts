@@ -201,10 +201,13 @@ const openRootHandle = async (
     throw new Error('Patchpit workspace is unavailable');
   }
   const initialPaneIds = paneIdsInLayoutOrder(initialWorkspace.workspace);
+  const initialContextPane = initialWorkspace.workspace.nodes[initialPaneIds.at(-1) ?? ''];
   const workspacePresence = openWorkspacePresence({
     sourceId: `${rootHandle.url}:presence:${crypto.randomUUID()}`,
     workspace: initialWorkspace.workspace,
-    activePaneId: initialPaneIds.at(-1) ?? null,
+    recentContextIds: initialContextPane?.kind === 'pane'
+      ? initialContextPane.contexts.slice(0, 1)
+      : [],
   });
   const resolveResourceDocument = async (resourceRef: string, documentSignal?: AbortSignal) => {
     if (closed || !rootReferencesResource(resourceQuery, resourceRef)

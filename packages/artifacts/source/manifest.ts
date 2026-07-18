@@ -47,7 +47,7 @@ const workspaceRelations = {
 const workspacePresenceRelations = {
   panes: relationLiteral(workspacePresenceSchema, 'panes'),
   previews: relationLiteral(workspacePresenceSchema, 'previews'),
-  session: relationLiteral(workspacePresenceSchema, 'session'),
+  recentContexts: relationLiteral(workspacePresenceSchema, 'recentContexts'),
 };
 
 const folderOwnedMapping = await sealFolderMapping(
@@ -121,7 +121,7 @@ export const artifactManifest = {
     workspacePanes: { schema: 'workspaceSchema', relation: 'panes' },
     workspacePresencePanes: { schema: 'workspacePresenceSchema', relation: 'panes' },
     workspacePresencePreviews: { schema: 'workspacePresenceSchema', relation: 'previews' },
-    workspacePresenceSession: { schema: 'workspacePresenceSchema', relation: 'session' },
+    workspacePresenceRecentContexts: { schema: 'workspacePresenceSchema', relation: 'recentContexts' },
     workspacePlacements: { schema: 'workspaceSchema', relation: 'placements' },
     workspaceSplits: { schema: 'workspaceSchema', relation: 'splits' },
     workspaceState: { schema: 'workspaceSchema', relation: 'state' },
@@ -244,15 +244,15 @@ function workspacePresenceStorageMapping(schema: ArtifactRef): StorageMappingBod
     schema,
     model: 'json-tree-v1',
     relations: {
-      [workspacePresenceRelations.session.relationId]: {
-        collection: { kind: 'singleton', path: ['session'], absent: 'invalid' },
-        keys: { id: { kind: 'literal', value: 'workspace-presence' } },
-        fields: { activePaneId: { path: ['activePaneId'], write: replace } },
+      [workspacePresenceRelations.recentContexts.relationId]: {
+        collection: { kind: 'object-map', path: ['recentContexts'], absent: 'invalid' },
+        keys: { contextId: { kind: 'map-key', onMismatch: 'reject' } },
+        fields: { position: { path: ['position'], write: replace } },
       },
       [workspacePresenceRelations.panes.relationId]: {
         collection: { kind: 'object-map', path: ['panes'], absent: 'invalid' },
         keys: { paneId: { kind: 'map-key', onMismatch: 'reject' } },
-        fields: { activeContextId: { path: ['activeContextId'], write: replace } },
+        fields: { selectedContextId: { path: ['selectedContextId'], write: replace } },
       },
       [workspacePresenceRelations.previews.relationId]: {
         collection: { kind: 'object-map', path: ['previews'], absent: 'invalid' },

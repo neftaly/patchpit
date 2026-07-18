@@ -6,6 +6,7 @@ import { workspaceFromLogicalRows, workspaceLogicalRows } from '../../src/worksp
 import { projectWorkspaceLayout, type LayoutRect } from '../../src/workspace/layout.ts';
 import {
   contentDropZone,
+  canStartResize,
   operationForDrop,
   pointInRect,
   splitRatio,
@@ -52,7 +53,7 @@ void test('workspace actions preserve the complete durable/view-state/document m
     fc.array(stepArbitrary, { minLength: 1, maxLength: 60 }),
     (steps) => {
       let workspace = createWorkspace('files.html', 'editor:initial');
-      let viewState = createWorkspaceViewState(workspace, 'right');
+      let viewState = createWorkspaceViewState(workspace, ['context-1']);
 
       for (const step of steps) {
         const beforeWorkspace = structuredClone(workspace);
@@ -74,7 +75,7 @@ void test('workspace actions preserve the complete durable/view-state/document m
         assert.deepEqual(workspaceInvariantViolations(workspace), []);
         assert.equal(reconcileWorkspaceViewState(workspace, viewState), viewState);
 
-        const presentation = composeWorkspacePresentation(workspace, viewState);
+        const presentation = composeWorkspacePresentation(workspace, viewState, isEditorContext);
         assert.deepEqual(presentationInvariantViolations(workspace, viewState, presentation), []);
         assertWorkspaceLayoutProjection(presentation);
         assertWorkspaceRelationRoundTrip(workspace);
@@ -93,7 +94,10 @@ void test('workspace pointer geometry lowers to bounded deterministic intent', (
     fc.double({ min: 0.01, max: 1_000, noNaN: true, noDefaultInfinity: true }),
     fc.double({ min: 0.01, max: 1_000, noNaN: true, noDefaultInfinity: true }),
     fc.nat(100),
-    (x, y, left, top, width, height, index) => {
+    fc.constantFrom('mouse', 'touch', 'pen', ''),
+    fc.integer({ min: -1, max: 5 }),
+    fc.boolean(),
+    (x, y, left, top, width, height, index, pointerType, button, isPrimary) => {
       const point = pointInRect(
         { x: left + (width * x), y: top + (height * y) },
         { left, top, width, height },
@@ -113,6 +117,10 @@ void test('workspace pointer geometry lowers to bounded deterministic intent', (
         sourcePaneId: null,
       }, 'target-pane', { zone });
       assert.equal(operation.kind, zone === 'center' ? 'workspace.context.move' : 'workspace.context.split');
+      assert.equal(
+        canStartResize(pointerType, button, isPrimary),
+        isPrimary && (pointerType === 'touch' || (pointerType === 'mouse' && button === 0)),
+      );
     },
   ), { numRuns: 200 });
 });
@@ -132,7 +140,7 @@ const planStep = (workspace: WorkspaceState, viewState: WorkspaceViewState, step
     });
   }
 
-  const presentation = composeWorkspacePresentation(workspace, viewState);
+  const presentation = composeWorkspacePresentation(workspace, viewState, isEditorContext);
   const mounted = Object.entries(presentation.nodes).flatMap(([paneId, node]) => node.kind === 'pane'
     ? node.contexts.map((contextId) => ({ contextId, paneId }))
     : []);
@@ -141,7 +149,7 @@ const planStep = (workspace: WorkspaceState, viewState: WorkspaceViewState, step
   let action: WorkspaceAction;
 
   if (step.kind === 1 && selected !== undefined) {
-    action = { kind: 'workspace.context.activate', ...selected };
+    action = { kind: 'workspace.context.select', contextId: selected.contextId };
   } else if (step.kind === 2 && selected !== undefined) {
     action = { kind: 'workspace.context.close', ...selected };
   } else if (step.kind === 3 && selected !== undefined) {
@@ -177,7 +185,7 @@ const planStep = (workspace: WorkspaceState, viewState: WorkspaceViewState, step
     }
     action = { kind: 'workspace.split.resize', splitId: selectedSplit[0], ratio: step.ratio };
   }
-  return planWorkspaceAction({ action, isEditorContext, viewState, workspace });
+  return planWorkspaceAction({ action, viewState, workspace });
 };
 
 const assertWorkspaceRelationRoundTrip = (workspace: WorkspaceState) => {

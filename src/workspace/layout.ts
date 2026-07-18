@@ -51,7 +51,7 @@ export const projectWorkspaceLayout = (
   };
   visit(workspace.rootNodeId, { height: 1, left: 0, top: 0, width: 1 });
   const contexts = panes.flatMap(({ pane, paneId, rect }) => pane.contexts.map((contextId) => ({
-    active: pane.activeContext === contextId,
+    selected: pane.selectedContext === contextId,
     contextId,
     paneId,
     rect,

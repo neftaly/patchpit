@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -19,15 +20,17 @@ import {
 } from './resource-projection.ts';
 import type { PatchpitRuntime } from '../root/runtime.ts';
 import type { BrowserSandboxHost } from '../browser/sandbox-host.ts';
+import { observeSameOriginFrameInteractions } from '../browser/frame-interaction.ts';
 
 export const RESOURCE_DRAG_TYPE = 'application/x-patchpit-resource';
 
 type ContentRuntime = Pick<PatchpitRuntime, 'createAppSnapshot' | 'resolveResourceDocument'>;
 type SandboxHost = Pick<BrowserSandboxHost, 'install'>;
 
-export function ContentView({ contentRuntime, contentUrl, onOpenResource, resources, resourceTitles, sandboxHost }: {
+export function ContentView({ contentRuntime, contentUrl, onInteract, onOpenResource, resources, resourceTitles, sandboxHost }: {
   readonly contentRuntime: ContentRuntime;
   readonly contentUrl: string | undefined;
+  readonly onInteract: () => void;
   readonly onOpenResource: (resource: FolderLinkRow, pinned: boolean) => void;
   readonly resources: ResourceProjection;
   readonly resourceTitles: ReadonlyMap<string, string>;
@@ -45,6 +48,7 @@ export function ContentView({ contentRuntime, contentUrl, onOpenResource, resour
           <SandboxApp
             sandboxHost={sandboxHost}
             key={invocation.resourceRef}
+            onInteract={onInteract}
             rootFolderRef={invocation.resourceRef}
             contentRuntime={contentRuntime}
             title={resourceTitles.get(invocation.resourceRef) ?? root.name}
@@ -114,13 +118,8 @@ function ResourceBrowser({ onOpenResource, resources }: {
                 className={`resource${resource.typeHint === 'folder' ? ' resource-folder' : ''}`}
                 draggable
                 key={resourceIdentity(resource)}
-                onClick={(event) => onOpenResource(resource, event.detail > 1)}
+                onClick={(event) => onOpenResource(resource, event.detail !== 1)}
                 onDragStart={(event) => event.dataTransfer.setData(RESOURCE_DRAG_TYPE, resourceIdentity(resource))}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  onOpenResource(resource, true);
-                }}
                 style={treeDepthStyle(depth + 1)}
                 type="button"
               >
@@ -208,18 +207,24 @@ function Viewer({ contentRuntime, resourceRef }: {
   return <pre className="viewer">{formatViewerContent(document, resourceRef)}</pre>;
 }
 
-function SandboxApp({ contentRuntime, rootFolderRef, sandboxHost, title }: {
+function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, title }: {
   readonly contentRuntime: ContentRuntime;
+  readonly onInteract: () => void;
   readonly rootFolderRef: string;
   readonly sandboxHost: SandboxHost;
   readonly title: string;
 }) {
-  const [frameAttributes, setFrameAttributes] = useState<SandboxFrameAttributes>();
-  const [installationFailed, setInstallationFailed] = useState(false);
+  const [installation, setInstallation] = useState<{
+    readonly state: 'loading' | 'unavailable';
+  } | {
+    readonly state: 'ready';
+    readonly frameAttributes: SandboxFrameAttributes;
+  }>({ state: 'loading' });
+  const removeInteractionListeners = useRef<() => void>(() => undefined);
+  useEffect(() => () => { removeInteractionListeners.current(); }, []);
   useEffect(() => {
     const controller = new AbortController();
-    setFrameAttributes(undefined);
-    setInstallationFailed(false);
+    setInstallation({ state: 'loading' });
     const mountPromise = contentRuntime.createAppSnapshot(rootFolderRef, controller.signal).then(async (snapshot) => {
       if (snapshot.state !== 'ready') throw new Error('Sandbox app snapshot is unavailable');
       return sandboxHost.install({
@@ -234,18 +239,30 @@ function SandboxApp({ contentRuntime, rootFolderRef, sandboxHost, title }: {
       }, controller.signal);
     });
     void mountPromise.then((installedMount) => {
-      if (!controller.signal.aborted) setFrameAttributes(installedMount.frameAttributes);
+      if (!controller.signal.aborted) {
+        setInstallation({ state: 'ready', frameAttributes: installedMount.frameAttributes });
+      }
     }, () => {
-      if (!controller.signal.aborted) setInstallationFailed(true);
+      if (!controller.signal.aborted) setInstallation({ state: 'unavailable' });
     });
     return () => {
       controller.abort();
       void mountPromise.then((installedMount) => installedMount.close(), () => undefined);
     };
   }, [contentRuntime, rootFolderRef, sandboxHost]);
-  return frameAttributes === undefined
-    ? installationFailed ? <p role="alert">App unavailable.</p> : null
-    : <iframe className="sandbox-app" title={`${title} app`} {...frameAttributes} />;
+  return installation.state !== 'ready'
+    ? installation.state === 'unavailable' ? <p role="alert">App unavailable.</p> : null
+    : (
+        <iframe
+          className="sandbox-app"
+          onLoad={(event) => {
+            removeInteractionListeners.current();
+            removeInteractionListeners.current = observeSameOriginFrameInteractions(event.currentTarget, onInteract);
+          }}
+          title={`${title} app`}
+          {...installation.frameAttributes}
+        />
+      );
 }
 
 const formatViewerContent = (document: object | undefined, resourceRef: string) => {

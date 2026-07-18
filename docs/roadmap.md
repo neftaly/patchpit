@@ -11,7 +11,7 @@ here.
 
 Route workspace presence through Tarstate's standard relational external-store
 attachment once that upstream boundary exists. Remove Patchpit's temporary
-storage-to-view lowering and direct exact-basis commit path; product
+storage-shaped presence serialization and direct exact-basis commit path; product
 reconciliation remains in Patchpit.
 
 Acceptance evidence:

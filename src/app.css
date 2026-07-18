@@ -3,7 +3,6 @@
   --hairline: 1px;
   --font-code: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-code-size: 0.8125rem;
-  --split-hit-size: 0.5rem;
   --split-line-size: 3px;
   --tab-pad: 0.375rem;
   --tabs-size: 1.75rem;
@@ -90,14 +89,14 @@ button {
 
 .split-boundary[data-axis="horizontal"] > .resize-handle {
   inset-block: 0;
-  width: var(--split-hit-size);
+  width: var(--split-line-size);
   transform: translateX(-100%);
   cursor: col-resize;
 }
 
 .split-boundary[data-axis="vertical"] > .resize-handle {
   inset-inline: 0;
-  height: var(--split-hit-size);
+  height: var(--split-line-size);
   transform: translateY(-100%);
   cursor: row-resize;
 }
@@ -165,13 +164,13 @@ button {
   outline: 0;
 }
 
-.tab[data-active="true"] {
+.tab[data-selected="true"] {
   border-bottom-color: transparent;
   background: var(--color-surface);
   color: var(--color-text);
 }
 
-.tab[data-targeted="true"] {
+.tab[data-active-editor="true"] {
   border-top-color: var(--color-muted);
 }
 

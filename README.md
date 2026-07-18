@@ -9,6 +9,9 @@ work.
 The current same-origin app profile is for trusted plugins. See
 [`packages/sandbox/SECURITY.md`](packages/sandbox/SECURITY.md) for its boundary.
 
+Current product behavior, architecture, testing policy, and future work are
+indexed in [`docs/`](docs/README.md).
+
 ## Apps
 
 A filesystem folder is launchable when it contains a direct `index.html` file.
@@ -41,6 +44,8 @@ host boundary rather than inside Patchpit's runtime.
 - `packages/sandbox/` mounts those snapshots behind the browser sandbox boundary.
 - `tests/` separates behavior examples, generated fuzz properties, lifecycle
   integration, and browser behavior.
+- `docs/` contains the current behavior and architecture specifications plus
+  future work.
 
 ## Development
 

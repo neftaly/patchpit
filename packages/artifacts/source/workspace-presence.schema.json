@@ -1,16 +1,13 @@
 {
-  "description": "Per-client Patchpit workspace focus and preview state.",
+  "description": "Per-client Patchpit workspace selection, recent context, and preview state.",
   "relations": {
-    "session": {
-      "relationId": "patchpit.workspace.presence.session",
-      "key": ["id"],
+    "recentContexts": {
+      "relationId": "patchpit.workspace.presence.recent-context",
+      "key": ["contextId"],
       "fields": {
-        "id": {
-          "type": { "kind": "string", "values": ["workspace-presence"] }
-        },
-        "activePaneId": {
-          "type": { "kind": "string" },
-          "nullable": true,
+        "contextId": { "type": { "kind": "string" } },
+        "position": {
+          "type": { "kind": "integer" },
           "editCapabilities": [{
             "id": "urn:tarstate:capability:field/replace",
             "version": "1",
@@ -24,7 +21,7 @@
       "key": ["paneId"],
       "fields": {
         "paneId": { "type": { "kind": "string" } },
-        "activeContextId": {
+        "selectedContextId": {
           "type": { "kind": "string" },
           "nullable": true,
           "editCapabilities": [{
