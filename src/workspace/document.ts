@@ -18,9 +18,11 @@ export type WorkspaceDocument = {
   readonly splits: Readonly<Record<string, Omit<WorkspaceSplitRelationRow, 'id'>>>;
 };
 
-type WorkspaceLogicalRow = {
-  readonly relationId: string;
-  readonly fields: Readonly<Record<string, JsonValue>>;
+export type WorkspaceRelationRows = {
+  readonly state: readonly WorkspaceStateRelationRow[];
+  readonly panes: readonly WorkspacePaneRelationRow[];
+  readonly placements: readonly WorkspacePlacementRelationRow[];
+  readonly splits: readonly WorkspaceSplitRelationRow[];
 };
 
 type WorkspaceDocumentIssue = {
@@ -35,29 +37,24 @@ export const createWorkspaceDocument = (
   documentContext?: string,
 ): WorkspaceDocument => workspaceDocumentFromState(createWorkspace(initialContext, documentContext));
 
-export const workspaceFromLogicalRows = (
-  rows: readonly WorkspaceLogicalRow[],
+export const workspaceFromRelationRows = (
+  rows: WorkspaceRelationRows,
 ): {
   readonly workspace?: WorkspaceState;
   readonly issues: readonly WorkspaceDocumentIssue[];
 } => {
   const issues: WorkspaceDocumentIssue[] = [];
-  const stateRows = relationRows<WorkspaceStateRelationRow>(rows, workspaceRelations.state.relationId);
-  if (stateRows.length !== 1 || stateRows[0]?.id !== WORKSPACE_STATE_ID) {
+  if (rows.state.length !== 1 || rows.state[0]?.id !== WORKSPACE_STATE_ID) {
     return {
-      issues: [{ kind: 'state-cardinality', details: { rows: stateRows.length } }],
+      issues: [{ kind: 'state-cardinality', details: { rows: rows.state.length } }],
     };
   }
 
-  const placements = relationRows<WorkspacePlacementRelationRow>(
-    rows,
-    workspaceRelations.placements.relationId,
-  );
-  const contexts = Object.fromEntries(placements.map((row) => [
+  const contexts = Object.fromEntries(rows.placements.map((row) => [
     row.contextId,
     { url: row.url },
   ]));
-  const paneContexts = placements.reduce((grouped, row) => {
+  const paneContexts = rows.placements.reduce((grouped, row) => {
     const { contextId, paneId } = row;
     const current = grouped.get(paneId) ?? [];
     current.push({ contextId, position: row.position });
@@ -65,7 +62,7 @@ export const workspaceFromLogicalRows = (
     return grouped;
   }, new Map<string, { contextId: string; position: number }[]>());
   const nodes: Record<string, WorkspaceNode> = Object.fromEntries(
-    relationRows<WorkspacePaneRelationRow>(rows, workspaceRelations.panes.relationId).map((row) => {
+    rows.panes.map((row) => {
       const { id } = row;
       return [id, {
         kind: 'pane',
@@ -75,11 +72,10 @@ export const workspaceFromLogicalRows = (
       }];
     }),
   );
-  const splits = relationRows<WorkspaceSplitRelationRow>(rows, workspaceRelations.splits.relationId);
-  issues.push(...splits
+  issues.push(...rows.splits
     .filter((row) => nodes[row.id] !== undefined)
     .map((row) => ({ kind: 'node-id-collision' as const, details: { nodeId: row.id } })));
-  Object.assign(nodes, Object.fromEntries(splits.flatMap((row) => {
+  Object.assign(nodes, Object.fromEntries(rows.splits.flatMap((row) => {
     const { id } = row;
     return nodes[id] === undefined
       ? [[id, {
@@ -95,37 +91,25 @@ export const workspaceFromLogicalRows = (
     workspace: {
       contexts,
       nodes,
-      rootNodeId: stateRows[0].rootNodeId,
+      rootNodeId: rows.state[0].rootNodeId,
     },
     issues,
   };
 };
 
 export const workspaceFromTransactionSnapshot = (snapshot: DatabaseTransactionSnapshot) =>
-  workspaceFromLogicalRows([
-    ...snapshot.rows(workspaceRelations.state).map((fields) => ({
-      relationId: workspaceRelations.state.relationId,
-      fields,
-    })),
-    ...snapshot.rows(workspaceRelations.panes).map((fields) => ({
-      relationId: workspaceRelations.panes.relationId,
-      fields,
-    })),
-    ...snapshot.rows(workspaceRelations.placements).map((fields) => ({
-      relationId: workspaceRelations.placements.relationId,
-      fields,
-    })),
-    ...snapshot.rows(workspaceRelations.splits).map((fields) => ({
-      relationId: workspaceRelations.splits.relationId,
-      fields,
-    })),
-  ]);
+  workspaceFromRelationRows({
+    state: snapshot.rows(workspaceRelations.state),
+    panes: snapshot.rows(workspaceRelations.panes),
+    placements: snapshot.rows(workspaceRelations.placements),
+    splits: snapshot.rows(workspaceRelations.splits),
+  });
 
 export const workspaceTransactionWithState = (
   snapshot: DatabaseTransactionSnapshot,
   workspace: WorkspaceState,
 ) => {
-  const rows = workspaceRowsFromState(workspace);
+  const rows = workspaceRelationRowsFromState(workspace);
   return snapshot
     .withRows(workspaceRelations.state, rows.state)
     .withRows(workspaceRelations.panes, rows.panes)
@@ -133,7 +117,7 @@ export const workspaceTransactionWithState = (
     .withRows(workspaceRelations.splits, rows.splits);
 };
 
-const workspaceRowsFromState = (workspace: WorkspaceState) => {
+export const workspaceRelationRowsFromState = (workspace: WorkspaceState): WorkspaceRelationRows => {
   const nodes = sortedEntries(workspace.nodes);
   const panes = nodes.flatMap(([id, node]) => node.kind === 'pane' ? [{ id }] : []);
   const placements = nodes.flatMap(([id, node]) => node.kind === 'pane'
@@ -156,20 +140,8 @@ const workspaceRowsFromState = (workspace: WorkspaceState) => {
   };
 };
 
-export const workspaceLogicalRows = (
-  workspace: WorkspaceState,
-): readonly WorkspaceLogicalRow[] => {
-  const rows = workspaceRowsFromState(workspace);
-  return [
-    ...logicalRows(workspaceRelations.state.relationId, rows.state),
-    ...logicalRows(workspaceRelations.panes.relationId, rows.panes),
-    ...logicalRows(workspaceRelations.placements.relationId, rows.placements),
-    ...logicalRows(workspaceRelations.splits.relationId, rows.splits),
-  ];
-};
-
 const workspaceDocumentFromState = (workspace: WorkspaceState): WorkspaceDocument => {
-  const rows = workspaceRowsFromState(workspace);
+  const rows = workspaceRelationRowsFromState(workspace);
   return {
     '@patchpit': workspaceDocumentMetadata,
     state: Object.fromEntries(rows.state.map(({ id, ...fields }) => [id, fields])),
@@ -178,18 +150,6 @@ const workspaceDocumentFromState = (workspace: WorkspaceState): WorkspaceDocumen
     splits: Object.fromEntries(rows.splits.map(({ id, ...fields }) => [id, fields])),
   };
 };
-
-const logicalRows = (
-  relationId: string,
-  rows: readonly Readonly<Record<string, JsonValue>>[],
-): readonly WorkspaceLogicalRow[] => rows.map((fields) => ({ relationId, fields }));
-
-const relationRows = <Row extends Readonly<Record<string, JsonValue>>>(
-  rows: readonly WorkspaceLogicalRow[],
-  relationId: string,
-): readonly Row[] => rows
-  .filter((row) => row.relationId === relationId)
-  .map(({ fields }) => fields as Row);
 
 const sortedEntries = <Value>(record: Readonly<Record<string, Value>>) => Object.entries(record)
   .sort(([left], [right]) => compareStrings(left, right));

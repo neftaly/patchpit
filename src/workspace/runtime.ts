@@ -1,6 +1,7 @@
 import { getConflicts } from '@automerge/automerge';
 import type { DocHandle } from '@automerge/automerge-repo';
 import {
+  mappedRelationRows,
   openAutomergeDatabase,
   type AutomergeDatabaseSnapshot,
 } from '@tarstate/automerge';
@@ -15,14 +16,14 @@ import {
   safeParseDocumentDeclaration,
 } from '@tarstate/core/attachment/declaration';
 import type { SourceBasis } from '@tarstate/core/source';
-import { workspaceDocumentMetadata } from '@patchpit/artifacts';
+import { workspaceDocumentMetadata, workspaceRelations } from '@patchpit/artifacts';
 import {
   applyWorkspaceOperation,
   type WorkspaceOperation,
   type WorkspaceState,
 } from './durable-state.ts';
 import {
-  workspaceFromLogicalRows,
+  workspaceFromRelationRows,
   workspaceFromTransactionSnapshot,
   workspaceTransactionWithState,
   type WorkspaceDocument,
@@ -109,7 +110,12 @@ const projectAttachmentSnapshot = (
       issues: current.issues,
     };
   }
-  const decoded = workspaceFromLogicalRows(current.rows);
+  const decoded = workspaceFromRelationRows({
+    state: mappedRelationRows(current, workspaceRelations.state),
+    panes: mappedRelationRows(current, workspaceRelations.panes),
+    placements: mappedRelationRows(current, workspaceRelations.placements),
+    splits: mappedRelationRows(current, workspaceRelations.splits),
+  });
   const issues = [
     ...current.issues,
     ...decoded.issues.map(({ kind, details }) => workspaceIssue(kind, details)),

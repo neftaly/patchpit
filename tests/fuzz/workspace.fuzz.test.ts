@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fc from 'fast-check';
 import { planOpenWorkspaceContext, planWorkspaceAction } from '../../src/workspace/action-planner.ts';
-import { workspaceFromLogicalRows, workspaceLogicalRows } from '../../src/workspace/document.ts';
+import {
+  workspaceFromRelationRows,
+  workspaceRelationRowsFromState,
+} from '../../src/workspace/document.ts';
 import { projectWorkspaceLayout, type LayoutRect } from '../../src/workspace/layout.ts';
 import {
   contentDropZone,
@@ -194,8 +197,8 @@ const planStep = (workspace: WorkspaceState, viewState: WorkspaceViewState, step
 };
 
 const assertWorkspaceRelationRoundTrip = (workspace: WorkspaceState) => {
-  const logicalRows = workspaceLogicalRows(workspace);
-  const decoded = workspaceFromLogicalRows(logicalRows);
+  const relationRows = workspaceRelationRowsFromState(workspace);
+  const decoded = workspaceFromRelationRows(relationRows);
   assert.deepEqual(decoded.issues, []);
   assert.deepEqual(decoded.workspace, workspace);
 };

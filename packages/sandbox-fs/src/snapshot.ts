@@ -10,14 +10,12 @@ import {
   type OpenLinkedDatabaseSource,
 } from '@tarstate/core/database/session';
 import { safeMaterializePortableBytes } from '@tarstate/core/values';
-import { prepareQuery } from '@tarstate/core/query';
+import { prepareTypedQuery } from '@tarstate/core/query';
 import {
-  field,
-  from,
-  orderBy,
-  pipe,
-  select,
-  sourceOf,
+  typedFrom,
+  typedOrderBy,
+  typedSelect,
+  typedSourceOf,
 } from '@tarstate/core/query/authoring';
 import {
   DEFAULT_FOLDER_DISCOVERY_BUDGET,
@@ -60,27 +58,26 @@ const QUERY_IDENTITY = {
   authorityFingerprint: 'patchpit:authority:app-contents:1',
   datasetId: 'patchpit:app:contents',
 } as const;
-const contentQuery = pipe(
-  from(fileRelation, 'file'),
-  select('content', {
-    binaryContent: field('file', 'binaryContent'),
-    contentKind: field('file', 'contentKind'),
-    mimeType: field('file', 'mimeType'),
-    resourceRef: sourceOf('file'),
-    textContent: field('file', 'textContent'),
-  }),
-  orderBy([{ value: field('content', 'resourceRef'), direction: 'asc' }]),
-);
-const contentLinksQuery = pipe(
-  from(folderLinksRelation, 'link'),
-  select('sourceLink', {
-    linkId: field('link', 'linkId'),
-    originSourceId: sourceOf('link'),
-    targetSourceId: field('link', 'resourceRef'),
-  }),
-);
-const contentsPlan = await prepareQuery({ root: contentQuery, ...QUERY_IDENTITY });
-const contentLinksPlan = await prepareQuery({ root: contentLinksQuery, ...QUERY_IDENTITY });
+const files = typedFrom(fileRelation, 'file');
+const content = typedSelect(files, 'content', ({ file }) => ({
+  binaryContent: file.row.binaryContent,
+  contentKind: file.row.contentKind,
+  mimeType: file.row.mimeType,
+  resourceRef: typedSourceOf(file),
+  textContent: file.row.textContent,
+}));
+const contentQuery = typedOrderBy(content, ({ content: row }) => [{
+  value: row.row.resourceRef,
+  direction: 'asc',
+}]);
+const links = typedFrom(folderLinksRelation, 'link');
+const contentLinksQuery = typedSelect(links, 'sourceLink', ({ link }) => ({
+  linkId: link.row.linkId,
+  originSourceId: typedSourceOf(link),
+  targetSourceId: link.row.resourceRef,
+}));
+const contentsPlan = await prepareTypedQuery(contentQuery, QUERY_IDENTITY);
+const contentLinksPlan = await prepareTypedQuery(contentLinksQuery, QUERY_IDENTITY);
 const DEFAULT_APP_BYTE_LIMIT = 256 * 1024 * 1024;
 const MAX_SNAPSHOT_RETRIES = 2;
 export const APP_FILE_AUTHORITY_SCOPE = 'patchpit.app-file';

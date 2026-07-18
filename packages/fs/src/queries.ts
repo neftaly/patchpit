@@ -1,17 +1,12 @@
-import { prepareQuery, prepareTypedQuery } from '@tarstate/core/query';
+import { prepareTypedQuery } from '@tarstate/core/query';
 import {
-  compare,
-  field,
-  from,
-  literal,
-  orderBy,
-  pipe,
-  select,
-  sourceOf,
+  typedCompare,
   typedFrom,
+  typedLiteral,
+  typedOrderBy,
   typedSelect,
   typedSourceOf,
-  where,
+  typedWhere,
 } from '@tarstate/core/query/authoring';
 import { fileRelation } from '@patchpit/artifacts';
 import { folderLinksRelation, folderRelation } from './schema.ts';
@@ -24,11 +19,11 @@ const QUERY_IDENTITY = {
 
 const folderLinks = typedFrom(folderLinksRelation, 'link');
 const folderLinksQuery = typedSelect(folderLinks, 'result', ({ link }) => ({
-  copyOf: link.row.copyOf!,
-  icon: link.row.icon!,
+  copyOf: link.row.copyOf,
+  icon: link.row.icon,
   linkId: link.row.linkId,
   name: link.row.name,
-  order: link.row.order!,
+  order: link.row.order,
   resourceRef: link.row.resourceRef,
   sourceId: typedSourceOf(link),
   typeHint: link.row.typeHint,
@@ -36,26 +31,21 @@ const folderLinksQuery = typedSelect(folderLinks, 'result', ({ link }) => ({
 
 export const folderLinksPlan = await prepareTypedQuery(folderLinksQuery, QUERY_IDENTITY);
 
-const portableLinksRelation = {
-  relationId: folderLinksRelation.relationId,
-  schemaView: folderLinksRelation.schemaView,
-};
-
-// typedSourceOf is optional, while Tarstate's source-link plan requires a
-// definite origin. Keep this plan portable until typed presence refinement exists.
-export const nestedFolderSourceLinksPlan = await prepareQuery({
-  root: pipe(
-    from(portableLinksRelation, 'link'),
-    where(compare('eq', field('link', 'typeHint'), literal('folder'))),
-    select('sourceLink', {
-      linkId: field('link', 'linkId'),
-      originSourceId: sourceOf('link'),
-      targetSourceId: field('link', 'resourceRef'),
-    }),
-    orderBy([{ value: field('sourceLink', 'linkId'), direction: 'asc' }]),
-  ),
-  ...QUERY_IDENTITY,
-});
+const nestedFolderLinks = typedWhere(folderLinks, ({ link }) =>
+  typedCompare('eq', link.row.typeHint, typedLiteral('folder')));
+const nestedFolderSourceLinks = typedSelect(nestedFolderLinks, 'sourceLink', ({ link }) => ({
+  linkId: link.row.linkId,
+  originSourceId: typedSourceOf(link),
+  targetSourceId: link.row.resourceRef,
+}));
+const orderedNestedFolderSourceLinks = typedOrderBy(
+  nestedFolderSourceLinks,
+  ({ sourceLink }) => [{ value: sourceLink.row.linkId, direction: 'asc' }],
+);
+export const nestedFolderSourceLinksPlan = await prepareTypedQuery(
+  orderedNestedFolderSourceLinks,
+  QUERY_IDENTITY,
+);
 
 const folders = typedFrom(folderRelation, 'folder');
 const folderDocumentTitle = typedSelect(folders, 'title', ({ folder }) => ({

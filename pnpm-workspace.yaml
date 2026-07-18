@@ -22,9 +22,9 @@ catalog:
 
 catalogs:
   tarstate:
-    '@tarstate/automerge': https://github.com/neftaly/tarstate/releases/download/v0.4.11/tarstate-automerge-0.4.11.tgz
-    '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.4.11/tarstate-core-0.4.11.tgz
-    '@tarstate/schema-tools': https://github.com/neftaly/tarstate/releases/download/v0.4.11/tarstate-schema-tools-0.4.11.tgz
+    '@tarstate/automerge': https://github.com/neftaly/tarstate/releases/download/v0.4.12/tarstate-automerge-0.4.12.tgz
+    '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.4.12/tarstate-core-0.4.12.tgz
+    '@tarstate/schema-tools': https://github.com/neftaly/tarstate/releases/download/v0.4.12/tarstate-schema-tools-0.4.12.tgz
 
 overrides:
   '@tarstate/core': catalog:tarstate

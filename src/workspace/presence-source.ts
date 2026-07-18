@@ -1,5 +1,7 @@
-import type { JsonValue } from '@tarstate/core';
-import type { ExternalStoreDatabaseSnapshot } from '@tarstate/core/database/external-store';
+import {
+  mappedRelationRows,
+  type ExternalStoreDatabaseSnapshot,
+} from '@tarstate/core/database/external-store';
 import type { DatabaseTransactionSnapshot } from '@tarstate/core/transactions';
 import {
   workspacePresenceRelations,
@@ -24,11 +26,6 @@ type WorkspacePresenceRows = {
   readonly recentContexts: readonly WorkspacePresenceRecentContextRelationRow[];
 };
 
-type LogicalRow = {
-  readonly fields: Readonly<Record<string, JsonValue>>;
-  readonly relationId: string;
-};
-
 export const createWorkspacePresenceStorage = (): WorkspacePresenceStorage => ({
   '@patchpit': workspacePresenceSourceMetadata,
   panes: {},
@@ -39,7 +36,11 @@ export const createWorkspacePresenceStorage = (): WorkspacePresenceStorage => ({
 export const viewStateFromDatabaseSnapshot = (
   snapshot: ExternalStoreDatabaseSnapshot,
 ): WorkspaceViewState | undefined => snapshot.state === 'open' && snapshot.current.readiness === 'ready'
-  ? viewStateFromProjectionRows(snapshot.current.rows)
+  ? viewStateFromRows({
+      panes: mappedRelationRows(snapshot.current, workspacePresenceRelations.panes),
+      previews: mappedRelationRows(snapshot.current, workspacePresenceRelations.previews),
+      recentContexts: mappedRelationRows(snapshot.current, workspacePresenceRelations.recentContexts),
+    })
   : undefined;
 
 export const viewStateFromTransactionSnapshot = (snapshot: DatabaseTransactionSnapshot) => viewStateFromRows({
@@ -58,15 +59,6 @@ export const transactionWithViewState = (
     .withRows(workspacePresenceRelations.previews, rows.previews)
     .withRows(workspacePresenceRelations.recentContexts, rows.recentContexts);
 };
-
-const viewStateFromProjectionRows = (rows: readonly LogicalRow[]): WorkspaceViewState => viewStateFromRows({
-  panes: relationRows<WorkspacePresencePaneRelationRow>(rows, workspacePresenceRelations.panes.relationId),
-  previews: relationRows<WorkspacePresencePreviewRelationRow>(rows, workspacePresenceRelations.previews.relationId),
-  recentContexts: relationRows<WorkspacePresenceRecentContextRelationRow>(
-    rows,
-    workspacePresenceRelations.recentContexts.relationId,
-  ),
-});
 
 const viewStateFromRows = (rows: WorkspacePresenceRows): WorkspaceViewState => {
   const previews = new Map(rows.previews.map((preview) => [preview.paneId, preview]));
@@ -94,10 +86,3 @@ const rowsFromViewState = (viewState: WorkspaceViewState): WorkspacePresenceRows
     : [{ paneId, contextId: pane.preview.contextId, url: pane.preview.url }]),
   recentContexts: viewState.recentContextIds.map((contextId, position) => ({ contextId, position })),
 });
-
-const relationRows = <Row extends Readonly<Record<string, JsonValue>>>(
-  rows: readonly LogicalRow[],
-  relationId: string,
-): readonly Row[] => rows
-  .filter((row) => row.relationId === relationId)
-  .map(({ fields }) => fields as Row);
