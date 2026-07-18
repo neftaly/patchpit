@@ -13,9 +13,11 @@ import {
   tabDropIndex,
 } from '../../src/workspace/interaction.ts';
 import {
+  activeWorkspaceEditor,
   composeWorkspacePresentation,
   createWorkspaceViewState,
   reconcileWorkspaceViewState,
+  workspaceContextForUrl,
   type WorkspaceAction,
   type WorkspaceViewState,
 } from '../../src/workspace/view-state.ts';
@@ -74,6 +76,9 @@ void test('workspace actions preserve the complete durable/view-state/document m
         viewState = plan.viewState;
         assert.deepEqual(workspaceInvariantViolations(workspace), []);
         assert.equal(reconcileWorkspaceViewState(workspace, viewState), viewState);
+        assertActiveEditorFallback(workspace, viewState);
+        assertContextIdCollisionIsNoOp(workspace, viewState, step.first + step.second, step.pinned);
+        assertMountedUrlReuse(workspace, viewState, step.first + step.second, step.pinned);
 
         const presentation = composeWorkspacePresentation(workspace, viewState, isEditorContext);
         assert.deepEqual(presentationInvariantViolations(workspace, viewState, presentation), []);
@@ -194,6 +199,91 @@ const assertWorkspaceRelationRoundTrip = (workspace: WorkspaceState) => {
   assert.deepEqual(decoded.issues, []);
   assert.deepEqual(decoded.workspace, workspace);
 };
+
+const assertActiveEditorFallback = (
+  workspace: WorkspaceState,
+  viewState: WorkspaceViewState,
+) => {
+  const withoutHistory = { ...viewState, recentContextIds: [] };
+  const presentation = composeWorkspacePresentation(workspace, withoutHistory, isEditorContext);
+  const panes = paneIdsInLayoutOrder(workspace).flatMap((paneId) => {
+    const pane = presentation.nodes[paneId];
+    return pane?.kind === 'pane' ? [{ pane, paneId }] : [];
+  });
+  const contextIds = new Set([
+    ...panes.flatMap(({ pane }) => pane.selectedContext === null ? [] : [pane.selectedContext]),
+    ...panes.flatMap(({ pane }) => pane.contexts),
+  ]);
+  const contextId = [...contextIds].find((candidate) => {
+    const url = presentation.contexts[candidate]?.url;
+    return url !== undefined && isEditorContext(url);
+  });
+  const paneId = contextId === undefined
+    ? undefined
+    : panes.find(({ pane }) => pane.contexts.includes(contextId))?.paneId;
+  const expected = contextId === undefined || paneId === undefined ? undefined : { contextId, paneId };
+  assert.deepEqual(activeWorkspaceEditor(workspace, withoutHistory, isEditorContext), expected);
+};
+
+const assertMountedUrlReuse = (
+  workspace: WorkspaceState,
+  viewState: WorkspaceViewState,
+  seed: number,
+  pinned: boolean,
+) => {
+  const presentation = composeWorkspacePresentation(workspace, viewState, isEditorContext);
+  const contextId = select(mountedContextIds(presentation), seed);
+  if (contextId === undefined) return;
+  const url = presentation.contexts[contextId]?.url;
+  if (url === undefined) return;
+  const existing = workspaceContextForUrl(workspace, viewState, url);
+  assert(existing !== undefined);
+  const plan = planOpenWorkspaceContext({
+    contextId: `duplicate-${seed}`,
+    isEditorContext,
+    nodes: { paneId: `duplicate-pane-${seed}`, splitId: `duplicate-split-${seed}` },
+    pinned,
+    viewState,
+    url,
+    workspace,
+  });
+  const reusedContextId = plan.viewState.recentContextIds[0];
+  if (pinned && existing.kind === 'preview') {
+    assert.equal(plan.durableOperation?.kind, 'workspace.context.pin');
+    assert.equal(plan.workspace.contexts[existing.contextId]?.url, url);
+    assert.equal(plan.viewState.panes[existing.paneId]?.preview, null);
+  } else {
+    assert.equal(plan.durableOperation, undefined);
+    assert.equal(plan.workspace, workspace);
+  }
+  assert(reusedContextId !== undefined);
+  assert.equal(reusedContextId, existing.contextId);
+};
+
+const assertContextIdCollisionIsNoOp = (
+  workspace: WorkspaceState,
+  viewState: WorkspaceViewState,
+  seed: number,
+  pinned: boolean,
+) => {
+  const presentation = composeWorkspacePresentation(workspace, viewState, isEditorContext);
+  const contextId = select(mountedContextIds(presentation), seed);
+  if (contextId === undefined) return;
+  const plan = planOpenWorkspaceContext({
+    contextId,
+    isEditorContext,
+    nodes: { paneId: `collision-pane-${seed}`, splitId: `collision-split-${seed}` },
+    pinned,
+    viewState,
+    url: `collision:${seed}`,
+    workspace,
+  });
+  assert.deepEqual(plan, { viewState, workspace });
+};
+
+const mountedContextIds = (
+  presentation: ReturnType<typeof composeWorkspacePresentation>,
+) => Object.values(presentation.nodes).flatMap((node) => node.kind === 'pane' ? node.contexts : []);
 
 const assertWorkspaceLayoutProjection = (
   presentation: ReturnType<typeof composeWorkspacePresentation>,

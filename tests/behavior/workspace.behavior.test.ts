@@ -87,14 +87,14 @@ void test('preview replacement and selection remain outside durable workspace st
   });
 });
 
-void test('workspace presence is owned by exact per-client external sources', () => {
+void test('workspace presence is owned by exact per-client external sources', async () => {
   const workspace = createWorkspace(resourcesUrl, 'document');
-  const first = openWorkspacePresence({
+  const first = await openWorkspacePresence({
     sourceId: 'presence:client-a',
     workspace,
     recentContextIds: ['context-1'],
   });
-  const second = openWorkspacePresence({
+  const second = await openWorkspacePresence({
     sourceId: 'presence:client-b',
     workspace,
     recentContextIds: ['context-0'],
@@ -102,7 +102,7 @@ void test('workspace presence is owned by exact per-client external sources', ()
   let changes = 0;
   const unsubscribe = first.subscribe(() => { changes += 1; });
   const before = first.getSnapshot();
-  first.update(workspace, (viewState) => previewWorkspaceContext(
+  await first.update(workspace, (viewState) => previewWorkspaceContext(
     workspace,
     viewState,
     'right',
@@ -124,8 +124,8 @@ void test('workspace presence is owned by exact per-client external sources', ()
     'right',
     { contextId: 'replacement-preview', url: 'document-3' },
   );
-  assert.equal(first.update(workspace, replacePreview), false);
-  assert.equal(second.update(workspace, replacePreview), true);
+  assert.equal(await first.update(workspace, replacePreview), false);
+  assert.equal(await second.update(workspace, replacePreview), true);
   second.close();
 });
 

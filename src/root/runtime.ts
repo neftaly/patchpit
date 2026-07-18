@@ -175,6 +175,12 @@ const openRootHandle = async (
       throw error;
     },
   );
+  const closeResourceRuntime = () => {
+    resolver.abort();
+    pendingHandles.clear();
+    resourceQuery.close();
+    filesystem.close();
+  };
   let workspaceHandle: DocHandle<WorkspaceDocument>;
   try {
     const workspaceLink = await readWorkspaceLink(filesystem, rootHandle.url);
@@ -184,30 +190,31 @@ const openRootHandle = async (
     workspaceHandle = await repo.find<WorkspaceDocument>(workspaceLink.resourceRef, findOptions(signal));
     handles.set(workspaceLink.resourceRef, asObjectHandle(workspaceHandle));
   } catch (error) {
-    resourceQuery.close();
-    filesystem.close();
+    closeResourceRuntime();
     throw error;
   }
   const workspaceRuntime = await openWorkspaceRuntime(workspaceHandle).catch((error: unknown) => {
-    resourceQuery.close();
-    filesystem.close();
+    closeResourceRuntime();
     throw error;
   });
   const initialWorkspace = workspaceRuntime.getSnapshot();
   if (initialWorkspace.state !== 'ready') {
-    resourceQuery.close();
-    filesystem.close();
     workspaceRuntime.close();
+    closeResourceRuntime();
     throw new Error('Patchpit workspace is unavailable');
   }
   const initialPaneIds = paneIdsInLayoutOrder(initialWorkspace.workspace);
   const initialContextPane = initialWorkspace.workspace.nodes[initialPaneIds.at(-1) ?? ''];
-  const workspacePresence = openWorkspacePresence({
+  const workspacePresence = await openWorkspacePresence({
     sourceId: `${rootHandle.url}:presence:${crypto.randomUUID()}`,
     workspace: initialWorkspace.workspace,
     recentContextIds: initialContextPane?.kind === 'pane'
       ? initialContextPane.contexts.slice(0, 1)
       : [],
+  }).catch((error: unknown) => {
+    workspaceRuntime.close();
+    closeResourceRuntime();
+    throw error;
   });
   const resolveResourceDocument = async (resourceRef: string, documentSignal?: AbortSignal) => {
     if (closed || !rootReferencesResource(resourceQuery, resourceRef)
@@ -268,14 +275,11 @@ const openRootHandle = async (
     close: () => {
       if (closed) return;
       closed = true;
-      resolver.abort();
-      pendingHandles.clear();
       for (const observer of titleObservers) observer.close();
       titleObservers.clear();
-      resourceQuery.close();
-      filesystem.close();
       workspaceRuntime.close();
       workspacePresence.close();
+      closeResourceRuntime();
     },
   };
 };

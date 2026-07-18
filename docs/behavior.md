@@ -7,8 +7,9 @@ discussion; they are not release numbers.
 
 The JSON URL hash selects the root Automerge filesystem document with `src` and
 accepts inert `sync` and opaque `delegation` values for document-host adapters.
-Missing `src` creates a root and canonicalizes the hash. Changing `src` replaces
-the active root lifecycle and closes resources owned by the previous root.
+Missing `src` creates a root and canonicalizes the hash. Changing the
+recognized hash replaces the active root lifecycle and closes resources owned
+by the previous root.
 Sandbox application hashes are app-owned and do not inherit root invocation
 values.
 
@@ -55,7 +56,8 @@ editor tab has a one-pixel top indicator.
 
 A single pointer click opens an eligible resource as a replaceable preview in
 the active editor pane. A double click or native keyboard button activation
-pins it durably. Opening an already-mounted URL selects its existing context.
+pins it durably. Opening an already-mounted URL selects its existing context;
+a pin request promotes an existing preview in its current pane.
 If no editor pane exists, opening creates one beside the first pane. Replacing
 a preview does not create durable workspace state; moving or pinning it does.
 

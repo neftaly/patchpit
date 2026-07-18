@@ -7,23 +7,6 @@ here.
 
 ## Near-term work goals
 
-### W1. Relational presence attachment
-
-Route workspace presence through Tarstate's standard relational external-store
-attachment once that upstream boundary exists. Remove Patchpit's temporary
-storage-shaped presence serialization and direct exact-basis commit path; product
-reconciliation remains in Patchpit.
-
-Acceptance evidence:
-
-1. Ready, incomplete, and invalid presence projections remain distinguishable.
-2. Queries, simulation, and writes use the same exact declaration and standard
-   source-routed database surface as other attached stores.
-3. Behavior fuzzing covers reconciliation after concurrent durable workspace
-   changes, removed panes, removed contexts, and source replacement.
-4. No Patchpit code implements generic attachment preparation, transaction
-   execution, or external-store projection.
-
 ### W2. Durable reopening
 
 Persist and reopen the root Automerge document through the injectable Repo
@@ -34,8 +17,8 @@ active root lifecycle.
 Persistence must distinguish a document that is unavailable, evicted, invalid,
 or unsupported from a newly created document. Multiple browser tabs must either
 use a convergent storage/network protocol or report an explicit ownership
-conflict. Durable reopening must not persist W1 presence state or pass root
-`sync` and `delegation` values into sandbox application hashes.
+conflict. Durable reopening must not persist per-client presence state or pass
+root `sync` and `delegation` values into sandbox application hashes.
 
 Acceptance evidence:
 

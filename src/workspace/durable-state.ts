@@ -141,13 +141,6 @@ export const createWorkspace = (initialContext: string, documentContext?: string
         rootNodeId: 'split-0',
       };
 
-export const contextIdForUrl = (
-  workspace: WorkspaceState,
-  url: string,
-  paneId: WorkspacePaneId,
-): string | undefined => paneAt(workspace, paneId)?.contexts
-  .find((contextId) => workspace.contexts[contextId]?.url === url);
-
 export const paneIdsInLayoutOrder = (workspace: WorkspaceState): readonly WorkspacePaneId[] => {
   const paneIds: WorkspacePaneId[] = [];
   const visited = new Set<string>();

@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Files, folders, links, and durable workspace | Canonical storage | Automerge documents |
 | Logical relations, authority, readiness, queries, and source-routed writes | Tarstate | Attachments, projections, and transactions |
-| Selection, previews, and recent context history | Patchpit presence | Per-client attached external source |
+| Selection, previews, and recent context history | Patchpit presence | Per-client Tarstate relational external-store database |
 | Pointer resize drafts and drag sessions | React component runtime | Local ephemeral state |
 | Immutable launched application files | Sandbox boundary | Authority-scoped snapshot and cache mount |
 

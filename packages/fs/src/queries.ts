@@ -1,4 +1,4 @@
-import { prepareQuery } from '@tarstate/core/query';
+import { prepareQuery, prepareTypedQuery } from '@tarstate/core/query';
 import {
   compare,
   field,
@@ -8,6 +8,9 @@ import {
   pipe,
   select,
   sourceOf,
+  typedFrom,
+  typedSelect,
+  typedSourceOf,
   where,
 } from '@tarstate/core/query/authoring';
 import { fileRelation } from '@patchpit/artifacts';
@@ -19,26 +22,27 @@ const QUERY_IDENTITY = {
   datasetId: 'patchpit:folder-graph',
 } as const;
 
+const folderLinks = typedFrom(folderLinksRelation, 'link');
+const folderLinksQuery = typedSelect(folderLinks, 'result', ({ link }) => ({
+  copyOf: link.row.copyOf!,
+  icon: link.row.icon!,
+  linkId: link.row.linkId,
+  name: link.row.name,
+  order: link.row.order!,
+  resourceRef: link.row.resourceRef,
+  sourceId: typedSourceOf(link),
+  typeHint: link.row.typeHint,
+}));
+
+export const folderLinksPlan = await prepareTypedQuery(folderLinksQuery, QUERY_IDENTITY);
+
 const portableLinksRelation = {
   relationId: folderLinksRelation.relationId,
   schemaView: folderLinksRelation.schemaView,
 };
-const folderLinksQuery = pipe(
-  from(portableLinksRelation, 'link'),
-  select('result', {
-    copyOf: field('link', 'copyOf'),
-    icon: field('link', 'icon'),
-    linkId: field('link', 'linkId'),
-    name: field('link', 'name'),
-    order: field('link', 'order'),
-    resourceRef: field('link', 'resourceRef'),
-    sourceId: sourceOf('link'),
-    typeHint: field('link', 'typeHint'),
-  }),
-);
 
-export const folderLinksPlan = await prepareQuery({ root: folderLinksQuery, ...QUERY_IDENTITY });
-
+// typedSourceOf is optional, while Tarstate's source-link plan requires a
+// definite origin. Keep this plan portable until typed presence refinement exists.
 export const nestedFolderSourceLinksPlan = await prepareQuery({
   root: pipe(
     from(portableLinksRelation, 'link'),
@@ -53,18 +57,16 @@ export const nestedFolderSourceLinksPlan = await prepareQuery({
   ...QUERY_IDENTITY,
 });
 
-export const folderDocumentTitlePlan = await prepareQuery({
-  root: pipe(
-    from(folderRelation, 'folder'),
-    select('title', { title: field('folder', 'title') }),
-  ),
-  ...QUERY_IDENTITY,
-});
+const folders = typedFrom(folderRelation, 'folder');
+const folderDocumentTitle = typedSelect(folders, 'title', ({ folder }) => ({
+  title: folder.row.title,
+}));
 
-export const fileDocumentTitlePlan = await prepareQuery({
-  root: pipe(
-    from(fileRelation, 'file'),
-    select('title', { title: field('file', 'name') }),
-  ),
-  ...QUERY_IDENTITY,
-});
+export const folderDocumentTitlePlan = await prepareTypedQuery(folderDocumentTitle, QUERY_IDENTITY);
+
+const files = typedFrom(fileRelation, 'file');
+const fileDocumentTitle = typedSelect(files, 'title', ({ file }) => ({
+  title: file.row.name,
+}));
+
+export const fileDocumentTitlePlan = await prepareTypedQuery(fileDocumentTitle, QUERY_IDENTITY);

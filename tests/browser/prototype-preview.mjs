@@ -115,15 +115,28 @@ async function proveWorkspaceBehavior(page) {
   await page.frameLocator('.sandbox-app').getByText('image-file-backed: PASS').waitFor();
   await page.frameLocator('.sandbox-app').getByText('image-html-file: PASS').waitFor();
   await proveActiveEditorInteractions({ drag, leftPane, page, resource, rightPane, tab });
+  await dragWithTargetPreview(
+    page,
+    resource('sandbox-compat', 'data.json'),
+    rightPane.locator('.pane-content'),
+    'data-drop-zone',
+    'left',
+    0.01,
+    0.5,
+    'cancel',
+  );
+  assert.equal(await page.locator('.pane-content[data-dragging="true"]').count(), 0);
+  assert.equal(await tab('data.json').count(), 0);
   const duplicateNames = page.getByRole('button', {
     name: 'duplicate.svg',
     exact: true,
   });
   await duplicateNames.first().waitFor();
   assert.equal(await duplicateNames.count(), 2);
-  await duplicateNames.first().click();
+  await duplicateNames.first().dblclick();
   await page.locator('.viewer').filter({ hasText: '<circle' }).waitFor();
-  await tab('relative-file.svg').waitFor();
+  await page.locator('.tab:not([data-preview])', { hasText: 'relative-file.svg' }).waitFor();
+  assert.equal(await tab('relative-file.svg').getAttribute('data-preview'), null);
   await page.getByRole('button', { name: 'Close relative-file.svg' }).click();
   const unavailableResource = page.getByRole('button', {
     name: 'ghostscript-tiger-web.svg',
@@ -204,6 +217,26 @@ async function proveWorkspaceBehavior(page) {
   assert(Math.abs(handleBounds.width - lineBounds.width) < 0.1);
   assert(Math.abs(handleBounds.x - lineBounds.x) < 0.1);
   const initialPointerRatio = Number(await rootSplit.getAttribute('data-ratio'));
+  await page.mouse.move(handleBounds.x + (handleBounds.width / 2), handleBounds.y + (handleBounds.height / 2));
+  await page.mouse.down();
+  const pointerId = await resizeHandle.evaluate((handle) =>
+    Array.from({ length: 10 }, (_, index) => index + 1)
+      .find((candidate) => handle.hasPointerCapture(candidate)));
+  assert.notEqual(pointerId, undefined);
+  await page.mouse.move(rootBounds.x + (rootBounds.width * 0.4), handleBounds.y + (handleBounds.height / 2));
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  assert.notEqual(Number(await rootSplit.getAttribute('data-ratio')), initialPointerRatio);
+  await page.evaluate((capturedPointerId) => {
+    const captureTarget = document.createElement('div');
+    captureTarget.id = 'pointer-capture-test-target';
+    document.body.append(captureTarget);
+    captureTarget.setPointerCapture(capturedPointerId);
+  }, pointerId);
+  await page.mouse.move(rootBounds.x + (rootBounds.width * 0.45), handleBounds.y + (handleBounds.height / 2));
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  assert.equal(Number(await rootSplit.getAttribute('data-ratio')), initialPointerRatio);
+  await page.mouse.up();
+  await page.locator('#pointer-capture-test-target').evaluate((captureTarget) => { captureTarget.remove(); });
   for (const button of ['middle', 'right']) {
     await page.mouse.move(handleBounds.x + (handleBounds.width / 2), handleBounds.y + (handleBounds.height / 2));
     await page.mouse.down({ button });
@@ -472,6 +505,7 @@ async function dragWithTargetPreview(
   expectedTarget,
   xRatio,
   yRatio = 0.5,
+  completion = 'drop',
 ) {
   const targetBounds = await target.boundingBox();
   assert(targetBounds !== null, 'Drag target must be visible');
@@ -488,6 +522,10 @@ async function dragWithTargetPreview(
   await target.dispatchEvent('dragover', position);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   assert.equal(await target.getAttribute(attribute), expectedTarget);
-  await target.dispatchEvent('drop', position);
+  if (completion === 'drop') await target.dispatchEvent('drop', position);
   await sourceElement.dispatchEvent('dragend', { dataTransfer });
+  if (completion === 'cancel') {
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    assert.equal(await target.getAttribute(attribute), null);
+  }
 }

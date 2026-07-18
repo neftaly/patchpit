@@ -100,7 +100,7 @@ export function App({ runtime, sandboxHost }: {
       }
       const committedProjection = workspaceRuntime.getSnapshot();
       if (committedProjection.state !== 'ready') return;
-      workspacePresence.update(committedProjection.workspace, () => reconcileWorkspaceViewState(
+      await workspacePresence.update(committedProjection.workspace, () => reconcileWorkspaceViewState(
         committedProjection.workspace,
         workspacePlan.viewState,
       ));

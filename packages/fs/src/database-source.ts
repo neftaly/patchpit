@@ -157,13 +157,13 @@ export const openFolderDocumentTitleQuery = (source: MountableDatabaseSource) =>
   sources: [{ source }],
   plan: folderDocumentTitlePlan,
   queryAuthorityScope: 'public',
-}) as Promise<DatabaseQuerySession<DocumentTitleRow>>;
+});
 
 export const openFileDocumentTitleQuery = (source: MountableDatabaseSource) => openDatabaseQuery({
   sources: [{ source }],
   plan: fileDocumentTitlePlan,
   queryAuthorityScope: 'public',
-}) as Promise<DatabaseQuerySession<DocumentTitleRow>>;
+});
 
 const staticSource = (sourceId: string, title: string, links: readonly FolderLink[]) => ({
   sourceId,

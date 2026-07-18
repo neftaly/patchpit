@@ -42,6 +42,11 @@ export type ActiveWorkspaceEditor = {
   readonly paneId: WorkspacePaneId;
 };
 
+export type MountedWorkspaceContext = ActiveWorkspaceEditor & {
+  readonly kind: 'durable' | 'preview';
+  readonly url: string;
+};
+
 export type WorkspaceAction = {
   readonly kind: 'workspace.context.select';
   readonly contextId: string;
@@ -123,31 +128,17 @@ export const activeWorkspaceEditor = (
   inputViewState: WorkspaceViewState,
   isEditorContext: (url: string) => boolean,
 ): ActiveWorkspaceEditor | undefined => {
-  const viewState = reconcileWorkspaceViewState(workspace, inputViewState);
-  const paneIds = paneIdsInLayoutOrder(workspace);
-  const fallbackContextIds = paneIds.flatMap((paneId) => {
-    const pane = workspace.nodes[paneId];
-    const paneViewState = viewState.panes[paneId];
-    if (pane?.kind !== 'pane' || paneViewState === undefined) return [];
-    const contextIds = paneViewState.preview === null
-      ? pane.contexts
-      : [...pane.contexts, paneViewState.preview.contextId];
-    return paneViewState.selectedContextId === null
-      ? contextIds
-      : [paneViewState.selectedContextId, ...contextIds];
-  });
-  const candidates = [...viewState.recentContextIds, ...fallbackContextIds];
-  return candidates.flatMap((contextId, index) => {
-    if (candidates.indexOf(contextId) !== index) return [];
-    const paneId = workspaceContextPaneId(workspace, viewState, contextId);
-    const url = paneId === undefined
-      ? undefined
-      : workspaceContextUrl(workspace, viewState, paneId, contextId);
-    return paneId !== undefined && url !== undefined && isEditorContext(url)
-      ? [{ contextId, paneId }]
-      : [];
-  })[0];
+  const editor = mountedWorkspaceContexts(workspace, inputViewState)
+    .find(({ url }) => isEditorContext(url));
+  return editor === undefined ? undefined : { contextId: editor.contextId, paneId: editor.paneId };
 };
+
+export const workspaceContextForUrl = (
+  workspace: WorkspaceState,
+  viewState: WorkspaceViewState,
+  url: string,
+): MountedWorkspaceContext | undefined => mountedWorkspaceContexts(workspace, viewState)
+  .find((candidate) => candidate.url === url);
 
 export const workspaceContextPaneId = (
   workspace: WorkspaceState,
@@ -171,19 +162,25 @@ export const reconcileWorkspaceViewState = (
   viewState: WorkspaceViewState,
 ): WorkspaceViewState => {
   const paneIds = paneIdsInLayoutOrder(workspace);
+  const claimedContextIds = new Set(Object.keys(workspace.contexts));
   const reconciledPanes = paneIds.map((paneId) => {
     const pane = workspace.nodes[paneId];
     const current = viewState.panes[paneId];
     const durableContexts = pane?.kind === 'pane' ? pane.contexts : [];
-    const available = current?.preview === null || current?.preview === undefined
+    const preview = current?.preview !== null && current?.preview !== undefined
+      && !claimedContextIds.has(current.preview.contextId)
+      ? current.preview
+      : null;
+    if (preview !== null) claimedContextIds.add(preview.contextId);
+    const available = preview === null
       ? durableContexts
-      : [...durableContexts, current.preview.contextId];
+      : [...durableContexts, preview.contextId];
     const selectedContextId = current?.selectedContextId !== null
       && current?.selectedContextId !== undefined
       && available.includes(current.selectedContextId)
       ? current.selectedContextId
-      : current?.preview?.contextId ?? durableContexts[0] ?? null;
-    const next = { selectedContextId, preview: current?.preview ?? null };
+      : preview?.contextId ?? durableContexts[0] ?? null;
+    const next = { selectedContextId, preview };
     return { current, next, paneId };
   });
   const panes = Object.fromEntries(reconciledPanes.map(({ next, paneId }) => [paneId, next]));
@@ -259,6 +256,44 @@ const updatePaneViewState = (
         recentContextIds,
       };
   return reconcileWorkspaceViewState(workspace, next);
+};
+
+const mountedWorkspaceContexts = (
+  workspace: WorkspaceState,
+  inputViewState: WorkspaceViewState,
+): readonly MountedWorkspaceContext[] => {
+  const viewState = reconcileWorkspaceViewState(workspace, inputViewState);
+  const panes = paneIdsInLayoutOrder(workspace).flatMap((paneId) => {
+    const pane = workspace.nodes[paneId];
+    const paneViewState = viewState.panes[paneId];
+    if (pane?.kind !== 'pane' || paneViewState === undefined) return [];
+    return [{
+      contextIds: paneViewState.preview === null
+        ? pane.contexts
+        : [...pane.contexts, paneViewState.preview.contextId],
+      paneId,
+      selectedContextId: paneViewState.selectedContextId,
+    }];
+  });
+  const contextIds = new Set([
+    ...viewState.recentContextIds,
+    ...panes.flatMap(({ selectedContextId }) => selectedContextId === null ? [] : [selectedContextId]),
+    ...panes.flatMap(({ contextIds: paneContextIds }) => paneContextIds),
+  ]);
+  return [...contextIds].flatMap((contextId) => {
+    const paneId = workspaceContextPaneId(workspace, viewState, contextId);
+    const url = paneId === undefined
+      ? undefined
+      : workspaceContextUrl(workspace, viewState, paneId, contextId);
+    return paneId === undefined || url === undefined
+      ? []
+      : [{
+          contextId,
+          kind: workspace.contexts[contextId] === undefined ? 'preview' as const : 'durable' as const,
+          paneId,
+          url,
+        }];
+  });
 };
 
 const sameStrings = (left: readonly string[], right: readonly string[]) =>

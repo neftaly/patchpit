@@ -1,6 +1,5 @@
 import {
   applyWorkspaceOperation,
-  contextIdForUrl,
   paneIdsInLayoutOrder,
   type WorkspaceOperation,
   type WorkspaceState,
@@ -11,6 +10,7 @@ import {
   reconcileWorkspaceViewState,
   selectWorkspaceContext,
   workspaceContextPaneId,
+  workspaceContextForUrl,
   activeWorkspaceEditor,
   type WorkspaceAction,
   type WorkspaceViewState,
@@ -94,16 +94,47 @@ type OpenWorkspaceContextOptions = {
 
 export const planOpenWorkspaceContext = (options: OpenWorkspaceContextOptions): WorkspacePlan => {
   const initial = emptyPlan(options.workspace, options.viewState);
+  const existing = workspaceContextForUrl(initial.workspace, initial.viewState, options.url);
+  if (existing !== undefined && (!options.pinned || existing.kind === 'durable')) {
+    return {
+      ...initial,
+      viewState: selectWorkspaceContext(
+        initial.workspace,
+        initial.viewState,
+        existing.paneId,
+        existing.contextId,
+      ),
+    };
+  }
+  if (existing?.kind === 'preview') {
+    const pinned = withDurableOperation(initial, {
+      kind: 'workspace.context.pin',
+      contextId: existing.contextId,
+      url: options.url,
+      targetPaneId: existing.paneId,
+      beforeContext: null,
+    });
+    const withoutPreview = clearWorkspacePreview(
+      pinned.workspace,
+      pinned.viewState,
+      existing.paneId,
+    );
+    return reconcilePlan({
+      ...pinned,
+      viewState: selectWorkspaceContext(
+        pinned.workspace,
+        withoutPreview,
+        existing.paneId,
+        existing.contextId,
+      ),
+    });
+  }
+  if (workspaceContextPaneId(initial.workspace, initial.viewState, options.contextId) !== undefined) {
+    return initial;
+  }
   const target = planEditorTarget(options, initial);
   if (target === undefined) return initial;
   const { paneId: targetPaneId, plan } = target;
-  const existing = contextIdForUrl(plan.workspace, options.url, targetPaneId);
-  if (existing !== undefined) {
-    return {
-      ...plan,
-      viewState: selectWorkspaceContext(plan.workspace, plan.viewState, targetPaneId, existing),
-    };
-  }
   const currentPreview = plan.viewState.panes[targetPaneId]?.preview;
   const contextId = currentPreview?.url === options.url ? currentPreview.contextId : options.contextId;
   if (options.pinned) {
