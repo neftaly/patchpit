@@ -11,8 +11,9 @@ import {
   createWorkspaceViewState,
   previewWorkspaceContext,
   selectWorkspaceContext,
+  type WorkspaceViewState,
 } from '../../src/workspace/view-state.ts';
-import { openWorkspaceViewState } from '../../src/workspace/view-state-runtime.ts';
+import { openWorkspacePresence } from '../../src/workspace/presence-runtime.ts';
 import { planOpenWorkspaceContext, planWorkspaceAction } from '../../src/workspace/action-planner.ts';
 import { workspaceInvariantViolations } from '../support/workspace-test-support.ts';
 
@@ -86,31 +87,46 @@ void test('preview replacement and selection remain outside durable workspace st
   });
 });
 
-void test('per-view state is owned by an exact external source with its own identity', () => {
+void test('workspace presence is owned by exact per-client external sources', () => {
   const workspace = createWorkspace(resourcesUrl, 'document');
-  const runtime = openWorkspaceViewState({
-    sourceId: 'view-state:client-a',
+  const first = openWorkspacePresence({
+    sourceId: 'presence:client-a',
     workspace,
     activePaneId: 'right',
   });
+  const second = openWorkspacePresence({
+    sourceId: 'presence:client-b',
+    workspace,
+    activePaneId: 'left',
+  });
   let changes = 0;
-  const unsubscribe = runtime.subscribe(() => { changes += 1; });
-  const before = runtime.getSnapshot();
-  runtime.update(workspace, (viewState) => previewWorkspaceContext(
+  const unsubscribe = first.subscribe(() => { changes += 1; });
+  const before = first.getSnapshot();
+  first.update(workspace, (viewState) => previewWorkspaceContext(
     workspace,
     viewState,
     'right',
     { contextId: 'preview', url: 'document-2' },
   ));
-  const after = runtime.getSnapshot();
+  const after = first.getSnapshot();
 
-  assert.equal(runtime.sourceId, 'view-state:client-a');
   assert.notEqual(after, before);
   assert.equal(after.panes.right?.preview?.contextId, 'preview');
+  assert.equal(second.getSnapshot().activePaneId, 'left');
+  assert.equal(second.getSnapshot().panes.right?.preview, null);
   assert.equal(changes, 1);
   unsubscribe();
-  runtime.close();
-  assert.equal(runtime.getSnapshot(), after);
+  first.close();
+  assert.equal(first.getSnapshot(), after);
+  const replacePreview = (viewState: WorkspaceViewState) => previewWorkspaceContext(
+    workspace,
+    viewState,
+    'right',
+    { contextId: 'replacement-preview', url: 'document-3' },
+  );
+  assert.equal(first.update(workspace, replacePreview), false);
+  assert.equal(second.update(workspace, replacePreview), true);
+  second.close();
 });
 
 void test('Resources selection does not replace the active editor target', () => {
@@ -127,7 +143,7 @@ void test('Resources selection does not replace the active editor target', () =>
     workspace,
   });
 
-  assert.equal(plan.operations.length, 0);
+  assert.equal(plan.durableOperation, undefined);
   assert.equal(plan.viewState.activePaneId, 'right');
   assert.equal(plan.viewState.panes.right?.preview?.contextId, 'preview');
 });

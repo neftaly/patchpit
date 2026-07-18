@@ -15,7 +15,7 @@ import {
 } from './view-state.ts';
 
 export type WorkspacePlan = {
-  readonly operations: readonly WorkspaceOperation[];
+  readonly durableOperation?: WorkspaceOperation;
   readonly viewState: WorkspaceViewState;
   readonly workspace: WorkspaceState;
 };
@@ -43,7 +43,7 @@ export const planWorkspaceAction = (options: {
     };
   }
   if (action.kind === 'workspace.split.resize') {
-    return reconcilePlan(applyPlannedOperation(plan, action));
+    return reconcilePlan(withDurableOperation(plan, action));
   }
   if (action.kind === 'workspace.context.close') {
     const preview = plan.viewState.panes[action.paneId]?.preview;
@@ -54,10 +54,10 @@ export const planWorkspaceAction = (options: {
       };
       const pane = plan.workspace.nodes[action.paneId];
       return reconcilePlan(pane?.kind === 'pane' && pane.contexts.length === 0
-        ? applyPlannedOperation(cleared, { kind: 'workspace.pane.close', paneId: action.paneId })
+        ? withDurableOperation(cleared, { kind: 'workspace.pane.close', paneId: action.paneId })
         : cleared);
     }
-    return reconcilePlan(applyPlannedOperation(plan, action));
+    return reconcilePlan(withDurableOperation(plan, action));
   }
 
   const preview = Object.entries(plan.viewState.panes)
@@ -65,7 +65,7 @@ export const planWorkspaceAction = (options: {
   const previewUrl = preview?.[1].preview?.url;
   const newUrl = action.url ?? previewUrl;
   const operation = durablePlacementOperation(action, newUrl);
-  const applied = applyPlannedOperation(plan, operation);
+  const applied = withDurableOperation(plan, operation);
   const withoutPreview = preview === undefined
     ? applied.viewState
     : clearWorkspacePreview(applied.workspace, applied.viewState, preview[0]);
@@ -108,7 +108,7 @@ export const planOpenWorkspaceContext = (options: OpenWorkspaceContextOptions): 
   const contextId = currentPreview?.url === options.url ? currentPreview.contextId : options.contextId;
   if (options.pinned) {
     const pinned = plan.workspace.contexts[contextId] === undefined
-      ? applyPlannedOperation(plan, {
+      ? withDurableOperation(plan, {
           kind: 'workspace.context.pin',
           contextId,
           url: options.url,
@@ -132,16 +132,15 @@ export const planOpenWorkspaceContext = (options: OpenWorkspaceContextOptions): 
 };
 
 const emptyPlan = (workspace: WorkspaceState, viewState: WorkspaceViewState): WorkspacePlan => ({
-  operations: [],
   viewState,
   workspace,
 });
 
-const applyPlannedOperation = (plan: WorkspacePlan, operation: WorkspaceOperation): WorkspacePlan => {
+const withDurableOperation = (plan: WorkspacePlan, operation: WorkspaceOperation): WorkspacePlan => {
   const workspace = applyWorkspaceOperation(plan.workspace, operation);
   return workspace === plan.workspace
     ? plan
-    : { ...plan, operations: [...plan.operations, operation], workspace };
+    : { ...plan, durableOperation: operation, workspace };
 };
 
 const reconcilePlan = (plan: WorkspacePlan): WorkspacePlan => ({
@@ -210,7 +209,7 @@ const planEditorTarget = (
         edge: 'right',
         ids: options.nodes,
       };
-  return { paneId: options.nodes.paneId, plan: applyPlannedOperation(plan, operation) };
+  return { paneId: options.nodes.paneId, plan: withDurableOperation(plan, operation) };
 };
 
 const editorPaneId = (

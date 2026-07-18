@@ -1,6 +1,7 @@
 import { getConflicts, isImmutableString } from '@automerge/automerge';
 import { adoptConflictFreeAutomergeJsonValue } from '@tarstate/automerge/values';
 import {
+  canonicalizeJson,
   createIssue,
   type Issue,
   type ParseResult,
@@ -9,15 +10,10 @@ import type { DocumentDeclaration } from '@tarstate/core/attachment/declaration'
 
 export type FilesystemDocumentKind = 'folder' | 'file';
 
-export const sameUnconstrainedMappingDeclaration = (
+export const sameDocumentDeclaration = (
   left: DocumentDeclaration,
   right: DocumentDeclaration,
-) => sameArtifactRef(left.storageSchema, right.storageSchema)
-  && left.projection.kind === 'storage-mapping'
-  && right.projection.kind === 'storage-mapping'
-  && sameArtifactRef(left.projection.storageMapping, right.projection.storageMapping)
-  && left.constraints === undefined
-  && right.constraints === undefined;
+) => canonicalizeJson(left) === canonicalizeJson(right);
 
 export const selectFilesystemDocumentKind = (
   document: object,
@@ -64,6 +60,24 @@ export const hasPatchworkFileShape = (document: object): document is {
   && 'extension' in document && typeof document.extension === 'string'
   && 'mimeType' in document && typeof document.mimeType === 'string'
   && 'name' in document && typeof document.name === 'string';
+
+export const patchworkMetadataIssue = (
+  document: object,
+  expectedKind: FilesystemDocumentKind,
+  sourceId: string,
+): Issue | undefined => {
+  if (!('@patchwork' in document)) return undefined;
+  const issue = (kind: string) => createIssue({
+    code: `patchpit.${expectedKind}.${kind}`, phase: 'parse', severity: 'warning', sourceId,
+  });
+  if (getConflicts(document, '@patchwork') !== undefined) {
+    return issue('interop-metadata-conflicted');
+  }
+  const adopted = adoptConflictFreeAutomergeJsonValue(document['@patchwork']);
+  return adopted.success && isRecord(adopted.value) && adopted.value.type === expectedKind
+    ? undefined
+    : issue('interop-metadata-invalid');
+};
 
 const selectOwnedKind = (
   document: object & { readonly '@patchpit': unknown },

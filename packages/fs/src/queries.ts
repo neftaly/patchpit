@@ -10,7 +10,7 @@ import {
   sourceOf,
   where,
 } from '@tarstate/core/query/authoring';
-import { fileRelation } from './file-content.ts';
+import { fileRelation } from '@patchpit/artifacts';
 import { folderLinksRelation, folderRelation } from './schema.ts';
 
 const QUERY_IDENTITY = {

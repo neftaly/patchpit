@@ -1,0 +1,63 @@
+{
+  "description": "Per-client Patchpit workspace focus and preview state.",
+  "relations": {
+    "session": {
+      "relationId": "patchpit.workspace.presence.session",
+      "key": ["id"],
+      "fields": {
+        "id": {
+          "type": { "kind": "string", "values": ["workspace-presence"] }
+        },
+        "activePaneId": {
+          "type": { "kind": "string" },
+          "nullable": true,
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        }
+      }
+    },
+    "panes": {
+      "relationId": "patchpit.workspace.presence.pane",
+      "key": ["paneId"],
+      "fields": {
+        "paneId": { "type": { "kind": "string" } },
+        "activeContextId": {
+          "type": { "kind": "string" },
+          "nullable": true,
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        }
+      }
+    },
+    "previews": {
+      "relationId": "patchpit.workspace.presence.preview",
+      "key": ["paneId"],
+      "fields": {
+        "paneId": { "type": { "kind": "string" } },
+        "contextId": {
+          "type": { "kind": "string" },
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        },
+        "url": {
+          "type": { "kind": "string" },
+          "description": "Ephemeral app invocation URL.",
+          "editCapabilities": [{
+            "id": "urn:tarstate:capability:field/replace",
+            "version": "1",
+            "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"
+          }]
+        }
+      }
+    }
+  }
+}

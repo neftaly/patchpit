@@ -149,6 +149,7 @@ button {
   flex: 0 1 auto;
   overflow: hidden;
   border: 0;
+  border-top: var(--hairline) solid transparent;
   border-right: var(--hairline) solid var(--color-border);
   border-bottom: var(--hairline) solid var(--color-border);
   display: flex;
@@ -171,7 +172,7 @@ button {
 }
 
 .tab[data-targeted="true"] {
-  box-shadow: inset 0 var(--hairline) var(--color-muted);
+  border-top-color: var(--color-muted);
 }
 
 .tab[data-preview="true"] {

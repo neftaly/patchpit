@@ -20,11 +20,19 @@ import {
   workspaceMappingArtifactRef,
   workspacePanesRelation,
   workspacePlacementsRelation,
+  workspacePresenceMappingArtifactRef,
+  workspacePresencePanesRelation,
+  workspacePresencePreviewsRelation,
+  workspacePresenceSchemaArtifactRef,
+  workspacePresenceSessionRelation,
   workspaceSchemaArtifactRef,
   workspaceSplitsRelation,
   workspaceStateRelation,
   type WorkspacePanesRow,
   type WorkspacePlacementsRow,
+  type WorkspacePresencePanesRow,
+  type WorkspacePresencePreviewsRow,
+  type WorkspacePresenceSessionRow,
   type WorkspaceSplitsRow,
   type WorkspaceStateRow,
 } from './generated/bindings.ts';
@@ -37,6 +45,7 @@ export const fileForeignTextAttachment = attachment(artifactDeclarationNames.fil
 export const folderOwnedAttachment = attachment(artifactDeclarationNames.folderOwned);
 export const folderForeignAttachment = attachment(artifactDeclarationNames.folderForeign);
 const workspaceAttachment = attachment(artifactDeclarationNames.workspace);
+const workspacePresenceAttachment = attachment(artifactDeclarationNames.workspacePresence);
 
 export {
   fileRelation,
@@ -51,6 +60,9 @@ export type {
   WorkspacePlacementsRow as WorkspacePlacementRelationRow,
   WorkspaceSplitsRow as WorkspaceSplitRelationRow,
   WorkspaceStateRow as WorkspaceStateRelationRow,
+  WorkspacePresencePanesRow as WorkspacePresencePaneRelationRow,
+  WorkspacePresencePreviewsRow as WorkspacePresencePreviewRelationRow,
+  WorkspacePresenceSessionRow as WorkspacePresenceSessionRelationRow,
 };
 
 export const workspaceRelations = {
@@ -60,9 +72,19 @@ export const workspaceRelations = {
   state: workspaceStateRelation,
 } as const;
 
+export const workspacePresenceRelations = {
+  panes: workspacePresencePanesRelation,
+  previews: workspacePresencePreviewsRelation,
+  session: workspacePresenceSessionRelation,
+} as const;
+
 export const fileSchemaArtifact = artifact<SchemaArtifact>(fileSchemaArtifactRef, 'schema');
 export const folderSchemaArtifact = artifact<SchemaArtifact>(folderSchemaArtifactRef, 'schema');
 export const workspaceSchemaArtifact = artifact<SchemaArtifact>(workspaceSchemaArtifactRef, 'schema');
+export const workspacePresenceSchemaArtifact = artifact<SchemaArtifact>(
+  workspacePresenceSchemaArtifactRef,
+  'schema',
+);
 export const workspaceConstraintSetArtifact = artifact<ConstraintSetArtifact>(
   workspaceConstraintSetArtifactRef,
   'constraint-set',
@@ -71,12 +93,23 @@ export const workspaceStorageMappingArtifact = artifact<StorageMappingArtifact>(
   workspaceMappingArtifactRef,
   'storage-mapping',
 );
+export const workspacePresenceStorageMappingArtifact = artifact<StorageMappingArtifact>(
+  workspacePresenceMappingArtifactRef,
+  'storage-mapping',
+);
 
 export const workspaceDocumentMetadata = {
   type: 'workspace',
   schema: workspaceSchemaArtifactRef,
   declaration: workspaceAttachment.declaration,
   schemas: workspaceAttachment.artifacts,
+} as const;
+
+export const workspacePresenceSourceMetadata = {
+  type: 'workspace-presence',
+  schema: workspacePresenceSchemaArtifactRef,
+  declaration: workspacePresenceAttachment.declaration,
+  schemas: workspacePresenceAttachment.artifacts,
 } as const;
 
 function artifact<Type extends Artifact>(reference: ArtifactRef, kind: ArtifactKind): Type {

@@ -30,8 +30,9 @@ import {
   filesystemSelectionIssue,
   hasPatchworkFolderShape,
   isRecord,
+  patchworkMetadataIssue,
   sameArtifactRef,
-  sameUnconstrainedMappingDeclaration,
+  sameDocumentDeclaration,
   selectFilesystemDocumentKind,
 } from './document-selection.ts';
 
@@ -169,7 +170,7 @@ const selectFolderAttachment = (
   if (!hasPatchworkFolderShape(document)) {
     return { issues: [folderIssue('shape-invalid', sourceId)] };
   }
-  const interopIssue = patchworkMetadataIssue(document, sourceId);
+  const interopIssue = patchworkMetadataIssue(document, 'folder', sourceId);
   return {
     attachment: folderForeignAttachment,
     issues: interopIssue === undefined ? [] : [interopIssue],
@@ -197,25 +198,14 @@ const selectOwnedFolderAttachment = (
     return { issues: [...parsedDeclaration.issues, folderIssue('metadata-invalid', sourceId)] };
   }
   const declaration = parsedDeclaration.value;
-  if (!sameUnconstrainedMappingDeclaration(declaration, folderOwnedAttachment.declaration)) {
+  if (!sameDocumentDeclaration(declaration, folderOwnedAttachment.declaration)) {
     return { issues: [folderIssue('metadata-invalid', sourceId)] };
   }
-  const interopIssue = patchworkMetadataIssue(document, sourceId);
+  const interopIssue = patchworkMetadataIssue(document, 'folder', sourceId);
   return {
     attachment: { declaration, artifacts: metadata.schemas },
     issues: interopIssue === undefined ? [] : [interopIssue],
   };
-};
-
-const patchworkMetadataIssue = (document: object, sourceId: string): Issue | undefined => {
-  if (!('@patchwork' in document)) return undefined;
-  if (getConflicts(document, '@patchwork') !== undefined) {
-    return folderIssue('interop-metadata-conflicted', sourceId, 'warning');
-  }
-  const adopted = adoptConflictFreeAutomergeJsonValue(document['@patchwork']);
-  return adopted.success && isRecord(adopted.value) && adopted.value.type === 'folder'
-    ? undefined
-    : folderIssue('interop-metadata-invalid', sourceId, 'warning');
 };
 
 const folderIssue = (

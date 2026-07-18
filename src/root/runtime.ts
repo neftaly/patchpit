@@ -14,6 +14,7 @@ import {
 import {
   openFileDocumentTitleQuery,
   openFolderDocumentTitleQuery,
+  openFolderGraphQuery,
   openFolderLinksQuery,
   type DocumentTitleRow,
   type FolderLink,
@@ -27,9 +28,6 @@ import {
   APP_FILE_AUTHORITY_SCOPE,
   snapshotFilesystemApp,
 } from '@patchpit/sandbox-fs';
-import {
-  openResourceQuery,
-} from '../content/resource-projection.ts';
 import { appContentUrl } from '../content/invocation.ts';
 import {
   createWorkspaceDocument,
@@ -37,7 +35,7 @@ import {
   type WorkspaceDocument,
 } from '../workspace/runtime.ts';
 import { paneIdsInLayoutOrder } from '../workspace/durable-state.ts';
-import { openWorkspaceViewState } from '../workspace/view-state-runtime.ts';
+import { openWorkspacePresence } from '../workspace/presence-runtime.ts';
 
 const WORKSPACE_LINK_ID = 'workspace';
 
@@ -171,7 +169,7 @@ const openRootHandle = async (
     handles.set(sourceId, handle);
     return opened.value;
   };
-  const resourceQuery = await openResourceQuery({ root: filesystem, openSource: openFolderSource }).catch(
+  const resourceQuery = await openFolderGraphQuery({ root: filesystem, openSource: openFolderSource }).catch(
     (error: unknown) => {
       filesystem.close();
       throw error;
@@ -203,8 +201,8 @@ const openRootHandle = async (
     throw new Error('Patchpit workspace is unavailable');
   }
   const initialPaneIds = paneIdsInLayoutOrder(initialWorkspace.workspace);
-  const workspaceViewStateRuntime = openWorkspaceViewState({
-    sourceId: `${rootHandle.url}:view-state:${crypto.randomUUID()}`,
+  const workspacePresence = openWorkspacePresence({
+    sourceId: `${rootHandle.url}:presence:${crypto.randomUUID()}`,
     workspace: initialWorkspace.workspace,
     activePaneId: initialPaneIds.at(-1) ?? null,
   });
@@ -260,7 +258,7 @@ const openRootHandle = async (
     rootUrl: rootHandle.url,
     resourceQuery,
     workspaceRuntime,
-    workspaceViewStateRuntime,
+    workspacePresence,
     resolveResourceDocument,
     openResourceTitle,
     createAppSnapshot,
@@ -274,12 +272,12 @@ const openRootHandle = async (
       resourceQuery.close();
       filesystem.close();
       workspaceRuntime.close();
-      workspaceViewStateRuntime.close();
+      workspacePresence.close();
     },
   };
 };
 
-type ResourceRuntime = Awaited<ReturnType<typeof openResourceQuery>>;
+type ResourceRuntime = Awaited<ReturnType<typeof openFolderGraphQuery>>;
 
 const rootReferencesResource = (resourceQuery: ResourceRuntime, resourceRef: string) => {
   const snapshot = resourceQuery.getSnapshot();

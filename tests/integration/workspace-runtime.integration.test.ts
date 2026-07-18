@@ -6,7 +6,7 @@ import { createWorkspaceDocument, openWorkspaceRuntime } from '../../src/workspa
 import {
   workspaceConstraintSetArtifact,
   workspaceSchemaArtifact,
-} from '../../src/workspace/schema.ts';
+} from '@patchpit/artifacts';
 
 void test('workspace runtime projects relation-shaped storage and applies named operations', async () => {
   const repo = new Repo();

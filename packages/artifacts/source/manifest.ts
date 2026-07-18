@@ -20,6 +20,7 @@ import type { ArtifactBuildManifest } from '@tarstate/schema-tools';
 import { sealWorkspaceConstraintSet } from './workspace-constraints.ts';
 import fileSchemaSource from './file.schema.json' with { type: 'json' };
 import folderSchemaSource from './folder.schema.json' with { type: 'json' };
+import workspacePresenceSchemaSource from './workspace-presence.schema.json' with { type: 'json' };
 import workspaceSchemaSource from './workspace.schema.json' with { type: 'json' };
 
 const replace = { kind: 'replace', capability: builtInCapabilityRefs.fieldReplace } as const;
@@ -29,6 +30,10 @@ const absent = { kind: 'absent' } as const;
 const folderSchema = await sealSchemaSource('urn:patchpit:schema:folder@1', folderSchemaSource);
 const fileSchema = await sealSchemaSource('urn:patchpit:schema:file@1', fileSchemaSource);
 const workspaceSchema = await sealSchemaSource('patchpit.workspace.state@1', workspaceSchemaSource);
+const workspacePresenceSchema = await sealSchemaSource(
+  'patchpit.workspace.presence@1',
+  workspacePresenceSchemaSource,
+);
 
 const folderRelation = relationLiteral(folderSchema, 'folder');
 const folderLinksRelation = relationLiteral(folderSchema, 'links');
@@ -38,6 +43,11 @@ const workspaceRelations = {
   placements: relationLiteral(workspaceSchema, 'placements'),
   splits: relationLiteral(workspaceSchema, 'splits'),
   state: relationLiteral(workspaceSchema, 'state'),
+};
+const workspacePresenceRelations = {
+  panes: relationLiteral(workspacePresenceSchema, 'panes'),
+  previews: relationLiteral(workspacePresenceSchema, 'previews'),
+  session: relationLiteral(workspacePresenceSchema, 'session'),
 };
 
 const folderOwnedMapping = await sealFolderMapping(
@@ -70,6 +80,10 @@ const workspaceMapping = await sealStorageMapping({
   id: 'patchpit.workspace.storage@1',
   body: workspaceStorageMapping(normalizeArtifactRef(workspaceSchema)),
 });
+const workspacePresenceMapping = await sealStorageMapping({
+  id: 'patchpit.workspace.presence.storage@1',
+  body: workspacePresenceStorageMapping(normalizeArtifactRef(workspacePresenceSchema)),
+});
 
 export const artifactManifest = {
   artifacts: {
@@ -83,6 +97,8 @@ export const artifactManifest = {
     folderSchema,
     workspaceConstraintSet,
     workspaceMapping,
+    workspacePresenceMapping,
+    workspacePresenceSchema,
     workspaceSchema,
   },
   declarations: {
@@ -96,12 +112,16 @@ export const artifactManifest = {
       set: normalizeArtifactRef(workspaceConstraintSet),
       mode: 'required',
     }),
+    workspacePresence: declaration(workspacePresenceSchema, workspacePresenceMapping),
   },
   relations: {
     file: { schema: 'fileSchema', relation: 'file' },
     folder: { schema: 'folderSchema', relation: 'folder' },
     folderLinks: { schema: 'folderSchema', relation: 'links' },
     workspacePanes: { schema: 'workspaceSchema', relation: 'panes' },
+    workspacePresencePanes: { schema: 'workspacePresenceSchema', relation: 'panes' },
+    workspacePresencePreviews: { schema: 'workspacePresenceSchema', relation: 'previews' },
+    workspacePresenceSession: { schema: 'workspacePresenceSchema', relation: 'session' },
     workspacePlacements: { schema: 'workspaceSchema', relation: 'placements' },
     workspaceSplits: { schema: 'workspaceSchema', relation: 'splits' },
     workspaceState: { schema: 'workspaceSchema', relation: 'state' },
@@ -213,6 +233,33 @@ function workspaceStorageMapping(schema: ArtifactRef): StorageMappingBody {
           first: { path: ['first'], write: replace },
           ratio: { path: ['ratio'], write: replace },
           second: { path: ['second'], write: replace },
+        },
+      },
+    },
+  };
+}
+
+function workspacePresenceStorageMapping(schema: ArtifactRef): StorageMappingBody {
+  return {
+    schema,
+    model: 'json-tree-v1',
+    relations: {
+      [workspacePresenceRelations.session.relationId]: {
+        collection: { kind: 'singleton', path: ['session'], absent: 'invalid' },
+        keys: { id: { kind: 'literal', value: 'workspace-presence' } },
+        fields: { activePaneId: { path: ['activePaneId'], write: replace } },
+      },
+      [workspacePresenceRelations.panes.relationId]: {
+        collection: { kind: 'object-map', path: ['panes'], absent: 'invalid' },
+        keys: { paneId: { kind: 'map-key', onMismatch: 'reject' } },
+        fields: { activeContextId: { path: ['activeContextId'], write: replace } },
+      },
+      [workspacePresenceRelations.previews.relationId]: {
+        collection: { kind: 'object-map', path: ['previews'], absent: 'invalid' },
+        keys: { paneId: { kind: 'map-key', onMismatch: 'reject' } },
+        fields: {
+          contextId: { path: ['contextId'], write: replace },
+          url: { path: ['url'], write: replace },
         },
       },
     },

@@ -1,4 +1,3 @@
-import type { JsonValue } from '@tarstate/core';
 import type { DatabaseTransactionService } from '@tarstate/core/transactions';
 import { folderLinksRelation, type FolderLink } from './schema.ts';
 
@@ -19,7 +18,7 @@ export const commitFolderOperation = (
   operation: FolderOperation,
   signal?: AbortSignal,
 ) => database.transact(
-  operation as JsonValue,
+  operation,
   (snapshot) => snapshot.withRows(
     folderLinksRelation,
     applyFolderOperation(snapshot.rows(folderLinksRelation), operation),

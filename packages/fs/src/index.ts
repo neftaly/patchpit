@@ -29,4 +29,4 @@ export {
   fileRelation,
   fileSchemaArtifact,
   type FileRow,
-} from './file-content.ts';
+} from '@patchpit/artifacts';

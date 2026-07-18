@@ -13,6 +13,7 @@
     "build": "pnpm artifacts:check && vite build",
     "build:sandbox-compat": "vite build --config apps/sandbox-compat/vite.config.ts",
     "dev": "vite",
+    "fixtures:patchwork": "node --import ./tests/support/register-ts-loader.mjs scripts/generate-patchwork-fixtures.mts",
     "lint": "oxlint apps packages scripts src tests vite.config.ts --deny-warnings --type-aware",
     "test": "node tests/run.mjs",
     "test:behavior": "node tests/run.mjs behavior",

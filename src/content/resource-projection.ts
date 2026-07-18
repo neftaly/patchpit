@@ -1,14 +1,5 @@
-import {
-  openFolderGraphQuery,
-  type FolderDatabaseSource,
-  type FolderLinkRow,
-} from '@patchpit/fs';
-import type { OpenLinkedDatabaseSource } from '@tarstate/core/database/session';
-
-export const openResourceQuery = (options: {
-  readonly root: FolderDatabaseSource;
-  readonly openSource: OpenLinkedDatabaseSource;
-}) => openFolderGraphQuery(options);
+import type { FolderLinkRow } from '@patchpit/fs';
+import type { DatabaseQuerySession } from '@tarstate/core/database/session';
 
 export const resourceIdentity = ({ linkId, sourceId }: Pick<FolderLinkRow, 'linkId' | 'sourceId'>) =>
   JSON.stringify([sourceId, linkId]);
@@ -38,7 +29,7 @@ type ResourceTreeRow = {
   readonly resource: FolderLinkRow;
 };
 
-type ResourceSnapshot = ReturnType<Awaited<ReturnType<typeof openResourceQuery>>['getSnapshot']>;
+type ResourceSnapshot = ReturnType<DatabaseQuerySession<FolderLinkRow>['getSnapshot']>;
 
 export const resourceRowsFromQuerySnapshot = (snapshot: ResourceSnapshot): readonly FolderLinkRow[] =>
   snapshot.state === 'closed' ? [] : snapshot.current.rows;

@@ -1,0 +1,43 @@
+{
+  "formatVersion": 1,
+  "upstream": {
+    "patchwork": {
+      "commit": "4742ae09ce406c89e13711dab57d15ec69a5c77f",
+      "repository": "https://github.com/inkandswitch/patchwork",
+      "sources": [
+        "core/plugins/src/datatypes.ts"
+      ]
+    },
+    "patchworkBase": {
+      "commit": "371b677978d00c4bcaf7b9831c24cc28479179d7",
+      "repository": "https://github.com/inkandswitch/patchwork-base",
+      "sources": [
+        "file/src/new-file-datatype.ts",
+        "file/src/new-file-tool.tsx",
+        "folder/src/datatype.js"
+      ]
+    }
+  },
+  "runtime": {
+    "@automerge/automerge": "3.2.6",
+    "@automerge/automerge-repo": "2.5.6"
+  },
+  "fixtures": [
+    {
+      "file": "folder.am",
+      "sha256": "8037b765e8c697b76e07407db0fa75d62822651bcb65f084d1b166e09d4664ff"
+    },
+    {
+      "file": "text-file.am",
+      "sha256": "c68c7b0b0be0b07a873a2222faab454ee121bc3678cd8b6dce7720dc195c4ef2"
+    },
+    {
+      "file": "binary-file.am",
+      "sha256": "f551ec14e9ca4d31514b61b6a10508cb43a520e5c7a036f2c4eef35bd0688ed3"
+    },
+    {
+      "file": "immutable-string-file.am",
+      "sha256": "e898073b362a8b4dff21d978585cf7f2e291d9e23b6901677ab0f2cc317e9adb"
+    }
+  ]
+}

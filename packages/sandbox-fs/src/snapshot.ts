@@ -25,7 +25,6 @@ import {
   folderLinksRelation,
   openFolderGraphQuery,
   type FolderDatabaseSource,
-  type FolderLinkRow,
 } from '@patchpit/fs';
 import {
   APP_ENTRY_PATH,
@@ -111,7 +110,7 @@ const snapshotFilesystemAppAttempt = async (
     options.signal?.throwIfAborted();
     const graphResult = await graph.whenSettled(settleOptions(options.signal));
     if (!launchable(graphResult)) return unavailable(graphResult);
-    const files = projectAppFiles(graphResult.rows as readonly FolderLinkRow[], options.rootFolderRef);
+    const files = projectAppFiles(graphResult.rows, options.rootFolderRef);
     if (!hasAppEntry(files)) return missingEntry(graphResult.basis.attachments);
 
     const contentResult = await snapshotContents(options);
@@ -254,6 +253,6 @@ const missingEntry = (
   sourceBases: Object.freeze(sourceBases),
 });
 
-const sameBasis = (left: unknown, right: unknown) =>
-  canonicalizeJson(left as JsonValue) === canonicalizeJson(right as JsonValue);
+const sameBasis = (left: JsonValue, right: JsonValue) =>
+  canonicalizeJson(left) === canonicalizeJson(right);
 const settleOptions = (signal: AbortSignal | undefined) => signal === undefined ? undefined : { signal };

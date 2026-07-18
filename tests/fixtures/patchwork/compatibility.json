@@ -1,0 +1,30 @@
+{
+  "formatVersion": 1,
+  "profiles": {
+    "foreign-folder": {
+      "fixtures": [{ "file": "folder.am" }],
+      "identify": "supported",
+      "read": "exact",
+      "preserve": "unknown-fields",
+      "write": "partial",
+      "operations": {
+        "rename": "unsupported",
+        "unlink": "supported",
+        "alias": "unsupported"
+      },
+      "create": "unsupported"
+    },
+    "foreign-file": {
+      "fixtures": [
+        { "file": "text-file.am", "title": "notes", "content": "text" },
+        { "file": "binary-file.am", "title": "pixel", "content": "binary" },
+        { "file": "immutable-string-file.am", "title": "collaborative", "content": "immutable" }
+      ],
+      "identify": "supported",
+      "read": "exact",
+      "preserve": "not-exercised",
+      "write": "read-only",
+      "create": "unsupported"
+    }
+  }
+}

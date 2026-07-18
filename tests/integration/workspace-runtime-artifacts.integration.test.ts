@@ -6,7 +6,7 @@ import { createWorkspaceDocument, openWorkspaceRuntime } from '../../src/workspa
 import {
   workspaceConstraintSetArtifact,
   workspaceStorageMappingArtifact,
-} from '../../src/workspace/schema.ts';
+} from '@patchpit/artifacts';
 
 void test('workspace opening resolves its declared artifacts by exact identity', async () => {
   const repo = new Repo({ network: [] });

@@ -6,15 +6,16 @@ import {
 } from '@tarstate/automerge';
 import { adoptConflictFreeAutomergeJsonValue } from '@tarstate/automerge/values';
 import {
+  canonicalizeJson,
   createIssue,
   type Issue,
   type JsonValue,
 } from '@tarstate/core';
 import {
   safeParseDocumentDeclaration,
-  type DocumentDeclaration,
 } from '@tarstate/core/attachment/declaration';
 import type { SourceBasis } from '@tarstate/core/source';
+import { workspaceDocumentMetadata } from '@patchpit/artifacts';
 import {
   applyWorkspaceOperation,
   type WorkspaceOperation,
@@ -26,7 +27,6 @@ import {
   workspaceTransactionWithState,
   type WorkspaceDocument,
 } from './document.ts';
-import { workspaceDocumentMetadata } from './schema.ts';
 
 export { createWorkspaceDocument, type WorkspaceDocument } from './document.ts';
 
@@ -38,11 +38,6 @@ type WorkspaceProjection = {
 } | {
   readonly state: 'incomplete' | 'invalid';
   readonly basis?: SourceBasis;
-  readonly issues: readonly Issue[];
-};
-
-type WorkspaceOperationResult = {
-  readonly outcome: 'committed' | 'unchanged' | 'rejected' | 'unknown';
   readonly issues: readonly Issue[];
 };
 
@@ -75,27 +70,19 @@ export const openWorkspaceRuntime = async (handle: DocHandle<WorkspaceDocument>)
   };
 
   const commitOperation = (operation: WorkspaceOperation) => {
-    const queuedTransaction = pendingTransactions.then(async (): Promise<WorkspaceOperationResult> => {
-      let transactionChanged = false;
-      const receipt = await attachment.transact(
-        operation as unknown as JsonValue,
-        (snapshot) => {
-          const decoded = workspaceFromTransactionSnapshot(snapshot);
-          if (decoded.workspace === undefined) {
-            throw new Error('Patchpit workspace logical state is unavailable', {
-              cause: decoded.issues,
-            });
-          }
-          const next = applyWorkspaceOperation(decoded.workspace, operation);
-          transactionChanged = next !== decoded.workspace;
-          return transactionChanged ? workspaceTransactionWithState(snapshot, next) : snapshot;
-        },
-      );
-      return {
-        outcome: receipt.outcome === 'committed' && !transactionChanged ? 'unchanged' : receipt.outcome,
-        issues: receipt.issues,
-      };
-    });
+    const queuedTransaction = pendingTransactions.then(() => attachment.transact(
+      operation,
+      (snapshot) => {
+        const decoded = workspaceFromTransactionSnapshot(snapshot);
+        if (decoded.workspace === undefined) {
+          throw new Error('Patchpit workspace logical state is unavailable', {
+            cause: decoded.issues,
+          });
+        }
+        const next = applyWorkspaceOperation(decoded.workspace, operation);
+        return next === decoded.workspace ? snapshot : workspaceTransactionWithState(snapshot, next);
+      },
+    ));
     pendingTransactions = queuedTransaction.then(() => undefined, () => undefined);
     return queuedTransaction;
   };
@@ -147,22 +134,12 @@ const parseWorkspaceMetadata = (document: WorkspaceDocument) => {
   }
   const declaration = safeParseDocumentDeclaration(input.declaration);
   if (!declaration.success) throw invalidWorkspaceMetadata(declaration.issues);
-  if (!sameWorkspaceDeclaration(declaration.value, workspaceDocumentMetadata.declaration)) {
+  if (canonicalizeJson(declaration.value)
+    !== canonicalizeJson(workspaceDocumentMetadata.declaration)) {
     throw invalidWorkspaceMetadata();
   }
   return { declaration: declaration.value, schemas: input.schemas };
 };
-
-const sameWorkspaceDeclaration = (
-  input: DocumentDeclaration,
-  expected: typeof workspaceDocumentMetadata.declaration,
-) => input.projection.kind === 'storage-mapping'
-  && expected.projection.kind === 'storage-mapping'
-  && expected.constraints !== undefined
-  && sameArtifactRef(input.storageSchema, expected.storageSchema)
-  && sameArtifactRef(input.projection.storageMapping, expected.projection.storageMapping)
-  && input.constraints?.mode === expected.constraints.mode
-  && sameArtifactRef(input.constraints?.set, expected.constraints.set);
 
 const invalidWorkspaceMetadata = (cause: readonly Issue[] = [workspaceIssue('metadata-invalid', {})]) =>
   new Error('Patchpit workspace metadata is invalid', { cause });

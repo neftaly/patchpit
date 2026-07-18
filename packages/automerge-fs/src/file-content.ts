@@ -26,8 +26,9 @@ import {
 import {
   hasPatchworkFileShape,
   isRecord,
+  patchworkMetadataIssue,
   sameArtifactRef,
-  sameUnconstrainedMappingDeclaration,
+  sameDocumentDeclaration,
   selectFilesystemDocumentKind,
 } from './document-selection.ts';
 
@@ -145,7 +146,7 @@ const selectFileAttachment = (
   if (!hasPatchworkFileShape(document)) {
     return { issues: [fileIssue('shape-invalid', sourceId)] };
   }
-  const interopIssue = patchworkMetadataIssue(document, sourceId);
+  const interopIssue = patchworkMetadataIssue(document, 'file', sourceId);
   return {
     attachment: document.content instanceof Uint8Array
       ? fileForeignBinaryAttachment
@@ -176,9 +177,9 @@ const selectOwnedFileAttachment = (
   }
   const declaration = parsedDeclaration.value;
   const attachment = [fileBinaryAttachment, fileTextAttachment].find((candidate) =>
-    sameUnconstrainedMappingDeclaration(declaration, candidate.declaration));
+    sameDocumentDeclaration(declaration, candidate.declaration));
   if (attachment === undefined) return { issues: [fileIssue('metadata-invalid', sourceId)] };
-  const interopIssue = patchworkMetadataIssue(document, sourceId);
+  const interopIssue = patchworkMetadataIssue(document, 'file', sourceId);
   return {
     attachment: {
       ...attachment,
@@ -187,17 +188,6 @@ const selectOwnedFileAttachment = (
     },
     issues: interopIssue === undefined ? [] : [interopIssue],
   };
-};
-
-const patchworkMetadataIssue = (document: object, sourceId: string): Issue | undefined => {
-  if (!('@patchwork' in document)) return undefined;
-  if (getConflicts(document, '@patchwork') !== undefined) {
-    return fileIssue('interop-metadata-conflicted', sourceId, {}, 'warning');
-  }
-  const adopted = adoptConflictFreeAutomergeJsonValue(document['@patchwork']);
-  return adopted.success && isRecord(adopted.value) && adopted.value.type === 'file'
-    ? undefined
-    : fileIssue('interop-metadata-invalid', sourceId, {}, 'warning');
 };
 
 const extensionOf = (name: string) => {

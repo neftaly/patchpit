@@ -62,7 +62,9 @@ void test('workspace actions preserve the complete durable/view-state/document m
         assert.deepEqual(workspace, beforeWorkspace, 'planning mutated durable input');
         assert.deepEqual(viewState, beforeViewState, 'planning mutated view-state input');
         assert.deepEqual(
-          plan.operations.reduce(applyWorkspaceOperation, workspace),
+          plan.durableOperation === undefined
+            ? workspace
+            : applyWorkspaceOperation(workspace, plan.durableOperation),
           plan.workspace,
           'the operation evidence does not reproduce the planned workspace',
         );

@@ -11,8 +11,10 @@ export const folderOwnedMappingArtifactRef = {"id":"urn:patchpit:mapping:automer
 export const folderSchemaArtifactRef = {"id":"urn:patchpit:schema:folder@1","contentHash":"sha256:e98d9bf1198a567766360ebe84fec43768a45e0fd20fa300ce6e8078fee050d6"} as const;
 export const workspaceConstraintSetArtifactRef = {"id":"patchpit.workspace.constraints@1","contentHash":"sha256:d9b68592b89d6b343b75983310b3af03aae40877fa449f536bca3501568ee9ff"} as const;
 export const workspaceMappingArtifactRef = {"id":"patchpit.workspace.storage@1","contentHash":"sha256:8d830f1d733a9912f0e732b989df85ec190a4c5abc2035f44771e13e223fc1c1"} as const;
+export const workspacePresenceMappingArtifactRef = {"id":"patchpit.workspace.presence.storage@1","contentHash":"sha256:7d50034d0b8d8c25f6bb9ed5c6b888320698b3c3565761f7a94f5c8f26a69f78"} as const;
+export const workspacePresenceSchemaArtifactRef = {"id":"patchpit.workspace.presence@1","contentHash":"sha256:61f16a73f980126bc7f8317ad03770aa6204a55a57e43336f09b684c19996988"} as const;
 export const workspaceSchemaArtifactRef = {"id":"patchpit.workspace.state@1","contentHash":"sha256:44f07df1bd17094da13c7049cf1ed281eca63ad816dfd3fffae0e56668f2c37d"} as const;
-export const artifactDeclarationNames = {"fileBinary":"fileBinary","fileForeignBinary":"fileForeignBinary","fileForeignText":"fileForeignText","fileText":"fileText","folderForeign":"folderForeign","folderOwned":"folderOwned","workspace":"workspace"} as const;
+export const artifactDeclarationNames = {"fileBinary":"fileBinary","fileForeignBinary":"fileForeignBinary","fileForeignText":"fileForeignText","fileText":"fileText","folderForeign":"folderForeign","folderOwned":"folderOwned","workspace":"workspace","workspacePresence":"workspacePresence"} as const;
 
 declare const fileSchemaSchemaBody: { readonly "description": "One Patchwork-compatible binary or collaborative text file."; readonly "relations": { readonly "file": { readonly "fields": { readonly "binaryContent": { readonly "editCapabilities": readonly [{ readonly "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"; readonly "id": "urn:tarstate:capability:field/replace"; readonly "version": "1" }]; readonly "optional": true; readonly "type": { readonly "kind": "bytes" } }; readonly "contentKind": { readonly "type": { readonly "kind": "string"; readonly "values": readonly ["binary", "text"] } }; readonly "extension": { readonly "type": { readonly "kind": "string" } }; readonly "id": { readonly "type": { readonly "kind": "string"; readonly "values": readonly ["file"] } }; readonly "mimeType": { readonly "type": { readonly "kind": "string" } }; readonly "name": { readonly "type": { readonly "kind": "string" } }; readonly "textContent": { readonly "editCapabilities": readonly [{ readonly "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"; readonly "id": "urn:tarstate:capability:field/replace"; readonly "version": "1" }]; readonly "optional": true; readonly "type": { readonly "kind": "string" } } }; readonly "key": readonly ["id", "contentKind"]; readonly "relationId": "patchpit.file" } } };
 
@@ -64,6 +66,35 @@ export const workspacePlacementsRelation: LiteralRelation<typeof workspaceSchema
 };
 export type WorkspacePlacementsRow = SchemaRow<typeof workspaceSchemaSchemaBody, "placements">;
 export type WorkspacePlacementsKey = SchemaKey<typeof workspaceSchemaSchemaBody, "placements">;
+
+declare const workspacePresenceSchemaSchemaBody: { readonly "description": "Per-client Patchpit workspace focus and preview state."; readonly "relations": { readonly "panes": { readonly "fields": { readonly "activeContextId": { readonly "editCapabilities": readonly [{ readonly "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"; readonly "id": "urn:tarstate:capability:field/replace"; readonly "version": "1" }]; readonly "nullable": true; readonly "type": { readonly "kind": "string" } }; readonly "paneId": { readonly "type": { readonly "kind": "string" } } }; readonly "key": readonly ["paneId"]; readonly "relationId": "patchpit.workspace.presence.pane" }; readonly "previews": { readonly "fields": { readonly "contextId": { readonly "editCapabilities": readonly [{ readonly "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"; readonly "id": "urn:tarstate:capability:field/replace"; readonly "version": "1" }]; readonly "type": { readonly "kind": "string" } }; readonly "paneId": { readonly "type": { readonly "kind": "string" } }; readonly "url": { readonly "description": "Ephemeral app invocation URL."; readonly "editCapabilities": readonly [{ readonly "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"; readonly "id": "urn:tarstate:capability:field/replace"; readonly "version": "1" }]; readonly "type": { readonly "kind": "string" } } }; readonly "key": readonly ["paneId"]; readonly "relationId": "patchpit.workspace.presence.preview" }; readonly "session": { readonly "fields": { readonly "activePaneId": { readonly "editCapabilities": readonly [{ readonly "contractHash": "sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74"; readonly "id": "urn:tarstate:capability:field/replace"; readonly "version": "1" }]; readonly "nullable": true; readonly "type": { readonly "kind": "string" } }; readonly "id": { readonly "type": { readonly "kind": "string"; readonly "values": readonly ["workspace-presence"] } } }; readonly "key": readonly ["id"]; readonly "relationId": "patchpit.workspace.presence.session" } } };
+
+export const workspacePresencePanesRelation: LiteralRelation<typeof workspacePresenceSchemaSchemaBody, "panes"> = {
+  schemaView: workspacePresenceSchemaArtifactRef,
+  relationId: "patchpit.workspace.presence.pane",
+  name: "panes",
+  declaration: {"fields":{"activeContextId":{"editCapabilities":[{"contractHash":"sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74","id":"urn:tarstate:capability:field/replace","version":"1"}],"nullable":true,"type":{"kind":"string"}},"paneId":{"type":{"kind":"string"}}},"key":["paneId"],"relationId":"patchpit.workspace.presence.pane"}
+};
+export type WorkspacePresencePanesRow = SchemaRow<typeof workspacePresenceSchemaSchemaBody, "panes">;
+export type WorkspacePresencePanesKey = SchemaKey<typeof workspacePresenceSchemaSchemaBody, "panes">;
+
+export const workspacePresencePreviewsRelation: LiteralRelation<typeof workspacePresenceSchemaSchemaBody, "previews"> = {
+  schemaView: workspacePresenceSchemaArtifactRef,
+  relationId: "patchpit.workspace.presence.preview",
+  name: "previews",
+  declaration: {"fields":{"contextId":{"editCapabilities":[{"contractHash":"sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74","id":"urn:tarstate:capability:field/replace","version":"1"}],"type":{"kind":"string"}},"paneId":{"type":{"kind":"string"}},"url":{"description":"Ephemeral app invocation URL.","editCapabilities":[{"contractHash":"sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74","id":"urn:tarstate:capability:field/replace","version":"1"}],"type":{"kind":"string"}}},"key":["paneId"],"relationId":"patchpit.workspace.presence.preview"}
+};
+export type WorkspacePresencePreviewsRow = SchemaRow<typeof workspacePresenceSchemaSchemaBody, "previews">;
+export type WorkspacePresencePreviewsKey = SchemaKey<typeof workspacePresenceSchemaSchemaBody, "previews">;
+
+export const workspacePresenceSessionRelation: LiteralRelation<typeof workspacePresenceSchemaSchemaBody, "session"> = {
+  schemaView: workspacePresenceSchemaArtifactRef,
+  relationId: "patchpit.workspace.presence.session",
+  name: "session",
+  declaration: {"fields":{"activePaneId":{"editCapabilities":[{"contractHash":"sha256:b60c245fe7811ce744805e1cd6c22ad9f270879e46bc03299fbd5270122afb74","id":"urn:tarstate:capability:field/replace","version":"1"}],"nullable":true,"type":{"kind":"string"}},"id":{"type":{"kind":"string","values":["workspace-presence"]}}},"key":["id"],"relationId":"patchpit.workspace.presence.session"}
+};
+export type WorkspacePresenceSessionRow = SchemaRow<typeof workspacePresenceSchemaSchemaBody, "session">;
+export type WorkspacePresenceSessionKey = SchemaKey<typeof workspacePresenceSchemaSchemaBody, "session">;
 
 export const workspaceSplitsRelation: LiteralRelation<typeof workspaceSchemaSchemaBody, "splits"> = {
   schemaView: workspaceSchemaArtifactRef,

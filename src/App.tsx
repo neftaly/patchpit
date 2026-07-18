@@ -43,7 +43,7 @@ export function App({ runtime, sandboxHost }: {
 }) {
   const resourceQuery = runtime.resourceQuery;
   const workspaceRuntime = runtime.workspaceRuntime;
-  const workspaceViewStateRuntime = runtime.workspaceViewStateRuntime;
+  const workspacePresence = runtime.workspacePresence;
   const pendingWorkspacePlans = useRef(Promise.resolve());
   const subscribeResourceQuery = useCallback(
     (listener: () => void) => resourceQuery.subscribe(listener),
@@ -72,9 +72,9 @@ export function App({ runtime, sandboxHost }: {
     workspaceRuntime.getSnapshot,
   );
   const viewState = useSyncExternalStore(
-    workspaceViewStateRuntime.subscribe,
-    workspaceViewStateRuntime.getSnapshot,
-    workspaceViewStateRuntime.getSnapshot,
+    workspacePresence.subscribe,
+    workspacePresence.getSnapshot,
+    workspacePresence.getSnapshot,
   );
   const workspacePresentation = useMemo(() => workspaceProjection.state === 'ready'
     ? composeWorkspacePresentation(workspaceProjection.workspace, viewState)
@@ -88,16 +88,19 @@ export function App({ runtime, sandboxHost }: {
   const workspace = workspaceProjection.workspace;
   const enqueueWorkspacePlan = (plan: (
     workspace: WorkspaceState,
-    viewState: ReturnType<typeof workspaceViewStateRuntime.getSnapshot>,
+    viewState: ReturnType<typeof workspacePresence.getSnapshot>,
   ) => WorkspacePlan) => {
     const queuedPlan = pendingWorkspacePlans.current.then(async () => {
       const currentProjection = workspaceRuntime.getSnapshot();
       if (currentProjection.state !== 'ready') return;
-      const workspacePlan = plan(currentProjection.workspace, workspaceViewStateRuntime.getSnapshot());
-      for (const operation of workspacePlan.operations) await workspaceRuntime.commitOperation(operation);
+      const workspacePlan = plan(currentProjection.workspace, workspacePresence.getSnapshot());
+      if (workspacePlan.durableOperation !== undefined) {
+        const receipt = await workspaceRuntime.commitOperation(workspacePlan.durableOperation);
+        if (receipt.outcome === 'rejected' || receipt.outcome === 'unknown') return;
+      }
       const committedProjection = workspaceRuntime.getSnapshot();
       if (committedProjection.state !== 'ready') return;
-      workspaceViewStateRuntime.update(committedProjection.workspace, () => reconcileWorkspaceViewState(
+      workspacePresence.update(committedProjection.workspace, () => reconcileWorkspaceViewState(
         committedProjection.workspace,
         workspacePlan.viewState,
       ));
@@ -123,7 +126,7 @@ export function App({ runtime, sandboxHost }: {
     <WorkspaceView
       canApplyDrop={(action) => {
         const planned = planWorkspaceAction({ action, isEditorContext, viewState, workspace });
-        return planned.operations.length > 0;
+        return planned.durableOperation !== undefined;
       }}
       dispatchAction={(action) => {
         enqueueWorkspacePlan((currentWorkspace, currentViewState) => planWorkspaceAction({

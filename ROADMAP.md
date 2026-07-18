@@ -7,25 +7,22 @@ here.
 
 ## Near-term work goals
 
-### W1. Explicit presence source
+### W1. Relational presence attachment
 
-Give per-client active-pane, active-context, and preview state an explicitly
-attached ephemeral source with its own identity and exact Tarstate schema.
-
-The source must remain distinct from durable workspace state. Its lifecycle is
-owned by the viewing client, and reconnecting or opening another client must not
-pretend that transient focus is shared durable state. Inline the sealed presence
-schema in `@patchpit.schemas` only once the real source reference and attachment
-exist.
+Route workspace presence through Tarstate's standard relational external-store
+attachment once that upstream boundary exists. Remove Patchpit's temporary
+storage-to-view lowering and direct exact-basis commit path; product
+reconciliation remains in Patchpit.
 
 Acceptance evidence:
 
-1. Two clients can hold different active and preview state over the same durable
-   workspace without writing the workspace document.
-2. Closing the presence source removes only that client's transient state.
-3. Ready, incomplete, and invalid presence projections remain distinguishable.
-4. Behavior fuzzing covers reconciliation after concurrent durable workspace
+1. Ready, incomplete, and invalid presence projections remain distinguishable.
+2. Queries, simulation, and writes use the same exact declaration and standard
+   source-routed database surface as other attached stores.
+3. Behavior fuzzing covers reconciliation after concurrent durable workspace
    changes, removed panes, removed contexts, and source replacement.
+4. No Patchpit code implements generic attachment preparation, transaction
+   execution, or external-store projection.
 
 ### W2. Durable reopening
 
@@ -50,24 +47,21 @@ Acceptance evidence:
    mounts belonging to the previous lifecycle.
 4. Multi-tab behavior has an executable convergence or explicit-rejection case.
 
-### W3. Patchwork interoperability corpus
+### W3. Two-way Patchwork interoperability corpus
 
-Establish golden Automerge documents produced and edited by both Patchwork and
-Patchpit for every compatibility level Patchpit claims. Begin with folders,
-text files, binary files, immutable strings, unknown-field preservation, aliases,
-duplicate placement names, unavailable links, and owned metadata failures.
+Finish two-way Automerge fixtures produced and edited by both Patchwork and
+Patchpit for every compatibility level Patchpit claims. A read-only adapter is
+not round-trip support and foreign documents remain foreign.
 
-Compatibility evidence must distinguish identify, read, preserve, write without
-representation loss, and create. A read-only adapter is not round-trip support.
-Foreign documents remain foreign; reading or writing through an adapter must not
-silently adopt them.
+Prioritize actual upstream reopening after Patchpit writes, Patchpit-created
+documents opened by upstream Patchwork, lineage metadata, and adversarial
+metadata/representation cases.
 
 Acceptance evidence:
 
-1. Patchwork-produced fixtures open through the intended Patchpit adapters.
-2. Supported Patchpit edits reopen in Patchwork without losing unknown fields.
-3. Patchpit-produced compatible documents are recognized by Patchwork.
-4. Malformed, conflicted, ambiguous, and representation-changing cases remain
+1. Supported Patchpit edits reopen in Patchwork without losing unknown fields.
+2. Patchpit-produced compatible documents are recognized by Patchwork.
+3. Malformed, conflicted, ambiguous, and representation-changing cases remain
    inspectable rather than selecting a winner or becoming empty data.
 
 ### W4. Markdown acceptance application

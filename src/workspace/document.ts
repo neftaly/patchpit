@@ -1,6 +1,5 @@
 import type { JsonValue } from '@tarstate/core';
 import type { DatabaseTransactionSnapshot } from '@tarstate/core/transactions';
-import { createWorkspace, type WorkspaceNode, type WorkspaceState } from './durable-state.ts';
 import {
   workspaceDocumentMetadata,
   workspaceRelations,
@@ -8,7 +7,8 @@ import {
   type WorkspacePlacementRelationRow,
   type WorkspaceSplitRelationRow,
   type WorkspaceStateRelationRow,
-} from './schema.ts';
+} from '@patchpit/artifacts';
+import { createWorkspace, type WorkspaceNode, type WorkspaceState } from './durable-state.ts';
 
 export type WorkspaceDocument = {
   readonly '@patchpit': typeof workspaceDocumentMetadata;
@@ -26,12 +26,6 @@ type WorkspaceLogicalRow = {
 type WorkspaceDocumentIssue = {
   readonly kind: 'node-id-collision' | 'state-cardinality';
   readonly details: Readonly<Record<string, JsonValue>>;
-};
-
-type WorkspaceRelationRows = {
-  readonly relationId: string;
-  readonly keyField: string;
-  readonly rows: readonly Readonly<Record<string, JsonValue>>[];
 };
 
 const WORKSPACE_STATE_ID = 'workspace';
@@ -139,18 +133,6 @@ export const workspaceTransactionWithState = (
     .withRows(workspaceRelations.splits, rows.splits);
 };
 
-const workspaceRelationRows = (
-  workspace: WorkspaceState,
-): readonly WorkspaceRelationRows[] => {
-  const rows = workspaceRowsFromState(workspace);
-  return [
-    relationRowsFor(workspaceRelations.state, rows.state),
-    relationRowsFor(workspaceRelations.panes, rows.panes),
-    relationRowsFor(workspaceRelations.placements, rows.placements),
-    relationRowsFor(workspaceRelations.splits, rows.splits),
-  ];
-};
-
 const workspaceRowsFromState = (workspace: WorkspaceState) => {
   const nodes = sortedEntries(workspace.nodes);
   const panes = nodes.flatMap(([id, node]) => node.kind === 'pane' ? [{ id }] : []);
@@ -176,53 +158,31 @@ const workspaceRowsFromState = (workspace: WorkspaceState) => {
 
 export const workspaceLogicalRows = (
   workspace: WorkspaceState,
-): readonly WorkspaceLogicalRow[] => workspaceRelationRows(workspace).flatMap(({ relationId, rows }) =>
-  rows.map((fields) => ({ relationId, fields })),
-);
+): readonly WorkspaceLogicalRow[] => {
+  const rows = workspaceRowsFromState(workspace);
+  return [
+    ...logicalRows(workspaceRelations.state.relationId, rows.state),
+    ...logicalRows(workspaceRelations.panes.relationId, rows.panes),
+    ...logicalRows(workspaceRelations.placements.relationId, rows.placements),
+    ...logicalRows(workspaceRelations.splits.relationId, rows.splits),
+  ];
+};
 
 const workspaceDocumentFromState = (workspace: WorkspaceState): WorkspaceDocument => {
-  const relations = new Map(workspaceRelationRows(workspace)
-    .map((relation) => [relation.relationId, relation]));
+  const rows = workspaceRowsFromState(workspace);
   return {
     '@patchpit': workspaceDocumentMetadata,
-    state: objectMap(relations, workspaceRelations.state.relationId) as WorkspaceDocument['state'],
-    panes: objectMap(relations, workspaceRelations.panes.relationId) as WorkspaceDocument['panes'],
-    placements: objectMap(
-      relations,
-      workspaceRelations.placements.relationId,
-    ) as WorkspaceDocument['placements'],
-    splits: objectMap(relations, workspaceRelations.splits.relationId) as WorkspaceDocument['splits'],
+    state: Object.fromEntries(rows.state.map(({ id, ...fields }) => [id, fields])),
+    panes: Object.fromEntries(rows.panes.map(({ id, ...fields }) => [id, fields])),
+    placements: Object.fromEntries(rows.placements.map(({ contextId, ...fields }) => [contextId, fields])),
+    splits: Object.fromEntries(rows.splits.map(({ id, ...fields }) => [id, fields])),
   };
 };
 
-const relationRowsFor = (
-  relation: (typeof workspaceRelations)[keyof typeof workspaceRelations],
-  rows: readonly Readonly<Record<string, JsonValue>>[],
-): WorkspaceRelationRows => {
-  const [keyField, ...additionalKeyFields] = relation.declaration.key;
-  if (keyField === undefined || additionalKeyFields.length > 0) {
-    throw new Error(`Workspace relation requires one key field: ${relation.relationId}`);
-  }
-  return {
-    relationId: relation.relationId,
-    keyField,
-    rows,
-  };
-};
-
-const objectMap = (
-  relations: ReadonlyMap<string, WorkspaceRelationRows>,
+const logicalRows = (
   relationId: string,
-): Record<string, object> => {
-  const relation = relations.get(relationId);
-  if (relation === undefined) throw new Error(`Workspace relation is unavailable: ${relationId}`);
-  return Object.fromEntries(relation.rows.map((row) => {
-    const key = row[relation.keyField];
-    if (typeof key !== 'string') throw new Error(`Workspace relation key is not a string: ${relationId}`);
-    return [key, Object.fromEntries(Object.entries(row)
-      .filter(([field]) => field !== relation.keyField))];
-  }));
-};
+  rows: readonly Readonly<Record<string, JsonValue>>[],
+): readonly WorkspaceLogicalRow[] => rows.map((fields) => ({ relationId, fields }));
 
 const relationRows = <Row extends Readonly<Record<string, JsonValue>>>(
   rows: readonly WorkspaceLogicalRow[],

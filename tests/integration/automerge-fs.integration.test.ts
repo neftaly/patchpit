@@ -22,6 +22,10 @@ void test('owned Automerge folders support relational rename, alias, and unlink'
     resourceRef: 'automerge:4hj6FJqozF7cLYqHi3FuK1SQhKc',
     typeHint: 'file',
   }]));
+  handle.change((document) => {
+    (document as Record<string, unknown>).fixtureExtension = { retained: true };
+    (document.docs[0] as unknown as Record<string, unknown>).fixtureLinkExtension = 'retained';
+  });
   const opened = await openAutomergeFolderDatabase(handle);
   assert.equal(opened.success, true);
   if (!opened.success) return;
@@ -32,6 +36,10 @@ void test('owned Automerge folders support relational rename, alias, and unlink'
     await commitFolderOperation(folder, {
       kind: 'folder.link.rename', linkId: 'readme', name: 'README.md',
     });
+    assert.equal(
+      (handle.doc().docs[0] as unknown as Record<string, unknown>).fixtureLinkExtension,
+      'retained',
+    );
     await commitFolderOperation(folder, {
       kind: 'folder.link.alias',
       link: {
@@ -44,39 +52,23 @@ void test('owned Automerge folders support relational rename, alias, and unlink'
     await commitFolderOperation(folder, { kind: 'folder.link.unlink', linkId: 'readme' });
     const snapshot = query.getSnapshot();
     assert.equal(snapshot.state, 'open');
+    assert.equal(snapshot.current.readiness, 'ready');
+    assert.equal(snapshot.current.completeness, 'exact');
     assert.deepEqual(snapshot.current.rows.map(({ linkId, name }) => [linkId, name]), [
       ['readme-alias', 'guide.md'],
     ]);
     assert.deepEqual(handle.doc().docs.map(({ id, name }) => [id, name]), [
       ['readme-alias', 'guide.md'],
     ]);
+    assert.equal(handle.doc()['@patchwork'].type, 'folder');
+    assert.equal(
+      (handle.doc() as unknown as { readonly fixtureExtension: { readonly retained: boolean } })
+        .fixtureExtension.retained,
+      true,
+    );
   } finally {
     query.close();
     folder.close();
-    await repo.shutdown();
-  }
-});
-
-void test('foreign Patchwork folders project source-native link identity read-only', async () => {
-  const repo = new Repo({ network: [] });
-  const handle = repo.create<object>({
-    '@patchwork': { type: 'folder' },
-    title: 'Foreign',
-    docs: [{ name: 'readme.md', type: 'file', url: 'https://example.com/readme.md' }],
-  });
-  const opened = await openAutomergeFolderDatabase(handle);
-  assert.equal(opened.success, true);
-  if (!opened.success) return;
-  const query = await openFolderLinksQuery([opened.value]);
-
-  try {
-    const snapshot = query.getSnapshot();
-    assert.equal(snapshot.state, 'open');
-    assert.equal(snapshot.current.rows[0]?.name, 'readme.md');
-    assert.equal(typeof snapshot.current.rows[0]?.linkId, 'string');
-  } finally {
-    query.close();
-    opened.value.close();
     await repo.shutdown();
   }
 });
