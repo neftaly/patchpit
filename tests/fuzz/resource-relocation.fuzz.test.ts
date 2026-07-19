@@ -33,6 +33,27 @@ void test('resource relocation progress is idempotent and interruption-safe', ()
     };
     const initial = classifyExactResourceRelocation(intent, [source]);
     assert.equal(initial.state === 'ready' && initial.step, 'add-destination');
+    assert.deepEqual(classifyExactResourceRelocation({
+      ...intent,
+      destinationSourceId: source.sourceId,
+    }, [source]), { reason: 'same-source', state: 'no-op' });
+    assert.deepEqual(classifyExactResourceRelocation(intent, []), {
+      destinationApplied: false,
+      reason: 'source-missing',
+      state: 'blocked',
+    });
+
+    const sameNamedUnrelatedLink: FolderLinkRow = {
+      linkId: `unrelated-${transferId}`,
+      name: source.name,
+      resourceRef: 'unrelated-resource',
+      sourceId: intent.destinationSourceId,
+      typeHint: 'file',
+    };
+    assert.deepEqual(
+      classifyExactResourceRelocation(intent, [source, sameNamedUnrelatedLink]),
+      initial,
+    );
 
     const destination = {
       ...relocationDestinationLink(intent),
@@ -43,12 +64,33 @@ void test('resource relocation progress is idempotent and interruption-safe', ()
     assert.equal(inserted.state === 'ready' && inserted.step, 'unlink-source');
     assert.deepEqual(classifyExactResourceRelocation(intent, [source, destination]), inserted);
     assert.deepEqual(classifyExactResourceRelocation(intent, [destination]), { state: 'complete' });
+    assert.deepEqual(
+      classifyExactResourceRelocation(intent, [{ ...source, order: 99 }, destination]),
+      inserted,
+    );
 
-    const changedSource = { ...source, name: `${source.name}-concurrent` };
-    assert.deepEqual(classifyExactResourceRelocation(intent, [changedSource, destination]), {
-      destinationApplied: true,
-      reason: 'source-changed',
-      state: 'blocked',
+    const changedSources: readonly FolderLinkRow[] = [{
+      ...source,
+      name: `${source.name}-concurrent`,
+    }, {
+      ...source,
+      resourceRef: `${source.resourceRef}-concurrent`,
+    }, {
+      ...source,
+      typeHint: `${source.typeHint}-concurrent`,
+    }, {
+      ...source,
+      copyOf: `${source.copyOf ?? 'none'}-concurrent`,
+    }, {
+      ...source,
+      icon: `${source.icon ?? 'none'}-concurrent`,
+    }];
+    changedSources.forEach((changedSource) => {
+      assert.deepEqual(classifyExactResourceRelocation(intent, [changedSource, destination]), {
+        destinationApplied: true,
+        reason: 'source-changed',
+        state: 'blocked',
+      });
     });
     assert.deepEqual(classifyExactResourceRelocation(intent, [source, {
       ...destination,
