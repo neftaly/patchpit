@@ -50,12 +50,44 @@ Receipts must expose partial completion, retry, repair, and idempotency evidence
 One-sided `copyOf` or `copies` lineage is valid partial evidence rather than
 corruption. The UI must not describe these operations as atomic transactions.
 
+Relocation adds the destination occurrence before unlinking the source. It keeps
+the referenced document identity and known placement metadata, but allocates a
+stable destination-local link ID and appends at the destination's source-native
+position. The source occurrence is unlinked only if its complete transferable
+facts still match the observed intent. A concurrent rename, retarget, or metadata
+change stops the sequence with both occurrences visible rather than discarding
+the concurrent fact. Repeating a known step accepts an exact existing result and
+rejects the same stable key with different data. Duplicate names remain valid.
+
+Copy first creates a new Automerge document identity from the supported source
+history, then adds a destination occurrence whose `copyOf` names the immediate
+source document. Copying a copy therefore records its immediate parent rather
+than rewriting lineage into a guessed total ancestry. Unsupported external
+resources and document types reject explicitly. Moving into the same folder is
+a no-op, not reorder. Folder copy or relocation that would introduce a reachable
+cycle rejects before its first mutation.
+
+Normal progress requires ready, current, exact source and destination evidence.
+Every retry re-projects both folders and classifies the observable postcondition
+before choosing the next step. No timeout, thrown exception, or lost connection
+is reported as rollback.
+
 Acceptance evidence:
 
-1. Every interruption point has a behavior case with an actionable receipt.
-2. Retrying an already-applied step does not duplicate an occurrence or document.
-3. Concurrent source changes are re-projected before the next step.
-4. Copy and move preserve the compatibility level advertised for each source.
+1. Every interruption point—including after document creation and after
+   destination insertion—has a behavior case with an actionable receipt and
+   observable repair choice.
+2. Retrying an already-applied step does not duplicate an occurrence or document;
+   a stable-key collision with different data rejects.
+3. Concurrent rename, retarget, unlink, destination collision, readiness loss,
+   and folder-graph changes are re-projected before the next step and never
+   silently lose source facts.
+4. Delivery-order fuzzing reaches the same classified complete, partial, failed,
+   or unknown evidence for equivalent converged source states.
+5. Copy and relocation preserve the compatibility level advertised for each
+   source and retain unknown Automerge/Patchwork document data.
+6. Same-source drops, unsupported copies, self/descendant folder targets, and
+   duplicate names have explicit distinct behavior.
 
 ### W6. Identity-preserving reorder
 
