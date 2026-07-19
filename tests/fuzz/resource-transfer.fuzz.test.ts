@@ -3,10 +3,15 @@ import test from 'node:test';
 import fc from 'fast-check';
 import type { FolderLinkRow } from '@patchpit/fs';
 import {
+  classifyExactResourceCopy,
+  classifyExactResourceCopySource,
   classifyExactResourceRelocation,
+  classifyExactResourceRelocationStep,
+  copyDestinationLink,
   relocationDestinationLink,
   type ResourceRelocationIntent,
-} from '../../src/root/resource-relocation.ts';
+  type ResourceCopyIntent,
+} from '../../src/root/resource-transfer.ts';
 
 const field = fc.string({ minLength: 1, maxLength: 40 });
 const sourceLink = fc.record({
@@ -33,6 +38,14 @@ void test('resource relocation progress is idempotent and interruption-safe', ()
     };
     const initial = classifyExactResourceRelocation(intent, [source]);
     assert.equal(initial.state === 'ready' && initial.step, 'add-destination');
+    assert.equal(
+      classifyExactResourceRelocationStep(intent, [source], 'add-destination').state,
+      'ready',
+    );
+    assert.equal(
+      classifyExactResourceRelocationStep(intent, [source], 'unlink-source').state,
+      'blocked',
+    );
     assert.deepEqual(classifyExactResourceRelocation({
       ...intent,
       destinationSourceId: source.sourceId,
@@ -62,8 +75,24 @@ void test('resource relocation progress is idempotent and interruption-safe', ()
     };
     const inserted = classifyExactResourceRelocation(intent, [source, destination]);
     assert.equal(inserted.state === 'ready' && inserted.step, 'unlink-source');
+    assert.equal(
+      classifyExactResourceRelocationStep(intent, [source, destination], 'add-destination').state,
+      'ready',
+    );
+    assert.equal(
+      classifyExactResourceRelocationStep(intent, [source, destination], 'unlink-source').state,
+      'ready',
+    );
     assert.deepEqual(classifyExactResourceRelocation(intent, [source, destination]), inserted);
     assert.deepEqual(classifyExactResourceRelocation(intent, [destination]), { state: 'complete' });
+    assert.equal(
+      classifyExactResourceRelocationStep(intent, [destination], 'add-destination').state,
+      'ready',
+    );
+    assert.equal(
+      classifyExactResourceRelocationStep(intent, [destination], 'unlink-source').state,
+      'ready',
+    );
     assert.deepEqual(
       classifyExactResourceRelocation(intent, [{ ...source, order: 99 }, destination]),
       inserted,
@@ -137,4 +166,47 @@ void test('resource relocation progress is idempotent and interruption-safe', ()
       });
     },
   ), { numRuns: 100 });
+});
+
+void test('resource copy progress retains identity lineage and rejects changed facts', () => {
+  fc.assert(fc.property(sourceLink, fc.uuid({ version: 4 }), (source, transferId) => {
+    const intent: ResourceCopyIntent = {
+      destinationLinkId: `copy-${transferId}`,
+      destinationSourceId: 'destination',
+      source,
+      sourceBasis: { incarnation: 'source:1', revision: 4 },
+      transferId,
+    };
+    assert.deepEqual(classifyExactResourceCopySource(intent, [source]), { state: 'ready' });
+    assert.deepEqual(classifyExactResourceCopySource(intent, []), {
+      reason: 'source-missing',
+      state: 'blocked',
+    });
+    const copiedResourceRef = `automerge:${transferId}`;
+    const ready = classifyExactResourceCopy(intent, copiedResourceRef, [source]);
+    assert.equal(ready.state, 'ready');
+    const destination: FolderLinkRow = {
+      ...copyDestinationLink(intent, copiedResourceRef),
+      order: 12,
+      sourceId: intent.destinationSourceId,
+    };
+    assert.deepEqual(classifyExactResourceCopy(intent, copiedResourceRef, [source, destination]), {
+      state: 'complete',
+    });
+    assert.equal(destination.copyOf, source.resourceRef);
+    assert.deepEqual(classifyExactResourceCopy(intent, copiedResourceRef, [{
+      ...source,
+      name: `${source.name}-changed`,
+    }, destination]), {
+      reason: 'source-changed',
+      state: 'blocked',
+    });
+    assert.deepEqual(classifyExactResourceCopy(intent, copiedResourceRef, [source, {
+      ...destination,
+      resourceRef: `${copiedResourceRef}-collision`,
+    }]), {
+      reason: 'destination-collision',
+      state: 'blocked',
+    });
+  }), { numRuns: 300 });
 });

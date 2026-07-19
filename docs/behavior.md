@@ -127,7 +127,7 @@ exchange document changes through a deployment-scoped BroadcastChannel. This is
 ephemeral replication, not persistence: a document becomes unavailable once no
 live or otherwise attached replica can supply it. A single attached source is
 the atomic write boundary. Work spanning multiple sources is non-atomic and
-must expose partial completion when such operations are implemented. Per-client
+exposes partial completion through nested receipts. Per-client
 presence remains separate and does not derive from Automerge change history
 because clicks and focus can change interaction intent without changing a
 durable document.
@@ -231,3 +231,31 @@ unrelated interaction behavior.
 
 The demo artifact is imported only when creating a fresh root. Changing a
 built-in demo never mutates or reseeds an existing root identity.
+
+## B14. Cross-source resource transfer
+
+The root runtime can relocate links between folder documents and copy file
+documents. These operations are not yet bound to a file-manager gesture; B8's
+same-pane resource drag remains a no-op.
+
+Relocation adds an exact destination occurrence before unlinking the source.
+The referenced document keeps its identity, while the destination gets a new
+source-local link ID. The unlink commits only if the source link's name,
+resource reference, type hint, icon, and copy lineage still match the observed
+intent. Concurrent source changes therefore leave both occurrences visible.
+Moving to the same folder is a no-op. Relocating a folder into itself or a
+reachable descendant rejects before mutation.
+
+Copy supports exact Automerge file documents. It creates a new document identity
+from the captured history, preserves unknown document fields, then links that
+document at the destination with `copyOf` naming the immediate source document.
+Folder documents and direct external resources are not copyable. A prepared copy
+belongs to one open root lifecycle; using it after reopening rejects instead of
+silently repeating a memory-only lifecycle operation.
+
+Both operations require a ready, current, exact resource graph and re-project
+state before each source-local step. Exact retries do not duplicate links or
+documents. Stable-key collisions reject. Every attempted multi-source sequence
+returns complete, partial, failed, or unknown evidence; a copy whose document
+was created but could not be linked reports that document as orphaned. No
+partial result is described as rollback.

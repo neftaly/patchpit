@@ -44,6 +44,7 @@ import {
 } from '../workspace/runtime.ts';
 import { paneIdsInLayoutOrder } from '../workspace/durable-state.ts';
 import { openWorkspacePresence } from '../workspace/presence-runtime.ts';
+import { createResourceTransferRuntime } from './resource-transfer-runtime.ts';
 
 const WORKSPACE_LINK_ID = 'workspace';
 
@@ -209,6 +210,23 @@ const openRootHandle = async (
     resourceQuery.close();
     filesystem.close();
   };
+  const resolveAutomergeHandle = async (resourceRef: string, findSignal?: AbortSignal) => {
+    if (closed || !isValidAutomergeUrl(resourceRef)) return undefined;
+    const handle = await findResourceHandle(resourceRef, findSignal);
+    if (closed) return undefined;
+    handles.set(resourceRef, handle);
+    return handle;
+  };
+  const resourceTransfers = await createResourceTransferRuntime({
+    isClosed: () => closed,
+    repo,
+    resolveDocument: resolveAutomergeHandle,
+    resourceQuery,
+    rootUrl: rootHandle.url,
+  }).catch((error: unknown) => {
+    closeResourceRuntime();
+    throw error;
+  });
   let workspaceHandle: DocHandle<WorkspaceDocument>;
   try {
     const workspaceLink = await readWorkspaceLink(filesystem, rootHandle.url);
@@ -247,9 +265,9 @@ const openRootHandle = async (
   const resolveResourceDocument = async (resourceRef: string, documentSignal?: AbortSignal) => {
     if (closed || !rootReferencesResource(resourceQuery, resourceRef)
       || !isValidAutomergeUrl(resourceRef)) return undefined;
-    const handle = await findResourceHandle(resourceRef, documentSignal);
+    const handle = await resolveAutomergeHandle(resourceRef, documentSignal);
+    if (handle === undefined) return undefined;
     if (closed || !rootReferencesResource(resourceQuery, resourceRef)) return undefined;
-    handles.set(resourceRef, handle);
     return handle;
   };
   const openResourceTitles = async (resourceRefs: readonly string[], titleSignal?: AbortSignal) => {
@@ -416,6 +434,7 @@ const openRootHandle = async (
     openResourceFileQuery,
     createAppSnapshot,
     openAppTextDocument,
+    ...resourceTransfers,
     close: () => {
       if (closed) return;
       closed = true;

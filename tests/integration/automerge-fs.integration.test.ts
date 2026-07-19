@@ -104,6 +104,27 @@ void test('owned Automerge folders support relational rename, alias, and unlink'
         typeHint: 'file',
       },
     });
+    const aliasCollision = await commitFolderOperation(folder, {
+      kind: 'folder.link.alias',
+      link: {
+        linkId: 'readme-alias',
+        name: 'collision.md',
+        resourceRef: 'automerge:3h6FJqozF7cLYqHi3FuK1SQhKc',
+        typeHint: 'file',
+      },
+    });
+    assert.equal(aliasCollision.outcome, 'rejected');
+    const changedUnlink = await commitFolderOperation(folder, {
+      kind: 'folder.link.unlink',
+      linkId: 'readme',
+      expected: {
+        linkId: 'readme',
+        name: 'readme.md',
+        resourceRef: 'automerge:4hj6FJqozF7cLYqHi3FuK1SQhKc',
+        typeHint: 'file',
+      },
+    });
+    assert.equal(changedUnlink.outcome, 'rejected');
     await commitFolderOperation(folder, { kind: 'folder.link.unlink', linkId: 'readme' });
     const snapshot = query.getSnapshot();
     assert.equal(snapshot.state, 'open');

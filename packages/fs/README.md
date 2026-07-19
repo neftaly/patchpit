@@ -23,6 +23,11 @@ Owned sources can apply `folder.link.rename`, `folder.link.unlink`, and
 `folder.link.alias` with `commitFolderOperation`. Reordering remains a distinct
 source-native identity-preserving move capability and is not emulated with
 delete/reinsert or private journal semantics.
+An alias is idempotent only when an existing source-local link ID has the same
+logical facts; a different value rejects as a collision. Unlink can carry the
+complete observed link facts and rejects if a concurrent write changed them.
+These replay-time conditions let a cross-source shell avoid overwriting facts
+without pretending multiple folders share one atomic boundary.
 
 The separate exact file relation describes logical text or binary content.
 Storage mappings retain each physical representation and its write capability.

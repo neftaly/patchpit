@@ -37,57 +37,30 @@ Acceptance evidence:
    held by a surviving replica; adapter liveness failure produces bounded,
    explicit evidence.
 
-### W5. Cross-source copy and move
+### W5. Resource-transfer interaction and repair
 
-Implement cross-folder operations as explicit sequences over independent atomic
-sources. Moving a link removes and adds occurrences across two folder documents;
-copying creates new document identity and records compatible lineage metadata.
-This is copy/relocate across source boundaries, not W6 identity-preserving
-reorder within one source: a destination occurrence has its own source-local
-identity.
+Expose the current cross-source relocation and file-copy semantics through an
+intentional file-manager interaction without changing B8's same-pane drag by
+accident. The UI must distinguish copy, relocation, W6 reorder, and aliases and
+must never describe a multi-source sequence as atomic.
 
-Receipts must expose partial completion, retry, repair, and idempotency evidence.
-One-sided `copyOf` lineage is valid: the original does not acquire a reverse
-list of copies. The UI must not describe these operations as atomic transactions.
-
-Relocation adds the destination occurrence before unlinking the source. It keeps
-the referenced document identity and known placement metadata, but allocates a
-stable destination-local link ID and appends at the destination's source-native
-position. The source occurrence is unlinked only if its complete transferable
-facts still match the observed intent. A concurrent rename, retarget, or metadata
-change stops the sequence with both occurrences visible rather than discarding
-the concurrent fact. Repeating a known step accepts an exact existing result and
-rejects the same stable key with different data. Duplicate names remain valid.
-
-Copy first creates a new Automerge document identity from the supported source
-history, then adds a destination occurrence whose `copyOf` names the immediate
-source document. Copying a copy therefore records its immediate parent rather
-than rewriting lineage into a guessed total ancestry. Unsupported external
-resources and document types reject explicitly. Moving into the same folder is
-a no-op, not reorder. Folder copy or relocation that would introduce a reachable
-cycle rejects before its first mutation.
-
-Normal progress requires ready, current, exact source and destination evidence.
-Every retry re-projects both folders and classifies the observable postcondition
-before choosing the next step. No timeout, thrown exception, or lost connection
-is reported as rollback.
+Partial and unknown receipts need an actionable repair surface. Persist workflow
+identity before promising recovery across root lifecycles; the current
+memory-scoped copy epoch must continue rejecting expired prepared work. Decide
+folder-copy semantics only after its history, cycle, compatibility, and partial
+creation behavior have a concrete user story.
 
 Acceptance evidence:
 
-1. Every interruption point—including after document creation and after
-   destination insertion—has a behavior case with an actionable receipt and
-   observable repair choice.
-2. Retrying an already-applied step does not duplicate an occurrence or document;
-   a stable-key collision with different data rejects.
-3. Concurrent rename, retarget, unlink, destination collision, readiness loss,
-   and folder-graph changes are re-projected before the next step and never
-   silently lose source facts.
-4. Delivery-order fuzzing reaches the same classified complete, partial, failed,
-   or unknown evidence for equivalent converged source states.
-5. Copy and relocation preserve the compatibility level advertised for each
-   source and retain unknown Automerge/Patchwork document data.
-6. Same-source drops, unsupported copies, self/descendant folder targets, and
-   duplicate names have explicit distinct behavior.
+1. Pointer, touch, keyboard, cancellation, invalid targets, and same-pane drops
+   have browser behavior evidence before a gesture is enabled.
+2. Complete, partial, failed, unknown, expired, and orphaned outcomes have
+   distinct presentation and repair choices.
+3. A durable workflow replay cannot duplicate a document or link after reopen.
+4. Delivery-order fuzzing covers source changes and interruption at every shell
+   boundary, not only the pure postcondition classifier.
+5. Any folder-copy behavior preserves advertised compatibility and unknown data
+   or rejects before creation.
 
 ### W6. Identity-preserving reorder
 

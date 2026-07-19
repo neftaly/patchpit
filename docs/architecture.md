@@ -16,6 +16,7 @@
 | In-progress input and composition | Sandboxed editor runtime | Local EditContext session and semantic splice intents |
 | Editor authority and revision lifecycle | Patchpit root/content runtime | Host-owned document session and versioned MessagePort |
 | Ordinary file views | Tarstate query, projected by Patchpit content UI | Exact logical file rows and readiness evidence |
+| Cross-source resource progress | Patchpit root runtime over Tarstate receipts | Pure graph classifier plus source-local transactions and lifecycle operations |
 
 State crosses an owner boundary through a projection, canonical writer, or
 explicit attached source. Patchpit does not mirror Tarstate readiness or raw
@@ -89,3 +90,14 @@ the app folder's authority; source handles remain host-only.
 - `packages/sandbox/` owns mount and runner contracts.
 - `apps/markdown-editor/` owns local text input, rendering, and the app side of
   the editor port; it owns no canonical document or replica.
+
+## A7. Cross-source operations
+
+The resource-transfer functional core classifies an exact folder-graph
+projection into a next source-local operation, completion, no-op, or explicit
+block. The root shell re-projects before each step and delegates source writes,
+non-atomic batches, lifecycle creation, and nested receipts to Tarstate.
+Relocation is recoverable from canonical link postconditions. Copy preparation
+captures an exact file basis; its document-creation idempotency is scoped to the
+open root's memory-backed lifecycle epoch. Patchpit does not mirror a workflow
+state machine or imply cross-source atomicity.

@@ -66,7 +66,10 @@ export type AutomergeFolderDocument = {
   readonly docs: readonly AutomergeFolderLink[];
 };
 
-export type AutomergeFolderDatabase = AutomergeDatabase & FolderDatabaseSource;
+export type AutomergeFolderDatabase = AutomergeDatabase & FolderDatabaseSource & {
+  readonly attachmentId: string;
+  readonly sourceId: string;
+};
 
 export type AutomergeFilesystemDatabase = {
   readonly kind: 'folder';
@@ -121,17 +124,18 @@ export const openAutomergeFolderDatabase = async (
   }
   const selected = selectFolderAttachment(document, sourceId);
   if (selected.attachment === undefined) return { success: false, issues: selected.issues };
+  const attachmentId = `patchpit:folder:${sourceId}`;
   const opened = await openAutomergeDatabase({
     handle,
     declaration: selected.attachment.declaration,
     embeddedArtifacts: selected.attachment.artifacts,
     authorityScope,
-    attachmentId: `patchpit:folder:${sourceId}`,
+    attachmentId,
   });
   return opened.success
     ? {
         success: true,
-        value: opened.value,
+        value: { ...opened.value, attachmentId, sourceId },
         issues: [...selected.issues, ...opened.issues],
       }
     : { success: false, issues: [...selected.issues, ...opened.issues] };
@@ -148,17 +152,24 @@ export const openAutomergeFilesystemDatabase = async (
   }
   const selected = selectFilesystemDocumentKind(document, sourceId);
   if (!selected.success) return selected;
-  const opened = selected.value === 'folder'
-    ? await openAutomergeFolderDatabase(handle, authorityScope)
-    : await openAutomergeFileDatabase(handle, authorityScope);
-  if (!opened.success) {
-    return { success: false, issues: [...selected.issues, ...opened.issues] };
+  if (selected.value === 'folder') {
+    const opened = await openAutomergeFolderDatabase(handle, authorityScope);
+    return opened.success
+      ? {
+          success: true,
+          value: { kind: 'folder', database: opened.value },
+          issues: [...selected.issues, ...opened.issues],
+        }
+      : { success: false, issues: [...selected.issues, ...opened.issues] };
   }
-  return {
-    success: true,
-    value: { kind: selected.value, database: opened.value },
-    issues: [...selected.issues, ...opened.issues],
-  };
+  const opened = await openAutomergeFileDatabase(handle, authorityScope);
+  return opened.success
+    ? {
+        success: true,
+        value: { kind: 'file', database: opened.value },
+        issues: [...selected.issues, ...opened.issues],
+      }
+    : { success: false, issues: [...selected.issues, ...opened.issues] };
 };
 
 const selectFolderAttachment = (

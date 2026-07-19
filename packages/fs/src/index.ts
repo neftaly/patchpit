@@ -25,7 +25,10 @@ export {
   applyFolderOperation,
   commitFolderOperation,
   commitTextFileSplice,
+  folderLinkFactsFromRow,
+  sameFolderLinkFacts,
   stageTextFileSplice,
+  type FolderLinkFacts,
   type FolderOperation,
   type TextFileSpliceOperation,
 } from './operations.ts';

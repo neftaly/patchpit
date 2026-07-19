@@ -247,3 +247,109 @@ void test('Patchpit runtime snapshots valid app bytes and retains invalid conten
   reopened.close();
   await repo.shutdown();
 });
+
+void test('Patchpit copies file history and relocates links through explicit source sequences', async () => {
+  const repo = new Repo({ network: [] });
+  const runtime = await createRoot({
+    repo,
+    initialContext: 'files.html',
+    folders: [{
+      folderId: 'source-folder',
+      name: 'source',
+      order: 1,
+      files: [{
+        contentType: 'text/markdown',
+        linkId: 'notes',
+        name: 'notes.md',
+        order: 0,
+        text: '# Notes',
+      }],
+    }, {
+      folderId: 'destination-folder',
+      name: 'destination',
+      order: 2,
+      files: [],
+    }],
+  });
+  try {
+    const initial = await runtime.resourceQuery.whenSettled();
+    const sourceFolder = initial.rows.find(({ linkId, sourceId }) =>
+      linkId === 'source-folder' && sourceId === runtime.rootUrl)!;
+    const destinationFolder = initial.rows.find(({ linkId, sourceId }) =>
+      linkId === 'destination-folder' && sourceId === runtime.rootUrl)!;
+    const notes = initial.rows.find(({ linkId, sourceId }) =>
+      linkId === 'notes' && sourceId === sourceFolder.resourceRef)!;
+    const notesHandle = (await runtime.resolveResourceDocument(notes.resourceRef))!;
+    notesHandle.change((document) => {
+      (document as Record<string, unknown>).unknownExtension = { retained: true };
+    });
+
+    const relocation = {
+      destinationLinkId: 'relocated-notes',
+      destinationSourceId: destinationFolder.resourceRef,
+      source: notes,
+      transferId: crypto.randomUUID(),
+    };
+    const relocated = await runtime.relocateResource(relocation);
+    assert.equal(relocated.state, 'complete', JSON.stringify(relocated));
+    const relocationRetry = await runtime.relocateResource(relocation);
+    assert.equal(relocationRetry.state, 'complete', JSON.stringify(relocationRetry));
+    const afterRelocation = await runtime.resourceQuery.whenSettled();
+    assert.equal(afterRelocation.rows.some(({ linkId, sourceId }) =>
+      linkId === notes.linkId && sourceId === sourceFolder.resourceRef), false);
+    const relocatedLink = afterRelocation.rows.find(({ linkId, sourceId }) =>
+      linkId === relocation.destinationLinkId && sourceId === destinationFolder.resourceRef)!;
+    assert.equal(relocatedLink.resourceRef, notes.resourceRef);
+
+    const prepared = await runtime.prepareResourceCopy({
+      destinationLinkId: 'copied-notes',
+      destinationSourceId: sourceFolder.resourceRef,
+      source: relocatedLink,
+      transferId: crypto.randomUUID(),
+    });
+    assert.equal(prepared.state, 'ready', JSON.stringify(prepared));
+    if (prepared.state !== 'ready') return;
+    const copied = await runtime.copyResource(prepared.intent);
+    assert.equal(copied.state, 'complete', JSON.stringify(copied));
+    const copyRetry = await runtime.copyResource(prepared.intent);
+    assert.equal(copyRetry.state, 'complete', JSON.stringify(copyRetry));
+    const afterCopy = await runtime.resourceQuery.whenSettled();
+    const copyLinks = afterCopy.rows.filter(({ linkId, sourceId }) =>
+      linkId === prepared.intent.destinationLinkId && sourceId === sourceFolder.resourceRef);
+    assert.equal(copyLinks.length, 1);
+    const copyLink = copyLinks[0]!;
+    assert.notEqual(copyLink.resourceRef, notes.resourceRef);
+    assert.equal(copyLink.copyOf, notes.resourceRef);
+    const copiedHandle = (await runtime.resolveResourceDocument(copyLink.resourceRef))!;
+    const copiedDocument = copiedHandle.doc() as Record<string, unknown>;
+    assert.deepEqual(copiedDocument.unknownExtension, { retained: true });
+    assert.equal(copiedDocument.content, '# Notes');
+
+    const colliding = await runtime.prepareResourceCopy({
+      destinationLinkId: prepared.intent.destinationLinkId,
+      destinationSourceId: sourceFolder.resourceRef,
+      source: relocatedLink,
+      transferId: crypto.randomUUID(),
+    });
+    assert.equal(colliding.state, 'ready', JSON.stringify(colliding));
+    if (colliding.state === 'ready') {
+      const partial = await runtime.copyResource(colliding.intent);
+      assert.equal(partial.state, 'partial', JSON.stringify(partial));
+      if (partial.state === 'partial') {
+        assert.equal(partial.receipt.orphanedSourceIds.length, 1);
+        assert.equal(partial.receipt.steps[1]?.outcome, 'failed');
+      }
+    }
+    const concurrentLifecycle = await openRoot({ repo, rootUrl: runtime.rootUrl });
+    try {
+      const expired = await concurrentLifecycle.copyResource(prepared.intent);
+      assert.equal(expired.state, 'blocked');
+      if (expired.state === 'blocked') assert.equal(expired.reason, 'operation-expired');
+    } finally {
+      concurrentLifecycle.close();
+    }
+  } finally {
+    runtime.close();
+    await repo.shutdown();
+  }
+});
