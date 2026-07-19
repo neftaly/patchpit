@@ -123,7 +123,7 @@ const materializeSnapshotRows = (
       name: row.name,
       ...(row.order === undefined ? {} : { order: row.order }),
       resourceRef: row.resourceRef,
-      sourceId: requiredSourceId(row.sourceId),
+      sourceId: row.sourceId,
       typeHint: row.typeHint,
     });
     return projection;
@@ -132,11 +132,10 @@ const materializeSnapshotRows = (
   const content = contentKind === 'text' && typeof textContent === 'string'
     ? new TextEncoder().encode(textContent)
     : materializeBinaryContent(contentKind, binaryContent);
-  const resolvedSourceId = requiredSourceId(sourceId);
-  if (content === undefined || projection.contents.has(resolvedSourceId)) {
+  if (content === undefined || projection.contents.has(sourceId)) {
     throw new TypeError('App file content projection is invalid');
   }
-  projection.contents.set(resolvedSourceId, { content, mimeType });
+  projection.contents.set(sourceId, { content, mimeType });
   return projection;
 }, {
   links: [],
@@ -150,11 +149,6 @@ const materializeBinaryContent = (
   if (contentKind !== 'binary') return undefined;
   const materialized = safeMaterializePortableBytes(content);
   return materialized.success ? materialized.value : undefined;
-};
-
-const requiredSourceId = (sourceId: string | undefined) => {
-  if (sourceId === undefined) throw new TypeError('App snapshot row has no source provenance');
-  return sourceId;
 };
 
 const unavailable = (

@@ -5,6 +5,7 @@ import {
   typedSelect,
   typedSourceOf,
   typedUnionAll,
+  typedWhereSourcePresent,
 } from '@tarstate/core/query/authoring';
 import { fileRelation, folderLinksRelation } from '@patchpit/fs';
 
@@ -14,7 +15,7 @@ const QUERY_IDENTITY = {
   datasetId: 'patchpit:app:contents',
 } as const;
 
-const links = typedFrom(folderLinksRelation, 'link');
+const links = typedWhereSourcePresent(typedFrom(folderLinksRelation, 'link'), 'link');
 const contentLinksQuery = typedSelect(links, 'sourceLink', ({ link }) => ({
   linkId: link.row.linkId,
   originSourceId: typedSourceOf(link),
@@ -37,7 +38,7 @@ const appLinks = typedSelect(links, 'snapshot', ({ link }) => ({
   textContent: typedLiteral(null),
   typeHint: link.row.typeHint,
 }));
-const files = typedFrom(fileRelation, 'file');
+const files = typedWhereSourcePresent(typedFrom(fileRelation, 'file'), 'file');
 const appContents = typedSelect(files, 'snapshot', ({ file }) => ({
   binaryContent: file.row.binaryContent,
   contentKind: file.row.contentKind,

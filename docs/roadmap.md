@@ -39,14 +39,14 @@ Acceptance evidence:
 
 ### W4. Markdown acceptance application
 
-Complete unrestricted continuous multiplayer input for the delivered Markdown
-editor. One independently based semantic splice already merges correctly, local
-dependent splices queue, and unsafe concurrent replacement retains the local
-draft. Replace that safe pause only after Tarstate supplies a generic
-source-native text-intent continuation or equivalent anchors; do not add a
-Patchpit offset transform, whole-text replacement, hidden Automerge writer, or
-distributed writer lock. Source-native Automerge feasibility is proven; the
-remaining dependency is the released session lifecycle and outcome contract.
+Complete bounded multiplayer input batches for the delivered Markdown editor.
+Tarstate 0.6.3 now supplies the released source-native text-intent session and
+outcome contract needed to compose locally dependent splices before one
+publication. Integrate that lifecycle without adding a Patchpit offset
+transform, whole-text replacement, hidden Automerge writer, or distributed
+writer lock. New input must not enter a batch after publication starts; truly
+continuous dependent input across several publications remains a distinct
+source capability rather than a Patchpit workaround.
 
 Generalize the existing relative open request to document creation only when the
 Markdown app has a concrete creation story. The application remains detached

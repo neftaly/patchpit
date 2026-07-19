@@ -357,21 +357,18 @@ screen-reader value/selection announcements; and non-Chromium platform keyboard
 conventions where EditContext becomes available. These stay explicit rather
 than being implied by the current passing cases.
 
-## Current upstream gate
+## Current integration boundary
 
-Released Tarstate correctly captures one text splice at an `observedBasis` and
-reconciles that intent with later Automerge changes. It does not yet expose a
-session or returned anchor that lets a consumer capture a second splice relative
-to characters introduced by a still-unacknowledged first splice. A Patchpit-local
-offset transform, hidden Automerge write, writer lock, or whole-document fallback
-would violate E3 and E4.
+Tarstate 0.6.3 exposes a bounded text-intent session that accepts dependent
+semantic splices against one optimistic transaction snapshot, reconciles the
+batch with concurrent Automerge changes, validates it, and publishes it once.
+Per-segment and final outcomes, cancellation, cleanup, and the observed source
+basis are part of the released contract, so the previous upstream gate is gone.
 
-Tarstate now has source-native feasibility evidence for retained Automerge
-branches, buffered dependent splices, and deletion-aware relative cursors. That
-reduces implementation uncertainty but does not yet provide the bounded session,
-outcome, authority, and cleanup contract Patchpit can consume.
-
-The host port, document projection, presence lifecycle, generated identities,
-selection cursors, composition rules, minimal UI, and independently based
-convergence evidence can proceed. Unrestricted continuous writes remain gated by
-the consumer-independent capability described in the Tarstate proposal.
+Patchpit still has to choose and exercise the product-level batch boundary. It
+must stop accepting additions once publication begins and retain actionable
+evidence on rejection or an unknown outcome. Tarstate deliberately does not
+carry dependent intent across several publications; genuinely uninterrupted
+input through an in-flight publication would require that separate source
+capability. Patchpit must not approximate it with offset transforms, a hidden
+Automerge writer, a writer lock, or whole-document replacement.
