@@ -27,7 +27,7 @@ export const RESOURCE_DRAG_TYPE = 'application/x-patchpit-resource';
 
 type ContentRuntime = Pick<
   PatchpitRuntime,
-  'createAppSnapshot' | 'openAppTextDocument' | 'openResourceFile'
+  'createAppSnapshot' | 'openAppTextDocument' | 'openResourceFileQuery'
 >;
 type SandboxHost = Pick<BrowserSandboxHost, 'install'>;
 
@@ -177,29 +177,24 @@ function Viewer({ contentRuntime, resourceRef }: {
   readonly resourceRef: string;
 }) {
   const [resolution, setResolution] = useState<{
-    readonly state: 'loading' | 'unavailable';
-  } | {
-    readonly state: 'ready';
-    readonly observer: NonNullable<Awaited<ReturnType<ContentRuntime['openResourceFile']>>>;
-  }>({ state: 'loading' });
+    readonly state: 'loading';
+  } | Awaited<ReturnType<ContentRuntime['openResourceFileQuery']>>>({ state: 'loading' });
   useEffect(() => {
     const controller = new AbortController();
     setResolution({ state: 'loading' });
-    let opened: Awaited<ReturnType<ContentRuntime['openResourceFile']>>;
-    void contentRuntime.openResourceFile(resourceRef, controller.signal).then((observer) => {
-      opened = observer;
-      if (!controller.signal.aborted) setResolution(observer === undefined
-        ? { state: 'unavailable' }
-        : { state: 'ready', observer });
+    let opened: Awaited<ReturnType<ContentRuntime['openResourceFileQuery']>>;
+    void contentRuntime.openResourceFileQuery(resourceRef, controller.signal).then((result) => {
+      opened = result;
+      if (!controller.signal.aborted) setResolution(result);
     }, () => {
       if (!controller.signal.aborted) setResolution({ state: 'unavailable' });
     });
     return () => {
       controller.abort();
-      opened?.close();
+      if (opened?.state === 'ready') opened.query.close();
     };
   }, [contentRuntime, resourceRef]);
-  const observer = resolution.state === 'ready' ? resolution.observer : undefined;
+  const observer = resolution.state === 'ready' ? resolution.query : undefined;
   const subscribe = useCallback(
     (listener: () => void) => observer?.subscribe(listener) ?? (() => undefined),
     [observer],
@@ -211,6 +206,7 @@ function Viewer({ contentRuntime, resourceRef }: {
     getSnapshot,
   );
   if (resolution.state === 'unavailable') return <p role="alert">Resource unavailable.</p>;
+  if (resolution.state === 'invalid') return <p role="alert">Resource invalid.</p>;
   if (snapshot === undefined) return null;
   const view = projectResourceFileView(snapshot);
   return view.state === 'ready'

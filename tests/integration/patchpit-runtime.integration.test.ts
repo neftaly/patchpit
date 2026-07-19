@@ -78,7 +78,10 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
   assert.equal(contentDocument.name, 'index.html');
   assert.equal(contentDocument.mimeType, 'text/html');
 
-  const indexFile = (await runtime.openResourceFile(index.resourceRef))!;
+  const indexFileResult = await runtime.openResourceFileQuery(index.resourceRef);
+  assert.equal(indexFileResult.state, 'ready');
+  if (indexFileResult.state !== 'ready') return;
+  const indexFile = indexFileResult.query;
   await indexFile.whenSettled();
   assert.deepEqual(projectResourceFileView(indexFile.getSnapshot()), {
     content: '<h1>',
@@ -92,7 +95,10 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
   assert.equal(demoDocument.content, '# Demo');
   assert.equal(demoDocument.mimeType, 'text/markdown');
 
-  const demoFile = (await runtime.openResourceFile(demo.resourceRef))!;
+  const demoFileResult = await runtime.openResourceFileQuery(demo.resourceRef);
+  assert.equal(demoFileResult.state, 'ready');
+  if (demoFileResult.state !== 'ready') return;
+  const demoFile = demoFileResult.query;
   const projectedDemo = await demoFile.whenSettled();
   assert.equal(projectedDemo.readiness, 'ready');
   assert.equal(projectedDemo.completeness, 'exact');
@@ -140,10 +146,19 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
     });
   });
   assert.equal(await runtime.resolveResourceDocument(addedHandle.url), addedHandle);
+  const invalidHandle = repo.create({ '@patchpit': { type: 'file' } });
+  folderHandle.change((doc) => {
+    (doc.docs as unknown as MutableFolderLink[]).push({
+      id: 'invalid', name: 'invalid.txt', type: 'file', url: invalidHandle.url,
+    });
+  });
+  assert.equal((await runtime.openResourceFileQuery(invalidHandle.url)).state, 'invalid');
   folderHandle.change((doc) => {
     const docs = doc.docs as unknown as MutableFolderLink[];
     const added = docs.findIndex(({ id }) => id === 'added');
     docs.splice(added, 1);
+    const invalid = docs.findIndex(({ id }) => id === 'invalid');
+    docs.splice(invalid, 1);
     const indexLink = docs.find(({ id }) => id === 'index.html');
     if (indexLink !== undefined) indexLink.name = 'main.html';
   });
@@ -222,6 +237,12 @@ void test('Patchpit runtime snapshots valid app bytes and retains invalid conten
   );
   handle.update(() => Automerge.merge(left, right) as Automerge.Doc<object>);
   assert.equal((await reopened.createAppSnapshot(folderRef)).state, 'invalid');
+  const conflictedFile = await reopened.openResourceFileQuery(resourceRef);
+  assert.equal(conflictedFile.state, 'ready');
+  if (conflictedFile.state === 'ready') {
+    assert.notEqual((await conflictedFile.query.whenSettled()).readiness, 'ready');
+    conflictedFile.query.close();
+  }
 
   reopened.close();
   await repo.shutdown();

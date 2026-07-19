@@ -278,17 +278,19 @@ const openRootHandle = async (
     const observer = await openTitleObserver(sources, resourceObservers);
     return retainOpenObserver(observer, closed, titleSignal);
   };
-  const openResourceFile = async (resourceRef: string, fileSignal?: AbortSignal) => {
+  const openResourceFileQuery = async (resourceRef: string, fileSignal?: AbortSignal) => {
     if (closed || !rootReferencesResource(resourceQuery, resourceRef)
-      || !isValidAutomergeUrl(resourceRef)) return undefined;
+      || !isValidAutomergeUrl(resourceRef)) return { state: 'unavailable' as const };
     const handle = await findResourceHandle(resourceRef, fileSignal);
-    if (closed || !rootReferencesResource(resourceQuery, resourceRef)) return undefined;
+    if (closed || !rootReferencesResource(resourceQuery, resourceRef)) {
+      return { state: 'unavailable' as const };
+    }
     const opened = await openAutomergeFileDatabase(handle, 'public');
-    if (!opened.success) return undefined;
+    if (!opened.success) return { issues: opened.issues, state: 'invalid' as const };
     if (closed || fileSignal?.aborted === true || !rootReferencesResource(resourceQuery, resourceRef)) {
       opened.value.close();
       fileSignal?.throwIfAborted();
-      return undefined;
+      return { state: 'unavailable' as const };
     }
     let query: Awaited<ReturnType<typeof openFileDocumentQuery>>;
     try {
@@ -311,7 +313,10 @@ const openRootHandle = async (
       },
     };
     resourceObservers.add(observer);
-    return retainOpenObserver(observer, closed, fileSignal);
+    const retained = retainOpenObserver(observer, closed, fileSignal);
+    return retained === undefined
+      ? { state: 'unavailable' as const }
+      : { query: retained, state: 'ready' as const };
   };
   const createAppSnapshot = async (rootFolderRef: string, snapshotSignal?: AbortSignal) => {
     if (closed) throw new Error('Patchpit root is closed');
@@ -408,7 +413,7 @@ const openRootHandle = async (
     workspacePresence,
     resolveResourceDocument,
     openResourceTitles,
-    openResourceFile,
+    openResourceFileQuery,
     createAppSnapshot,
     openAppTextDocument,
     close: () => {
