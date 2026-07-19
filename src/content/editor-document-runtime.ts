@@ -10,7 +10,7 @@ import {
   type PeerState,
 } from '@automerge/automerge-repo';
 import { mappedRelationRows, type AutomergeDatabase } from '@tarstate/automerge';
-import { canonicalizeJson } from '@tarstate/core';
+import { viewAutomergeDocumentAtBasis } from '@tarstate/automerge/view';
 import type { SourceBasis } from '@tarstate/core/database';
 import type {
   EditorDocumentSnapshot,
@@ -30,7 +30,6 @@ const PARTICIPANT_COLOR_COUNT = 8;
 const PRESENCE_HEARTBEAT_MS = 5_000;
 const PRESENCE_PEER_TTL_MS = 15_000;
 const MAX_EDITOR_TEXT_LENGTH = 16 * 1_024 * 1_024;
-const EXACT_BASIS_CAPTURE_WAIT_MS = 5_000;
 
 type PresenceSelection = {
   readonly anchor: Cursor;
@@ -61,6 +60,11 @@ type UnavailableDocument = {
 
 type CurrentDocument = CapturedDocument | UnavailableDocument;
 
+type EditorDatabase = Pick<
+  AutomergeDatabase,
+  'capabilities' | 'close' | 'getSnapshot' | 'openTextIntent' | 'subscribe'
+>;
+
 export type EditorDocumentSession = {
   readonly commitSplice: (
     revision: string,
@@ -85,7 +89,7 @@ export type EditorDocumentHub = {
 
 export const createEditorDocumentHub = (
   handle: DocHandle<object>,
-  database: AutomergeDatabase,
+  database: EditorDatabase,
   displayIdentityId: string,
   onEmpty: () => void,
 ): EditorDocumentHub => {
@@ -94,8 +98,6 @@ export const createEditorDocumentHub = (
   const listeners = new Set<() => void>();
   const sessionDisposers = new Set<() => void>();
   const captures = new Map<string, CapturedDocument>();
-  const capturesByBasis = new Map<string, CapturedDocument>();
-  const captureWaiters = new Map<string, Set<(capture: CapturedDocument | undefined) => void>>();
   let currentDocument = captureDocument(handle, database);
   let closed = false;
 
@@ -103,19 +105,10 @@ export const createEditorDocumentHub = (
     currentDocument = capture;
     if (capture.state !== 'ready') return;
     captures.set(capture.revision, capture);
-    const basisKey = canonicalizeJson(capture.basis);
-    capturesByBasis.set(basisKey, capture);
-    captureWaiters.get(basisKey)?.forEach((resolve) => { resolve(capture); });
-    captureWaiters.delete(basisKey);
     while (captures.size > MAX_CAPTURED_REVISIONS) {
       const oldest = captures.keys().next().value as string | undefined;
       if (oldest === undefined) break;
-      const evicted = captures.get(oldest);
       captures.delete(oldest);
-      if (evicted !== undefined
-        && capturesByBasis.get(canonicalizeJson(evicted.basis)) === evicted) {
-        capturesByBasis.delete(canonicalizeJson(evicted.basis));
-      }
     }
   };
   retainCapture(currentDocument);
@@ -178,11 +171,6 @@ export const createEditorDocumentHub = (
     sessionDisposers.clear();
     localSessions.clear();
     captures.clear();
-    capturesByBasis.clear();
-    captureWaiters.forEach((waiters) => {
-      waiters.forEach((resolve) => { resolve(undefined); });
-    });
-    captureWaiters.clear();
     listeners.clear();
     database.close();
   };
@@ -202,21 +190,18 @@ export const createEditorDocumentHub = (
       maxTextLength: MAX_EDITOR_TEXT_LENGTH,
       basisForRevision: (revision) => captures.get(revision)?.basis,
       resolveSelection: async (basis, selection, signal) => {
-        const capture = await captureAtBasis(
-          basis,
-          capturesByBasis,
-          captureWaiters,
-          signal,
-          () => closed,
-        );
-        if (capture === undefined
-          || !validOffset(selection.anchor, capture.text)
-          || !validOffset(selection.focus, capture.text)) return false;
+        if (closed || signal.aborted) return false;
+        const viewed = viewAutomergeDocumentAtBasis(handle.doc(), basis);
+        if (!viewed.success) return false;
+        const text = textContent(viewed.value);
+        if (text === undefined
+          || !validOffset(selection.anchor, text)
+          || !validOffset(selection.focus, text)) return false;
         localSessions.set(sessionId, {
           displayIdentityId,
           selection: {
-            anchor: getCursor(capture.document, TEXT_PATH, selection.anchor),
-            focus: getCursor(capture.document, TEXT_PATH, selection.focus),
+            anchor: getCursor(viewed.value, TEXT_PATH, selection.anchor),
+            focus: getCursor(viewed.value, TEXT_PATH, selection.focus),
           },
         });
         broadcastSessions();
@@ -272,7 +257,7 @@ export const createEditorDocumentHub = (
 
 const captureDocument = (
   handle: DocHandle<object>,
-  database: AutomergeDatabase,
+  database: EditorDatabase,
 ): CurrentDocument => {
   const snapshot = database.getSnapshot();
   const document = handle.doc();
@@ -423,29 +408,7 @@ const isSessionId = (value: string) =>
 const isRecord = (candidate: unknown): candidate is Readonly<Record<string, unknown>> =>
   typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate);
 
-const captureAtBasis = (
-  basis: SourceBasis,
-  captures: ReadonlyMap<string, CapturedDocument>,
-  waiters: Map<string, Set<(capture: CapturedDocument | undefined) => void>>,
-  signal: AbortSignal,
-  isClosed: () => boolean,
-): Promise<CapturedDocument | undefined> => {
-  const key = canonicalizeJson(basis);
-  const capture = captures.get(key);
-  if (capture !== undefined || isClosed() || signal.aborted) return Promise.resolve(capture);
-  return new Promise((resolve) => {
-    const pending = waiters.get(key) ?? new Set();
-    const settle = (value: CapturedDocument | undefined) => {
-      clearTimeout(timeout);
-      signal.removeEventListener('abort', aborted);
-      pending.delete(settle);
-      if (pending.size === 0) waiters.delete(key);
-      resolve(value);
-    };
-    const aborted = () => { settle(undefined); };
-    const timeout = setTimeout(() => { settle(undefined); }, EXACT_BASIS_CAPTURE_WAIT_MS);
-    pending.add(settle);
-    waiters.set(key, pending);
-    signal.addEventListener('abort', aborted, { once: true });
-  });
+const textContent = (document: Doc<object>) => {
+  const content = (document as Readonly<{ content?: unknown }>).content;
+  return typeof content === 'string' ? content : undefined;
 };

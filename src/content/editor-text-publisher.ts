@@ -17,12 +17,12 @@ type EditorSelection = {
 };
 
 type PendingPublication = {
-  readonly resolve: (result: EditorPublicationResult) => void;
+  readonly settle: (result: EditorPublicationResult) => void;
 };
 
 export const createEditorTextPublisher = (options: {
   readonly basisForRevision: (revision: string) => SourceBasis | undefined;
-  readonly database: AutomergeDatabase;
+  readonly database: Pick<AutomergeDatabase, 'openTextIntent'>;
   readonly maxTextLength: number;
   readonly resolveSelection: (
     basis: SourceBasis,
@@ -32,10 +32,12 @@ export const createEditorTextPublisher = (options: {
 }) => {
   const lifecycle = new AbortController();
   const pendingRequests: PendingPublication[] = [];
+  const publishingRequests: PendingPublication[] = [];
   let session: DatabaseTextIntentSession | undefined;
   let sessionBasisRevision: string | undefined;
   let appendTail = Promise.resolve();
   let publishing = false;
+  let knownPublishingOutcome: EditorPublicationResult['outcome'] | undefined;
   let latestSelection: EditorSelection = { anchor: 0, focus: 0 };
   let closed = false;
 
@@ -45,22 +47,31 @@ export const createEditorTextPublisher = (options: {
     sessionBasisRevision = undefined;
   };
 
-  const settlePending = (result: EditorPublicationResult) => {
-    pendingRequests.splice(0).forEach(({ resolve }) => { resolve(result); });
+  const settle = (
+    requests: PendingPublication[],
+    result: EditorPublicationResult,
+  ) => {
+    requests.splice(0).forEach((request) => { request.settle(result); });
   };
 
-  const failPublisher = (outcome: 'rejected' | 'unknown') => {
+  const failPublisher = (
+    outcome: 'rejected' | 'unknown',
+    activeOutcome: EditorPublicationResult['outcome'] = outcome,
+  ) => {
     publishing = false;
     closed = true;
     lifecycle.abort();
-    settlePending({ outcome, selection: 'unresolved' });
+    settle(publishingRequests, { outcome: activeOutcome, selection: 'unresolved' });
+    settle(pendingRequests, { outcome, selection: 'unresolved' });
+    knownPublishingOutcome = undefined;
     closeSession();
   };
 
   const publishPending = () => {
     const active = session;
     if (closed || publishing || active === undefined || pendingRequests.length === 0) return;
-    const publishingRequests = pendingRequests.splice(0);
+    publishingRequests.push(...pendingRequests.splice(0));
+    knownPublishingOutcome = undefined;
     let positions;
     try {
       positions = [
@@ -82,20 +93,16 @@ export const createEditorTextPublisher = (options: {
         }),
       ];
     } catch {
-      publishingRequests.forEach(({ resolve }) => {
-        resolve({ outcome: 'rejected', selection: 'unresolved' });
-      });
       failPublisher('rejected');
       return;
     }
     publishing = true;
     void active.publish({ textPositions: positions }).then(async (receipt) => {
       if (closed || session !== active) {
-        publishingRequests.forEach(({ resolve }) => {
-          resolve({ outcome: 'unknown', selection: 'unresolved' });
-        });
+        settle(publishingRequests, { outcome: 'unknown', selection: 'unresolved' });
         return;
       }
+      knownPublishingOutcome = receipt.outcome;
       let selectionState: EditorPublicationResult['selection'] = 'unresolved';
       if (receipt.outcome === 'committed') {
         const anchor = receipt.textPositions.find(({ name }) => name === ANCHOR_POSITION_NAME);
@@ -111,16 +118,12 @@ export const createEditorTextPublisher = (options: {
           }
         }
       }
-      publishingRequests.forEach(({ resolve }) => {
-        resolve({ outcome: receipt.outcome, selection: selectionState });
-      });
+      settle(publishingRequests, { outcome: receipt.outcome, selection: selectionState });
       publishing = false;
+      knownPublishingOutcome = undefined;
       if (receipt.outcome === 'committed') publishPending();
       else failPublisher(receipt.outcome);
     }).catch(() => {
-      publishingRequests.forEach(({ resolve }) => {
-        resolve({ outcome: 'unknown', selection: 'unresolved' });
-      });
       failPublisher('unknown');
     });
   };
@@ -151,21 +154,29 @@ export const createEditorTextPublisher = (options: {
     operation: TextFileSpliceOperation,
     nextSelection: EditorSelection,
   ): Promise<EditorPublicationResult> => new Promise((resolve) => {
+    let settled = false;
+    const request: PendingPublication = {
+      settle: (result) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      },
+    };
     appendTail = appendTail.then(async () => {
       if (closed) {
-        resolve({ outcome: 'rejected', selection: 'unresolved' });
+        request.settle({ outcome: 'rejected', selection: 'unresolved' });
         return;
       }
       const active = await openSession(revision);
       if (active === undefined) {
-        resolve({ outcome: 'rejected', selection: 'unresolved' });
+        request.settle({ outcome: 'rejected', selection: 'unresolved' });
         return;
       }
       const text = editableText(active);
       if (text === undefined
         || !validSplice(operation, text, options.maxTextLength)
         || !validSelection(nextSelection, text, operation)) {
-        resolve({ outcome: 'rejected', selection: 'unresolved' });
+        request.settle({ outcome: 'rejected', selection: 'unresolved' });
         return;
       }
       const segment = active.append(
@@ -174,18 +185,18 @@ export const createEditorTextPublisher = (options: {
       );
       if (segment.status !== 'pending') {
         const outcome = segment.status === 'unknown' ? 'unknown' : 'rejected';
-        resolve({
+        request.settle({
           outcome,
           selection: 'unresolved',
         });
-        failPublisher(outcome);
+        failPublisher(outcome, knownPublishingOutcome ?? 'unknown');
         return;
       }
       latestSelection = nextSelection;
-      pendingRequests.push({ resolve });
+      pendingRequests.push(request);
       publishPending();
     }).catch(() => {
-      resolve({ outcome: 'unknown', selection: 'unresolved' });
+      request.settle({ outcome: 'unknown', selection: 'unresolved' });
       failPublisher('unknown');
     });
   });
@@ -194,7 +205,12 @@ export const createEditorTextPublisher = (options: {
     if (closed) return;
     closed = true;
     lifecycle.abort();
-    settlePending({ outcome: 'unknown', selection: 'unresolved' });
+    settle(publishingRequests, {
+      outcome: knownPublishingOutcome ?? 'unknown',
+      selection: 'unresolved',
+    });
+    settle(pendingRequests, { outcome: 'unknown', selection: 'unresolved' });
+    knownPublishingOutcome = undefined;
     closeSession();
   };
 

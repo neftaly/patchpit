@@ -54,8 +54,10 @@ opaque revision. The host converts selection offsets to Automerge cursors and
 back. Each mounted editor session owns one retained Tarstate text-intent session:
 an in-flight publication atomically captures its pending prefix while later
 dependent input remains a source-native suffix for the next publication.
-Rejected, unknown, or unresolvable results retain the local draft and stop
-writes; Patchpit never rebases numeric offsets itself.
+The host materializes selection at a committed receipt's exact Automerge basis,
+even when its live handle has advanced. Rejected, unknown, or unresolvable
+results retain the local draft and stop writes; Patchpit never rebases numeric
+offsets itself.
 
 ## A5. Sandbox boundary
 

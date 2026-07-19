@@ -179,7 +179,10 @@ and publish as its causal suffix rather than replaying numeric offsets against a
 different string. Rejection, an unknown outcome, or a committed result whose
 selection cannot be resolved at its exact basis retains the visible local draft
 and makes the editor read-only instead of dropping, duplicating, or misplacing
-input.
+input. Source-level expiry and work-budget failures follow those same observable
+rejected or unresolved paths; adapter diagnostics do not become a second
+sandbox protocol. A failure in a retained suffix does not falsely describe an
+already-publishing prefix as rejected when its outcome is not known.
 
 Each browser profile has one opaque generated display identity. Its label and
 color remain stable across Patchpit tabs and reloads on that origin, while every
@@ -211,7 +214,9 @@ one semantic splice against the source basis captured when composition began. A
 canonical change received during composition does not disturb the candidate
 window. Completion reconciles through the same retained source-native session;
 Tarstate resolves the final anchor and focus into detached offsets at the exact
-committed basis before Patchpit updates presence or adopts the merged projection.
+committed basis. Patchpit materializes that immutable historical Automerge view
+directly before updating presence or adopting the merged projection, so an
+advanced live handle cannot select against the wrong document.
 The app fills its viewport and shows only a compact
 write/readiness and participant line outside the text. There is no formatting
 toolbar, preview, diagnostic counter, save ceremony, or undo behavior.

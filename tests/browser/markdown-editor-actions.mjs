@@ -106,6 +106,25 @@ const dispatchTextUpdate = async (editor, text, nextSelection) => {
   }, { text, selection: nextSelection });
 };
 
+const dispatchSplices = (editor, operations) => editor.editor.evaluate((root, edits) => {
+  if (root.editContext === null) throw new Error('EditContext is detached');
+  edits.forEach((operation) => {
+    root.editContext.updateText(
+      operation.index,
+      operation.index + operation.deleteCount,
+      operation.insert,
+    );
+    const caret = operation.index + operation.insert.length;
+    root.editContext.dispatchEvent(new TextUpdateEvent('textupdate', {
+      updateRangeStart: operation.index,
+      updateRangeEnd: operation.index + operation.deleteCount,
+      text: operation.insert,
+      selectionStart: caret,
+      selectionEnd: caret,
+    }));
+  });
+}, operations);
+
 const setFixture = async (editor, text, nextSelection) => {
   await eventually(
     async () => await editor.app.getAttribute('data-sync-state') !== 'applying',
@@ -691,6 +710,46 @@ const remoteStableCase = async (local, peer, name, action, options = {}) => {
   });
 };
 
+const runConcurrentSpliceCases = async (local, peer) => {
+  const initial = '0123456789';
+  const localOperations = [
+    { index: 3, deleteCount: 0, insert: 'X' },
+    { index: 6, deleteCount: 0, insert: 'Y' },
+    { index: 7, deleteCount: 0, insert: 'Z' },
+  ];
+  const localText = '012X34YZ56789';
+  for (const [position, remoteIndex] of Object.entries({ before: 1, inside: 4, after: 8 })) {
+    await record(`default: concurrency: rapid dependent splices merge a remote ${position} edit`, async () => {
+      await setFixture(local, initial, { start: 0, end: 0 });
+      await eventually(async () => await editorText(peer.editor) === initial, 'peer did not adopt concurrency fixture', 8_000);
+      const marker = `⟦${position}⟧`;
+      await Promise.all([
+        dispatchSplices(local, localOperations),
+        dispatchSplices(peer, [{ index: remoteIndex, deleteCount: 0, insert: marker }]),
+      ]);
+      await eventually(async () => {
+        const localValue = await editorText(local.editor);
+        const peerValue = await editorText(peer.editor);
+        return localValue === peerValue
+          && localValue?.includes(marker) === true
+          && await local.app.getAttribute('data-sync-state') === 'ready'
+          && await peer.app.getAttribute('data-sync-state') === 'ready';
+      }, `replicas did not settle the remote ${position} edit`, 8_000);
+      const merged = await editorText(local.editor) ?? '';
+      assert.equal(merged.replace(marker, ''), localText);
+      const markerIndex = merged.indexOf(marker);
+      if (position === 'before') assert(markerIndex < merged.indexOf('X'));
+      if (position === 'inside') {
+        assert(markerIndex > merged.indexOf('X'));
+        assert(markerIndex < merged.indexOf('Y'));
+      }
+      if (position === 'after') assert(markerIndex > merged.indexOf('Z'));
+      assert.deepEqual(local.pageErrors, []);
+      assert.deepEqual(peer.pageErrors, []);
+    });
+  }
+};
+
 const runPresenceCorpus = async (context, local) => {
   await local.page.waitForFunction(() => location.hash.includes('src'));
   const peer = await openEditor(context, 'default', local.page.url());
@@ -700,6 +759,7 @@ const runPresenceCorpus = async (context, local) => {
       'peer did not join local participant list',
       8_000,
     );
+    await runConcurrentSpliceCases(local, peer);
     await remoteStableCase(local, peer, 'hover over editor text preserves remote paint', async () => {
       await local.editor.hover({ position: await offsetPoint(local, 12) });
     });

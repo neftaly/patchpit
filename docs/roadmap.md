@@ -37,26 +37,6 @@ Acceptance evidence:
    held by a surviving replica; adapter liveness failure produces bounded,
    explicit evidence.
 
-### W4. Markdown acceptance hardening
-
-Close the remaining executable gaps in the delivered multiplayer editor. Replace
-the bounded wait for a matching live projection with the proposed public
-exact-basis Automerge view once Tarstate releases it. Keep the application
-detached from Repo, raw `DocHandle`, source handles, iframe state, credentials,
-and provider registries.
-
-Acceptance evidence:
-
-1. An end-to-end browser case keeps rapid locally dependent splices correctly
-   anchored while a second replica edits before, inside, and after their logical
-   range.
-2. Rejected, unknown, expired, and budget-exhausted intent streams retain
-   actionable unapplied evidence.
-3. Replacing a lifecycle during an in-flight prefix and retained suffix cancels
-   both exactly once, and late receipts cannot affect the replacement editor.
-4. Advancing the live handle beyond a committed result basis before result
-   handling still restores selection from that exact historical view.
-
 ### W5. Cross-source copy and move
 
 Implement cross-folder operations as explicit sequences over independent atomic
@@ -118,7 +98,8 @@ adapter actually preserves. Conflicts and unsupported values remain evidence.
 
 ### W9. Generalized views and typed creation
 
-Generalize only the view-selection and creation behavior demonstrated by W4.
+Generalize only the view-selection and creation behavior demonstrated by the
+multiplayer Markdown editor.
 Offer compatible views using exact logical schema and media type, retain raw
 inspection as fallback, and create canonical documents of selected logical
 types without introducing a generic renderer or provider registry.
