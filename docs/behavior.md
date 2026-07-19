@@ -24,8 +24,9 @@ than Automerge documents, apps, or implicit fetch requests. Unavailable,
 incomplete, invalid, stale, and closed source state never appears as an empty
 filesystem. An ordinary file viewer renders only a ready, current, exact logical
 file projection and reports other states explicitly; it does not inspect the
-physical Automerge document. Claimed Patchwork folder compatibility is two-way:
-supported
+physical Automerge document. The owned `workspace.am` occurrence instead opens
+a conflict-aware raw JSON inspector that follows Automerge heads without
+exposing its handle. Claimed Patchwork folder compatibility is two-way: supported
 Patchpit edits reopen in pinned Patchwork, and Patchwork edits to compatible
 Patchpit folders reopen without losing Patchpit or unknown metadata. Foreign
 file profiles remain read-only.
@@ -234,9 +235,26 @@ built-in demo never mutates or reseeds an existing root identity.
 
 ## B14. Cross-source resource transfer
 
-The root runtime can relocate links between folder documents and copy file
-documents. These operations are not yet bound to a file-manager gesture; B8's
-same-pane resource drag remains a no-op.
+The file manager exposes a `Transfer…` button for each transferable occurrence
+while the resource graph is ready. The root workspace occurrence is protected
+and has no transfer action. Activating the button opens a modal dialog containing
+one destination-folder chooser and distinct `Move` and `Copy` buttons. This is
+the complete pointer, touch, and keyboard interaction; there is no hidden drag
+modifier or independent shortcut, and B8's same-pane resource drag remains a
+no-op.
+
+The selected occurrence and destination are stable source identities rather
+than paths or names. Move is unavailable when the destination is the containing
+folder. Copy is offered only for occurrences nominated as Automerge files, then
+the exact document schema is checked before creation; folders and direct external
+resources expose move only. Duplicate destination names remain valid.
+The dialog cannot be dismissed after an operation starts until its receipt is
+known, so partial work is not hidden by cancellation. It then reports complete,
+no-op, blocked, failed, partial, or unknown state. Retrying reuses the same
+operation identity and prepared basis; it does not silently start a new copy.
+Closing returns focus to the surviving source action. A completed move, or a
+move whose outcome is unknown, returns focus to the stable Files region instead.
+Patchpit offers no transfer undo.
 
 Relocation adds an exact destination occurrence before unlinking the source.
 The referenced document keeps its identity, while the destination gets a new

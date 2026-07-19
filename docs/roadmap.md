@@ -37,31 +37,6 @@ Acceptance evidence:
    held by a surviving replica; adapter liveness failure produces bounded,
    explicit evidence.
 
-### W5. Resource-transfer interaction and repair
-
-Expose the current cross-source relocation and file-copy semantics through an
-intentional file-manager interaction without changing B8's same-pane drag by
-accident. The UI must distinguish copy, relocation, W6 reorder, and aliases and
-must never describe a multi-source sequence as atomic.
-
-Partial and unknown receipts need an actionable repair surface. Persist workflow
-identity before promising recovery across root lifecycles; the current
-memory-scoped copy epoch must continue rejecting expired prepared work. Decide
-folder-copy semantics only after its history, cycle, compatibility, and partial
-creation behavior have a concrete user story.
-
-Acceptance evidence:
-
-1. Pointer, touch, keyboard, cancellation, invalid targets, and same-pane drops
-   have browser behavior evidence before a gesture is enabled.
-2. Complete, partial, failed, unknown, expired, and orphaned outcomes have
-   distinct presentation and repair choices.
-3. A durable workflow replay cannot duplicate a document or link after reopen.
-4. Delivery-order fuzzing covers source changes and interruption at every shell
-   boundary, not only the pure postcondition classifier.
-5. Any folder-copy behavior preserves advertised compatibility and unknown data
-   or rejects before creation.
-
 ### W6. Identity-preserving reorder
 
 Add semantic link reorder after the generic source capability exists in
@@ -107,7 +82,7 @@ adapter actually preserves. Conflicts and unsupported values remain evidence.
 ### W9. Generalized views and typed creation
 
 Generalize only the view-selection and creation behavior demonstrated by the
-multiplayer Markdown editor.
+workspace inspector and multiplayer Markdown editor.
 Offer compatible views using exact logical schema and media type, offer raw
 inspection as fallback, and create canonical documents of selected logical
 types without introducing a generic renderer or provider registry.

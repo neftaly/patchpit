@@ -15,34 +15,58 @@ import {
 } from './invocation.ts';
 import {
   resourceIdentity,
+  resourceTransferDestinations,
   type ResourceProjection,
 } from './resource-projection.ts';
 import type { PatchpitRuntime } from '../root/runtime.ts';
 import type { BrowserSandboxHost } from '../browser/sandbox-host.ts';
 import { observeSameOriginFrameInteractions } from '../browser/frame-interaction.ts';
 import { connectEditorFrame } from './editor-port-host.ts';
-import { projectResourceFileView } from './resource-file-view.ts';
+import {
+  projectFileResourceView,
+  type ResourceView,
+  type ResourceViewSource,
+} from '../root/resource-view.ts';
+import {
+  ResourceTransferDialog,
+  type ResourceTransferCloseFocus,
+} from './ResourceTransferDialog.tsx';
 
 export const RESOURCE_DRAG_TYPE = 'application/x-patchpit-resource';
 
 type ContentRuntime = Pick<
   PatchpitRuntime,
-  'createAppSnapshot' | 'openAppTextDocument' | 'openResourceFileQuery'
+  | 'canTransferResource'
+  | 'copyResource'
+  | 'createAppSnapshot'
+  | 'openAppTextDocument'
+  | 'openResourceFileQuery'
+  | 'prepareResourceCopy'
+  | 'relocateResource'
 >;
 type SandboxHost = Pick<BrowserSandboxHost, 'install'>;
 
-export function ContentView({ contentRuntime, contentUrl, onInteract, onOpenResource, resources, resourceTitles, sandboxHost }: {
+export function ContentView({ contentRuntime, contentUrl, onInteract, onOpenResource, resources, resourceTitles, resourceViews, rootSourceId, sandboxHost }: {
   readonly contentRuntime: ContentRuntime;
   readonly contentUrl: string | undefined;
   readonly onInteract: () => void;
   readonly onOpenResource: (resource: FolderLinkRow, pinned: boolean) => void;
   readonly resources: ResourceProjection;
   readonly resourceTitles: ReadonlyMap<string, string>;
+  readonly resourceViews: ReadonlyMap<string, ResourceViewSource>;
+  readonly rootSourceId: string;
   readonly sandboxHost: SandboxHost;
 }): ReactNode {
   const invocation = contentUrl === undefined ? undefined : parseContentInvocation(contentUrl);
   if (invocation?.kind === 'resources') {
-    return <ResourceBrowser onOpenResource={onOpenResource} resources={resources} />;
+    return (
+      <ResourceBrowser
+        contentRuntime={contentRuntime}
+        onOpenResource={onOpenResource}
+        resources={resources}
+        rootSourceId={rootSourceId}
+      />
+    );
   }
   if (invocation?.kind === 'app') {
     const root = resources.byResourceRef.get(invocation.resourceRef);
@@ -61,15 +85,50 @@ export function ContentView({ contentRuntime, contentUrl, onInteract, onOpenReso
   }
   return invocation?.kind !== 'viewer'
     ? <p role="alert">Resource unavailable.</p>
-    : <Viewer contentRuntime={contentRuntime} key={invocation.resourceRef} resourceRef={invocation.resourceRef} />;
+    : (
+        <Viewer
+          contentRuntime={contentRuntime}
+          key={invocation.resourceRef}
+          viewSource={resourceViews.get(invocation.resourceRef)}
+          resourceRef={invocation.resourceRef}
+        />
+      );
 }
 
-function ResourceBrowser({ onOpenResource, resources }: {
+function ResourceBrowser({ contentRuntime, onOpenResource, resources, rootSourceId }: {
+  readonly contentRuntime: ContentRuntime;
   readonly onOpenResource: (resource: FolderLinkRow, pinned: boolean) => void;
   readonly resources: ResourceProjection;
+  readonly rootSourceId: string;
 }) {
+  const browser = useRef<HTMLElement>(null);
+  const pendingTransferFocus = useRef<{
+    readonly resourceIdentity: string;
+    readonly target: ResourceTransferCloseFocus;
+  } | undefined>(undefined);
+  const [transferSource, setTransferSource] = useState<FolderLinkRow>();
+  const closeTransfer = (target: ResourceTransferCloseFocus) => {
+    if (transferSource !== undefined) {
+      pendingTransferFocus.current = {
+        resourceIdentity: resourceIdentity(transferSource),
+        target,
+      };
+    }
+    setTransferSource(undefined);
+  };
+  useEffect(() => {
+    const pending = pendingTransferFocus.current;
+    if (transferSource !== undefined || pending === undefined) return;
+    pendingTransferFocus.current = undefined;
+    const trigger = pending.target === 'files'
+      ? undefined
+      : browser.current?.querySelector<HTMLElement>(
+          `[data-transfer-resource="${CSS.escape(pending.resourceIdentity)}"]`,
+        );
+    (trigger ?? browser.current)?.focus();
+  }, [transferSource]);
   return (
-    <section aria-label="Files" className="view">
+    <section aria-label="Files" className="view" ref={browser} tabIndex={-1}>
       <div className="resource resource-folder" style={treeDepthStyle(0)}>
         <span aria-hidden="true" className="resource-icon">📂</span>
         <span className="resource-name">patchpit</span>
@@ -107,11 +166,11 @@ function ResourceBrowser({ onOpenResource, resources }: {
             </span>
           </>
         );
-        return !openable
+        const identity = resourceIdentity(resource);
+        const row = !openable
           ? (
               <div
                 className={`resource${resource.typeHint === 'folder' ? ' resource-folder' : ''}`}
-                key={resourceIdentity(resource)}
                 style={treeDepthStyle(depth + 1)}
               >
                 {label}
@@ -121,16 +180,40 @@ function ResourceBrowser({ onOpenResource, resources }: {
               <button
                 className={`resource${resource.typeHint === 'folder' ? ' resource-folder' : ''}`}
                 draggable
-                key={resourceIdentity(resource)}
                 onClick={(event) => onOpenResource(resource, event.detail !== 1)}
-                onDragStart={(event) => event.dataTransfer.setData(RESOURCE_DRAG_TYPE, resourceIdentity(resource))}
+                onDragStart={(event) => event.dataTransfer.setData(RESOURCE_DRAG_TYPE, identity)}
                 style={treeDepthStyle(depth + 1)}
                 type="button"
               >
                 {label}
               </button>
             );
+        return (
+          <div className="resource-row" key={identity}>
+            {row}
+            {resources.graphState === 'ready' && contentRuntime.canTransferResource(resource) && (
+              <button
+                aria-label={`Transfer ${resource.name}`}
+                className="resource-transfer"
+                data-transfer-resource={identity}
+                onClick={() => setTransferSource(resource)}
+                title="Transfer…"
+                type="button"
+              >
+                …
+              </button>
+            )}
+          </div>
+        );
       })}
+      {transferSource !== undefined && (
+        <ResourceTransferDialog
+          destinations={resourceTransferDestinations(resources, rootSourceId)}
+          onClose={closeTransfer}
+          runtime={contentRuntime}
+          source={transferSource}
+        />
+      )}
     </section>
   );
 }
@@ -172,7 +255,25 @@ const resourceIcon = (resource: FolderLinkRow) => {
   return '📄';
 };
 
-function Viewer({ contentRuntime, resourceRef }: {
+function Viewer({ contentRuntime, resourceRef, viewSource }: {
+  readonly contentRuntime: ContentRuntime;
+  readonly resourceRef: string;
+  readonly viewSource: ResourceViewSource | undefined;
+}) {
+  return viewSource === undefined
+    ? <FileViewer contentRuntime={contentRuntime} resourceRef={resourceRef} />
+    : <ProjectedResourceViewer source={viewSource} />;
+}
+
+const ProjectedResourceViewer = ({ source }: { readonly source: ResourceViewSource }) => (
+  <ProjectedResourceView view={useSyncExternalStore(
+    source.subscribe,
+    source.getSnapshot,
+    source.getSnapshot,
+  )} />
+);
+
+function FileViewer({ contentRuntime, resourceRef }: {
   readonly contentRuntime: ContentRuntime;
   readonly resourceRef: string;
 }) {
@@ -208,11 +309,12 @@ function Viewer({ contentRuntime, resourceRef }: {
   if (resolution.state === 'unavailable') return <p role="alert">Resource unavailable.</p>;
   if (resolution.state === 'invalid') return <p role="alert">Resource invalid.</p>;
   if (snapshot === undefined) return null;
-  const view = projectResourceFileView(snapshot);
-  return view.state === 'ready'
-    ? <pre className="viewer">{view.content}</pre>
-    : <p role="alert">{resourceFileMessage(view.state)}</p>;
+  return <ProjectedResourceView view={projectFileResourceView(snapshot)} />;
 }
+
+const ProjectedResourceView = ({ view }: { readonly view: ResourceView }) => view.state === 'ready'
+  ? <pre className="viewer">{view.content}</pre>
+  : <p role="alert">{resourceViewMessage(view.state)}</p>;
 
 function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, title }: {
   readonly contentRuntime: ContentRuntime;
@@ -280,7 +382,7 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
       );
 }
 
-const resourceFileMessage = (state: Exclude<ReturnType<typeof projectResourceFileView>['state'], 'ready'>) => ({
+const resourceViewMessage = (state: Exclude<ResourceView['state'], 'ready'>) => ({
   closed: 'Resource closed.',
   incomplete: 'Resource incomplete.',
   invalid: 'Resource invalid.',

@@ -66,10 +66,7 @@ export type AutomergeFolderDocument = {
   readonly docs: readonly AutomergeFolderLink[];
 };
 
-export type AutomergeFolderDatabase = AutomergeDatabase & FolderDatabaseSource & {
-  readonly attachmentId: string;
-  readonly sourceId: string;
-};
+export type AutomergeFolderDatabase = AutomergeDatabase & FolderDatabaseSource;
 
 export type AutomergeFilesystemDatabase = {
   readonly kind: 'folder';
@@ -135,7 +132,7 @@ export const openAutomergeFolderDatabase = async (
   return opened.success
     ? {
         success: true,
-        value: { ...opened.value, attachmentId, sourceId },
+        value: opened.value,
         issues: [...selected.issues, ...opened.issues],
       }
     : { success: false, issues: [...selected.issues, ...opened.issues] };

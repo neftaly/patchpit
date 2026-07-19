@@ -152,7 +152,9 @@ export function App({ runtime, sandboxHost }: {
           onInteract={onInteract}
           onOpenResource={openResource}
           resources={resources}
+          resourceViews={runtime.resourceViews}
           resourceTitles={resourceTitles}
+          rootSourceId={runtime.rootUrl}
           sandboxHost={sandboxHost}
           contentRuntime={runtime}
         />

@@ -18,7 +18,11 @@ import {
   parseContentInvocation,
   viewerContentUrl,
 } from '../../src/content/invocation.ts';
-import { projectResourceTree, resourceIdentity } from '../../src/content/resource-projection.ts';
+import {
+  projectResourceTree,
+  resourceIdentity,
+  resourceTransferDestinations,
+} from '../../src/content/resource-projection.ts';
 import {
   canonicalRootInvocationHash,
   parseRootInvocationHash,
@@ -101,6 +105,14 @@ void test('resource graph projection preserves every source-scoped link exactly 
       resources.forEach((resource) => {
         assert.equal(projected.byIdentity.get(resourceIdentity(resource)), resource);
       });
+      const destinations = resourceTransferDestinations(projected, 'source-0');
+      const expectedDestinationIds = new Set([
+        'source-0',
+        ...resources.filter(({ typeHint }) => typeHint === 'folder')
+          .map(({ resourceRef }) => resourceRef),
+      ]);
+      assert.deepEqual(new Set(destinations.map(({ sourceId }) => sourceId)), expectedDestinationIds);
+      assert.equal(new Set(destinations.map(({ label }) => label)).size, destinations.length);
     },
   ), { numRuns: 150 });
 });

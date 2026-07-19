@@ -10,7 +10,7 @@ import {
   type AutomergeFolderDocument,
   type AutomergeTextFileDocument,
 } from '@patchpit/automerge-fs';
-import { projectResourceFileView } from '../../src/content/resource-file-view.ts';
+import { projectFileResourceView } from '../../src/root/resource-view.ts';
 import { createRoot, openRoot } from '../../src/root/runtime.ts';
 
 void test('Patchpit root reopens one live graph of Automerge folder documents', async () => {
@@ -83,7 +83,7 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
   if (indexFileResult.state !== 'ready') return;
   const indexFile = indexFileResult.query;
   await indexFile.whenSettled();
-  assert.deepEqual(projectResourceFileView(indexFile.getSnapshot()), {
+  assert.deepEqual(projectFileResourceView(indexFile.getSnapshot()), {
     content: '<h1>',
     state: 'ready',
   });
@@ -277,8 +277,22 @@ void test('Patchpit copies file history and relocates links through explicit sou
       linkId === 'source-folder' && sourceId === runtime.rootUrl)!;
     const destinationFolder = initial.rows.find(({ linkId, sourceId }) =>
       linkId === 'destination-folder' && sourceId === runtime.rootUrl)!;
+    const workspace = initial.rows.find(({ linkId, sourceId }) =>
+      linkId === 'workspace' && sourceId === runtime.rootUrl)!;
     const notes = initial.rows.find(({ linkId, sourceId }) =>
       linkId === 'notes' && sourceId === sourceFolder.resourceRef)!;
+    assert.equal(runtime.canTransferResource(workspace), false);
+    assert.equal(runtime.canTransferResource(notes), true);
+    const protectedResult = await runtime.relocateResource({
+      destinationLinkId: 'moved-workspace',
+      destinationSourceId: destinationFolder.resourceRef,
+      source: workspace,
+      transferId: crypto.randomUUID(),
+    });
+    assert.equal(protectedResult.state, 'blocked');
+    if (protectedResult.state === 'blocked') {
+      assert.equal(protectedResult.reason, 'protected-resource');
+    }
     const notesHandle = (await runtime.resolveResourceDocument(notes.resourceRef))!;
     notesHandle.change((document) => {
       (document as Record<string, unknown>).unknownExtension = { retained: true };

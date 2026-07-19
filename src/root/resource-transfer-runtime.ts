@@ -72,6 +72,7 @@ export type ResourceTransferBlocked = {
     | 'graph-invalid'
     | 'graph-stale'
     | 'operation-expired'
+    | 'protected-resource'
     | 'root-closed'
     | 'source-unavailable'
     | 'unsupported-copy'
@@ -88,6 +89,7 @@ type ResourceQuery = DatabaseQuerySession<FolderLinkRow>;
 
 type ResourceTransferRuntimeOptions = {
   readonly isClosed: () => boolean;
+  readonly isProtectedResource: (resource: FolderLinkRow) => boolean;
   readonly repo: Repo;
   readonly resolveDocument: (
     resourceRef: string,
@@ -133,6 +135,7 @@ export const createResourceTransferRuntime = async (
     request: ResourceCopyRequest,
     signal?: AbortSignal,
   ): Promise<PreparedResourceCopy> => {
+    if (options.isProtectedResource(request.source)) return blocked('protected-resource');
     const graph = await exactResourceGraph(options, signal);
     if (graph.state === 'blocked') return graph;
     const classified = classifyExactResourceCopySource(request, graph.rows);
@@ -141,7 +144,7 @@ export const createResourceTransferRuntime = async (
       || !isValidAutomergeUrl(request.source.resourceRef)) {
       return blocked('unsupported-copy');
     }
-    const handle = await options.resolveDocument(request.source.resourceRef, signal);
+    const handle = await resolveTransferDocument(options, request.source.resourceRef, signal);
     if (handle === undefined) return blocked('source-unavailable');
     const opened = await openAutomergeFileDatabase(handle, 'public');
     if (!opened.success) return blocked('document-invalid', opened.issues);
@@ -177,6 +180,7 @@ export const createResourceTransferRuntime = async (
     intent: ResourceRelocationIntent,
     signal?: AbortSignal,
   ): Promise<ResourceTransferResult<NonAtomicBatchReceipt>> => {
+    if (options.isProtectedResource(intent.source)) return blocked('protected-resource');
     const graph = await exactResourceGraph(options, signal);
     if (graph.state === 'blocked') return graph;
     const initial = classifyExactResourceRelocation(intent, graph.rows);
@@ -239,6 +243,7 @@ export const createResourceTransferRuntime = async (
     intent: PreparedResourceCopyIntent,
     signal?: AbortSignal,
   ): Promise<ResourceTransferResult<SequenceReceipt>> => {
+    if (options.isProtectedResource(intent.source)) return blocked('protected-resource');
     if (intent.operationEpoch !== operationEpoch) return blocked('operation-expired');
     const graph = await exactResourceGraph(options, signal);
     if (graph.state === 'blocked') return graph;
@@ -248,7 +253,7 @@ export const createResourceTransferRuntime = async (
       || !isValidAutomergeUrl(intent.source.resourceRef)) {
       return blocked('unsupported-copy');
     }
-    const handle = await options.resolveDocument(intent.source.resourceRef, signal);
+    const handle = await resolveTransferDocument(options, intent.source.resourceRef, signal);
     if (handle === undefined) return blocked('source-unavailable');
     const historical = viewAutomergeDocumentAtBasis(handle.doc(), intent.sourceBasis);
     if (!historical.success) return blocked('document-basis-unavailable');
@@ -326,7 +331,12 @@ export const createResourceTransferRuntime = async (
     }
   };
 
-  return { copyResource, prepareResourceCopy, relocateResource };
+  return {
+    canTransferResource: (resource: FolderLinkRow) => !options.isProtectedResource(resource),
+    copyResource,
+    prepareResourceCopy,
+    relocateResource,
+  };
 };
 
 const transactRelocationStep = async (
@@ -354,12 +364,25 @@ const openFolder = async (
 ): Promise<{ readonly database: AutomergeFolderDatabase; readonly state: 'ready' }
   | ResourceTransferBlocked> => {
   if (!isValidAutomergeUrl(sourceId)) return blocked(unavailableReason);
-  const handle = await options.resolveDocument(sourceId, signal);
+  const handle = await resolveTransferDocument(options, sourceId, signal);
   if (handle === undefined) return blocked(unavailableReason);
   const opened = await openAutomergeFolderDatabase(handle);
   return opened.success
     ? { database: opened.value, state: 'ready' }
     : blocked(unavailableReason, opened.issues);
+};
+
+const resolveTransferDocument = async (
+  options: ResourceTransferRuntimeOptions,
+  resourceRef: string,
+  signal?: AbortSignal,
+) => {
+  try {
+    return await options.resolveDocument(resourceRef, signal);
+  } catch {
+    signal?.throwIfAborted();
+    return undefined;
+  }
 };
 
 const exactResourceGraph = async (
@@ -426,7 +449,7 @@ const transferIssue = (
   code: `patchpit.resource_transfer.${reason.replaceAll('-', '_')}`,
   phase: 'commit',
   severity: 'error',
-  retry: reason === 'root-closed' || reason === 'unsupported-copy'
+  retry: reason === 'protected-resource' || reason === 'root-closed' || reason === 'unsupported-copy'
     ? 'never'
     : reason === 'operation-expired' ? 'after_input' : 'after_refresh',
   ...(operationId === undefined ? {} : { operationId }),

@@ -45,6 +45,10 @@ import {
 import { paneIdsInLayoutOrder } from '../workspace/durable-state.ts';
 import { openWorkspacePresence } from '../workspace/presence-runtime.ts';
 import { createResourceTransferRuntime } from './resource-transfer-runtime.ts';
+import {
+  createAutomergeResourceViewSource,
+  type ResourceViewSource,
+} from './resource-view.ts';
 
 const WORKSPACE_LINK_ID = 'workspace';
 
@@ -219,6 +223,8 @@ const openRootHandle = async (
   };
   const resourceTransfers = await createResourceTransferRuntime({
     isClosed: () => closed,
+    isProtectedResource: ({ linkId, sourceId }) =>
+      sourceId === rootHandle.url && linkId === WORKSPACE_LINK_ID,
     repo,
     resolveDocument: resolveAutomergeHandle,
     resourceQuery,
@@ -424,8 +430,13 @@ const openRootHandle = async (
       }
     }
   };
+  const resourceViews: ReadonlyMap<string, ResourceViewSource> = new Map([[
+    workspaceHandle.url,
+    createAutomergeResourceViewSource(workspaceHandle),
+  ]]);
   return {
     rootUrl: rootHandle.url,
+    resourceViews,
     resourceQuery,
     workspaceRuntime,
     workspacePresence,

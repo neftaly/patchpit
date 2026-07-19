@@ -16,6 +16,7 @@
 | In-progress input and composition | Sandboxed editor runtime | Local EditContext session and semantic splice intents |
 | Editor authority and revision lifecycle | Patchpit root/content runtime | Host-owned document session and versioned MessagePort |
 | Ordinary file views | Tarstate query, projected by Patchpit content UI | Exact logical file rows and readiness evidence |
+| Owned raw document inspection | Patchpit root view source | Conflict-aware immutable snapshots subscribed to Automerge heads |
 | Cross-source resource progress | Patchpit root runtime over Tarstate receipts | Pure graph classifier plus source-local transactions and lifecycle operations |
 
 State crosses an owner boundary through a projection, canonical writer, or
@@ -24,8 +25,10 @@ Automerge handles inside application state.
 
 The root runtime owns Automerge handles and attached database lifecycles.
 Ordinary viewers observe logical file relations through a closeable Tarstate
-query; only editor and canonical-writer boundaries that require source-native
-identity receive a host-owned document session.
+query. The owned workspace inspector receives only immutable presentation
+snapshots from a head-subscribed root view source. Only editor and
+canonical-writer boundaries that require source-native identity receive a
+host-owned document session.
 
 The browser root host owns the Repo it creates for its default transport. A
 Repo supplied by a container remains owned and shut down by that container.
@@ -101,3 +104,7 @@ Relocation is recoverable from canonical link postconditions. Copy preparation
 captures an exact file basis; its document-creation idempotency is scoped to the
 open root's memory-backed lifecycle epoch. Patchpit does not mirror a workflow
 state machine or imply cross-source atomicity.
+
+The content layer owns only the open modal and its same-operation retry attempt.
+Closing a settled dialog discards its receipt presentation; canonical progress
+remains visible through the resource graph.

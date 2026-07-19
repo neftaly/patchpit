@@ -13,6 +13,11 @@ export type ResourceProjection = {
   readonly sourceProblems: readonly ResourceSourceProblem[];
 };
 
+export type ResourceTransferDestination = {
+  readonly label: string;
+  readonly sourceId: string;
+};
+
 export type ResourceGraphState = 'ready' | 'incomplete' | 'invalid' | 'stale' | 'closed';
 
 type OpenResourceSnapshot = Extract<ResourceSnapshot, { readonly state: 'open' }>;
@@ -109,6 +114,29 @@ export const projectResourceTree = (
     launchableFolders,
     sourceProblems: options.sourceProblems ?? [],
   };
+};
+
+export const resourceTransferDestinations = (
+  resources: ResourceProjection,
+  rootSourceId: string,
+): readonly ResourceTransferDestination[] => {
+  const destinations = new Map<string, ResourceTransferDestination>([[
+    rootSourceId,
+    { label: 'patchpit', sourceId: rootSourceId },
+  ]]);
+  resources.rows.forEach(({ resource }) => {
+    if (resource.typeHint === 'folder' && !destinations.has(resource.resourceRef)) {
+      destinations.set(resource.resourceRef, {
+        label: resource.name,
+        sourceId: resource.resourceRef,
+      });
+    }
+  });
+  const labelCounts = [...destinations.values()].reduce((counts, { label }) =>
+    counts.set(label, (counts.get(label) ?? 0) + 1), new Map<string, number>());
+  return [...destinations.values()].map((destination) => labelCounts.get(destination.label) === 1
+    ? destination
+    : { ...destination, label: `${destination.label} — ${destination.sourceId}` });
 };
 
 const sorted = (resources: readonly FolderLinkRow[] | undefined) => [...resources ?? []].sort((left, right) =>

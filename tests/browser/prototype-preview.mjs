@@ -423,6 +423,54 @@ async function proveWorkspaceBehavior(page) {
   assert.equal(await page.locator(`[data-pane="${splitPaneId}"]`).count(), 0);
   assert.equal(await page.locator('.pane').count(), 2);
   await assertSandboxIdentity(page);
+  await proveResourceTransfers(page);
+}
+
+async function proveResourceTransfers(page) {
+  await page.getByRole('tab', { name: 'Resources' }).click();
+  assert.equal(await page.getByRole('button', { name: 'Transfer workspace.am' }).count(), 0);
+  const sourceTransfer = page.getByRole('button', { name: 'Transfer data.json' }).first();
+  await sourceTransfer.click();
+  let dialog = page.getByRole('dialog', { name: 'Transfer data.json' });
+  await dialog.getByLabel('Destination').selectOption({ label: 'sandbox-compat' });
+  assert.equal(await dialog.getByRole('button', { name: 'Move' }).isDisabled(), true);
+  assert.equal(await dialog.getByRole('button', { name: 'Copy' }).count(), 1);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await dialog.waitFor({ state: 'detached' });
+  assert.equal(await sourceTransfer.evaluate((element) => document.activeElement === element), true);
+
+  await sourceTransfer.click();
+  dialog = page.getByRole('dialog', { name: 'Transfer data.json' });
+  await dialog.getByLabel('Destination').selectOption({ label: 'duplicate names' });
+  await dialog.getByRole('button', { name: 'Copy' }).dblclick();
+  await dialog.getByText('Copy complete.').waitFor();
+  await dialog.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
+  assert.equal(await sourceTransfer.evaluate((element) => document.activeElement === element), true);
+  assert.equal(await page.getByRole('button', { name: 'data.json', exact: true }).count(), 2);
+
+  await page.getByRole('button', { name: 'Transfer duplicate names' }).click();
+  dialog = page.getByRole('dialog', { name: 'Transfer duplicate names' });
+  assert.equal(await dialog.getByRole('button', { name: 'Copy' }).count(), 0);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.getByRole('button', { name: 'Transfer data.json' }).last().click();
+  dialog = page.getByRole('dialog', { name: 'Transfer data.json' });
+  await dialog.getByLabel('Destination').selectOption({ label: 'web resources' });
+  await dialog.getByRole('button', { name: 'Move' }).click();
+  await dialog.getByText('Move complete.').waitFor();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await dialog.waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Files');
+  assert.equal(await page.getByRole('region', { name: 'Files' })
+    .evaluate((element) => document.activeElement === element), true);
+  assert.equal(await page.getByRole('button', { name: 'data.json', exact: true }).count(), 2);
+
+  await page.getByRole('button', { name: 'Transfer ghostscript-tiger-web.svg' }).click();
+  dialog = page.getByRole('dialog', { name: 'Transfer ghostscript-tiger-web.svg' });
+  assert.equal(await dialog.getByRole('button', { name: 'Copy' }).count(), 0);
+  await dialog.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
 }
 
 async function proveActiveEditorInteractions({ drag, leftPane, page, resource, rightPane, tab }) {
