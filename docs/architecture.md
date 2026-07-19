@@ -10,6 +10,10 @@
 | Pointer resize drafts and drag sessions | React component runtime | Local ephemeral state |
 | Live same-origin replica transport | Browser host | Deployment-scoped Automerge Repo BroadcastChannel adapter |
 | Immutable launched application files | Sandbox boundary | Authority-scoped snapshot and cache mount |
+| Editor text and character identity | Canonical storage | Patchwork-compatible Automerge text document |
+| Editor focus, selection, and mounted participants | Automerge Repo Presence | Per-document ephemeral sessions and Automerge cursors |
+| In-progress input and composition | Sandboxed editor runtime | Local EditContext session and semantic splice intents |
+| Editor authority and revision lifecycle | Patchpit root/content runtime | Host-owned document session and versioned MessagePort |
 
 State crosses an owner boundary through a projection, canonical writer, or
 explicit attached source. Patchpit does not mirror Tarstate readiness or raw
@@ -42,13 +46,22 @@ lifecycle. Dragging is an optional session that owns both drag data and its
 current validated drop preview. Pointer resize has one captured pointer and one
 draft ratio. Selection and layout remain ordinary declarative transitions.
 
+The Markdown editor has one host-owned document-session protocol. The app opens
+a relative document path, observes detached replacement projections, submits
+basis-bound semantic splices, and publishes local selection for the matching
+opaque revision. The host converts selection offsets to Automerge cursors and
+back. Locally dependent splices form an ordered queue; a concurrent replacement
+that cannot safely rebase that queue retains the draft and stops writes.
+
 ## A5. Sandbox boundary
 
 The host creates an immutable app snapshot from exact Tarstate projections and
 mounts it through the browser adapter. Applications receive normal relative
 URLs, not a Repo, document handle, source handle, credentials, or host iframe
-state. The trusted same-origin profile bridges interaction events only so host
-editor selection follows interaction inside nested frames.
+state. The trusted same-origin profile bridges interaction events so host editor
+selection follows interaction inside nested frames, and grants each app instance
+a narrow versioned MessagePort. Relative document requests are resolved within
+the app folder's authority; source handles remain host-only.
 
 ## A6. Source organization
 
@@ -62,3 +75,5 @@ editor selection follows interaction inside nested frames.
 - `packages/automerge-fs/` owns Automerge filesystem adapters.
 - `packages/sandbox-fs/` owns authority-scoped immutable app projection.
 - `packages/sandbox/` owns mount and runner contracts.
+- `apps/markdown-editor/` owns local text input, rendering, and the app side of
+  the editor port; it owns no canonical document or replica.

@@ -2,8 +2,8 @@ export {
   createFolderDatabaseSource,
   createStaticFolderDatabaseSource,
   DEFAULT_FOLDER_DISCOVERY_BUDGET,
-  openFileDocumentTitleQuery,
-  openFolderDocumentTitleQuery,
+  openFileDocumentTitlesQuery,
+  openFolderDocumentTitlesQuery,
   openFolderGraphQuery,
   openFolderLinksQuery,
   type DocumentTitleRow,
@@ -24,7 +24,6 @@ export {
   applyFolderOperation,
   commitFolderOperation,
   commitTextFileSplice,
-  simulateTextFileSplice,
   type FolderOperation,
   type TextFileSpliceOperation,
 } from './operations.ts';

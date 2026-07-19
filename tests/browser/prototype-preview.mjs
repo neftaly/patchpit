@@ -55,6 +55,7 @@ try {
   await proveOfflineSandboxReload(page);
   await proveFolderAppLaunch(page);
   await proveRootReplacementLifecycle(page);
+  await provePageCacheLifecycle(page);
   console.log(JSON.stringify({ cases: report.cases.length, entryHeaders: 'pass', mode: development ? 'dev' : 'preview', workspace: 'pass' }, null, 2));
 } finally {
   await browser?.close();
@@ -520,6 +521,19 @@ async function proveRootReplacementLifecycle(page) {
   const currentCache = await sandboxCacheNameForFrame(page);
   assert.notEqual(currentCache, previousCache);
   assert((await sandboxCacheNames(page)).includes(currentCache));
+}
+
+async function provePageCacheLifecycle(page) {
+  const previousCache = await sandboxCacheNameForFrame(page);
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+  });
+  await page.locator('.workspace').waitFor({ state: 'detached' });
+  await page.waitForFunction((cacheName) => caches.has(cacheName).then((present) => !present), previousCache);
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  });
+  await page.locator('button.resource', { hasText: 'workspace.am' }).waitFor();
 }
 
 function sandboxCacheNames(page) {

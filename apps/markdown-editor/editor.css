@@ -1,30 +1,83 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+  --participant-0: #d33f49;
+  --participant-1: #8a4fff;
+  --participant-2: #087e8b;
+  --participant-3: #b05f00;
+  --participant-4: #2b6cb0;
+  --participant-5: #a61e71;
+  --participant-6: #39733a;
+  --participant-7: #6b5b00;
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
   margin: 0;
 }
 
-main {
-  width: min(52rem, calc(100% - 2rem));
-  margin: 2rem auto;
+.editor-app {
+  --participant-color: var(--participant-0);
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.participant-0 { --participant-color: var(--participant-0); }
+.participant-1 { --participant-color: var(--participant-1); }
+.participant-2 { --participant-color: var(--participant-2); }
+.participant-3 { --participant-color: var(--participant-3); }
+.participant-4 { --participant-color: var(--participant-4); }
+.participant-5 { --participant-color: var(--participant-5); }
+.participant-6 { --participant-color: var(--participant-6); }
+.participant-7 { --participant-color: var(--participant-7); }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --participant-0: #ff7b84;
+    --participant-1: #bb9aff;
+    --participant-2: #52c7d3;
+    --participant-3: #f0a04b;
+    --participant-4: #75b5ef;
+    --participant-5: #ed78b9;
+    --participant-6: #83c985;
+    --participant-7: #d2bd4f;
+  }
 }
 
 .editor {
-  min-height: 20rem;
-  padding: 1rem;
-  border: 1px solid currentColor;
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 1.25rem;
   font-family: ui-monospace, monospace;
   line-height: 1.5;
-  outline-offset: 2px;
+  outline: none;
   touch-action: pan-y;
   white-space: pre-wrap;
 }
 
+.editor:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--participant-color);
+}
+
 .caret {
-  border-inline-start: 1px solid currentColor;
+  display: block;
+  position: absolute;
+  inline-size: 0;
+  border-inline-start: 1px solid var(--participant-color);
+  pointer-events: none;
+}
+
+.editor-text {
+  display: block;
 }
 
 .selection {
@@ -32,8 +85,77 @@ main {
   color: HighlightText;
 }
 
-output,
-pre {
-  display: block;
-  margin-block-start: 1rem;
+.remote-paint,
+.remote-selection,
+.remote-caret {
+  position: absolute;
+  pointer-events: none;
+}
+
+.remote-paint {
+  inset: 0;
+}
+
+.remote-selection {
+  background: color-mix(in srgb, var(--participant-color) 28%, transparent);
+}
+
+.remote-caret {
+  width: 0 !important;
+  border-inline-start: 1px solid var(--participant-color);
+}
+
+.remote-label {
+  position: absolute;
+  inset-block-end: 100%;
+  inset-inline-start: -1px;
+  padding: .1rem .3rem;
+  border-radius: .2rem .2rem .2rem 0;
+  background: var(--participant-color);
+  color: Canvas;
+  font: 600 .65rem/1.2 system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.editor-status {
+  display: flex;
+  min-height: 1.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-inline: .75rem;
+  border-block-start: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  font-size: .75rem;
+}
+
+.participants {
+  display: flex;
+  margin: 0;
+  gap: .75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.participant {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  white-space: nowrap;
+}
+
+.participant-swatch {
+  width: .65rem;
+  height: .65rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: var(--participant-color);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

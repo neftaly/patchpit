@@ -49,6 +49,7 @@ export const nestedFolderSourceLinksPlan = await prepareTypedQuery(
 
 const folders = typedFrom(folderRelation, 'folder');
 const folderDocumentTitle = typedSelect(folders, 'title', ({ folder }) => ({
+  resourceRef: typedSourceOf(folder),
   title: folder.row.title,
 }));
 
@@ -56,6 +57,7 @@ export const folderDocumentTitlePlan = await prepareTypedQuery(folderDocumentTit
 
 const files = typedFrom(fileRelation, 'file');
 const fileDocumentTitle = typedSelect(files, 'title', ({ file }) => ({
+  resourceRef: typedSourceOf(file),
   title: file.row.name,
 }));
 

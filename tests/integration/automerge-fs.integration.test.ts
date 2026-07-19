@@ -7,9 +7,8 @@ import {
   commitFolderOperation,
   commitTextFileSplice,
   fileRelation,
-  openFileDocumentTitleQuery,
+  openFileDocumentTitlesQuery,
   openFolderLinksQuery,
-  simulateTextFileSplice,
 } from '@patchpit/fs';
 import {
   createAutomergeFolderDocument,
@@ -18,7 +17,7 @@ import {
   openAutomergeFolderDatabase,
 } from '@patchpit/automerge-fs';
 
-void test('owned text files simulate and commit basis-aware semantic splices', async () => {
+void test('owned text files commit basis-aware semantic splices', async () => {
   const repo = new Repo({ network: [] });
   const handle = repo.create(createAutomergeTextFileDocument('Hello world', {
     name: 'notes.md',
@@ -59,9 +58,6 @@ void test('owned text files simulate and commit basis-aware semantic splices', a
     handle.change((document) => {
       Automerge.splice(document, ['content'], document.content.length, 0, '!');
     });
-    const simulation = await simulateTextFileSplice(database, operation, options);
-    assert.equal(simulation.outcome, 'would-commit', JSON.stringify(simulation));
-    assert.equal(handle.doc().content, 'Hello world!');
     const receipt = await commitTextFileSplice(database, operation, options);
     assert.equal(receipt.outcome, 'committed');
     assert.equal(handle.doc().content, 'Hello Tarstate!');
@@ -158,13 +154,13 @@ void test('focused foreign-file queries ignore conflicts in unobserved fields', 
   const fullSnapshot = opened.value.getSnapshot();
   assert.equal(fullSnapshot.state, 'open');
   assert.equal(fullSnapshot.current.readiness, 'incomplete');
-  const query = await openFileDocumentTitleQuery(opened.value);
+  const query = await openFileDocumentTitlesQuery([opened.value]);
 
   try {
     const snapshot = query.getSnapshot();
     assert.equal(snapshot.state, 'open');
     assert.equal(snapshot.current.readiness, 'ready');
-    assert.deepEqual(snapshot.current.rows, [{ title: 'notes.txt' }]);
+    assert.deepEqual(snapshot.current.rows, [{ resourceRef: handle.url, title: 'notes.txt' }]);
   } finally {
     query.close();
     opened.value.close();

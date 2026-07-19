@@ -3,7 +3,7 @@ import type {
   DatabaseTransactionService,
   DatabaseTransactionSnapshot,
 } from '@tarstate/core/transactions';
-import { fileRelation } from '@patchpit/artifacts';
+import { fileRelation, type FileKey } from '@patchpit/artifacts';
 import { folderLinksRelation, type FolderLink } from './schema.ts';
 
 export type FolderOperation = {
@@ -48,20 +48,10 @@ export const commitTextFileSplice = (
   options,
 );
 
-export const simulateTextFileSplice = (
-  database: DatabaseTransactionService,
-  operation: TextFileSpliceOperation,
-  options?: DatabaseTransactionOptions,
-) => database.simulate(
-  operation,
-  textFileSplice(operation),
-  options,
-);
-
 const textFileSplice = (operation: TextFileSpliceOperation) =>
   (snapshot: DatabaseTransactionSnapshot) => snapshot.spliceText(
     fileRelation,
-    ['text'],
+    ['text'] satisfies FileKey,
     'textContent',
     operation,
   );

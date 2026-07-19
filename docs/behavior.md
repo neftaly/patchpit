@@ -10,6 +10,8 @@ accepts inert `sync` and opaque `delegation` values for document-host adapters.
 Missing `src` creates a root and canonicalizes the hash. Changing the
 recognized hash replaces the active root lifecycle and closes resources owned
 by the previous root.
+Entering the browser's back/forward cache releases the active lifecycle;
+restoring that page reopens the root selected by the unchanged hash.
 Sandbox application hashes are app-owned and do not inherit root invocation
 values.
 
@@ -127,17 +129,89 @@ presence remains separate and does not derive from Automerge change history
 because clicks and focus can change interaction intent without changing a
 durable document.
 
-## B13. Demo Markdown editor
+## B13. Multiplayer Markdown editor
 
 A freshly bootstrapped demo root contains one launchable Markdown editor folder
-with an ordinary visible Automerge text document named `demo.md`. The launched
-app reads that file from its immutable sandbox snapshot and supports text input,
-selection, composition, and semantic UTF-16 splice reporting through native
-EditContext or the pinned polyfill. The two input paths have the same observable
-editing behavior.
+with an ordinary visible Automerge text document named `demo.md`. The app asks
+the host to open that document relative to its folder over a versioned private
+port. The immutable sandbox snapshot supplies application code and assets; it is
+not the editable document. The app receives detached projections and opaque
+revisions, never a Repo, document handle, Tarstate service, source, credential,
+or iframe object.
 
-This is an input experiment, not yet a document editor: edits are session-local,
-remounting reloads `demo.md`, and no persistence, replication, presence, undo,
-or save claim is shown. The demo artifact is imported only when creating a fresh
-root. Changing a built-in demo never mutates or reseeds an existing root
-identity.
+The editor supports text input, selection, composition, and semantic UTF-16
+splices through native EditContext or the pinned polyfill. Each splice is
+committed through the Tarstate writer at the exact observed source basis.
+Committed edits update the canonical Patchwork-compatible Automerge text,
+replicate through the root's live transport, survive app remounting, and merge
+ordinary independently based concurrent edits.
+
+The surface follows ordinary multiline plain-text editing behavior. Physical
+keyboard input, virtual-keyboard input, clipboard input, and input-method input
+reach the same text model. Printable keys and spaces insert text; Enter and
+Shift+Enter insert a line feed; Backspace and Delete remove the adjacent
+grapheme; and typing, pasting, or pressing Enter over a selection replaces that
+selection. Copy is non-mutating, while cut and plain-text paste each produce the
+corresponding semantic splice. Rich clipboard formatting is ignored. There is
+no submit key, Markdown autoformatting, or Patchpit-specific editing shortcut.
+
+Left and Right move by grapheme, Up and Down retain the closest visual column,
+Home and End move to logical line edges, and the platform document-edge and word
+navigation modifiers retain their conventional meanings. Shift extends the
+selection and Control/Command+A selects all. Tab and Shift+Tab leave the editor;
+tab indentation is not yet an editor feature. Navigation preserves selection
+direction and never splits a surrogate pair, combining sequence, or joined
+emoji.
+
+A primary click or tap places the caret. Primary dragging selects in either
+direction, Shift+click extends from the existing anchor, double click selects a
+word, and triple click selects a logical line. Non-primary pointer buttons do not
+silently reposition the editor selection. Pointer hover is observational: it
+does not change text, revision, focus, local selection, participant state, or
+local or remote paint. Dropped files, URLs, and rich content neither navigate
+the frame nor mutate the document; text drag-and-drop is not promised yet.
+
+Local input paints immediately and locally dependent splices queue behind their
+predecessor. If a concurrent canonical change makes a queued numeric position
+unsafe to reinterpret, the editor becomes read-only and retains the visible
+local draft rather than dropping, duplicating, or misplacing it. Removing that
+safe pause requires the generic source-native text-intent continuation described
+in the active editor review and Tarstate's transaction/concurrency specification.
+
+Each mounted editor session has a generated label and one color from a fixed
+accessible palette. Color is not unique identity and is always accompanied by a
+label in the participant surface. Automerge Repo Presence shares mounted
+sessions and their last selection endpoints as Automerge cursors; it does not write
+selection, focus, color, or composition into document history. Normal close
+removes presence immediately and abrupt loss expires after a bounded interval.
+
+Local and remote carets and selections are paint-only overlays: they do not
+change text wrapping, editor dimensions, scroll dimensions, hit testing, or
+assistive-technology text. Remote selections remain listed but are not painted
+while the visible local draft differs from the canonical projection, because
+their canonical offsets do not identify positions in that temporary string.
+When the local text is canonical, remote paint remains stable while the local
+user hovers, focuses, moves their own selection, scrolls, or resizes. It is
+removed only when the remote session leaves or expires, or the local editor
+enters the explicitly non-canonical draft state. Window or element blur retains
+the session's last logical selection; switching windows, hovering another
+editor, or using surrounding UI must not make collaborator carets blink in and
+out. Local and remote carets track scrolling and resizing without moving either
+selection; a local navigation or edit scrolls its caret into view without
+resetting the horizontal or vertical position unnecessarily.
+Intermediate composition remains local and one
+completed composition produces one semantic splice when its source basis is
+still safe. A canonical change received during composition does not disturb the
+candidate window; if both texts changed and no source-native anchor can reconcile
+them, completion retains the local draft and pauses instead of submitting stale
+numeric offsets. The app fills its viewport and shows only a compact
+write/readiness and participant line outside the text. There is no formatting
+toolbar, preview, diagnostic counter, save ceremony, or undo behavior.
+
+Native EditContext and the pinned polyfill satisfy the same user-action corpus.
+Tests distinguish physical key presses from direct text injection and exercise
+actions independently so one passing journey or one early failure cannot hide
+unrelated interaction behavior.
+
+The demo artifact is imported only when creating a fresh root. Changing a
+built-in demo never mutates or reseeds an existing root identity.

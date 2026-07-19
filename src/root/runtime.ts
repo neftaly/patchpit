@@ -8,13 +8,15 @@ import {
   createAutomergeBinaryFileDocument,
   createAutomergeFolderDocument,
   createAutomergeTextFileDocument,
+  openAutomergeFileDatabase,
   openAutomergeFilesystemDatabase,
   openAutomergeFolderDatabase,
+  type AutomergeFilesystemDatabase,
   type AutomergeFolderDocument,
 } from '@patchpit/automerge-fs';
 import {
-  openFileDocumentTitleQuery,
-  openFolderDocumentTitleQuery,
+  openFileDocumentTitlesQuery,
+  openFolderDocumentTitlesQuery,
   openFolderGraphQuery,
   openFolderLinksQuery,
   type DocumentTitleRow,
@@ -30,6 +32,10 @@ import {
   snapshotFilesystemApp,
 } from '@patchpit/sandbox-fs';
 import { appContentUrl } from '../content/invocation.ts';
+import {
+  createEditorDocumentHub,
+  type EditorDocumentHub,
+} from '../content/editor-document-runtime.ts';
 import {
   createWorkspaceDocument,
   openWorkspaceRuntime,
@@ -145,6 +151,10 @@ const openRootHandle = async (
   const handles = new Map<string, DocHandle<object>>([[rootHandle.url, asObjectHandle(rootHandle)]]);
   const pendingHandles = new Map<string, Promise<DocHandle<object>>>();
   const titleObservers = new Set<{ readonly close: () => void }>();
+  const editorHubs = new Map<string, {
+    readonly promise: Promise<EditorDocumentHub>;
+    pendingConsumers: number;
+  }>();
   const resolver = new AbortController();
   let closed = false;
   const findResourceHandle = (resourceRef: string, findSignal?: AbortSignal) => {
@@ -237,18 +247,30 @@ const openRootHandle = async (
     handles.set(resourceRef, handle);
     return handle;
   };
-  const openResourceTitle = async (resourceRef: string, titleSignal?: AbortSignal) => {
-    if (closed || !rootReferencesResource(resourceQuery, resourceRef)
-      || !isValidAutomergeUrl(resourceRef)) return undefined;
-    const handle = await findResourceHandle(resourceRef, titleSignal);
-    if (closed || !rootReferencesResource(resourceQuery, resourceRef)) return undefined;
-    const opened = await openAutomergeFilesystemDatabase(handle);
-    if (!opened.success) return undefined;
-    const observer = await openTitleObserver(
-      opened.value.database,
-      opened.value.kind === 'folder' ? openFolderDocumentTitleQuery : openFileDocumentTitleQuery,
-      titleObservers,
-    );
+  const openResourceTitles = async (resourceRefs: readonly string[], titleSignal?: AbortSignal) => {
+    const stopped = () => closed || titleSignal?.aborted === true;
+    const sources = (await Promise.all([...new Set(resourceRefs)].map(async (resourceRef) => {
+      if (stopped() || !rootReferencesResource(resourceQuery, resourceRef)
+        || !isValidAutomergeUrl(resourceRef)) return undefined;
+      try {
+        const handle = await findResourceHandle(resourceRef, titleSignal);
+        if (stopped() || !rootReferencesResource(resourceQuery, resourceRef)) return undefined;
+        const opened = await openAutomergeFilesystemDatabase(handle);
+        if (stopped() || !rootReferencesResource(resourceQuery, resourceRef)) {
+          if (opened.success) opened.value.database.close();
+          return undefined;
+        }
+        return opened.success ? opened.value : undefined;
+      } catch {
+        return undefined;
+      }
+    }))).filter((source) => source !== undefined);
+    if (titleSignal?.aborted === true) {
+      sources.forEach(({ database }) => database.close());
+      titleSignal.throwIfAborted();
+    }
+    if (sources.length === 0) return undefined;
+    const observer = await openTitleObserver(sources, titleObservers);
     return retainOpenTitleObserver(observer, closed, titleSignal);
   };
   const createAppSnapshot = async (rootFolderRef: string, snapshotSignal?: AbortSignal) => {
@@ -277,19 +299,86 @@ const openRootHandle = async (
       folderOpened.value.close();
     }
   };
+  const openAppTextDocument = async (
+    rootFolderRef: string,
+    path: readonly [string],
+    documentSignal?: AbortSignal,
+  ) => {
+    if (closed) throw new Error('Patchpit root is closed');
+    documentSignal?.throwIfAborted();
+    const snapshot = resourceQuery.getSnapshot();
+    if (snapshot.state !== 'open'
+      || snapshot.current.readiness !== 'ready'
+      || snapshot.current.completeness !== 'exact'
+      || snapshot.current.freshness !== 'current') {
+      throw new Error('App document graph is unavailable');
+    }
+    const matches = snapshot.current.rows.filter(({ name, sourceId, typeHint }) =>
+      sourceId === rootFolderRef && name === path[0] && typeHint !== 'folder');
+    if (matches.length !== 1) throw new Error('App document path is unavailable or ambiguous');
+    const resourceRef = matches[0]?.resourceRef;
+    if (resourceRef === undefined || !isValidAutomergeUrl(resourceRef)) {
+      throw new Error('App document reference is invalid');
+    }
+    let hubEntry = editorHubs.get(resourceRef);
+    if (hubEntry === undefined) {
+      const promise = (async () => {
+        const handle = await resolveResourceDocument(resourceRef);
+        if (handle === undefined) throw new Error('App document is unavailable');
+        const opened = await openAutomergeFileDatabase(handle, 'patchpit.editor-text');
+        if (!opened.success) throw new Error('App document is invalid', { cause: opened.issues });
+        let hub: EditorDocumentHub;
+        hub = createEditorDocumentHub(handle, opened.value, () => {
+          const entry = editorHubs.get(resourceRef);
+          if (entry?.promise === promise && entry.pendingConsumers > 0) return;
+          if (entry?.promise === promise) editorHubs.delete(resourceRef);
+          hub.close();
+        });
+        return hub;
+      })();
+      hubEntry = { promise, pendingConsumers: 0 };
+      editorHubs.set(resourceRef, hubEntry);
+      void promise.catch(() => {
+        if (editorHubs.get(resourceRef)?.promise === promise) editorHubs.delete(resourceRef);
+      });
+    }
+    hubEntry.pendingConsumers += 1;
+    try {
+      const hub = await abortable(hubEntry.promise, documentSignal);
+      if (closed) throw new Error('Patchpit root is closed');
+      return hub.openSession();
+    } finally {
+      hubEntry.pendingConsumers -= 1;
+      if (hubEntry.pendingConsumers === 0) {
+        void hubEntry.promise.then((hub) => {
+          if (hubEntry.pendingConsumers === 0
+            && hub.isIdle()
+            && editorHubs.get(resourceRef) === hubEntry) {
+            editorHubs.delete(resourceRef);
+            hub.close();
+          }
+        }, () => undefined);
+      }
+    }
+  };
   return {
     rootUrl: rootHandle.url,
     resourceQuery,
     workspaceRuntime,
     workspacePresence,
     resolveResourceDocument,
-    openResourceTitle,
+    openResourceTitles,
     createAppSnapshot,
+    openAppTextDocument,
     close: () => {
       if (closed) return;
       closed = true;
       for (const observer of titleObservers) observer.close();
       titleObservers.clear();
+      for (const { promise } of editorHubs.values()) {
+        void promise.then((value) => value.close(), () => undefined);
+      }
+      editorHubs.clear();
       workspaceRuntime.close();
       workspacePresence.close();
       closeResourceRuntime();
@@ -368,41 +457,59 @@ const abortable = async <Value>(promise: Promise<Value>, abortSignal?: AbortSign
 };
 
 const openTitleObserver = async (
-  source: MountableDatabaseSource & { readonly close: () => void },
-  openQuery: (source: MountableDatabaseSource) => Promise<DatabaseQuerySession<DocumentTitleRow>>,
+  sources: readonly AutomergeFilesystemDatabase[],
   owners: Set<{ readonly close: () => void }>,
 ) => {
-  let query: DatabaseQuerySession<DocumentTitleRow>;
-  try {
-    query = await openQuery(source);
-  } catch (error) {
-    source.close();
-    throw error;
+  const queryResults = await Promise.allSettled([
+    openTitleQuery(sources, 'folder', openFolderDocumentTitlesQuery),
+    openTitleQuery(sources, 'file', openFileDocumentTitlesQuery),
+  ]);
+  const queries = queryResults.flatMap((result) => result.status === 'fulfilled' && result.value !== undefined
+    ? [result.value]
+    : []);
+  const failure = queryResults.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') {
+    queries.forEach((query) => query.close());
+    sources.forEach(({ database }) => database.close());
+    throw failure.reason;
   }
   let closed = false;
   const observer = {
-    getSnapshot: () => {
+    getSnapshot: () => materializeResourceTitles(queries.flatMap((query) => {
       const snapshot = query.getSnapshot();
-      if (snapshot.state === 'closed') return { state: 'unavailable' as const };
-      const { completeness, freshness, readiness, rows } = snapshot.current;
-      const title = rows.length === 1 ? rows[0]?.title : undefined;
-      return readiness === 'ready' && completeness === 'exact' && freshness === 'current'
-        && typeof title === 'string'
-        ? { state: 'ready' as const, title }
-        : { state: 'unavailable' as const };
+      return snapshot.state === 'open' ? snapshot.current.rows : [];
+    })),
+    subscribe: (listener: () => void) => {
+      const unsubscribes = queries.map((query) => query.subscribe(() => listener()));
+      return () => { unsubscribes.forEach((unsubscribe) => unsubscribe()); };
     },
-    subscribe: (listener: () => void) => query.subscribe(() => listener()),
     close: () => {
       if (closed) return;
       closed = true;
       owners.delete(observer);
-      query.close();
-      source.close();
+      queries.forEach((query) => query.close());
+      sources.forEach(({ database }) => database.close());
     },
   };
   owners.add(observer);
   return observer;
 };
+
+const openTitleQuery = (
+  sources: readonly AutomergeFilesystemDatabase[],
+  kind: AutomergeFilesystemDatabase['kind'],
+  open: (sources: readonly MountableDatabaseSource[]) => Promise<DatabaseQuerySession<DocumentTitleRow>>,
+) => {
+  const databases = sources.flatMap((source) => source.kind === kind ? [source.database] : []);
+  return databases.length === 0 ? undefined : open(databases);
+};
+
+const materializeResourceTitles = (
+  rows: readonly Readonly<Record<string, unknown>>[],
+) => new Map(rows.flatMap(({ resourceRef, title }) =>
+  typeof resourceRef === 'string' && typeof title === 'string'
+    ? [[resourceRef, title] as const]
+    : []));
 
 const retainOpenTitleObserver = <Observer extends { readonly close: () => void }>(
   observer: Observer,

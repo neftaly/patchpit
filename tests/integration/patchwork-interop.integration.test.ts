@@ -8,8 +8,8 @@ import {
   commitFolderOperation,
   fileRelation,
   folderLinksRelation,
-  openFileDocumentTitleQuery,
-  openFolderDocumentTitleQuery,
+  openFileDocumentTitlesQuery,
+  openFolderDocumentTitlesQuery,
   openFolderLinksQuery,
 } from '@patchpit/fs';
 import {
@@ -191,10 +191,11 @@ void test('pinned Patchwork histories satisfy their claimed compatibility levels
     operation: 'rename',
   });
   await inspectFolderFixture(renamedOwnedFolderFixture.file, async (handle, database) => {
-    const titleQuery = await openFolderDocumentTitleQuery(database);
+    const titleQuery = await openFolderDocumentTitlesQuery([database]);
     try {
       const titleSnapshot = titleQuery.getSnapshot();
       assert.deepEqual(titleSnapshot.state === 'open' ? titleSnapshot.current.rows : [], [{
+        resourceRef: handle.url,
         title: 'Patchwork renamed folder',
       }]);
       const document = handle.doc() as {
@@ -231,11 +232,11 @@ void test('pinned Patchwork histories satisfy their claimed compatibility levels
     }
     assert.equal(Object.values(fileOpened.value.capabilities(fileRelation).fields)
       .some(({ replace }) => replace !== undefined), false);
-    const titleQuery = await openFileDocumentTitleQuery(fileOpened.value);
+    const titleQuery = await openFileDocumentTitlesQuery([fileOpened.value]);
     try {
       const snapshot = titleQuery.getSnapshot();
       assert.equal(snapshot.state, 'open');
-      assert.deepEqual(snapshot.current.rows, [{ title: fileCase.title }]);
+      assert.deepEqual(snapshot.current.rows, [{ resourceRef: fixture.handle.url, title: fileCase.title }]);
       const content = (fixture.handle.doc() as { readonly content: unknown }).content;
       assert.equal(
         fileCase.content === 'binary'

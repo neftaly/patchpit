@@ -3,6 +3,8 @@ import test from 'node:test';
 import fc from 'fast-check';
 import {
   createSandboxFrameAttributes,
+  parseEditorAppMessage,
+  parseEditorHostMessage,
   respondFromSandboxCache,
   sandboxCacheName,
   type SandboxCacheStorage,
@@ -11,6 +13,12 @@ import { indexSandboxFiles } from '../../packages/sandbox/src/document.ts';
 
 const pathSegment = fc.string({ minLength: 1, maxLength: 30 })
   .filter((segment) => segment !== '.' && segment !== '..');
+const textValue = fc.array(
+  fc.integer({ min: 0, max: 0x10FFFF })
+    .filter((value) => value < 0xD800 || value > 0xDFFF)
+    .map(String.fromCodePoint),
+  { maxLength: 30 },
+).map((characters) => characters.join(''));
 
 void test('sandbox paths and unknown cache requests remain encoded, bounded, and allocation-free', async () => {
   await fc.assert(fc.asyncProperty(
@@ -39,6 +47,56 @@ void test('sandbox paths and unknown cache requests remain encoded, bounded, and
       assert.throws(() => sandboxCacheName(wrongVersion), /Invalid sandbox mount UUID/);
     },
   ), { numRuns: 100 });
+});
+
+void test('editor port parsing is total and retains only bounded protocol messages', () => {
+  fc.assert(fc.property(fc.anything({ maxDepth: 5 }), (candidate) => {
+    assert.doesNotThrow(() => parseEditorAppMessage(candidate));
+    assert.doesNotThrow(() => parseEditorHostMessage(candidate));
+  }), { numRuns: 1_000 });
+
+  fc.assert(fc.property(
+    fc.uuid({ version: 4 }),
+    fc.nat({ max: 1_000_000 }),
+    fc.nat({ max: 1_000_000 }),
+    textValue,
+    (requestId, index, deleteCount, insert) => {
+      assert.deepEqual(parseEditorAppMessage({
+        type: 'splice',
+        requestId,
+        revision: requestId,
+        index,
+        deleteCount,
+        insert,
+      }), {
+        type: 'splice',
+        requestId,
+        revision: requestId,
+        index,
+        deleteCount,
+        insert,
+      });
+    },
+  ), { numRuns: 200 });
+
+  fc.assert(fc.property(fc.uuid({ version: 4 }), textValue, (sessionId, text) => {
+    const message = {
+      type: 'snapshot',
+      snapshot: {
+        state: 'ready',
+        revision: sessionId,
+        text,
+        participants: [{
+          color: 0,
+          label: 'You',
+          local: true,
+          selection: { anchor: 0, focus: text.length },
+          sessionId,
+        }],
+      },
+    };
+    assert.deepEqual(parseEditorHostMessage(message), message);
+  }), { numRuns: 200 });
 });
 
 const emptyCacheStorage = (): SandboxCacheStorage & { readonly opened: () => boolean } => {

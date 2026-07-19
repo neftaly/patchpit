@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { parseContentInvocation } from './invocation.ts';
 import type { PatchpitRuntime } from '../root/runtime.ts';
 
-type ResourceTitleRuntime = Pick<PatchpitRuntime, 'openResourceTitle'>;
+type ResourceTitleRuntime = Pick<PatchpitRuntime, 'openResourceTitles'>;
 
 export const useResourceTitles = (
   runtime: ResourceTitleRuntime,
@@ -18,47 +18,33 @@ export const useResourceTitles = (
 
   useEffect(() => {
     const controller = new AbortController();
-    const closeObservers: (() => void)[] = [];
     const resourceRefs = JSON.parse(resourceRefsKey) as string[];
     setTitles(new Map());
-    resourceRefs.forEach((resourceRef) => {
-      void runtime.openResourceTitle(resourceRef, controller.signal).then((observer) => {
-        if (observer === undefined || controller.signal.aborted) {
-          observer?.close();
-          return;
-        }
-        const publish = () => {
-          const snapshot = observer.getSnapshot();
-          setTitles((current) => updateResourceTitle(current, resourceRef,
-            snapshot.state === 'ready' ? snapshot.title : undefined));
-        };
-        const unsubscribe = observer.subscribe(publish);
-        closeObservers.push(() => {
-          unsubscribe();
-          observer.close();
-        });
-        publish();
-      }, () => undefined);
-    });
+    const observerLifecycle = runtime.openResourceTitles(resourceRefs, controller.signal).then((observer) => {
+      if (observer === undefined || controller.signal.aborted) {
+        observer?.close();
+        return undefined;
+      }
+      const publish = () => {
+        const next = observer.getSnapshot();
+        setTitles((current) => sameTitles(current, next) ? current : next);
+      };
+      const unsubscribe = observer.subscribe(publish);
+      publish();
+      return () => {
+        unsubscribe();
+        observer.close();
+      };
+    }, () => undefined);
     return () => {
       controller.abort();
-      closeObservers.forEach((close) => close());
+      void observerLifecycle.then((close) => close?.());
     };
   }, [resourceRefsKey, runtime]);
 
   return titles;
 };
 
-const updateResourceTitle = (
-  current: ReadonlyMap<string, string>,
-  resourceRef: string,
-  title: string | undefined,
-) => {
-  if (current.get(resourceRef) === title && (title !== undefined || !current.has(resourceRef))) {
-    return current;
-  }
-  const next = new Map(current);
-  if (title === undefined) next.delete(resourceRef);
-  else next.set(resourceRef, title);
-  return next;
-};
+const sameTitles = (left: ReadonlyMap<string, string>, right: ReadonlyMap<string, string>) =>
+  left.size === right.size && [...left].every(([resourceRef, title]) =>
+    right.get(resourceRef) === title);

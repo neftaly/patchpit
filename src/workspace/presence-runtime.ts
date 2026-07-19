@@ -1,6 +1,6 @@
 import {
+  createMemoryAtomicExternalStore,
   openExternalStoreDatabase,
-  type AtomicExternalStore,
 } from '@tarstate/core/database/external-store';
 import { workspacePresenceSourceMetadata } from '@patchpit/artifacts';
 import {
@@ -22,11 +22,10 @@ export const openWorkspacePresence = async (options: {
   readonly recentContextIds?: readonly string[];
 }) => {
   const initialViewState = createWorkspaceViewState(options.workspace, options.recentContextIds);
-  const store = createAtomicStore(createWorkspacePresenceStorage());
+  const store = createMemoryAtomicExternalStore(createWorkspacePresenceStorage());
   const opened = await openExternalStoreDatabase({
     sourceId: options.sourceId,
     store,
-    storeIdentity: store,
     declaration: workspacePresenceSourceMetadata.declaration,
     embeddedArtifacts: workspacePresenceSourceMetadata.schemas,
     authorityScope: 'patchpit.workspace.presence',
@@ -81,26 +80,6 @@ export const openWorkspacePresence = async (options: {
         },
       );
       return receipt.outcome === 'committed';
-    },
-  };
-};
-
-const createAtomicStore = <State extends object>(initial: State): AtomicExternalStore<State> => {
-  let state = initial;
-  const listeners = new Set<() => void>();
-  return {
-    getState: () => state,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => { listeners.delete(listener); };
-    },
-    update: (apply) => {
-      const result = apply(state);
-      if (result.changed) {
-        state = result.state;
-        listeners.forEach((listener) => { listener(); });
-      }
-      return result.result;
     },
   };
 };

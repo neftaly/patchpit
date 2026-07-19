@@ -54,6 +54,7 @@ export {
   folderLinksRelation,
   folderRelation,
   type FileRow,
+  type FileKey,
   type FolderLinksRow as FolderLink,
   type FolderRow as Folder,
 } from './generated/bindings.ts';

@@ -17,43 +17,74 @@ export const textOffsetAtPoint = (
   y: number,
 ): number | undefined => {
   const document = root.ownerDocument as CaretDocument;
+  const text = textLayer(root);
+  if (text === undefined) return undefined;
   const position = document.caretPositionFromPoint?.(x, y);
   if (position !== undefined && position !== null) {
-    return offsetWithin(root, position.offsetNode, position.offset);
+    return offsetWithin(text, position.offsetNode, position.offset);
   }
   const range = document.caretRangeFromPoint?.(x, y);
   return range === undefined || range === null
     ? undefined
-    : offsetWithin(root, range.startContainer, range.startOffset);
+    : offsetWithin(text, range.startContainer, range.startOffset);
 };
 
 export const caretBounds = (root: HTMLElement, offset: number): DOMRect | undefined => {
-  const point = textPointAtOffset(root, offset);
+  const text = textLayer(root);
+  if (text === undefined) return undefined;
+  const point = textPointAtOffset(text, offset);
   if (point === undefined) return undefined;
   const range = root.ownerDocument.createRange();
   range.setStart(point.node, point.offset);
   range.collapse(true);
   const collapsed = range.getBoundingClientRect();
   if (collapsed.height > 0) return collapsed;
-
-  const adjacentStart = offset === 0 ? 0 : offset - 1;
-  const adjacentEnd = Math.min(root.textContent?.length ?? 0, offset + 1);
-  const adjacent = textRangeBounds(root, adjacentStart, adjacentEnd);
-  if (adjacent === undefined) return root.getBoundingClientRect();
-  const x = offset === 0 ? adjacent.left : adjacent.right;
-  return new DOMRect(x, adjacent.top, 0, adjacent.height);
+  const content = text.textContent ?? '';
+  const next = offset < content.length
+    ? textRangeBounds(text, offset, offset + 1)
+    : undefined;
+  if (next !== undefined) return caretRectangle(next.left, next.top, next.height, root);
+  const previous = offset > 0
+    ? textRangeBounds(text, offset - 1, offset)
+    : undefined;
+  if (previous !== undefined) {
+    return content[offset - 1] === '\n'
+      ? caretRectangle(text.getBoundingClientRect().left, previous.bottom, previous.height, root)
+      : caretRectangle(previous.right, previous.top, previous.height, root);
+  }
+  const empty = text.getBoundingClientRect();
+  return caretRectangle(empty.left, empty.top, 0, root);
 };
 
 export const characterBounds = (
   root: HTMLElement,
   start: number,
   end: number,
-): readonly DOMRect[] =>
-  Array.from({ length: Math.max(0, end - start) }, (_, index) => {
+): readonly DOMRect[] => {
+  const text = textLayer(root);
+  return Array.from({ length: Math.max(0, end - start) }, (_, index) => {
     const offset = start + index;
-    return textRangeBounds(root, offset, offset + 1) ?? caretBounds(root, offset)
+    return (text === undefined ? undefined : textRangeBounds(text, offset, offset + 1))
+      ?? caretBounds(root, offset)
       ?? new DOMRect();
   });
+};
+
+export const textSelectionBounds = (
+  root: HTMLElement,
+  start: number,
+  end: number,
+): readonly DOMRect[] => {
+  const text = textLayer(root);
+  if (text === undefined) return [];
+  const first = textPointAtOffset(text, start);
+  const last = textPointAtOffset(text, end);
+  if (first === undefined || last === undefined) return [];
+  const range = root.ownerDocument.createRange();
+  range.setStart(first.node, first.offset);
+  range.setEnd(last.node, last.offset);
+  return [...range.getClientRects()].filter(({ height, width }) => height > 0 && width > 0);
+};
 
 const textRangeBounds = (
   root: HTMLElement,
@@ -97,4 +128,13 @@ const offsetWithin = (
     return undefined;
   }
   return Math.min(range.toString().length, root.textContent?.length ?? 0);
+};
+
+const textLayer = (root: HTMLElement): HTMLElement | undefined =>
+  root.querySelector<HTMLElement>('.editor-text') ?? undefined;
+
+const caretRectangle = (left: number, top: number, measuredHeight: number, root: HTMLElement) => {
+  const lineHeight = Number.parseFloat(root.ownerDocument.defaultView?.getComputedStyle(root).lineHeight ?? '');
+  const height = measuredHeight > 0 ? measuredHeight : Number.isFinite(lineHeight) ? lineHeight : 16;
+  return new DOMRect(left, top, 0, height);
 };

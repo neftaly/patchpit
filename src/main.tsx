@@ -25,6 +25,16 @@ const showError = () => {
   root.render(<p role="alert">Workspace unavailable.</p>);
 };
 
+const releaseActivePage = () => {
+  generation += 1;
+  pending?.abort();
+  pending = undefined;
+  void sandboxHost?.close();
+  sandboxHost = undefined;
+  rootHost.release();
+  root.render(null);
+};
+
 const loadRoot = async () => {
   const currentGeneration = ++generation;
   pending?.abort();
@@ -74,12 +84,12 @@ const loadRoot = async () => {
 };
 
 window.addEventListener('hashchange', () => { void loadRoot(); });
-window.addEventListener('pagehide', () => {
-  generation += 1;
-  pending?.abort();
-  void sandboxHost?.close();
-  sandboxHost = undefined;
-  void rootHost.close();
-}, { once: true });
+window.addEventListener('pagehide', (event) => {
+  releaseActivePage();
+  if (!event.persisted) void rootHost.close();
+});
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) void loadRoot();
+});
 
 void loadRoot();

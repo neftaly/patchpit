@@ -23,7 +23,7 @@ export type TextInputIssue = 'range' | 'selection' | 'text';
 
 export type TextNavigationKey = 'ArrowLeft' | 'ArrowRight' | 'Home' | 'End';
 
-type TextInputTransition = {
+export type TextInputTransition = {
   readonly session: TextInputSession;
   readonly intent?: TextSpliceIntent;
 };
@@ -95,10 +95,112 @@ export const moveTextSelection = (
   };
 };
 
+export const moveTextSelectionTo = (
+  session: TextInputSession,
+  offset: number,
+  extend: boolean,
+): TextInputSession => {
+  const selected = selectText(
+    session,
+    extend ? session.selection.start : offset,
+    offset,
+  );
+  return selected ?? session;
+};
+
+export const moveTextSelectionToDocumentEdge = (
+  session: TextInputSession,
+  edge: 'start' | 'end',
+  extend: boolean,
+): TextInputSession => moveTextSelectionTo(
+  session,
+  edge === 'start' ? 0 : session.text.length,
+  extend,
+);
+
+export const moveTextSelectionByWord = (
+  session: TextInputSession,
+  direction: 'backward' | 'forward',
+  extend: boolean,
+): TextInputSession => {
+  const offset = direction === 'backward'
+    ? previousWordBoundary(session.text, session.selection.end)
+    : nextWordBoundary(session.text, session.selection.end);
+  return moveTextSelectionTo(session, offset, extend);
+};
+
+export const replaceTextSelection = (
+  session: TextInputSession,
+  insert: string,
+): TextInputTransition => {
+  const index = Math.min(session.selection.start, session.selection.end);
+  const deleteCount = Math.abs(session.selection.end - session.selection.start);
+  const intent = { index, deleteCount, insert };
+  const selection = index + insert.length;
+  return {
+    session: {
+      ...session,
+      text: applyTextSplice(session.text, intent),
+      selection: { start: selection, end: selection },
+    },
+    ...(deleteCount > 0 || insert.length > 0 ? { intent } : {}),
+  };
+};
+
+export const deleteText = (
+  session: TextInputSession,
+  direction: 'backward' | 'forward',
+  unit: 'grapheme' | 'word',
+): TextInputTransition => {
+  if (session.selection.start !== session.selection.end) {
+    return replaceTextSelection(session, '');
+  }
+  const focus = session.selection.end;
+  const boundary = direction === 'backward'
+    ? unit === 'word'
+      ? previousWordBoundary(session.text, focus)
+      : previousGraphemeBoundary(session.text, focus)
+    : unit === 'word'
+      ? nextWordBoundary(session.text, focus)
+      : nextGraphemeBoundary(session.text, focus);
+  if (boundary === focus) return { session };
+  return replaceTextSelection({
+    ...session,
+    selection: { start: focus, end: boundary },
+  }, '');
+};
+
+export const selectWordAt = (
+  session: TextInputSession,
+  offset: number,
+): TextInputSession => {
+  for (const segment of wordSegmenter.segment(session.text)) {
+    const end = segment.index + segment.segment.length;
+    if (offset >= segment.index && offset < end) {
+      return selectText(session, segment.index, end) ?? session;
+    }
+  }
+  return moveTextSelectionTo(session, offset, false);
+};
+
+export const selectLineAt = (
+  session: TextInputSession,
+  offset: number,
+): TextInputSession => selectText(
+  session,
+  lineStart(session.text, offset),
+  lineEnd(session.text, offset),
+) ?? session;
+
 export const selectAllText = (session: TextInputSession): TextInputSession => ({
   ...session,
   selection: { start: 0, end: session.text.length },
 });
+
+export const selectedText = ({ selection, text }: TextInputSession) => text.slice(
+  Math.min(selection.start, selection.end),
+  Math.max(selection.start, selection.end),
+);
 
 export const selectText = (
   session: TextInputSession,
@@ -212,6 +314,7 @@ const isHighSurrogate = (codeUnit: number) => codeUnit >= 0xD800 && codeUnit <= 
 const isLowSurrogate = (codeUnit: number) => codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const wordSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
 
 const previousGraphemeBoundary = (text: string, offset: number) => {
   let previous = 0;
@@ -224,6 +327,23 @@ const previousGraphemeBoundary = (text: string, offset: number) => {
 
 const nextGraphemeBoundary = (text: string, offset: number) => {
   for (const segment of graphemeSegmenter.segment(text)) {
+    const end = segment.index + segment.segment.length;
+    if (end > offset) return end;
+  }
+  return text.length;
+};
+
+const previousWordBoundary = (text: string, offset: number) => {
+  let boundary = 0;
+  for (const segment of wordSegmenter.segment(text)) {
+    if (segment.index >= offset) break;
+    boundary = segment.index;
+  }
+  return boundary;
+};
+
+const nextWordBoundary = (text: string, offset: number) => {
+  for (const segment of wordSegmenter.segment(text)) {
     const end = segment.index + segment.segment.length;
     if (end > offset) return end;
   }

@@ -62,12 +62,12 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
   assert.equal(tiger.resourceRef, externalUrl);
   assert.equal(await runtime.resolveResourceDocument(externalUrl), undefined);
 
-  const folderTitle = await runtime.openResourceTitle(sandbox.resourceRef);
-  const fileTitle = await runtime.openResourceTitle(index.resourceRef);
-  assert.deepEqual(folderTitle?.getSnapshot(), { state: 'ready', title: 'sandbox-compat' });
-  assert.deepEqual(fileTitle?.getSnapshot(), { state: 'ready', title: 'index.html' });
-  folderTitle?.close();
-  fileTitle?.close();
+  const titles = await runtime.openResourceTitles([sandbox.resourceRef, index.resourceRef]);
+  assert.deepEqual(titles?.getSnapshot(), new Map([
+    [sandbox.resourceRef, 'sandbox-compat'],
+    [index.resourceRef, 'index.html'],
+  ]));
+  titles?.close();
 
   const contentHandle = (await runtime.resolveResourceDocument(index.resourceRef))!;
   const contentDocument = contentHandle.doc() as AutomergeBinaryFileDocument;
@@ -82,6 +82,19 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
   assert.deepEqual(demoDocument['@patchpit'].schema, automergeTextFileDocumentMetadata.schema);
   assert.equal(demoDocument.content, '# Demo');
   assert.equal(demoDocument.mimeType, 'text/markdown');
+
+  const abandonedOpen = new AbortController();
+  const abandonedSession = runtime.openAppTextDocument(
+    sandbox.resourceRef,
+    ['demo.md'],
+    abandonedOpen.signal,
+  );
+  abandonedOpen.abort();
+  const survivingSession = runtime.openAppTextDocument(sandbox.resourceRef, ['demo.md']);
+  await assert.rejects(abandonedSession, { name: 'AbortError' });
+  const editorSession = await survivingSession;
+  assert.equal(editorSession.getSnapshot().state, 'ready');
+  editorSession.close();
 
   const folderHandle = await repo.find<AutomergeFolderDocument>(sandbox.resourceRef as AutomergeUrl);
   const addedHandle = repo.create(createAutomergeBinaryFileDocument(new Uint8Array([10]), { name: 'added.bin' }));

@@ -21,3 +21,14 @@ export {
   type SandboxCacheFetchEvent,
   type SandboxCacheStorage,
 } from './cache-service-worker.ts';
+export {
+  EDITOR_CONNECT_MESSAGE,
+  EDITOR_PROTOCOL_VERSION,
+  isEditorConnectMessage,
+  parseEditorAppMessage,
+  parseEditorHostMessage,
+  type EditorAppMessage,
+  type EditorDocumentSnapshot,
+  type EditorHostMessage,
+  type EditorParticipant,
+} from './editor-protocol.ts';

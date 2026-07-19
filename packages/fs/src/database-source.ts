@@ -33,7 +33,7 @@ export type FolderDocument = {
 
 export type FolderLinkRow = FolderLink & { readonly sourceId: string };
 export type FolderDatabaseSource = MountableDatabaseSource;
-export type DocumentTitleRow = { readonly title: string };
+export type DocumentTitleRow = { readonly resourceRef: string; readonly title: string };
 
 type FolderStorage = {
   readonly title: string;
@@ -153,17 +153,17 @@ export const openFolderGraphQuery = (options: {
   },
 }) as Promise<DatabaseQuerySession<FolderLinkRow>>;
 
-export const openFolderDocumentTitleQuery = (source: MountableDatabaseSource) => openDatabaseQuery({
-  sources: [{ source }],
+export const openFolderDocumentTitlesQuery = (sources: readonly MountableDatabaseSource[]) => openDatabaseQuery({
+  sources: sources.map((source) => ({ source })),
   plan: folderDocumentTitlePlan,
   queryAuthorityScope: 'public',
-});
+}) as Promise<DatabaseQuerySession<DocumentTitleRow>>;
 
-export const openFileDocumentTitleQuery = (source: MountableDatabaseSource) => openDatabaseQuery({
-  sources: [{ source }],
+export const openFileDocumentTitlesQuery = (sources: readonly MountableDatabaseSource[]) => openDatabaseQuery({
+  sources: sources.map((source) => ({ source })),
   plan: fileDocumentTitlePlan,
   queryAuthorityScope: 'public',
-});
+}) as Promise<DatabaseQuerySession<DocumentTitleRow>>;
 
 const staticSource = (sourceId: string, title: string, links: readonly FolderLink[]) => ({
   sourceId,

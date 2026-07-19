@@ -1,34 +1,26 @@
 import {
-  canonicalizeJson,
   createIssue,
   type Issue,
   type JsonValue,
 } from '@tarstate/core';
 import type { ObservedQueryResult } from '@tarstate/core/database';
+import type { PreparedPlanRow } from '@tarstate/core/query';
 import {
   openDatabaseQuery,
   type OpenLinkedDatabaseSource,
 } from '@tarstate/core/database/session';
 import { safeMaterializePortableBytes } from '@tarstate/core/values';
-import { prepareTypedQuery } from '@tarstate/core/query';
-import {
-  typedFrom,
-  typedOrderBy,
-  typedSelect,
-  typedSourceOf,
-} from '@tarstate/core/query/authoring';
 import {
   DEFAULT_FOLDER_DISCOVERY_BUDGET,
-  fileRelation,
-  folderLinksRelation,
-  openFolderGraphQuery,
   type FolderDatabaseSource,
+  type FolderLinkRow,
 } from '@patchpit/fs';
 import {
   APP_ENTRY_PATH,
   hasAppEntry,
   projectAppFiles,
 } from './app-files.ts';
+import { appSnapshotPlan, contentLinksPlan } from './query.ts';
 
 export type ImmutableAppSnapshot = {
   readonly state: 'ready';
@@ -53,33 +45,7 @@ export type AppSnapshotResult = ImmutableAppSnapshot | {
   readonly sourceBases: ImmutableAppSnapshot['sourceBases'];
 };
 
-const QUERY_IDENTITY = {
-  registryFingerprint: 'patchpit:registry:1',
-  authorityFingerprint: 'patchpit:authority:app-contents:1',
-  datasetId: 'patchpit:app:contents',
-} as const;
-const files = typedFrom(fileRelation, 'file');
-const content = typedSelect(files, 'content', ({ file }) => ({
-  binaryContent: file.row.binaryContent,
-  contentKind: file.row.contentKind,
-  mimeType: file.row.mimeType,
-  resourceRef: typedSourceOf(file),
-  textContent: file.row.textContent,
-}));
-const contentQuery = typedOrderBy(content, ({ content: row }) => [{
-  value: row.row.resourceRef,
-  direction: 'asc',
-}]);
-const links = typedFrom(folderLinksRelation, 'link');
-const contentLinksQuery = typedSelect(links, 'sourceLink', ({ link }) => ({
-  linkId: link.row.linkId,
-  originSourceId: typedSourceOf(link),
-  targetSourceId: link.row.resourceRef,
-}));
-const contentsPlan = await prepareTypedQuery(contentQuery, QUERY_IDENTITY);
-const contentLinksPlan = await prepareTypedQuery(contentLinksQuery, QUERY_IDENTITY);
 const DEFAULT_APP_BYTE_LIMIT = 256 * 1024 * 1024;
-const MAX_SNAPSHOT_RETRIES = 2;
 export const APP_FILE_AUTHORITY_SCOPE = 'patchpit.app-file';
 
 type SnapshotOptions = {
@@ -92,42 +58,34 @@ type SnapshotOptions = {
 
 export const snapshotFilesystemApp = async (
   options: SnapshotOptions,
-): Promise<AppSnapshotResult> => snapshotFilesystemAppAttempt(options, MAX_SNAPSHOT_RETRIES);
-
-const snapshotFilesystemAppAttempt = async (
-  options: SnapshotOptions,
-  retries: number,
 ): Promise<AppSnapshotResult> => {
-  const graph = await openFolderGraphQuery({
-    authorityScope: APP_FILE_AUTHORITY_SCOPE,
-    root: options.root,
-    openSource: options.openSource,
+  const observer = await openDatabaseQuery({
+    sources: [{ source: options.root }],
+    plan: appSnapshotPlan,
+    queryAuthorityScope: APP_FILE_AUTHORITY_SCOPE,
+    canRead: () => true,
+    followSourceLinks: {
+      budget: DEFAULT_FOLDER_DISCOVERY_BUDGET,
+      plan: contentLinksPlan,
+      openSource: options.openSource,
+    },
   });
   try {
     options.signal?.throwIfAborted();
-    const graphResult = await graph.whenSettled(settleOptions(options.signal));
-    if (!launchable(graphResult)) return unavailable(graphResult);
-    const files = projectAppFiles(graphResult.rows, options.rootFolderRef);
-    if (!hasAppEntry(files)) return missingEntry(graphResult.basis.attachments);
-
-    const contentResult = await snapshotContents(options);
-    const latestGraph = graph.getSnapshot();
-    if (latestGraph.state !== 'open' || !sameBasis(graphResult.basis, latestGraph.current.basis)) {
-      if (retries === 0) throw new Error('Filesystem app changed while creating its snapshot');
-      return snapshotFilesystemAppAttempt(options, retries - 1);
-    }
-    const sourceBases = contentResult.basis.attachments;
-    if (!launchable(contentResult)) return unavailable(contentResult, sourceBases);
-
+    const result = await observer.whenSettled(settleOptions(options.signal));
+    if (!launchable(result)) return unavailable(result);
+    const projected = materializeSnapshotRows(result.rows);
+    const files = projectAppFiles(projected.links, options.rootFolderRef);
+    const sourceBases = result.basis.attachments;
+    if (!hasAppEntry(files)) return missingEntry(sourceBases);
     options.signal?.throwIfAborted();
-    const contents = materializeContentRows(contentResult.rows);
     const totalBytes = files.reduce((total, { resource }) =>
-      total + (contents.get(resource.resourceRef)?.content.byteLength ?? 0), 0);
+      total + (projected.contents.get(resource.resourceRef)?.content.byteLength ?? 0), 0);
     if (totalBytes > (options.byteLimit ?? DEFAULT_APP_BYTE_LIMIT)) {
       throw new Error('Filesystem app is too large');
     }
     return ready(files.map(({ path, resource }) => {
-      const resolved = contents.get(resource.resourceRef);
+      const resolved = projected.contents.get(resource.resourceRef);
       if (resolved === undefined) {
         throw new Error(`Ready app content is unavailable: ${resource.resourceRef}`);
       }
@@ -138,25 +96,6 @@ const snapshotFilesystemAppAttempt = async (
       };
     }), sourceBases);
   } finally {
-    graph.close();
-  }
-};
-
-const snapshotContents = async (options: SnapshotOptions) => {
-  const observer = await openDatabaseQuery({
-    sources: [{ source: options.root }],
-    plan: contentsPlan,
-    queryAuthorityScope: APP_FILE_AUTHORITY_SCOPE,
-    canRead: () => true,
-    followSourceLinks: {
-      budget: DEFAULT_FOLDER_DISCOVERY_BUDGET,
-      plan: contentLinksPlan,
-      openSource: options.openSource,
-    },
-  });
-  try {
-    return await observer.whenSettled(settleOptions(options.signal));
-  } finally {
     observer.close();
   }
 };
@@ -166,30 +105,56 @@ type MaterializedContent = {
   readonly mimeType: string;
 };
 
-const materializeContentRows = (
-  rows: readonly Readonly<Record<string, unknown>>[],
-): ReadonlyMap<string, MaterializedContent> => rows.reduce((contents, row) => {
-  const { binaryContent, contentKind, mimeType, resourceRef, textContent } = row;
-  if (typeof mimeType !== 'string' || typeof resourceRef !== 'string') {
-    throw new TypeError('App file content projection is invalid');
+type MaterializedSnapshot = {
+  readonly links: FolderLinkRow[];
+  readonly contents: Map<string, MaterializedContent>;
+};
+
+type AppSnapshotRow = PreparedPlanRow<typeof appSnapshotPlan>;
+
+const materializeSnapshotRows = (
+  rows: readonly AppSnapshotRow[],
+): MaterializedSnapshot => rows.reduce<MaterializedSnapshot>((projection, row) => {
+  if (row.rowKind === 'link') {
+    projection.links.push({
+      ...(row.copyOf === undefined ? {} : { copyOf: row.copyOf }),
+      ...(row.icon === undefined ? {} : { icon: row.icon }),
+      linkId: row.linkId,
+      name: row.name,
+      ...(row.order === undefined ? {} : { order: row.order }),
+      resourceRef: row.resourceRef,
+      sourceId: requiredSourceId(row.sourceId),
+      typeHint: row.typeHint,
+    });
+    return projection;
   }
-  const bytes = contentKind === 'text' && typeof textContent === 'string'
+  const { binaryContent, contentKind, mimeType, sourceId, textContent } = row;
+  const content = contentKind === 'text' && typeof textContent === 'string'
     ? new TextEncoder().encode(textContent)
     : materializeBinaryContent(contentKind, binaryContent);
-  if (bytes === undefined || contents.has(resourceRef)) {
+  const resolvedSourceId = requiredSourceId(sourceId);
+  if (content === undefined || projection.contents.has(resolvedSourceId)) {
     throw new TypeError('App file content projection is invalid');
   }
-  contents.set(resourceRef, { content: bytes, mimeType });
-  return contents;
-}, new Map<string, MaterializedContent>());
+  projection.contents.set(resolvedSourceId, { content, mimeType });
+  return projection;
+}, {
+  links: [],
+  contents: new Map<string, MaterializedContent>(),
+});
 
 const materializeBinaryContent = (
-  contentKind: unknown,
-  content: unknown,
+  contentKind: AppSnapshotRow['contentKind'],
+  content: AppSnapshotRow['binaryContent'],
 ): Uint8Array<ArrayBuffer> | undefined => {
   if (contentKind !== 'binary') return undefined;
   const materialized = safeMaterializePortableBytes(content);
   return materialized.success ? materialized.value : undefined;
+};
+
+const requiredSourceId = (sourceId: string | undefined) => {
+  if (sourceId === undefined) throw new TypeError('App snapshot row has no source provenance');
+  return sourceId;
 };
 
 const unavailable = (
@@ -250,6 +215,4 @@ const missingEntry = (
   sourceBases: Object.freeze(sourceBases),
 });
 
-const sameBasis = (left: JsonValue, right: JsonValue) =>
-  canonicalizeJson(left) === canonicalizeJson(right);
 const settleOptions = (signal: AbortSignal | undefined) => signal === undefined ? undefined : { signal };

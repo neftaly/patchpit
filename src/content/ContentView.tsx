@@ -21,10 +21,14 @@ import {
 import type { PatchpitRuntime } from '../root/runtime.ts';
 import type { BrowserSandboxHost } from '../browser/sandbox-host.ts';
 import { observeSameOriginFrameInteractions } from '../browser/frame-interaction.ts';
+import { connectEditorFrame } from './editor-port-host.ts';
 
 export const RESOURCE_DRAG_TYPE = 'application/x-patchpit-resource';
 
-type ContentRuntime = Pick<PatchpitRuntime, 'createAppSnapshot' | 'resolveResourceDocument'>;
+type ContentRuntime = Pick<
+  PatchpitRuntime,
+  'createAppSnapshot' | 'openAppTextDocument' | 'resolveResourceDocument'
+>;
 type SandboxHost = Pick<BrowserSandboxHost, 'install'>;
 
 export function ContentView({ contentRuntime, contentUrl, onInteract, onOpenResource, resources, resourceTitles, sandboxHost }: {
@@ -221,6 +225,7 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
     readonly frameAttributes: SandboxFrameAttributes;
   }>({ state: 'loading' });
   const removeInteractionListeners = useRef<() => void>(() => undefined);
+  const closeEditorPort = useRef<() => void>(() => undefined);
   useEffect(() => {
     removeInteractionListeners.current();
     removeInteractionListeners.current = () => undefined;
@@ -247,6 +252,8 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
       if (!controller.signal.aborted) setInstallation({ state: 'unavailable' });
     });
     return () => {
+      closeEditorPort.current();
+      closeEditorPort.current = () => undefined;
       removeInteractionListeners.current();
       removeInteractionListeners.current = () => undefined;
       controller.abort();
@@ -260,7 +267,9 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
           className="sandbox-app"
           onLoad={(event) => {
             removeInteractionListeners.current();
+            closeEditorPort.current();
             removeInteractionListeners.current = observeSameOriginFrameInteractions(event.currentTarget, onInteract);
+            closeEditorPort.current = connectEditorFrame(event.currentTarget, contentRuntime, rootFolderRef);
           }}
           title={`${title} app`}
           {...installation.frameAttributes}

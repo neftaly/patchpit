@@ -39,28 +39,30 @@ Acceptance evidence:
 
 ### W4. Markdown acceptance application
 
-Build the first real editing application around a Patchwork-compatible Markdown
-document with `@patchwork.type: markdown` and collaborative Automerge text.
+Complete unrestricted continuous multiplayer input for the delivered Markdown
+editor. One independently based semantic splice already merges correctly, local
+dependent splices queue, and unsafe concurrent replacement retains the local
+draft. Replace that safe pause only after Tarstate supplies a generic
+source-native text-intent continuation or equivalent anchors; do not add a
+Patchpit offset transform, whole-text replacement, hidden Automerge writer, or
+distributed writer lock. Source-native Automerge feasibility is proven; the
+remaining dependency is the released session lifecycle and outcome contract.
 
-The application must drive the smallest useful host boundary for:
-
-1. Receiving an immutable authority-scoped Tarstate projection with readiness,
-   exact completeness, and contributing source bases.
-2. Observing replacement projections.
-3. Simulating and submitting semantic edits.
-4. Asking the host to open or create a document.
-
-The application must not receive a Repo, raw `DocHandle`, foreign source handle,
-iframe state, credential, or generic provider registry. It may initially use the
-trusted same-origin runner; W7 gates untrusted applications.
+Generalize the existing relative open request to document creation only when the
+Markdown app has a concrete creation story. The application remains detached
+from Repo, raw `DocHandle`, source handles, iframe state, credentials, and
+provider registries.
 
 Acceptance evidence:
 
-1. Two replicas can edit the same Markdown document and converge.
-2. Incomplete and invalid projections disable unsafe editing without appearing
-   as empty content.
-3. Simulation and commit use the same semantic operation path.
-4. The document round-trips through the pinned Patchwork compatibility corpus.
+1. Rapid locally dependent splices remain correctly anchored while a second
+   replica edits before, inside, and after their logical range.
+2. Composition completed across a concurrent remote change commits once and
+   converges without moving the input-method candidate window.
+3. Rejected, unknown, expired, and budget-exhausted intent streams retain
+   actionable unapplied evidence.
+4. A real creation flow establishes the smallest canonical document-creation
+   request and receipt, or creation remains explicitly deferred.
 
 ### W5. Cross-source copy and move
 
