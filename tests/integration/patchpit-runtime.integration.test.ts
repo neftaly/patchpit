@@ -10,6 +10,7 @@ import {
   type AutomergeFolderDocument,
   type AutomergeTextFileDocument,
 } from '@patchpit/automerge-fs';
+import { projectResourceFileView } from '../../src/content/resource-file-view.ts';
 import { createRoot, openRoot } from '../../src/root/runtime.ts';
 
 void test('Patchpit root reopens one live graph of Automerge folder documents', async () => {
@@ -77,11 +78,46 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
   assert.equal(contentDocument.name, 'index.html');
   assert.equal(contentDocument.mimeType, 'text/html');
 
+  const indexFile = (await runtime.openResourceFile(index.resourceRef))!;
+  await indexFile.whenSettled();
+  assert.deepEqual(projectResourceFileView(indexFile.getSnapshot()), {
+    content: '<h1>',
+    state: 'ready',
+  });
+  indexFile.close();
+
   const demoHandle = (await runtime.resolveResourceDocument(demo.resourceRef))!;
   const demoDocument = demoHandle.doc() as AutomergeTextFileDocument;
   assert.deepEqual(demoDocument['@patchpit'].schema, automergeTextFileDocumentMetadata.schema);
   assert.equal(demoDocument.content, '# Demo');
   assert.equal(demoDocument.mimeType, 'text/markdown');
+
+  const demoFile = (await runtime.openResourceFile(demo.resourceRef))!;
+  const projectedDemo = await demoFile.whenSettled();
+  assert.equal(projectedDemo.readiness, 'ready');
+  assert.equal(projectedDemo.completeness, 'exact');
+  assert.equal(projectedDemo.freshness, 'current');
+  assert.deepEqual(projectedDemo.rows, [{
+    contentKind: 'text',
+    extension: 'md',
+    mimeType: 'text/markdown',
+    name: 'demo.md',
+    textContent: '# Demo',
+  }]);
+  const projectedUpdate = new Promise<void>((resolve) => {
+    const unsubscribe = demoFile.subscribe(() => {
+      const snapshot = demoFile.getSnapshot();
+      if (snapshot.state === 'open' && snapshot.current.rows[0]?.textContent === '# Tumeke') {
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
+  demoHandle.change((document) => {
+    (document as { content: string }).content = '# Tumeke';
+  });
+  await projectedUpdate;
+  demoFile.close();
 
   const abandonedOpen = new AbortController();
   const abandonedSession = runtime.openAppTextDocument(

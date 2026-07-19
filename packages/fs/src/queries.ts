@@ -56,6 +56,16 @@ const folderDocumentTitle = typedSelect(folders, 'title', ({ folder }) => ({
 export const folderDocumentTitlePlan = await prepareTypedQuery(folderDocumentTitle, QUERY_IDENTITY);
 
 const files = typedFrom(fileRelation, 'file');
+const fileDocument = typedSelect(files, 'file', ({ file }) => ({
+  binaryContent: file.row.binaryContent,
+  contentKind: file.row.contentKind,
+  extension: file.row.extension,
+  mimeType: file.row.mimeType,
+  name: file.row.name,
+  textContent: file.row.textContent,
+}));
+export const fileDocumentPlan = await prepareTypedQuery(fileDocument, QUERY_IDENTITY);
+
 const fileDocumentTitle = typedSelect(files, 'title', ({ file }) => ({
   resourceRef: typedSourceOf(file),
   title: file.row.name,

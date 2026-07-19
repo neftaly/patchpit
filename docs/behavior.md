@@ -22,7 +22,10 @@ IDs; names, order, paths, and parent folders are mutable facts. Duplicate names
 remain distinct links. Direct `https:` leaves are external resources rather
 than Automerge documents, apps, or implicit fetch requests. Unavailable,
 incomplete, invalid, stale, and closed source state never appears as an empty
-filesystem. Claimed Patchwork folder compatibility is two-way: supported
+filesystem. An ordinary file viewer renders only a ready, current, exact logical
+file projection and reports other states explicitly; it does not inspect the
+physical Automerge document. Claimed Patchwork folder compatibility is two-way:
+supported
 Patchpit edits reopen in pinned Patchwork, and Patchwork edits to compatible
 Patchpit folders reopen without losing Patchpit or unknown metadata. Foreign
 file profiles remain read-only.

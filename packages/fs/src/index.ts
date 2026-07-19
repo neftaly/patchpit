@@ -3,6 +3,7 @@ export {
   createStaticFolderDatabaseSource,
   DEFAULT_FOLDER_DISCOVERY_BUDGET,
   openFileDocumentTitlesQuery,
+  openFileDocumentQuery,
   openFolderDocumentTitlesQuery,
   openFolderGraphQuery,
   openFolderLinksQuery,

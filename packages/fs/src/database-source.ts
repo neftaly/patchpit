@@ -1,4 +1,5 @@
 import type { Issue } from '@tarstate/core';
+import type { FileRow } from '@patchpit/artifacts';
 import { prepareManualReadOnlyAttachment } from '@tarstate/core/attachment/adapter';
 import type { AttachmentProjection } from '@tarstate/core/database';
 import {
@@ -11,6 +12,7 @@ import {
 import type { Completeness, RelationInput } from '@tarstate/core/query';
 import type { ObservableSource, SourceSnapshot } from '@tarstate/core/source';
 import {
+  fileDocumentPlan,
   fileDocumentTitlePlan,
   folderDocumentTitlePlan,
   folderLinksPlan,
@@ -158,6 +160,12 @@ export const openFolderDocumentTitlesQuery = (sources: readonly MountableDatabas
   plan: folderDocumentTitlePlan,
   queryAuthorityScope: 'public',
 }) as Promise<DatabaseQuerySession<DocumentTitleRow>>;
+
+export const openFileDocumentQuery = (source: MountableDatabaseSource) => openDatabaseQuery({
+  sources: [{ source }],
+  plan: fileDocumentPlan,
+  queryAuthorityScope: 'public',
+}) as Promise<DatabaseQuerySession<FileRow>>;
 
 export const openFileDocumentTitlesQuery = (sources: readonly MountableDatabaseSource[]) => openDatabaseQuery({
   sources: sources.map((source) => ({ source })),

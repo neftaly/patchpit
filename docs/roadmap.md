@@ -42,6 +42,9 @@ Acceptance evidence:
 Implement cross-folder operations as explicit sequences over independent atomic
 sources. Moving a link removes and adds occurrences across two folder documents;
 copying creates new document identity and records compatible lineage metadata.
+This is copy/relocate across source boundaries, not W6 identity-preserving
+reorder within one source: a destination occurrence has its own source-local
+identity.
 
 Receipts must expose partial completion, retry, repair, and idempotency evidence.
 One-sided `copyOf` or `copies` lineage is valid partial evidence rather than
@@ -100,7 +103,7 @@ adapter actually preserves. Conflicts and unsupported values remain evidence.
 
 Generalize only the view-selection and creation behavior demonstrated by the
 multiplayer Markdown editor.
-Offer compatible views using exact logical schema and media type, retain raw
+Offer compatible views using exact logical schema and media type, offer raw
 inspection as fallback, and create canonical documents of selected logical
 types without introducing a generic renderer or provider registry.
 

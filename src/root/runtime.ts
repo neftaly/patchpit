@@ -15,6 +15,7 @@ import {
   type AutomergeFolderDocument,
 } from '@patchpit/automerge-fs';
 import {
+  openFileDocumentQuery,
   openFileDocumentTitlesQuery,
   openFolderDocumentTitlesQuery,
   openFolderGraphQuery,
@@ -154,7 +155,7 @@ const openRootHandle = async (
 ) => {
   const handles = new Map<string, DocHandle<object>>([[rootHandle.url, asObjectHandle(rootHandle)]]);
   const pendingHandles = new Map<string, Promise<DocHandle<object>>>();
-  const titleObservers = new Set<{ readonly close: () => void }>();
+  const resourceObservers = new Set<{ readonly close: () => void }>();
   const editorHubs = new Map<string, {
     readonly promise: Promise<EditorDocumentHub>;
     pendingConsumers: number;
@@ -274,8 +275,43 @@ const openRootHandle = async (
       titleSignal.throwIfAborted();
     }
     if (sources.length === 0) return undefined;
-    const observer = await openTitleObserver(sources, titleObservers);
-    return retainOpenTitleObserver(observer, closed, titleSignal);
+    const observer = await openTitleObserver(sources, resourceObservers);
+    return retainOpenObserver(observer, closed, titleSignal);
+  };
+  const openResourceFile = async (resourceRef: string, fileSignal?: AbortSignal) => {
+    if (closed || !rootReferencesResource(resourceQuery, resourceRef)
+      || !isValidAutomergeUrl(resourceRef)) return undefined;
+    const handle = await findResourceHandle(resourceRef, fileSignal);
+    if (closed || !rootReferencesResource(resourceQuery, resourceRef)) return undefined;
+    const opened = await openAutomergeFileDatabase(handle, 'public');
+    if (!opened.success) return undefined;
+    if (closed || fileSignal?.aborted === true || !rootReferencesResource(resourceQuery, resourceRef)) {
+      opened.value.close();
+      fileSignal?.throwIfAborted();
+      return undefined;
+    }
+    let query: Awaited<ReturnType<typeof openFileDocumentQuery>>;
+    try {
+      query = await openFileDocumentQuery(opened.value);
+    } catch (error) {
+      opened.value.close();
+      throw error;
+    }
+    let observerClosed = false;
+    const observer = {
+      getSnapshot: () => query.getSnapshot(),
+      subscribe: (listener: Parameters<typeof query.subscribe>[0]) => query.subscribe(listener),
+      whenSettled: (options?: Parameters<typeof query.whenSettled>[0]) => query.whenSettled(options),
+      close: () => {
+        if (observerClosed) return;
+        observerClosed = true;
+        resourceObservers.delete(observer);
+        query.close();
+        opened.value.close();
+      },
+    };
+    resourceObservers.add(observer);
+    return retainOpenObserver(observer, closed, fileSignal);
   };
   const createAppSnapshot = async (rootFolderRef: string, snapshotSignal?: AbortSignal) => {
     if (closed) throw new Error('Patchpit root is closed');
@@ -372,13 +408,14 @@ const openRootHandle = async (
     workspacePresence,
     resolveResourceDocument,
     openResourceTitles,
+    openResourceFile,
     createAppSnapshot,
     openAppTextDocument,
     close: () => {
       if (closed) return;
       closed = true;
-      for (const observer of titleObservers) observer.close();
-      titleObservers.clear();
+      for (const observer of resourceObservers) observer.close();
+      resourceObservers.clear();
       for (const { promise } of editorHubs.values()) {
         void promise.then((value) => value.close(), () => undefined);
       }
@@ -515,7 +552,7 @@ const materializeResourceTitles = (
     ? [[resourceRef, title] as const]
     : []));
 
-const retainOpenTitleObserver = <Observer extends { readonly close: () => void }>(
+const retainOpenObserver = <Observer extends { readonly close: () => void }>(
   observer: Observer,
   rootClosed: boolean,
   signal?: AbortSignal,

@@ -7,7 +7,6 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import { isImmutableString } from '@automerge/automerge';
 import type { SandboxFrameAttributes } from '@patchpit/sandbox';
 import type { FolderLinkRow } from '@patchpit/fs';
 import {
@@ -22,12 +21,13 @@ import type { PatchpitRuntime } from '../root/runtime.ts';
 import type { BrowserSandboxHost } from '../browser/sandbox-host.ts';
 import { observeSameOriginFrameInteractions } from '../browser/frame-interaction.ts';
 import { connectEditorFrame } from './editor-port-host.ts';
+import { projectResourceFileView } from './resource-file-view.ts';
 
 export const RESOURCE_DRAG_TYPE = 'application/x-patchpit-resource';
 
 type ContentRuntime = Pick<
   PatchpitRuntime,
-  'createAppSnapshot' | 'openAppTextDocument' | 'resolveResourceDocument'
+  'createAppSnapshot' | 'openAppTextDocument' | 'openResourceFile'
 >;
 type SandboxHost = Pick<BrowserSandboxHost, 'install'>;
 
@@ -180,35 +180,42 @@ function Viewer({ contentRuntime, resourceRef }: {
     readonly state: 'loading' | 'unavailable';
   } | {
     readonly state: 'ready';
-    readonly handle: NonNullable<Awaited<ReturnType<ContentRuntime['resolveResourceDocument']>>>;
+    readonly observer: NonNullable<Awaited<ReturnType<ContentRuntime['openResourceFile']>>>;
   }>({ state: 'loading' });
   useEffect(() => {
     const controller = new AbortController();
     setResolution({ state: 'loading' });
-    void contentRuntime.resolveResourceDocument(resourceRef, controller.signal).then((resolved) => {
-      if (!controller.signal.aborted) setResolution(resolved === undefined
+    let opened: Awaited<ReturnType<ContentRuntime['openResourceFile']>>;
+    void contentRuntime.openResourceFile(resourceRef, controller.signal).then((observer) => {
+      opened = observer;
+      if (!controller.signal.aborted) setResolution(observer === undefined
         ? { state: 'unavailable' }
-        : { state: 'ready', handle: resolved });
+        : { state: 'ready', observer });
     }, () => {
       if (!controller.signal.aborted) setResolution({ state: 'unavailable' });
     });
-    return () => { controller.abort(); };
+    return () => {
+      controller.abort();
+      opened?.close();
+    };
   }, [contentRuntime, resourceRef]);
-  const handle = resolution.state === 'ready' ? resolution.handle : undefined;
-  const subscribeDocument = useCallback((listener: () => void) => {
-    if (handle === undefined) return () => undefined;
-    const changed = () => { listener(); };
-    handle.on('heads-changed', changed);
-    return () => { handle.off('heads-changed', changed); };
-  }, [handle]);
-  const getDocument = useCallback(() => handle?.doc(), [handle]);
-  const document = useSyncExternalStore(
-    subscribeDocument,
-    getDocument,
-    getDocument,
+  const observer = resolution.state === 'ready' ? resolution.observer : undefined;
+  const subscribe = useCallback(
+    (listener: () => void) => observer?.subscribe(listener) ?? (() => undefined),
+    [observer],
+  );
+  const getSnapshot = useCallback(() => observer?.getSnapshot(), [observer]);
+  const snapshot = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getSnapshot,
   );
   if (resolution.state === 'unavailable') return <p role="alert">Resource unavailable.</p>;
-  return <pre className="viewer">{formatViewerContent(document, resourceRef)}</pre>;
+  if (snapshot === undefined) return null;
+  const view = projectResourceFileView(snapshot);
+  return view.state === 'ready'
+    ? <pre className="viewer">{view.content}</pre>
+    : <p role="alert">{resourceFileMessage(view.state)}</p>;
 }
 
 function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, title }: {
@@ -277,11 +284,9 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
       );
 }
 
-const formatViewerContent = (document: object | undefined, resourceRef: string) => {
-  if (document === undefined) return resourceRef;
-  const content = 'content' in document ? document.content : undefined;
-  return content instanceof Uint8Array
-    ? new TextDecoder().decode(content)
-    : typeof content === 'string' || isImmutableString(content) ? String(content)
-    : JSON.stringify(document, null, 2);
-};
+const resourceFileMessage = (state: Exclude<ReturnType<typeof projectResourceFileView>['state'], 'ready'>) => ({
+  closed: 'Resource closed.',
+  incomplete: 'Resource incomplete.',
+  invalid: 'Resource invalid.',
+  stale: 'Resource not current.',
+})[state];

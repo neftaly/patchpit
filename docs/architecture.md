@@ -15,10 +15,16 @@
 | Editor focus, selection, and mounted participants | Automerge Repo Presence | Per-document ephemeral sessions, profile identity, and Automerge cursors |
 | In-progress input and composition | Sandboxed editor runtime | Local EditContext session and semantic splice intents |
 | Editor authority and revision lifecycle | Patchpit root/content runtime | Host-owned document session and versioned MessagePort |
+| Ordinary file views | Tarstate query, projected by Patchpit content UI | Exact logical file rows and readiness evidence |
 
 State crosses an owner boundary through a projection, canonical writer, or
 explicit attached source. Patchpit does not mirror Tarstate readiness or raw
 Automerge handles inside application state.
+
+The root runtime owns Automerge handles and attached database lifecycles.
+Ordinary viewers observe logical file relations through a closeable Tarstate
+query; only editor and canonical-writer boundaries that require source-native
+identity receive a host-owned document session.
 
 The browser root host owns the Repo it creates for its default transport. A
 Repo supplied by a container remains owned and shut down by that container.
