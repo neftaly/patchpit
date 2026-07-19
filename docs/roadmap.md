@@ -47,8 +47,8 @@ reorder within one source: a destination occurrence has its own source-local
 identity.
 
 Receipts must expose partial completion, retry, repair, and idempotency evidence.
-One-sided `copyOf` or `copies` lineage is valid partial evidence rather than
-corruption. The UI must not describe these operations as atomic transactions.
+One-sided `copyOf` lineage is valid: the original does not acquire a reverse
+list of copies. The UI must not describe these operations as atomic transactions.
 
 Relocation adds the destination occurrence before unlinking the source. It keeps
 the referenced document identity and known placement metadata, but allocates a
