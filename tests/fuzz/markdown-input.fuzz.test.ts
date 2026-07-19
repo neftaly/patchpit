@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fc from 'fast-check';
+import * as Automerge from '@automerge/automerge';
 import { Repo } from '@automerge/automerge-repo';
 import {
   createAutomergeTextFileDocument,
   openAutomergeFileDatabase,
 } from '@patchpit/automerge-fs';
-import { commitTextFileSplice } from '@patchpit/fs';
+import { fileRelation, stageTextFileSplice } from '@patchpit/fs';
 import {
   applyTextSplice,
   applyTextUpdate,
@@ -30,7 +31,6 @@ import {
 import {
   createEditorSyncState,
   transitionEditorSync,
-  type EditorSyncState,
 } from '../../apps/markdown-editor/editor-sync.ts';
 
 const unicodeScalar = fc.integer({ min: 0, max: 0x10FFFF })
@@ -195,21 +195,31 @@ void test('input parsing rejects non-boundaries and out-of-range updates', () =>
   }), { success: false, reason: 'text' });
 });
 
-void test('basis-captured concurrent editor inserts survive either submission order', async () => {
+void test('retained dependent editor inserts survive concurrent publication and resolve positions', async () => {
   const repo = new Repo({ network: [] });
   try {
     await fc.assert(fc.asyncProperty(
       text,
-      fc.tuple(text, text).filter(([left, right]) => left.length > 0 && right.length > 0),
-      fc.nat(),
+      fc.array(fc.record({ insert: text, indexSeed: fc.nat() }), { minLength: 2, maxLength: 8 }),
       fc.boolean(),
-      async (initialText, [leftPayload, rightPayload], offsetSeed, reverse) => {
-        const boundaries = codePointBoundaries(initialText);
-        const index = boundaries[offsetSeed % boundaries.length]!;
-        const left = `⟦A${leftPayload}A⟧`;
-        const right = `⟦B${rightPayload}B⟧`;
+      fc.nat(),
+      async (initialText, generated, remoteFirst, remoteIndexSeed) => {
+        let optimisticText = initialText;
+        const operations = generated.map(({ indexSeed, insert }, operationIndex) => {
+          const boundaries = codePointBoundaries(optimisticText);
+          const operation = {
+            kind: 'file.text.splice' as const,
+            index: boundaries[indexSeed % boundaries.length]!,
+            deleteCount: 0,
+            insert: `⟦${operationIndex}:${insert}⟧`,
+          };
+          optimisticText = applyTextSplice(optimisticText, operation);
+          return operation;
+        });
+        const remote = '⟦remote⟧';
+        const initialBoundaries = codePointBoundaries(initialText);
+        const remoteOffset = initialBoundaries[remoteIndexSeed % initialBoundaries.length]!;
         const handle = repo.create(createAutomergeTextFileDocument(initialText, { name: 'demo.md' }));
-        // This property exercises source-routed writes, not Repo networking.
         handle.removeAllListeners('change');
         const opened = await openAutomergeFileDatabase(handle, 'patchpit.editor-text');
         assert.equal(opened.success, true);
@@ -220,23 +230,64 @@ void test('basis-captured concurrent editor inserts survive either submission or
           opened.value.close();
           return;
         }
-        const options = { observedBasis: snapshot.current.basis };
-        const insert = (value: string) => commitTextFileSplice(opened.value, {
-          kind: 'file.text.splice',
-          index,
-          deleteCount: 0,
-          insert: value,
-        }, options);
+        const intent = await opened.value.openTextIntent({ observedBasis: snapshot.current.basis });
+        assert.equal(intent.success, true);
+        if (!intent.success) {
+          opened.value.close();
+          return;
+        }
+        const session = intent.value;
+        const prefixLength = Math.max(1, Math.floor(operations.length / 2));
+        const append = (operation: (typeof operations)[number]) => session.append(
+          operation,
+          (current) => stageTextFileSplice(current, operation),
+        );
         try {
-          const receipts = reverse
-            ? [await insert(right), await insert(left)]
-            : [await insert(left), await insert(right)];
-          assert.deepEqual(receipts.map(({ outcome }) => outcome), ['committed', 'committed']);
+          operations.slice(0, prefixLength).forEach((operation) => {
+            assert.equal(append(operation).status, 'pending');
+          });
+          if (remoteFirst) {
+            handle.change((document) => {
+              Automerge.splice(document, ['content'], remoteOffset, 0, remote);
+            });
+          }
+          const prefix = session.publish();
+          operations.slice(prefixLength).forEach((operation) => {
+            assert.equal(append(operation).status, 'pending');
+          });
+          if (!remoteFirst) {
+            handle.change((document) => {
+              Automerge.splice(document, ['content'], remoteOffset, 0, remote);
+            });
+          }
+          assert.equal((await prefix).outcome, 'committed');
+          const end = session.captureTextPosition({
+            name: 'document-end',
+            relation: fileRelation,
+            key: ['text'],
+            field: 'textContent',
+            index: optimisticText.length,
+            affinity: 'after',
+          });
+          const suffix = await session.publish({ textPositions: [end] });
+          assert.equal(suffix.outcome, 'committed');
           const merged = handle.doc().content;
-          assert.equal(merged.length, initialText.length + left.length + right.length);
-          assert.equal(merged.includes(left), true);
-          assert.equal(merged.includes(right), true);
+          assert.equal(merged.length, optimisticText.length + remote.length);
+          const remoteIndex = merged.indexOf(remote);
+          assert.notEqual(remoteIndex, -1);
+          assert.equal(
+            merged.slice(0, remoteIndex) + merged.slice(remoteIndex + remote.length),
+            optimisticText,
+          );
+          assert.deepEqual(suffix.textPositions, [{
+            name: 'document-end',
+            state: 'resolved',
+            index: merged.length,
+            basis: suffix.outcome === 'committed' ? suffix.afterBasis : undefined,
+            issues: [],
+          }]);
         } finally {
+          session.close();
           opened.value.close();
         }
       },
@@ -246,12 +297,13 @@ void test('basis-captured concurrent editor inserts survive either submission or
   }
 });
 
-void test('editor synchronization drains dependent input or blocks a divergent rebase', () => {
+void test('editor synchronization adopts merged projections and blocks failed evidence', () => {
   fc.assert(fc.property(
     text,
     fc.array(fc.record({ insert: text, indexSeed: fc.nat() }), { minLength: 1, maxLength: 30 }),
     fc.boolean(),
-    (initialText, generated, diverge) => {
+    fc.constantFrom('committed', 'rejected', 'unknown', 'unresolved'),
+    (initialText, generated, diverge, result) => {
       let localText = initialText;
       const operations = generated.map(({ indexSeed, insert }) => {
         const boundaries = codePointBoundaries(localText);
@@ -270,34 +322,37 @@ void test('editor synchronization drains dependent input or blocks a divergent r
         state = transitionEditorSync(state, {
           type: 'intent',
           operation,
+          selection: {
+            start: operation.index + operation.insert.length,
+            end: operation.index + operation.insert.length,
+          },
           snapshot: { revision: String(revision), text: canonicalText },
         }).state;
       });
       assert.equal(state.kind, 'applying');
-      let first = true;
-      while (state.kind === 'applying') {
-        const applying: Extract<EditorSyncState, { readonly kind: 'applying' }> = state;
+      const pending = state.pendingSubmissionIds;
+      for (const [index, submissionId] of pending.entries()) {
+        const outcome = index === 0 && result !== 'unresolved' ? result : 'committed';
         state = transitionEditorSync(state, {
           type: 'receipt',
-          submissionId: applying.submissionId,
-          outcome: 'committed',
+          submissionId,
+          outcome,
+          selection: index === 0 && result === 'unresolved' ? 'unresolved' : 'resolved',
         }).state;
-        revision += 1;
-        canonicalText = diverge && first && applying.queued.length > 0
-          ? `remote:${applying.expectedText}`
-          : applying.expectedText;
-        first = false;
-        state = transitionEditorSync(state, {
-          type: 'snapshot',
-          snapshot: { revision: String(revision), text: canonicalText },
-        }).state;
+        if (state.kind === 'blocked') break;
       }
-      if (diverge && operations.length > 1) {
+      if (result !== 'committed') {
         assert.equal(state.kind, 'blocked');
-      } else {
-        assert.equal(state.kind, 'ready');
-        assert.equal(canonicalText, localText);
+        return;
       }
+      assert.equal(state.kind, 'applying');
+      revision += 1;
+      canonicalText = diverge ? `remote:${localText}` : localText;
+      state = transitionEditorSync(state, {
+        type: 'snapshot',
+        snapshot: { revision: String(revision), text: canonicalText },
+      }).state;
+      assert.equal(state.kind, 'ready');
     },
   ), { numRuns: 300 });
 });

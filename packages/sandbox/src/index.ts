@@ -31,4 +31,5 @@ export {
   type EditorDocumentSnapshot,
   type EditorHostMessage,
   type EditorParticipant,
+  type EditorPublicationResult,
 } from './editor-protocol.ts';

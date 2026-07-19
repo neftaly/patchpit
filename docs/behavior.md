@@ -171,17 +171,24 @@ does not change text, revision, focus, local selection, participant state, or
 local or remote paint. Dropped files, URLs, and rich content neither navigate
 the frame nor mutate the document; text drag-and-drop is not promised yet.
 
-Local input paints immediately and locally dependent splices queue behind their
-predecessor. If a concurrent canonical change makes a queued numeric position
-unsafe to reinterpret, the editor becomes read-only and retains the visible
-local draft rather than dropping, duplicating, or misplacing it. Removing that
-safe pause requires the generic source-native text-intent continuation described
-in the active editor review and Tarstate's transaction/concurrency specification.
+Local input paints immediately and each completed semantic splice appends to one
+host-owned Tarstate text-intent session. When no publication is active, the
+pending prefix publishes immediately. Later locally dependent splices may append
+while that prefix is publishing; they retain source-native character identity
+and publish as its causal suffix rather than replaying numeric offsets against a
+different string. Rejection, an unknown outcome, or a committed result whose
+selection cannot be resolved at its exact basis retains the visible local draft
+and makes the editor read-only instead of dropping, duplicating, or misplacing
+input.
 
-Each mounted editor session has a generated label and one color from a fixed
-accessible palette. Color is not unique identity and is always accompanied by a
-label in the participant surface. Automerge Repo Presence shares mounted
-sessions and their last selection endpoints as Automerge cursors; it does not write
+Each browser profile has one opaque generated display identity. Its label and
+color remain stable across Patchpit tabs and reloads on that origin, while every
+mounted editor still has a distinct presence session and selection lifecycle.
+Clearing site data or using storage that cannot persist may produce a new display
+identity; it is not an account, credential, or durable document fact. Color is
+not unique identity and is always accompanied by a label in the participant
+surface. Automerge Repo Presence shares mounted sessions, their display identity,
+and their last selection endpoints as Automerge cursors; it does not write
 selection, focus, color, or composition into document history. Normal close
 removes presence immediately and abrupt loss expires after a bounded interval.
 
@@ -199,12 +206,13 @@ editor, or using surrounding UI must not make collaborator carets blink in and
 out. Local and remote carets track scrolling and resizing without moving either
 selection; a local navigation or edit scrolls its caret into view without
 resetting the horizontal or vertical position unnecessarily.
-Intermediate composition remains local and one
-completed composition produces one semantic splice when its source basis is
-still safe. A canonical change received during composition does not disturb the
-candidate window; if both texts changed and no source-native anchor can reconcile
-them, completion retains the local draft and pauses instead of submitting stale
-numeric offsets. The app fills its viewport and shows only a compact
+Intermediate composition remains local and one completed composition produces
+one semantic splice against the source basis captured when composition began. A
+canonical change received during composition does not disturb the candidate
+window. Completion reconciles through the same retained source-native session;
+Tarstate resolves the final anchor and focus into detached offsets at the exact
+committed basis before Patchpit updates presence or adopts the merged projection.
+The app fills its viewport and shows only a compact
 write/readiness and participant line outside the text. There is no formatting
 toolbar, preview, diagnostic counter, save ceremony, or undo behavior.
 

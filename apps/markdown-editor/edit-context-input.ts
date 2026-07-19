@@ -30,7 +30,7 @@ export type EditContextInputCallbacks = {
   readonly onCompositionInterrupted: (session: TextInputSession) => void;
   readonly onInputIssue: (reason: TextInputIssue) => void;
   readonly onSessionChange: (session: TextInputSession) => void;
-  readonly onSpliceIntent: (intent: TextSpliceIntent) => void;
+  readonly onSpliceIntent: (intent: TextSpliceIntent, session: TextInputSession) => void;
 };
 
 export type AttachedEditContextInput = {
@@ -132,7 +132,7 @@ export const attachEditContextInput = (
   const publish = (next: TextInputSession, intent?: TextSpliceIntent, revealCaret = false) => {
     session = next;
     callbacks.onSessionChange(session);
-    if (intent !== undefined) callbacks.onSpliceIntent(intent);
+    if (intent !== undefined) callbacks.onSpliceIntent(intent, session);
     scheduleLayout(revealCaret);
   };
   const publishSelection = (

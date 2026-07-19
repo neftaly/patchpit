@@ -2,6 +2,7 @@ import {
   isEditorConnectMessage,
   parseEditorHostMessage,
   type EditorDocumentSnapshot,
+  type EditorPublicationResult,
 } from '@patchpit/sandbox';
 import type { TextSelection, TextSpliceIntent } from './input-session.ts';
 
@@ -16,7 +17,7 @@ export const createEditorClient = () => {
   let port: MessagePort | undefined;
   let closed = false;
   const listeners = new Set<() => void>();
-  const receipts = new Map<string, (outcome: 'committed' | 'rejected' | 'unknown') => void>();
+  const receipts = new Map<string, (result: EditorPublicationResult) => void>();
   const emit = () => { listeners.forEach((listener) => listener()); };
   const connected = (event: MessageEvent) => {
     if (closed
@@ -41,7 +42,10 @@ export const createEditorClient = () => {
         emit();
         return;
       }
-      receipts.get(message.requestId)?.(message.outcome);
+      receipts.get(message.requestId)?.({
+        outcome: message.outcome,
+        selection: message.selection,
+      });
       receipts.delete(message.requestId);
     });
     connectedPort.start();
@@ -61,7 +65,9 @@ export const createEditorClient = () => {
       message: 'Document closed.',
       participants: [],
     };
-    for (const resolve of receipts.values()) resolve('unknown');
+    for (const resolve of receipts.values()) {
+      resolve({ outcome: 'unknown', selection: 'unresolved' });
+    }
     receipts.clear();
     emit();
     listeners.clear();
@@ -77,8 +83,11 @@ export const createEditorClient = () => {
     commitSplice: (
       revision: string,
       operation: TextSpliceIntent,
-    ): Promise<'committed' | 'rejected' | 'unknown'> => {
-      if (closed || port === undefined) return Promise.resolve('rejected');
+      selection: TextSelection,
+    ): Promise<EditorPublicationResult> => {
+      if (closed || port === undefined) {
+        return Promise.resolve({ outcome: 'rejected', selection: 'unresolved' });
+      }
       const requestId = crypto.randomUUID();
       return new Promise((resolve) => {
         receipts.set(requestId, resolve);
@@ -87,6 +96,8 @@ export const createEditorClient = () => {
           requestId,
           revision,
           ...operation,
+          selectionAnchor: selection.start,
+          selectionFocus: selection.end,
         });
       });
     },

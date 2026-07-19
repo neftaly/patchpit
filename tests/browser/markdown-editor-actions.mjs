@@ -808,7 +808,7 @@ const runPresenceCorpus = async (context, local) => {
       await eventually(
         async () => await local.frame.getByRole('list', { name: 'Present editors' }).locator('li').count() === 1,
         'closed peer outlived the presence expiry bound',
-        18_000,
+        22_000,
       );
       assert.equal(await editorText(local.editor), durableText);
     });

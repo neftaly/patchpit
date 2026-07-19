@@ -44,17 +44,19 @@ export const commitTextFileSplice = (
   options?: DatabaseTransactionOptions,
 ) => database.transact(
   operation,
-  textFileSplice(operation),
+  (snapshot) => stageTextFileSplice(snapshot, operation),
   options,
 );
 
-const textFileSplice = (operation: TextFileSpliceOperation) =>
-  (snapshot: DatabaseTransactionSnapshot) => snapshot.spliceText(
-    fileRelation,
-    ['text'] satisfies FileKey,
-    'textContent',
-    operation,
-  );
+export const stageTextFileSplice = (
+  snapshot: DatabaseTransactionSnapshot,
+  operation: TextFileSpliceOperation,
+) => snapshot.spliceText(
+  fileRelation,
+  ['text'] satisfies FileKey,
+  'textContent',
+  operation,
+);
 
 export const applyFolderOperation = (
   links: readonly FolderLink[],

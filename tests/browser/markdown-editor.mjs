@@ -76,6 +76,18 @@ try {
       await peerEditor.waitFor();
       await peerFrame.getByRole('list', { name: 'Present editors' }).locator('li').nth(1).waitFor();
       await frame.getByRole('list', { name: 'Present editors' }).locator('li').nth(1).waitFor();
+      const localNames = (await frame.getByRole('list', { name: 'Present editors' })
+        .locator('li').allTextContents()).map(displayName);
+      const peerNames = (await peerFrame.getByRole('list', { name: 'Present editors' })
+        .locator('li').allTextContents()).map(displayName);
+      assert.equal(new Set([...localNames, ...peerNames]).size, 1);
+      const participantLists = [frame, peerFrame].map((participantFrame) =>
+        participantFrame.getByRole('list', { name: 'Present editors' }).locator('li.participant'));
+      const colorClasses = (await Promise.all(participantLists.map((participants) =>
+        participants.evaluateAll((items) => items.map((item) => [...item.classList]
+          .find((className) => /^participant-\d$/u.test(className))))))).flat();
+      assert(colorClasses.every((colorClass) => colorClass !== undefined));
+      assert.equal(new Set(colorClasses).size, 1);
     }
     await editor.focus();
     const caretLayout = await editor.evaluate((root) => {
@@ -292,17 +304,23 @@ try {
       await frame.locator(
         `.editor-app:not([data-document-revision="${compositionBasisRevision}"])`,
       ).waitFor();
+      const concurrentRevision = await revision();
+      assert.notEqual(concurrentRevision, null);
       await client.send('Input.insertText', { text: 'Ω' });
-      await frame.locator('.editor-app[data-sync-state="unsaved"]').waitFor();
-      assert.equal(await editor.getAttribute('aria-readonly'), 'true');
-      assert.match(
-        await frame.locator('.visually-hidden').textContent() ?? '',
-        /composition reconciliation.*local draft retained/iu,
-      );
-      const localDraft = await editor.locator('.editor-text').textContent();
-      assert(localDraft?.includes('Ω'));
+      await waitForCommit(concurrentRevision);
+      assert.equal(await editor.getAttribute('aria-readonly'), 'false');
+      const mergedText = await editor.locator('.editor-text').textContent() ?? '';
+      assert(mergedText.includes('Ω'));
+      assert(mergedText.includes('Remote '));
+      await peerFrame.getByText(mergedText, { exact: true }).waitFor();
+      const resolvedSelection = {
+        start: Number(await editor.getAttribute('data-selection-start')),
+        end: Number(await editor.getAttribute('data-selection-end')),
+      };
+      assert(resolvedSelection.start >= 0 && resolvedSelection.start <= mergedText.length);
+      assert(resolvedSelection.end >= 0 && resolvedSelection.end <= mergedText.length);
       finalText = await peerEditor.locator('.editor-text').textContent() ?? '';
-      assert.equal(finalText.includes('Ω'), false);
+      assert.equal(finalText, mergedText);
       await peerPage.close();
       await frame.getByRole('list', { name: 'Present editors' }).locator('li').nth(1).waitFor({
         state: 'detached',
@@ -321,4 +339,8 @@ try {
 } finally {
   await browser?.close();
   await server.close();
+}
+
+function displayName(label) {
+  return label.replace(/^You · /u, '').trim();
 }

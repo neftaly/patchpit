@@ -60,7 +60,9 @@ void test('editor port parsing is total and retains only bounded protocol messag
     fc.nat({ max: 1_000_000 }),
     fc.nat({ max: 1_000_000 }),
     textValue,
-    (requestId, index, deleteCount, insert) => {
+    fc.constantFrom('committed', 'rejected', 'unknown'),
+    fc.constantFrom('resolved', 'unresolved'),
+    (requestId, index, deleteCount, insert, outcome, selection) => {
       assert.deepEqual(parseEditorAppMessage({
         type: 'splice',
         requestId,
@@ -68,6 +70,8 @@ void test('editor port parsing is total and retains only bounded protocol messag
         index,
         deleteCount,
         insert,
+        selectionAnchor: index,
+        selectionFocus: deleteCount,
       }), {
         type: 'splice',
         requestId,
@@ -75,6 +79,19 @@ void test('editor port parsing is total and retains only bounded protocol messag
         index,
         deleteCount,
         insert,
+        selectionAnchor: index,
+        selectionFocus: deleteCount,
+      });
+      assert.deepEqual(parseEditorHostMessage({
+        type: 'receipt',
+        requestId,
+        outcome,
+        selection,
+      }), {
+        type: 'receipt',
+        requestId,
+        outcome,
+        selection,
       });
     },
   ), { numRuns: 200 });

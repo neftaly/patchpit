@@ -1,4 +1,4 @@
-export const EDITOR_PROTOCOL_VERSION = 2;
+export const EDITOR_PROTOCOL_VERSION = 3;
 export const EDITOR_CONNECT_MESSAGE = 'patchpit.editor.connect';
 
 export type EditorParticipant = {
@@ -24,16 +24,20 @@ export type EditorDocumentSnapshot = {
   readonly participants: readonly EditorParticipant[];
 };
 
+export type EditorPublicationResult = {
+  readonly outcome: 'committed' | 'rejected' | 'unknown';
+  readonly selection: 'resolved' | 'unresolved';
+};
+
 export type EditorHostMessage = {
   readonly type: 'snapshot';
   readonly snapshot: EditorDocumentSnapshot;
 } | {
   readonly type: 'participants';
   readonly participants: readonly EditorParticipant[];
-} | {
+} | EditorPublicationResult & {
   readonly type: 'receipt';
   readonly requestId: string;
-  readonly outcome: 'committed' | 'rejected' | 'unknown';
 };
 
 export type EditorAppMessage = {
@@ -51,6 +55,8 @@ export type EditorAppMessage = {
   readonly index: number;
   readonly deleteCount: number;
   readonly insert: string;
+  readonly selectionAnchor: number;
+  readonly selectionFocus: number;
 };
 
 export const isEditorConnectMessage = (candidate: unknown) =>
@@ -85,6 +91,8 @@ export const parseEditorAppMessage = (candidate: unknown): EditorAppMessage | un
     || !validToken(candidate.revision)
     || !validOffset(candidate.index)
     || !validOffset(candidate.deleteCount)
+    || !validOffset(candidate.selectionAnchor)
+    || !validOffset(candidate.selectionFocus)
     || typeof candidate.insert !== 'string'
     || !candidate.insert.isWellFormed()) return undefined;
   return {
@@ -94,6 +102,8 @@ export const parseEditorAppMessage = (candidate: unknown): EditorAppMessage | un
     index: candidate.index,
     deleteCount: candidate.deleteCount,
     insert: candidate.insert,
+    selectionAnchor: candidate.selectionAnchor,
+    selectionFocus: candidate.selectionFocus,
   };
 };
 
@@ -104,7 +114,13 @@ export const parseEditorHostMessage = (candidate: unknown): EditorHostMessage | 
       && (candidate.outcome === 'committed'
         || candidate.outcome === 'rejected'
         || candidate.outcome === 'unknown')
-      ? { type: 'receipt', requestId: candidate.requestId, outcome: candidate.outcome }
+      && (candidate.selection === 'resolved' || candidate.selection === 'unresolved')
+      ? {
+          type: 'receipt',
+          requestId: candidate.requestId,
+          outcome: candidate.outcome,
+          selection: candidate.selection,
+        }
       : undefined;
   }
   if (candidate.type === 'participants') {

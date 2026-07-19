@@ -37,32 +37,25 @@ Acceptance evidence:
    held by a surviving replica; adapter liveness failure produces bounded,
    explicit evidence.
 
-### W4. Markdown acceptance application
+### W4. Markdown acceptance hardening
 
-Complete bounded multiplayer input batches for the delivered Markdown editor.
-Tarstate 0.6.3 now supplies the released source-native text-intent session and
-outcome contract needed to compose locally dependent splices before one
-publication. Integrate that lifecycle without adding a Patchpit offset
-transform, whole-text replacement, hidden Automerge writer, or distributed
-writer lock. New input must not enter a batch after publication starts; truly
-continuous dependent input across several publications remains a distinct
-source capability rather than a Patchpit workaround.
-
-Generalize the existing relative open request to document creation only when the
-Markdown app has a concrete creation story. The application remains detached
-from Repo, raw `DocHandle`, source handles, iframe state, credentials, and
-provider registries.
+Close the remaining executable gaps in the delivered multiplayer editor. Replace
+the bounded wait for a matching live projection with the proposed public
+exact-basis Automerge view once Tarstate releases it. Keep the application
+detached from Repo, raw `DocHandle`, source handles, iframe state, credentials,
+and provider registries.
 
 Acceptance evidence:
 
-1. Rapid locally dependent splices remain correctly anchored while a second
-   replica edits before, inside, and after their logical range.
-2. Composition completed across a concurrent remote change commits once and
-   converges without moving the input-method candidate window.
-3. Rejected, unknown, expired, and budget-exhausted intent streams retain
+1. An end-to-end browser case keeps rapid locally dependent splices correctly
+   anchored while a second replica edits before, inside, and after their logical
+   range.
+2. Rejected, unknown, expired, and budget-exhausted intent streams retain
    actionable unapplied evidence.
-4. A real creation flow establishes the smallest canonical document-creation
-   request and receipt, or creation remains explicitly deferred.
+3. Replacing a lifecycle during an in-flight prefix and retained suffix cancels
+   both exactly once, and late receipts cannot affect the replacement editor.
+4. Advancing the live handle beyond a committed result basis before result
+   handling still restores selection from that exact historical view.
 
 ### W5. Cross-source copy and move
 
@@ -246,4 +239,4 @@ product requirement.
 ### D3. Premature application contracts
 
 Do not add a general capability manifest, renderer registry, or app-data
-protocol before W4 supplies its concrete acceptance case.
+protocol before a concrete application supplies its acceptance case.

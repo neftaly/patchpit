@@ -87,18 +87,20 @@ against the text present when composition began.
 
 Remote durable changes received during composition do not replace the active
 composition or move its candidate window. After an unchanged composition ends,
-the queued canonical state is adopted. If both the composition and canonical
-text changed, the visible local draft is retained and editing pauses unless the
-completed intent can be reconciled through document-relative anchors.
+the pending canonical state is adopted. If both the composition and canonical
+text changed, its one completed intent joins the retained source-native session
+captured at composition start. Rejected, unknown, or unresolvable publication
+evidence retains the visible local draft and pauses editing.
 Closing the editor or losing writability during composition reports interruption;
 it does not publish a partial composition.
 
 ### E7. Participant identity and color
 
-Every mounted editor session receives a fresh opaque session ID. A short
-generated label and color are deterministic projections of that ID for the life
-of the session; they are not accounts or durable profile data. Reloading may
-produce a new identity.
+Every mounted editor session receives a fresh opaque session ID. A separate
+opaque browser-profile ID gives that person's sessions the same short generated
+label and color across tabs and reloads on one origin. Clearing site data or
+unavailable storage may replace it. Neither ID is an account, credential, or
+durable document fact; the raw profile ID stays host-side.
 
 Colors come from a fixed, host-approved palette with usable light and dark
 contrast. A finite palette cannot promise global uniqueness, so labels accompany
@@ -158,7 +160,8 @@ announcements.
 | Local in-progress input and composition | sandbox editor runtime | semantic splice intent |
 | Local selection while mounted | sandbox editor runtime | offset endpoints for the matching opaque revision |
 | Shared selection positions | Automerge Repo Presence | host converts offsets to/from Automerge cursors |
-| Session ID, generated label, and palette slot | Patchpit document-session runtime | detached participant projection |
+| Session ID | Patchpit document-session runtime | detached participant projection |
+| Browser-profile ID, generated label, and palette slot | Patchpit browser runtime | host-only ID; detached label/color projection |
 | Application files | immutable sandbox snapshot | cache mount |
 | Frame, port, authority, and cleanup | Patchpit host runtime | versioned MessagePort |
 
@@ -289,8 +292,9 @@ accessible count.
 
 ## Adversarial review
 
-1. **A generated color is not identity.** Palette collisions are expected;
-   generated labels and session IDs disambiguate them.
+1. **A generated color or short label is not identity.** Palette and label
+   collisions are possible; labels reduce color ambiguity, while opaque profile
+   and session IDs retain internal identity without becoming accounts.
 2. **Automerge heads are not user presence.** Durable history cannot reveal
    focus, selection, composition, or whether a replica is still online.
 3. **Presence offsets are stale immediately.** Only Automerge cursors cross the
@@ -359,16 +363,27 @@ than being implied by the current passing cases.
 
 ## Current integration boundary
 
-Tarstate 0.6.3 exposes a bounded text-intent session that accepts dependent
-semantic splices against one optimistic transaction snapshot, reconciles the
-batch with concurrent Automerge changes, validates it, and publishes it once.
-Per-segment and final outcomes, cancellation, cleanup, and the observed source
-basis are part of the released contract, so the previous upstream gate is gone.
+Tarstate 0.6.5 exposes a retained causal text-intent session. Each publication
+atomically captures its pending prefix, while dependent input accepted during
+publication remains a source-native suffix for the next publication. Patchpit
+keeps one such session per mounted editor document session and closes it with
+that lifecycle.
 
-Patchpit still has to choose and exercise the product-level batch boundary. It
-must stop accepting additions once publication begins and retain actionable
-evidence on rejection or an unknown outcome. Tarstate deliberately does not
-carry dependent intent across several publications; genuinely uninterrupted
-input through an in-flight publication would require that separate source
-capability. Patchpit must not approximate it with offset transforms, a hidden
-Automerge writer, a writer lock, or whole-document replacement.
+Each completed input carries its resulting anchor and focus to the host. The
+host captures typed text positions against the exact optimistic Tarstate
+snapshot, then uses only resolved offsets at the committed `afterBasis` to
+update Automerge presence. Automerge cursors, candidate branches, database
+services, and source handles remain outside the sandbox.
+
+Tarstate does not yet expose a public way to materialize an Automerge view at a
+reported basis. Patchpit therefore waits for the ordinary live projection to
+capture that exact basis, with a bounded timeout and fail-closed unresolved
+result. A generic public exact-basis Automerge view is the upstream capability
+that removes this timing dependency; Patchpit does not inspect adapter internals
+or approximate the historical view.
+
+The remaining work is end-to-end browser evidence for retained rapid input,
+non-success outcomes, lifecycle replacement during publication, and historical
+selection resolution once the exact-basis view lands. Patchpit must continue to
+avoid offset transforms, a hidden Automerge writer, a writer lock, or
+whole-document replacement.

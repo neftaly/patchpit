@@ -24,6 +24,7 @@ export {
   applyFolderOperation,
   commitFolderOperation,
   commitTextFileSplice,
+  stageTextFileSplice,
   type FolderOperation,
   type TextFileSpliceOperation,
 } from './operations.ts';

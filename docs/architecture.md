@@ -9,9 +9,10 @@
 | Selection, previews, and recent context history | Patchpit presence | Per-client Tarstate relational external-store database |
 | Pointer resize drafts and drag sessions | React component runtime | Local ephemeral state |
 | Live same-origin replica transport | Browser host | Deployment-scoped Automerge Repo BroadcastChannel adapter |
+| Generated participant display identity | Patchpit browser profile | Origin-local opaque ID; label/color projection only crosses the sandbox port |
 | Immutable launched application files | Sandbox boundary | Authority-scoped snapshot and cache mount |
 | Editor text and character identity | Canonical storage | Patchwork-compatible Automerge text document |
-| Editor focus, selection, and mounted participants | Automerge Repo Presence | Per-document ephemeral sessions and Automerge cursors |
+| Editor focus, selection, and mounted participants | Automerge Repo Presence | Per-document ephemeral sessions, profile identity, and Automerge cursors |
 | In-progress input and composition | Sandboxed editor runtime | Local EditContext session and semantic splice intents |
 | Editor authority and revision lifecycle | Patchpit root/content runtime | Host-owned document session and versioned MessagePort |
 
@@ -50,8 +51,11 @@ The Markdown editor has one host-owned document-session protocol. The app opens
 a relative document path, observes detached replacement projections, submits
 basis-bound semantic splices, and publishes local selection for the matching
 opaque revision. The host converts selection offsets to Automerge cursors and
-back. Locally dependent splices form an ordered queue; a concurrent replacement
-that cannot safely rebase that queue retains the draft and stops writes.
+back. Each mounted editor session owns one retained Tarstate text-intent session:
+an in-flight publication atomically captures its pending prefix while later
+dependent input remains a source-native suffix for the next publication.
+Rejected, unknown, or unresolvable results retain the local draft and stop
+writes; Patchpit never rebases numeric offsets itself.
 
 ## A5. Sandbox boundary
 

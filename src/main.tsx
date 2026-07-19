@@ -3,15 +3,20 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { loadBrowserDemoSeed } from './browser/demo-seed.ts';
 import { openBrowserSandboxHost, type BrowserSandboxHost } from './browser/sandbox-host.ts';
-import { createBrowserRootHost } from './browser/root-host.ts';
+import {
+  createBrowserRootHost,
+  loadBrowserDisplayIdentityId,
+} from './browser/root-host.ts';
 import { canonicalRootInvocationHash, parseRootInvocationHash } from './root/invocation.ts';
 
 const container = document.querySelector('#root');
 if (container === null) throw new Error('Missing root element.');
 const root = createRoot(container);
 const browserBaseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
+const displayIdentityId = await loadBrowserDisplayIdentityId();
 const rootHost = createBrowserRootHost({
   broadcastChannelName: `patchpit:${browserBaseUrl.href}`,
+  displayIdentityId,
   seed: (signal) => loadBrowserDemoSeed(
     browserBaseUrl,
     signal,

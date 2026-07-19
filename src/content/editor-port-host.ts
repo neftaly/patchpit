@@ -30,8 +30,11 @@ export const connectEditorFrame = (
   const postReceipt = (
     requestId: string,
     outcome: 'committed' | 'rejected' | 'unknown',
+    selection: 'resolved' | 'unresolved' = 'unresolved',
   ) => {
-    if (!closed) channel.port1.postMessage({ type: 'receipt', requestId, outcome });
+    if (!closed) channel.port1.postMessage({
+      type: 'receipt', requestId, outcome, selection,
+    });
   };
 
   const postSnapshot = (snapshot: EditorDocumentSnapshot) => {
@@ -103,8 +106,11 @@ export const connectEditorFrame = (
       index: message.index,
       deleteCount: message.deleteCount,
       insert: message.insert,
-    }).then((outcome) => {
-      postReceipt(message.requestId, outcome);
+    }, {
+      anchor: message.selectionAnchor,
+      focus: message.selectionFocus,
+    }).then((result) => {
+      postReceipt(message.requestId, result.outcome, result.selection);
     }, () => {
       postReceipt(message.requestId, 'unknown');
     });

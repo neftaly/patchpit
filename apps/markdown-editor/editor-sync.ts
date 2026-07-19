@@ -1,5 +1,7 @@
+import type { EditorPublicationResult } from '@patchpit/sandbox';
 import {
   applyTextSplice,
+  type TextSelection,
   type TextSpliceIntent,
 } from './input-session.ts';
 
@@ -15,11 +17,9 @@ export type EditorSyncState = {
 } | {
   readonly kind: 'applying';
   readonly nextSubmissionId: number;
-  readonly submissionId: number;
   readonly basisRevision: string;
   readonly expectedText: string;
-  readonly queued: readonly TextSpliceIntent[];
-  readonly outcome?: 'committed';
+  readonly pendingSubmissionIds: readonly number[];
 } | {
   readonly kind: 'blocked';
   readonly nextSubmissionId: number;
@@ -29,11 +29,11 @@ export type EditorSyncState = {
 export type EditorSyncEvent = {
   readonly type: 'intent';
   readonly operation: TextSpliceIntent;
+  readonly selection: TextSelection;
   readonly snapshot: ReadyEditorSnapshot;
-} | {
+} | EditorPublicationResult & {
   readonly type: 'receipt';
   readonly submissionId: number;
-  readonly outcome: 'committed' | 'rejected' | 'unknown';
 } | {
   readonly type: 'snapshot';
   readonly snapshot: ReadyEditorSnapshot;
@@ -47,6 +47,7 @@ export type EditorSyncCommand = {
   readonly submissionId: number;
   readonly revision: string;
   readonly operation: TextSpliceIntent;
+  readonly selection: TextSelection;
 } | {
   readonly type: 'adopt';
   readonly snapshot: ReadyEditorSnapshot;
@@ -68,87 +69,90 @@ export const transitionEditorSync = (
 ): EditorSyncTransition => {
   if (event.type === 'block') return blocked(state.nextSubmissionId, event.message);
   if (state.kind === 'blocked') return unchanged(state);
-  if (event.type === 'intent') {
-    if (state.kind === 'applying') {
-      return unchanged({ ...state, queued: [...state.queued, event.operation] });
-    }
-    return submit(state.nextSubmissionId, event.snapshot, event.operation, []);
-  }
-  if (event.type === 'receipt') {
-    if (state.kind !== 'applying' || event.submissionId !== state.submissionId) {
-      return unchanged(state);
-    }
-    if (event.outcome === 'rejected') {
-      return blocked(state.nextSubmissionId, 'Edit rejected; local draft retained.');
-    }
-    if (event.outcome === 'unknown') {
-      return blocked(state.nextSubmissionId, 'Write outcome unknown; local draft retained.');
-    }
-    return unchanged({ ...state, outcome: 'committed' });
-  }
+  if (event.type === 'intent') return submit(state, event);
+  if (event.type === 'receipt') return receiveReceipt(state, event);
   if (state.kind === 'ready') {
     return state.documentRevision === event.snapshot.revision
       ? unchanged(state)
-      : {
-          state: {
-            kind: 'ready',
-            nextSubmissionId: state.nextSubmissionId,
-            documentRevision: event.snapshot.revision,
-          },
-          commands: [{ type: 'adopt', snapshot: event.snapshot }],
-        };
+      : readyAt(state.nextSubmissionId, event.snapshot, true);
   }
-  if (state.outcome !== 'committed' || event.snapshot.revision === state.basisRevision) {
-    return unchanged(state);
-  }
-  const [next, ...remaining] = state.queued;
-  if (next !== undefined) {
-    return event.snapshot.text === state.expectedText
-      ? submit(state.nextSubmissionId, event.snapshot, next, remaining)
-      : blocked(
-          state.nextSubmissionId,
-          'Concurrent change needs draft reconciliation; local draft retained.',
-        );
-  }
-  return event.snapshot.text === state.expectedText
-    ? {
-        state: {
-          kind: 'ready',
-          nextSubmissionId: state.nextSubmissionId,
-          documentRevision: event.snapshot.revision,
-        },
-        commands: [],
-      }
-    : {
-        state: {
-          kind: 'ready',
-          nextSubmissionId: state.nextSubmissionId,
-          documentRevision: event.snapshot.revision,
-        },
-        commands: [{ type: 'adopt', snapshot: event.snapshot }],
-      };
+  if (state.pendingSubmissionIds.length > 0
+    || event.snapshot.revision === state.basisRevision) return unchanged(state);
+  return readyAt(
+    state.nextSubmissionId,
+    event.snapshot,
+    event.snapshot.text !== state.expectedText,
+  );
 };
 
 const submit = (
-  submissionId: number,
+  state: Exclude<EditorSyncState, { readonly kind: 'blocked' }>,
+  event: Extract<EditorSyncEvent, { readonly type: 'intent' }>,
+): EditorSyncTransition => {
+  const submissionId = state.nextSubmissionId;
+  const basisRevision = state.kind === 'applying'
+    ? state.basisRevision
+    : event.snapshot.revision;
+  const expectedText = applyTextSplice(
+    state.kind === 'applying' ? state.expectedText : event.snapshot.text,
+    event.operation,
+  );
+  return {
+    state: {
+      kind: 'applying',
+      nextSubmissionId: submissionId + 1,
+      basisRevision,
+      expectedText,
+      pendingSubmissionIds: [
+        ...(state.kind === 'applying' ? state.pendingSubmissionIds : []),
+        submissionId,
+      ],
+    },
+    commands: [{
+      type: 'submit',
+      submissionId,
+      revision: basisRevision,
+      operation: event.operation,
+      selection: event.selection,
+    }],
+  };
+};
+
+const receiveReceipt = (
+  state: EditorSyncState,
+  event: Extract<EditorSyncEvent, { readonly type: 'receipt' }>,
+): EditorSyncTransition => {
+  if (state.kind !== 'applying'
+    || !state.pendingSubmissionIds.includes(event.submissionId)) return unchanged(state);
+  if (event.outcome === 'rejected') {
+    return blocked(state.nextSubmissionId, 'Edit rejected; local draft retained.');
+  }
+  if (event.outcome === 'unknown') {
+    return blocked(state.nextSubmissionId, 'Write outcome unknown; local draft retained.');
+  }
+  if (event.selection === 'unresolved') {
+    return blocked(
+      state.nextSubmissionId,
+      'Edit committed, but merged selection is unavailable; local draft retained.',
+    );
+  }
+  return unchanged({
+    ...state,
+    pendingSubmissionIds: state.pendingSubmissionIds.filter((id) => id !== event.submissionId),
+  });
+};
+
+const readyAt = (
+  nextSubmissionId: number,
   snapshot: ReadyEditorSnapshot,
-  operation: TextSpliceIntent,
-  queued: readonly TextSpliceIntent[],
+  adopt: boolean,
 ): EditorSyncTransition => ({
   state: {
-    kind: 'applying',
-    nextSubmissionId: submissionId + 1,
-    submissionId,
-    basisRevision: snapshot.revision,
-    expectedText: applyTextSplice(snapshot.text, operation),
-    queued,
+    kind: 'ready',
+    nextSubmissionId,
+    documentRevision: snapshot.revision,
   },
-  commands: [{
-    type: 'submit',
-    submissionId,
-    revision: snapshot.revision,
-    operation,
-  }],
+  commands: adopt ? [{ type: 'adopt', snapshot }] : [],
 });
 
 const blocked = (nextSubmissionId: number, message: string): EditorSyncTransition => ({

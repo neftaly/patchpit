@@ -79,6 +79,7 @@ export type RootSeedFolder = {
 
 type RootOptions = {
   readonly repo: Repo;
+  readonly displayIdentityId?: string;
   readonly folders: readonly RootSeedFolder[];
   readonly initialContext: string;
   readonly documentContextFolderId?: string;
@@ -119,7 +120,7 @@ export const createRoot = async (options: RootOptions) => {
       folderHandles[index]?.url ?? unreachableFolder(folder.folderId),
     )),
   ]));
-  return openRootHandle(options.repo, rootHandle);
+  return openRootHandle(options.repo, rootHandle, undefined, options.displayIdentityId);
 };
 
 const fileMetadata = (file: RootSeedFile) => ({
@@ -130,6 +131,7 @@ const fileMetadata = (file: RootSeedFile) => ({
 export const openRoot = async (options: {
   readonly repo: Repo;
   readonly rootUrl: string;
+  readonly displayIdentityId?: string;
   readonly signal?: AbortSignal;
 }) => {
   if (!isValidAutomergeUrl(options.rootUrl)) throw new Error('Invalid Patchpit root URL');
@@ -140,6 +142,7 @@ export const openRoot = async (options: {
       findOptions(options.signal),
     ),
     options.signal,
+    options.displayIdentityId,
   );
 };
 
@@ -147,6 +150,7 @@ const openRootHandle = async (
   repo: Repo,
   rootHandle: DocHandle<AutomergeFolderDocument>,
   signal?: AbortSignal,
+  displayIdentityId: string = crypto.randomUUID(),
 ) => {
   const handles = new Map<string, DocHandle<object>>([[rootHandle.url, asObjectHandle(rootHandle)]]);
   const pendingHandles = new Map<string, Promise<DocHandle<object>>>();
@@ -328,7 +332,7 @@ const openRootHandle = async (
         const opened = await openAutomergeFileDatabase(handle, 'patchpit.editor-text');
         if (!opened.success) throw new Error('App document is invalid', { cause: opened.issues });
         let hub: EditorDocumentHub;
-        hub = createEditorDocumentHub(handle, opened.value, () => {
+        hub = createEditorDocumentHub(handle, opened.value, displayIdentityId, () => {
           const entry = editorHubs.get(resourceRef);
           if (entry?.promise === promise && entry.pendingConsumers > 0) return;
           if (entry?.promise === promise) editorHubs.delete(resourceRef);

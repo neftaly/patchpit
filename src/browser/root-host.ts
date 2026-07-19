@@ -8,8 +8,31 @@ import {
 } from '../root/runtime.ts';
 import type { RootInvocation } from '../root/invocation.ts';
 
+const DISPLAY_IDENTITY_STORAGE_KEY = 'patchpit.display-identity.v1';
+
+export const loadBrowserDisplayIdentityId = async () => {
+  const load = () => {
+    try {
+      const stored = localStorage.getItem(DISPLAY_IDENTITY_STORAGE_KEY);
+      if (isDisplayIdentityId(stored)) return stored;
+      const created = crypto.randomUUID();
+      localStorage.setItem(DISPLAY_IDENTITY_STORAGE_KEY, created);
+      const persisted = localStorage.getItem(DISPLAY_IDENTITY_STORAGE_KEY);
+      return isDisplayIdentityId(persisted) ? persisted : created;
+    } catch {
+      return crypto.randomUUID();
+    }
+  };
+  try {
+    return await navigator.locks.request(DISPLAY_IDENTITY_STORAGE_KEY, load);
+  } catch {
+    return load();
+  }
+};
+
 export const createBrowserRootHost = (options: {
   readonly broadcastChannelName?: string;
+  readonly displayIdentityId?: string;
   readonly repo?: Repo;
   readonly seed: (signal?: AbortSignal) => Promise<{
     readonly documentContextFolderId?: string;
@@ -18,6 +41,7 @@ export const createBrowserRootHost = (options: {
   }>;
 }) => {
   const ownsRepo = options.repo === undefined;
+  const displayIdentityId = options.displayIdentityId ?? crypto.randomUUID();
   const repo = options.repo ?? new Repo({
     network: [new BroadcastChannelNetworkAdapter({
       channelName: options.broadcastChannelName ?? 'patchpit',
@@ -41,13 +65,19 @@ export const createBrowserRootHost = (options: {
     const runtime = invocation.src === undefined
       ? await options.seed(signal).then((seed) => createRoot({
           repo,
+          displayIdentityId,
           folders: seed.folders,
           initialContext: seed.initialContext,
           ...(seed.documentContextFolderId === undefined
             ? {}
             : { documentContextFolderId: seed.documentContextFolderId }),
         }))
-      : await openRoot({ repo, rootUrl: invocation.src, ...(signal === undefined ? {} : { signal }) });
+      : await openRoot({
+          repo,
+          rootUrl: invocation.src,
+          displayIdentityId,
+          ...(signal === undefined ? {} : { signal }),
+        });
     if (closed || generation !== currentGeneration || signal?.aborted === true) {
       runtime.close();
       signal?.throwIfAborted();
@@ -71,3 +101,6 @@ export const createBrowserRootHost = (options: {
 
   return { close, open, release };
 };
+
+const isDisplayIdentityId = (value: string | null): value is string => value !== null
+  && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);

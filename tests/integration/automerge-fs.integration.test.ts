@@ -46,7 +46,7 @@ void test('owned text files commit basis-aware semantic splices', async () => {
     assert.equal(capabilities?.replace, undefined);
     assert.deepEqual(capabilities?.textSplice, {
       concurrency: 'merge-captured-intent',
-      dependentComposition: 'bounded-before-publish',
+      dependentComposition: 'retained-cross-publication',
       indexUnit: 'utf16-code-unit',
     });
     const operation = {

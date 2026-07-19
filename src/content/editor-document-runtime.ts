@@ -10,16 +10,15 @@ import {
   type PeerState,
 } from '@automerge/automerge-repo';
 import { mappedRelationRows, type AutomergeDatabase } from '@tarstate/automerge';
+import { canonicalizeJson } from '@tarstate/core';
 import type { SourceBasis } from '@tarstate/core/database';
 import type {
   EditorDocumentSnapshot,
   EditorParticipant,
+  EditorPublicationResult,
 } from '@patchpit/sandbox';
-import {
-  commitTextFileSplice,
-  fileRelation,
-  type TextFileSpliceOperation,
-} from '@patchpit/fs';
+import { fileRelation, type TextFileSpliceOperation } from '@patchpit/fs';
+import { createEditorTextPublisher } from './editor-text-publisher.ts';
 
 const TEXT_PATH = ['content'];
 const MAX_CAPTURED_REVISIONS = 16;
@@ -31,6 +30,7 @@ const PARTICIPANT_COLOR_COUNT = 8;
 const PRESENCE_HEARTBEAT_MS = 5_000;
 const PRESENCE_PEER_TTL_MS = 15_000;
 const MAX_EDITOR_TEXT_LENGTH = 16 * 1_024 * 1_024;
+const EXACT_BASIS_CAPTURE_WAIT_MS = 5_000;
 
 type PresenceSelection = {
   readonly anchor: Cursor;
@@ -38,6 +38,7 @@ type PresenceSelection = {
 };
 
 type PresenceSession = {
+  readonly displayIdentityId: string;
   readonly selection?: PresenceSelection;
 };
 
@@ -64,7 +65,8 @@ export type EditorDocumentSession = {
   readonly commitSplice: (
     revision: string,
     operation: TextFileSpliceOperation,
-  ) => Promise<'committed' | 'rejected' | 'unknown'>;
+    selection: { readonly anchor: number; readonly focus: number },
+  ) => Promise<EditorPublicationResult>;
   readonly getSnapshot: () => EditorDocumentSnapshot;
   readonly setSelection: (input: {
     readonly anchor: number;
@@ -84,12 +86,16 @@ export type EditorDocumentHub = {
 export const createEditorDocumentHub = (
   handle: DocHandle<object>,
   database: AutomergeDatabase,
+  displayIdentityId: string,
   onEmpty: () => void,
 ): EditorDocumentHub => {
   const presence = new Presence<EditorPresence>({ handle });
   const localSessions = new Map<string, PresenceSession>();
   const listeners = new Set<() => void>();
+  const sessionDisposers = new Set<() => void>();
   const captures = new Map<string, CapturedDocument>();
+  const capturesByBasis = new Map<string, CapturedDocument>();
+  const captureWaiters = new Map<string, Set<(capture: CapturedDocument | undefined) => void>>();
   let currentDocument = captureDocument(handle, database);
   let closed = false;
 
@@ -97,10 +103,19 @@ export const createEditorDocumentHub = (
     currentDocument = capture;
     if (capture.state !== 'ready') return;
     captures.set(capture.revision, capture);
+    const basisKey = canonicalizeJson(capture.basis);
+    capturesByBasis.set(basisKey, capture);
+    captureWaiters.get(basisKey)?.forEach((resolve) => { resolve(capture); });
+    captureWaiters.delete(basisKey);
     while (captures.size > MAX_CAPTURED_REVISIONS) {
       const oldest = captures.keys().next().value as string | undefined;
       if (oldest === undefined) break;
+      const evicted = captures.get(oldest);
       captures.delete(oldest);
+      if (evicted !== undefined
+        && capturesByBasis.get(canonicalizeJson(evicted.basis)) === evicted) {
+        capturesByBasis.delete(canonicalizeJson(evicted.basis));
+      }
     }
   };
   retainCapture(currentDocument);
@@ -126,12 +141,15 @@ export const createEditorDocumentHub = (
     emit();
   };
   const participants = (localSessionId: string): readonly EditorParticipant[] => {
-    const current = handle.doc();
+    const projectedDocument = currentDocument.state === 'ready'
+      ? currentDocument.document
+      : undefined;
     const local = [...localSessions.keys()].map((sessionId) => participant(
       sessionId,
       sessionId === localSessionId,
       localSessions.get(sessionId)?.selection,
-      current,
+      projectedDocument,
+      displayIdentityId,
     ));
     const remote = Object.values(presence.getPeerStates().value)
       .slice(0, MAX_REMOTE_PEERS)
@@ -139,7 +157,8 @@ export const createEditorDocumentHub = (
         remoteSessionId(peer.peerId, sessionId),
         false,
         session.selection,
-        current,
+        projectedDocument,
+        session.displayIdentityId,
       )));
     return [...local, ...remote].sort((left, right) =>
       Number(right.sessionId === localSessionId) - Number(left.sessionId === localSessionId)
@@ -155,8 +174,15 @@ export const createEditorDocumentHub = (
     presence.off('goodbye', presenceChanged);
     presence.off('pruning', presenceChanged);
     presence.stop();
+    sessionDisposers.forEach((dispose) => { dispose(); });
+    sessionDisposers.clear();
     localSessions.clear();
     captures.clear();
+    capturesByBasis.clear();
+    captureWaiters.forEach((waiters) => {
+      waiters.forEach((resolve) => { resolve(undefined); });
+    });
+    captureWaiters.clear();
     listeners.clear();
     database.close();
   };
@@ -166,11 +192,42 @@ export const createEditorDocumentHub = (
     if (localSessions.size >= MAX_LOCAL_SESSIONS) throw new Error('Editor document session limit reached');
     const sessionId = crypto.randomUUID();
     let sessionClosed = false;
-    localSessions.set(sessionId, {});
+    localSessions.set(sessionId, { displayIdentityId });
     broadcastSessions();
     const sessionListeners = new Set<() => void>();
     const notifySession = () => { sessionListeners.forEach((listener) => listener()); };
     listeners.add(notifySession);
+    const textPublisher = createEditorTextPublisher({
+      database,
+      maxTextLength: MAX_EDITOR_TEXT_LENGTH,
+      basisForRevision: (revision) => captures.get(revision)?.basis,
+      resolveSelection: async (basis, selection, signal) => {
+        const capture = await captureAtBasis(
+          basis,
+          capturesByBasis,
+          captureWaiters,
+          signal,
+          () => closed,
+        );
+        if (capture === undefined
+          || !validOffset(selection.anchor, capture.text)
+          || !validOffset(selection.focus, capture.text)) return false;
+        localSessions.set(sessionId, {
+          displayIdentityId,
+          selection: {
+            anchor: getCursor(capture.document, TEXT_PATH, selection.anchor),
+            focus: getCursor(capture.document, TEXT_PATH, selection.focus),
+          },
+        });
+        broadcastSessions();
+        return true;
+      },
+    });
+    const disposeTextPublisher = () => {
+      textPublisher.close();
+      sessionDisposers.delete(disposeTextPublisher);
+    };
+    sessionDisposers.add(disposeTextPublisher);
 
     return {
       getSnapshot: () => projectSnapshot(currentDocument, participants(sessionId), closed || sessionClosed),
@@ -186,6 +243,7 @@ export const createEditorDocumentHub = (
         if (!validOffset(anchor, capture.text)
           || !validOffset(focus, capture.text)) return;
         localSessions.set(sessionId, {
+          displayIdentityId,
           selection: {
             anchor: getCursor(capture.document, TEXT_PATH, anchor),
             focus: getCursor(capture.document, TEXT_PATH, focus),
@@ -193,17 +251,13 @@ export const createEditorDocumentHub = (
         });
         broadcastSessions();
       },
-      commitSplice: async (revision, operation) => {
-        if (closed || sessionClosed) return 'rejected';
-        const capture = captures.get(revision);
-        if (capture === undefined || !validSplice(operation, capture.text)) return 'rejected';
-        const options = { observedBasis: capture.basis };
-        const receipt = await commitTextFileSplice(database, operation, options);
-        return receipt.outcome;
-      },
+      commitSplice: (revision, operation, selection) => closed || sessionClosed
+        ? Promise.resolve({ outcome: 'rejected', selection: 'unresolved' })
+        : textPublisher.commit(revision, operation, selection),
       close: () => {
         if (sessionClosed) return;
         sessionClosed = true;
+        disposeTextPublisher();
         listeners.delete(notifySession);
         sessionListeners.clear();
         localSessions.delete(sessionId);
@@ -241,7 +295,8 @@ const captureDocument = (
     return { state: 'incomplete', message: 'Document exceeds the editor size limit.' };
   }
   const textWrite = database.capabilities(fileRelation).fields.textContent?.textSplice;
-  if (textWrite?.concurrency !== 'merge-captured-intent') {
+  if (textWrite?.concurrency !== 'merge-captured-intent'
+    || textWrite.dependentComposition !== 'retained-cross-publication') {
     return { state: 'read-only', message: 'Document is read-only.' };
   }
   return {
@@ -281,7 +336,9 @@ const remoteSessions = (
     const candidate = sessions[sessionId];
     if (!Object.hasOwn(sessions, sessionId) || !isSessionId(sessionId) || !isRecord(candidate)) continue;
     if (candidate.selection === undefined) {
-      projected.push([sessionId, {}]);
+      projected.push([sessionId, {
+        displayIdentityId: remoteDisplayIdentityId(candidate, sessionId),
+      }]);
       continue;
     }
     const selection = candidate.selection;
@@ -290,25 +347,29 @@ const remoteSessions = (
       && selection.anchor.length <= 1_024
       && typeof selection.focus === 'string'
       && selection.focus.length <= 1_024) {
-      projected.push([sessionId, { selection: {
-        anchor: selection.anchor as Cursor,
-        focus: selection.focus as Cursor,
-      } }]);
+      projected.push([sessionId, {
+        displayIdentityId: remoteDisplayIdentityId(candidate, sessionId),
+        selection: {
+          anchor: selection.anchor as Cursor,
+          focus: selection.focus as Cursor,
+        },
+      }]);
     }
   }
   return projected;
 };
 
 const remoteSessionId = (peerId: string, sessionId: string) =>
-  `remote-${hashSessionId(peerId.slice(0, 128)).toString(16).padStart(8, '0')}-${sessionId}`;
+  `remote-${hashIdentity(peerId.slice(0, 128)).toString(16).padStart(8, '0')}-${sessionId}`;
 
 const participant = (
   sessionId: string,
   local: boolean,
   selection: PresenceSelection | undefined,
   document: Doc<object> | undefined,
+  displayIdentityId: string,
 ): EditorParticipant => {
-  const identityHash = hashSessionId(sessionId);
+  const identityHash = hashIdentity(displayIdentityId);
   return {
     color: identityHash % PARTICIPANT_COLOR_COUNT,
     label: `User ${identityHash.toString(16).padStart(8, '0').slice(0, 4).toUpperCase()}`,
@@ -332,25 +393,19 @@ const resolveSelection = (
   }
 };
 
-const hashSessionId = (sessionId: string) => {
+const remoteDisplayIdentityId = (candidate: Readonly<Record<string, unknown>>, sessionId: string) =>
+  typeof candidate.displayIdentityId === 'string' && isSessionId(candidate.displayIdentityId)
+    ? candidate.displayIdentityId
+    : sessionId;
+
+const hashIdentity = (identity: string) => {
   let hash = 2_166_136_261;
-  for (const character of sessionId) {
+  for (const character of identity) {
     hash ^= character.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 16_777_619);
   }
   return hash >>> 0;
 };
-
-const validSplice = (operation: TextFileSpliceOperation, text: string) =>
-  operation.kind === 'file.text.splice'
-  && validOffset(operation.index, text)
-  && Number.isSafeInteger(operation.deleteCount)
-  && operation.deleteCount >= 0
-  && operation.index + operation.deleteCount <= text.length
-  && text.length - operation.deleteCount + operation.insert.length <= MAX_EDITOR_TEXT_LENGTH
-  && !bisectsSurrogatePair(text, operation.index)
-  && !bisectsSurrogatePair(text, operation.index + operation.deleteCount)
-  && operation.insert.isWellFormed();
 
 const validOffset = (offset: number, text: string) => Number.isSafeInteger(offset)
   && offset >= 0
@@ -367,3 +422,30 @@ const isSessionId = (value: string) =>
 
 const isRecord = (candidate: unknown): candidate is Readonly<Record<string, unknown>> =>
   typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate);
+
+const captureAtBasis = (
+  basis: SourceBasis,
+  captures: ReadonlyMap<string, CapturedDocument>,
+  waiters: Map<string, Set<(capture: CapturedDocument | undefined) => void>>,
+  signal: AbortSignal,
+  isClosed: () => boolean,
+): Promise<CapturedDocument | undefined> => {
+  const key = canonicalizeJson(basis);
+  const capture = captures.get(key);
+  if (capture !== undefined || isClosed() || signal.aborted) return Promise.resolve(capture);
+  return new Promise((resolve) => {
+    const pending = waiters.get(key) ?? new Set();
+    const settle = (value: CapturedDocument | undefined) => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', aborted);
+      pending.delete(settle);
+      if (pending.size === 0) waiters.delete(key);
+      resolve(value);
+    };
+    const aborted = () => { settle(undefined); };
+    const timeout = setTimeout(() => { settle(undefined); }, EXACT_BASIS_CAPTURE_WAIT_MS);
+    pending.add(settle);
+    waiters.set(key, pending);
+    signal.addEventListener('abort', aborted, { once: true });
+  });
+};

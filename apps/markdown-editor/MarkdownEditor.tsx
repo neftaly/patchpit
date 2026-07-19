@@ -5,6 +5,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import type { EditorPublicationResult } from '@patchpit/sandbox';
 import {
   attachEditContextInput,
   type AttachedEditContextInput,
@@ -30,6 +31,7 @@ export function MarkdownEditor({ client }: { readonly client: EditorClient }) {
   const latestSnapshot = useRef(snapshot);
   latestSnapshot.current = snapshot;
   const deferredAdoption = useRef<ReadyEditorSnapshot | undefined>(undefined);
+  const compositionBasis = useRef<ReadyEditorSnapshot | undefined>(undefined);
   const hasInputFocus = useRef(false);
   const [sync, setSync] = useState(createEditorSyncState);
   const syncRef = useRef(sync);
@@ -38,23 +40,33 @@ export function MarkdownEditor({ client }: { readonly client: EditorClient }) {
   const [session, setSession] = useState(() => createTextInputSession(
     snapshot.state === 'ready' ? snapshot.text : '',
   ));
+  const latestSession = useRef(session);
+  latestSession.current = session;
   const [hasDocument, setHasDocument] = useState(snapshot.state === 'ready');
   const [issue, setIssue] = useState<string>();
   const documentRevision = snapshot.state === 'ready' ? snapshot.revision : undefined;
   const documentText = snapshot.state === 'ready' ? snapshot.text : undefined;
-  const onSessionChange = useEffectEvent((next: TextInputSession) => { setSession(next); });
+  const onSessionChange = useEffectEvent((next: TextInputSession) => {
+    if (next.compositionBasisText !== undefined && compositionBasis.current === undefined) {
+      const current = latestSnapshot.current;
+      if (current.state === 'ready') {
+        compositionBasis.current = { revision: current.revision, text: current.text };
+      }
+    }
+    latestSession.current = next;
+    setSession(next);
+  });
   const adoptSnapshot = useEffectEvent((adopted: ReadyEditorSnapshot) => {
-    const current = latestSnapshot.current;
+    const current = client.getSnapshot();
     if (current.state !== 'ready' || current.revision !== adopted.revision) return;
-    const localSelection = current.participants.find(({ local }) => local)?.selection;
-    const fallback = Math.min(session.selection.end, current.text.length);
-    const selection = localSelection ?? { anchor: fallback, focus: fallback };
-    if (current.text === session.text
-      && selection.anchor === session.selection.start
-      && selection.focus === session.selection.end) {
+    const currentSession = latestSession.current;
+    if (current.text === currentSession.text) {
       setIssue(undefined);
       return;
     }
+    const localSelection = current.participants.find(({ local }) => local)?.selection;
+    const fallback = Math.min(currentSession.selection.end, current.text.length);
+    const selection = localSelection ?? { anchor: fallback, focus: fallback };
     if (input.current?.replace(current.text, {
       start: selection.anchor,
       end: selection.focus,
@@ -75,38 +87,44 @@ export function MarkdownEditor({ client }: { readonly client: EditorClient }) {
         adoptSnapshot(command.snapshot);
         return;
       }
-      void client.commitSplice(command.revision, command.operation).then((outcome) => {
+      const receiveResult = (result: EditorPublicationResult) => {
         dispatchSyncRef.current({
           type: 'receipt',
           submissionId: command.submissionId,
-          outcome,
+          ...result,
         });
-        const current = latestSnapshot.current;
+        const current = client.getSnapshot();
         if (current.state === 'ready') {
           dispatchSyncRef.current({ type: 'snapshot', snapshot: current });
         }
-      });
+      };
+      void client.commitSplice(command.revision, command.operation, command.selection).then(
+        receiveResult,
+        () => { receiveResult({ outcome: 'unknown', selection: 'unresolved' }); },
+      );
     });
   });
   dispatchSyncRef.current = dispatchSync;
-  const onSpliceIntent = useEffectEvent((intent: TextSpliceIntent) => {
-    if (deferredAdoption.current !== undefined) {
-      dispatchSync({
-        type: 'block',
-        message: 'Concurrent change needs composition reconciliation; local draft retained.',
-      });
-      return;
-    }
+  const onSpliceIntent = useEffectEvent((intent: TextSpliceIntent, next: TextInputSession) => {
     const current = latestSnapshot.current;
-    if (current.state === 'ready') {
+    const basis = compositionBasis.current
+      ?? (current.state === 'ready' ? { revision: current.revision, text: current.text } : undefined);
+    if (basis !== undefined) {
       setIssue(undefined);
-      dispatchSync({ type: 'intent', operation: intent, snapshot: current });
+      dispatchSync({
+        type: 'intent',
+        operation: intent,
+        selection: next.selection,
+        snapshot: basis,
+      });
     }
   });
   const onCompositionInterrupted = useEffectEvent(() => {
+    compositionBasis.current = undefined;
     dispatchSync({ type: 'block', message: 'Composition interrupted; local draft retained.' });
   });
   const onCompositionEnd = useEffectEvent((changed: boolean) => {
+    compositionBasis.current = undefined;
     const pending = deferredAdoption.current;
     deferredAdoption.current = undefined;
     if (!changed && pending !== undefined) adoptSnapshot(pending);
