@@ -22,7 +22,7 @@ using placement names as durable document metadata.
 Owned sources can apply `folder.link.rename`, `folder.link.unlink`, and
 `folder.link.alias` with `commitFolderOperation`. Reordering remains a distinct
 source-native identity-preserving move capability and is not emulated with
-delete/reinsert or private journal semantics.
+delete/reinsert or private ordering metadata.
 An alias is idempotent only when an existing source-local link ID has the same
 logical facts; a different value rejects as a collision. Unlink can carry the
 complete observed link facts and rejects if a concurrent write changed them.

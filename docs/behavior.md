@@ -7,9 +7,11 @@ discussion; they are not release numbers.
 
 The JSON URL hash selects the root Automerge filesystem document with `src` and
 accepts inert `sync` and opaque `delegation` values for document-host adapters.
-Missing `src` creates a root and canonicalizes the hash. Changing the
-recognized hash replaces the active root lifecycle and closes resources owned
-by the previous root.
+Missing `src` reopens the browser deployment's remembered default root. When no
+default exists, concurrent first loads converge on exactly one newly created
+demo root. Either path canonicalizes the hash. `New demo` always creates a new
+root identity. Changing the recognized hash replaces the active root lifecycle
+and closes resources owned by the previous root.
 Entering the browser's back/forward cache releases the active lifecycle;
 restoring that page reopens the root selected by the unchanged hash.
 Sandbox application hashes are app-owned and do not inherit root invocation
@@ -37,8 +39,9 @@ A folder is launchable when its direct links contain `index.html`. Launch
 materializes an immutable, exact, authority-scoped snapshot with every
 contributing source basis. Relative HTML, CSS, modules, and assets resolve from
 the mounted snapshot. Missing content, unresolved sources, an inexact graph,
-or a missing direct entry prevents launch. The same-origin runner accepts
-trusted applications only.
+or a missing direct entry prevents launch. Snapshot and mount preparation report
+a loading state; failure becomes an explicit unavailable state. The same-origin
+runner accepts trusted applications only.
 
 ## B4. Durable workspace and per-client presence
 
@@ -120,15 +123,20 @@ Incomplete sources do not masquerade as empty relations. Sandbox launch
 requires ready, current, exact input; source changes during materialization are
 retried within a fixed bound or fail explicitly.
 
-## B12. Replication and atomicity
+## B12. Replication, durability, and atomicity
 
 Automerge documents are canonical CRDT storage and merge ordinary concurrent
 changes. Live browser clients in the same origin and Patchpit deployment
-exchange document changes through a deployment-scoped BroadcastChannel. This is
-ephemeral replication, not persistence: a document becomes unavailable once no
-live or otherwise attached replica can supply it. A single attached source is
-the atomic write boundary. Work spanning multiple sources is non-atomic and
-exposes partial completion through nested receipts. Per-client
+exchange document changes through a deployment-scoped BroadcastChannel. The
+browser host also stores ready Automerge sources through the Repo IndexedDB
+adapter. A separate deployment-scoped catalogue stores only root pointers,
+bootstrap and retention evidence, and local-copy state; it is not canonical
+workspace storage and contains no document content, presence, `sync`, or
+`delegation` values. Unavailable, locally evicted, invalid, unsupported, and
+storage-failed roots are distinct outcomes and never silently seed a
+replacement. A single attached source is the atomic write boundary. Work
+spanning multiple sources is non-atomic and exposes partial completion through
+nested receipts. Per-client
 presence remains separate and does not derive from Automerge change history
 because clicks and focus can change interaction intent without changing a
 durable document.
@@ -277,3 +285,21 @@ documents. Stable-key collisions reject. Every attempted multi-source sequence
 returns complete, partial, failed, or unknown evidence; a copy whose document
 was created but could not be linked reports that document as orphaned. No
 partial result is described as rollback.
+
+## B15. Browser root recovery and retention
+
+Losing the hash reopens the remembered default root. A successful explicit open
+becomes the default only after it is ready. A failed open keeps the requested
+identity visible and offers Retry, New demo, and a bounded list of recent roots;
+losing both all local site data and every external root identity cannot be
+recovered automatically.
+
+Automatic collection is deliberately local and conservative. Only unchanged,
+disposable bootstrap roots with an exact stored source-and-head baseline are
+eligible. The current root, default root, retained or edited roots, sources
+shared with another retained graph, foreign roots, incomplete graphs, and any
+uncertain evidence are protected. Browser Web Locks exclude live lifecycles and
+concurrent collectors. Eviction records exact progress, is bounded and
+resumable, and removes only the proven-exclusive local sources. It stops local
+storage only; a page or peer that still holds a replica may legitimately supply
+the CRDT again.

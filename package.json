@@ -29,6 +29,7 @@
     "@automerge/automerge": "3.2.6",
     "@automerge/automerge-repo": "2.5.6",
     "@automerge/automerge-repo-network-broadcastchannel": "catalog:",
+    "@automerge/automerge-repo-storage-indexeddb": "catalog:",
     "@neftaly/editcontext-polyfill": "0.1.1",
     "@patchpit/artifacts": "workspace:*",
     "@patchpit/automerge-fs": "workspace:*",

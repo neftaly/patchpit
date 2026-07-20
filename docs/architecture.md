@@ -9,6 +9,8 @@
 | Selection, previews, and recent context history | Patchpit presence | Per-client Tarstate relational external-store database |
 | Pointer resize drafts and drag sessions | React component runtime | Local ephemeral state |
 | Live same-origin replica transport | Browser host | Deployment-scoped Automerge Repo BroadcastChannel adapter |
+| Durable Automerge chunks | Browser host | Official deployment-scoped Repo IndexedDB storage adapter |
+| Known roots, default root, and local retention evidence | Browser root catalogue | Parsed deployment-scoped IndexedDB records |
 | Generated participant display identity | Patchpit browser profile | Origin-local opaque ID; label/color projection only crosses the sandbox port |
 | Immutable launched application files | Sandbox boundary | Authority-scoped snapshot and cache mount |
 | Editor text and character identity | Canonical storage | Patchwork-compatible Automerge text document |
@@ -30,8 +32,22 @@ snapshots from a head-subscribed root view source. Only editor and
 canonical-writer boundaries that require source-native identity receive a
 host-owned document session.
 
-The browser root host owns the Repo it creates for its default transport. A
-Repo supplied by a container remains owned and shut down by that container.
+The browser root host owns one Repo for the page when it creates the default
+transport. Replacing a root closes the root-scoped runtime, subscriptions,
+presence, and mounts while retaining that page transport. A failed lookup
+rotates to a fresh Repo without waiting for a disconnected remote handle. Repo
+flushes are scoped to page-known ready sources so an incidental loading peer
+handle cannot block persistence. A Repo supplied by a container remains owned
+and shut down by that container.
+
+The browser root catalogue is discovery and retention infrastructure, not a
+second workspace. Its default and recent root pointers contain no document
+content, presence, `sync`, or `delegation`. Missing `src` is serialized under a
+deployment bootstrap lock so concurrent first pages converge. Root lifecycles
+hold shared per-root locks; collection requests the exclusive lock and verifies
+the exact stored source-and-head baseline before removing only exclusive local
+sources. An uncertain comparison retains data. Interrupted collection resumes
+from its recorded remaining source IDs.
 
 ## A2. Workspace update flow
 
@@ -77,7 +93,9 @@ URLs, not a Repo, document handle, source handle, credentials, or host iframe
 state. The trusted same-origin profile bridges interaction events so host editor
 selection follows interaction inside nested frames, and grants each app instance
 a narrow versioned MessagePort. Relative document requests are resolved within
-the app folder's authority; source handles remain host-only.
+the app folder's authority; source handles remain host-only. Service-worker
+registration is shared by page and deployment, while immutable cache mounts and
+their cleanup remain scoped to the root/application lifecycle that created them.
 
 ## A6. Source organization
 

@@ -11,7 +11,53 @@ import {
   type AutomergeTextFileDocument,
 } from '@patchpit/automerge-fs';
 import { projectFileResourceView } from '../../src/root/resource-view.ts';
+import {
+  BrowserRootOpenError,
+  createBrowserRootHost,
+} from '../../src/browser/root-host.ts';
+import { createMemoryRootCatalogue } from '../../src/browser/root-catalogue.ts';
+import { DEMO_BOOTSTRAP } from '../../src/root/document.ts';
 import { createRoot, openRoot } from '../../src/root/runtime.ts';
+
+const rootInvocation = (src: string) => ({ src, sync: ['wss://example.test'] as const });
+
+void test('browser root opening distinguishes invalid and unsupported canonical roots', async () => {
+  const repo = new Repo({ network: [] });
+  const invalid = repo.create({ unexpected: true });
+  const host = createBrowserRootHost({
+    catalogue: createMemoryRootCatalogue(),
+    repo,
+    seed: async () => { throw new Error('Seed must not replace an explicit root'); },
+  });
+  await assert.rejects(host.open(rootInvocation(invalid.url)), (error) =>
+    error instanceof BrowserRootOpenError && error.reason === 'invalid');
+
+  const runtime = await createRoot({ repo, initialContext: 'files.html', folders: [] });
+  runtime.close();
+  const rootHandle = await repo.find<AutomergeFolderDocument>(runtime.rootUrl);
+  rootHandle.change((document) => {
+    const metadata = document['@patchpit'] as unknown as {
+      root: { bootstrap?: { generation: number } };
+    };
+    if (metadata.root.bootstrap !== undefined) metadata.root.bootstrap.generation += 1;
+  });
+  await assert.rejects(host.open(rootInvocation(runtime.rootUrl)), (error) =>
+    error instanceof BrowserRootOpenError && error.reason === 'unsupported');
+
+  rootHandle.change((document) => {
+    const metadata = document['@patchpit'] as unknown as {
+      root: { format: number; bootstrap?: { generation: number } };
+    };
+    metadata.root.format = 2;
+    if (metadata.root.bootstrap !== undefined) {
+      metadata.root.bootstrap.generation = DEMO_BOOTSTRAP.generation;
+    }
+  });
+  await assert.rejects(host.open(rootInvocation(runtime.rootUrl)), (error) =>
+    error instanceof BrowserRootOpenError && error.reason === 'unsupported');
+  await host.close();
+  await repo.shutdown();
+});
 
 void test('Patchpit root reopens one live graph of Automerge folder documents', async () => {
   const repo = new Repo({ network: [] });
@@ -44,6 +90,7 @@ void test('Patchpit root reopens one live graph of Automerge folder documents', 
       }],
     }],
   });
+  assert.deepEqual(runtime.rootDeclaration, { format: 1, bootstrap: DEMO_BOOTSTRAP });
   const rows = (await runtime.resourceQuery.whenSettled()).rows;
   const workspace = rows.find(({ linkId, sourceId }) =>
     linkId === 'workspace' && sourceId === runtime.rootUrl)!;

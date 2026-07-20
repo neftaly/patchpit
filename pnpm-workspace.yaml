@@ -5,6 +5,7 @@ packages:
 catalog:
   '@babel/core': ^8.0.1
   '@automerge/automerge-repo-network-broadcastchannel': 2.5.6
+  '@automerge/automerge-repo-storage-indexeddb': 2.5.6
   '@rolldown/plugin-babel': ^0.2.3
   '@types/babel__core': ^7.20.5
   '@types/node': ^24.10.3
@@ -23,9 +24,9 @@ catalog:
 
 catalogs:
   tarstate:
-    '@tarstate/automerge': https://github.com/neftaly/tarstate/releases/download/v0.6.8/tarstate-automerge-0.6.8.tgz
-    '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.6.8/tarstate-core-0.6.8.tgz
-    '@tarstate/schema-tools': https://github.com/neftaly/tarstate/releases/download/v0.6.8/tarstate-schema-tools-0.6.8.tgz
+    '@tarstate/automerge': https://github.com/neftaly/tarstate/releases/download/v0.7.0/tarstate-automerge-0.7.0.tgz
+    '@tarstate/core': https://github.com/neftaly/tarstate/releases/download/v0.7.0/tarstate-core-0.7.0.tgz
+    '@tarstate/schema-tools': https://github.com/neftaly/tarstate/releases/download/v0.7.0/tarstate-schema-tools-0.7.0.tgz
 
 overrides:
   '@tarstate/core': catalog:tarstate

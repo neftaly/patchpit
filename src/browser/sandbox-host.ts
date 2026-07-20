@@ -7,6 +7,8 @@ import {
 
 export type BrowserSandboxHost = ReturnType<typeof openBrowserSandboxHost>;
 
+const workerRegistrations = new Map<string, Promise<ServiceWorkerRegistration>>();
+
 export const openBrowserSandboxHost = (baseUrl: string | URL) => {
   const base = new URL(baseUrl, window.location.origin);
   if (base.origin !== window.location.origin) {
@@ -15,7 +17,7 @@ export const openBrowserSandboxHost = (baseUrl: string | URL) => {
   const mounts = new Set<InstalledSandboxCacheMount>();
   let registration: Promise<ServiceWorkerRegistration> | undefined;
   let closed = false;
-  const ensureWorker = () => registration ??= registerSandboxWorker(base);
+  const ensureWorker = () => registration ??= acquireSandboxWorker(base);
 
   return {
     install: async (snapshot: SandboxCacheSnapshot, signal?: AbortSignal) => {
@@ -47,9 +49,21 @@ export const openBrowserSandboxHost = (baseUrl: string | URL) => {
   };
 };
 
-const registerSandboxWorker = async (baseUrl: URL) => {
-  if (!('serviceWorker' in navigator)) throw new Error('Service workers are unavailable');
+const acquireSandboxWorker = (baseUrl: URL) => {
   const { scope, script } = sandboxCacheServiceWorkerUrls(baseUrl);
+  const key = `${scope}\n${script}`;
+  const existing = workerRegistrations.get(key);
+  if (existing !== undefined) return existing;
+  const registration = registerSandboxWorker(scope, script);
+  workerRegistrations.set(key, registration);
+  void registration.catch(() => {
+    if (workerRegistrations.get(key) === registration) workerRegistrations.delete(key);
+  });
+  return registration;
+};
+
+const registerSandboxWorker = async (scope: string, script: string) => {
+  if (!('serviceWorker' in navigator)) throw new Error('Service workers are unavailable');
   const registration = await navigator.serviceWorker.register(script, {
     scope,
     type: 'module',

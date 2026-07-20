@@ -7,57 +7,25 @@ here.
 
 ## Near-term work goals
 
-### W2. Durable reopening
+### W6. Native identity-preserving reorder
 
-Persist and reopen the root Automerge document through the injectable Repo
-boundary. The root invocation's `src` remains document identity; missing `src`
-creates a root and canonicalizes the hash, while replacing `src` replaces the
-active root lifecycle.
-
-Persistence must distinguish a document that is unavailable, evicted, invalid,
-or unsupported from a newly created document. Before the implicit demo root is
-persisted, its root declaration must distinguish bootstrap generation from user
-document identity. Opening never silently reseeds, migrates, or replaces an old
-root; requesting a fresh demo creates new identity. Durable reopening must not
-persist per-client presence state or pass root `sync` and `delegation` values
-into sandbox application hashes.
-
-Acceptance evidence:
-
-1. A browser behavior case creates, closes, and reopens the same root identity
-   with its durable workspace and folder graph intact.
-2. Missing storage, local eviction, adapter failure, and invalid bytes produce
-   distinct evidence.
-3. Root replacement closes subscriptions, attachments, presence, and sandbox
-   mounts belonging to the previous lifecycle.
-4. A bootstrap version change reopens the old root unchanged with explicit
-   supported or unsupported evidence, while an explicit fresh bootstrap gets a
-   new root identity.
-5. Abrupt peer loss cannot indefinitely block readiness for documents already
-   held by a surviving replica; adapter liveness failure produces bounded,
-   explicit evidence.
-
-### W6. Identity-preserving reorder
-
-Add semantic link reorder after the generic source capability exists in
-Tarstate. Do not build a Patchpit-local transaction or identity workaround.
-
-Until Automerge exposes native object moves, the Automerge adapter records move
-lineage on the document root in `__automergeMoves`, keyed by source object
-identity. The physical list order remains readable by ordinary Patchwork
-clients, while Patchpit and Tarstate depend on the semantic move guarantee
-rather than the journal representation. Native identity-preserving moves,
-fallback semantic moves, and copy/relocate remain distinct capabilities.
+Add generic filesystem link reorder only after Automerge supplies a native
+identity-preserving object move and Tarstate exposes it as a source capability.
+Do not emulate it with delete/reinsert, private ordering metadata, or a
+Patchpit-local transaction. Application-specific rank or predecessor fields are
+ordinary schema data, not filesystem move compatibility. Copy/relocate and
+native physical move remain distinct capabilities.
 
 Acceptance evidence:
 
 1. Reorder preserves logical occurrence identity through local and merged edits.
-2. Ordinary Patchwork readers observe the resulting physical order while safely
-   ignoring private bookkeeping.
-3. Concurrent reorder, rename, insert, unlink, and duplicate-name cases converge
-   to equivalent source state and Tarstate evidence in every delivery order.
-4. A later native Automerge move can replace the fallback without changing the
-   Patchpit schema or semantic operation.
+2. Concurrent field edits retain the original Automerge object and its merge
+   behavior.
+3. Patchpit, Patchwork, and ordinary Automerge readers observe the same physical
+   order without a private interpretation protocol.
+4. Repeated and concurrent reorder, rename, insert, unlink, and duplicate-name
+   cases converge to equivalent source state and evidence in every delivery
+   order.
 
 ### W7. Authority-free runner origin
 
@@ -110,9 +78,10 @@ authority; untrusted catalogue applications depend on W7.
 
 ### W13. Document lifecycle and retention
 
-Keep unlinking, semantic tombstoning, stopping advertisement or sync, local
-eviction, and host garbage collection distinct. Receipts state the host-local
-action performed and never promise global erasure of replicated data.
+Add explicit semantic tombstoning, advertisement or sync withdrawal, and host
+retention operations without treating unlinking as any of them. Receipts state
+the host-local action performed and never promise global erasure of replicated
+data.
 
 ### W14. Portable import and export
 

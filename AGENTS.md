@@ -69,11 +69,12 @@ and fetched bytes separate.
 
 ## Automerge Moves
 
-Until Automerge exposes native object moves, record semantic moves on document
-roots as `__automergeMoves` keyed by `getObjectId`. Treat this as private
-fallback bookkeeping: schemas, queries, refs, and apps depend on semantic move
-guarantees rather than the journal format. Copy/relocate and identity-preserving
-native moves are distinct capability levels.
+Do not emulate an Automerge object move with delete/reinsert or private ordering
+metadata. Generic filesystem reorder waits for a native identity-preserving
+Automerge move so Tarstate-aware and ordinary readers observe the same physical
+order. Application-specific order belongs in an explicit logical schema and is
+not filesystem move compatibility. Copy/relocate and native physical move remain
+distinct capabilities.
 
 ## Decomplection
 

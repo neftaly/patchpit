@@ -40,7 +40,15 @@ try {
       if (event.data?.type === 'sandbox-compat:report') window.__sandboxCompatReport = event.data;
     });
   });
-  await page.goto(`${url}#${JSON.stringify({ delegation: 'https://example.com/delegation' })}`);
+  const initialUrl = `${url}#${JSON.stringify({ delegation: 'https://example.com/delegation' })}`;
+  const concurrentPage = await context.newPage();
+  await Promise.all([page.goto(initialUrl), concurrentPage.goto(initialUrl)]);
+  await Promise.all([
+    page.getByRole('button', { name: 'workspace.am' }).waitFor(),
+    concurrentPage.getByRole('button', { name: 'workspace.am' }).waitFor(),
+  ]);
+  assert.equal(rootSource(page.url()), rootSource(concurrentPage.url()));
+  await concurrentPage.close();
   await proveWorkspaceBehavior(page);
   const reportHandle = await page.waitForFunction(() => window.__sandboxCompatReport, undefined, {
     timeout: 2_000,
@@ -56,6 +64,8 @@ try {
   await proveFolderAppLaunch(page);
   await proveRootReplacementLifecycle(page);
   await provePageCacheLifecycle(page);
+  await proveDurableRootRecovery(page);
+  await proveDisposableRootRetention(page);
   console.log(JSON.stringify({ cases: report.cases.length, entryHeaders: 'pass', mode: development ? 'dev' : 'preview', workspace: 'pass' }, null, 2));
 } finally {
   await browser?.close();
@@ -151,6 +161,7 @@ async function proveWorkspaceBehavior(page) {
   await tab('relative-file.svg').click({ button: 'middle' });
   assert.equal(await tab('relative-file.svg').count(), 0);
   await peerRelativeTab.waitFor({ state: 'detached' });
+  await peerPage.close();
   assert.equal(await tab('sandbox-compat / index.html').getAttribute('data-selected'), 'true');
   const unavailableResource = page.getByRole('button', {
     name: 'ghostscript-tiger-web.svg',
@@ -560,10 +571,28 @@ async function proveRootReplacementLifecycle(page) {
     location.hash = JSON.stringify({ ...invocation, delegation: 'https://example.com/replaced' });
   });
   await page.waitForFunction((oldCache) => caches.has(oldCache).then((present) => !present), previousCache);
+  await waitForWorkspaceOrThrow(page);
   await page.locator('button.resource', { hasText: 'sandbox-compat' }).waitFor();
   assert.equal(await page.locator('.sandbox-app').count(), 0);
   await page.locator('button.resource', { hasText: 'sandbox-compat' }).click();
-  await page.locator('.sandbox-app').waitFor();
+  await page.locator('.sandbox-app').waitFor().catch(async (cause) => {
+    throw new Error(JSON.stringify({
+      alerts: await page.getByRole('alert').allTextContents(),
+      resources: await page.locator('button.resource').allTextContents(),
+      sandboxCaches: await sandboxCacheNames(page),
+      sandboxStage: await page.locator('[data-sandbox-stage]').getAttribute('data-sandbox-stage'),
+      selectedTabs: await page.locator('.tab[data-selected="true"]').allTextContents(),
+      serviceWorkers: await page.evaluate(() => navigator.serviceWorker.getRegistrations().then((registrations) =>
+        registrations.map(({ active, installing, scope, waiting }) => ({
+          active: active?.state,
+          installing: installing?.state,
+          scope,
+          waiting: waiting?.state,
+        })))),
+      tabs: await page.locator('.tab').allTextContents(),
+      workspace: await page.locator('.workspace').getAttribute('data-state'),
+    }), { cause });
+  });
   await page.waitForFunction(() => window.__sandboxCompatReport, undefined, { timeout: 2_000 });
   assert.notEqual(await page.locator('.sandbox-app').getAttribute('src'), previousFrameSrc);
   const currentCache = await sandboxCacheNameForFrame(page);
@@ -582,6 +611,84 @@ async function provePageCacheLifecycle(page) {
     window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
   });
   await page.locator('button.resource', { hasText: 'workspace.am' }).waitFor();
+}
+
+async function proveDurableRootRecovery(page) {
+  const expectedRoot = rootSource(page.url());
+  await page.reload();
+  await waitForWorkspaceOrThrow(page);
+  assert.equal(rootSource(page.url()), expectedRoot);
+  await page.evaluate(() => { location.hash = ''; });
+  await waitForWorkspaceOrThrow(page);
+  await page.waitForFunction((rootUrl) => {
+    const invocation = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+    return invocation.src === rootUrl;
+  }, expectedRoot);
+  assert.equal(rootSource(page.url()), expectedRoot);
+}
+
+async function waitForWorkspaceOrThrow(page) {
+  const workspace = page.getByRole('button', { name: 'workspace.am' });
+  const alert = page.getByRole('alert');
+  await Promise.race([workspace.waitFor(), alert.waitFor()]);
+  if (await alert.count() > 0) throw new Error(`Root reopening failed: ${await alert.allTextContents()}`);
+  await workspace.waitFor();
+}
+
+async function proveDisposableRootRetention(page) {
+  const editedRoot = rootSource(page.url());
+  await openUnavailableRoot(page);
+  await page.getByRole('button', { name: 'New demo' }).click();
+  await waitForWorkspaceOrThrow(page);
+  const disposableRoot = rootSource(page.url());
+  assert.notEqual(disposableRoot, editedRoot);
+
+  await openUnavailableRoot(page);
+  await page.getByRole('button', { name: 'New demo' }).click();
+  await waitForWorkspaceOrThrow(page);
+  assert.notEqual(rootSource(page.url()), disposableRoot);
+
+  await page.waitForFunction(async ({ disposableRoot, editedRoot }) => {
+    const request = indexedDB.open(`patchpit.roots.v1:${location.origin}/`);
+    const database = await new Promise((resolve, reject) => {
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    try {
+      const transaction = database.transaction('roots');
+      const store = transaction.objectStore('roots');
+      const read = (rootUrl) => new Promise((resolve, reject) => {
+        const lookup = store.get(rootUrl);
+        lookup.onerror = () => reject(lookup.error);
+        lookup.onsuccess = () => resolve(lookup.result);
+      });
+      const [disposable, edited] = await Promise.all([read(disposableRoot), read(editedRoot)]);
+      return disposable?.localCopy?.state === 'evicted' && edited?.retention === 'retained';
+    } finally {
+      database.close();
+    }
+  }, { disposableRoot, editedRoot });
+
+  await openUnavailableRoot(page);
+  await page.getByRole('button', { name: new RegExp(disposableRoot) }).click();
+  await page.getByRole('alert').getByText('Workspace root was locally evicted.').waitFor();
+}
+
+async function openUnavailableRoot(page) {
+  await page.evaluate(() => {
+    const invocation = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+    location.hash = JSON.stringify({
+      ...invocation,
+      src: 'automerge:4NMNnkMhL8jXrdJ9jamS58PAVdXu',
+    });
+  });
+  await page.getByRole('alert').getByText('Workspace root unavailable.').waitFor();
+}
+
+function rootSource(url) {
+  const invocation = JSON.parse(decodeURIComponent(new URL(url).hash.slice(1)));
+  assert.equal(typeof invocation.src, 'string');
+  return invocation.src;
 }
 
 function sandboxCacheNames(page) {

@@ -16,8 +16,8 @@ let browser;
 
 try {
   browser = await chromium.launch({ executablePath: chromiumPath });
-  const context = await browser.newContext();
   for (const mode of ['default', 'forced-polyfill']) {
+    const context = await browser.newContext();
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => { errors.push(error.message); });
@@ -334,6 +334,7 @@ try {
     await reopenedFrame.getByText(finalText, { exact: false }).waitFor();
     assert.deepEqual(errors, []);
     await page.close();
+    await context.close();
   }
   console.log(JSON.stringify({ modes: ['default', 'forced-polyfill'], markdownEditor: 'pass' }, null, 2));
 } finally {

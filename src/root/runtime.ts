@@ -49,8 +49,22 @@ import {
   createAutomergeResourceViewSource,
   type ResourceViewSource,
 } from './resource-view.ts';
+import {
+  createAutomergeRootDocument,
+  readRootDeclaration,
+} from './document.ts';
 
 const WORKSPACE_LINK_ID = 'workspace';
+
+export class RootRuntimeOpenError extends Error {
+  readonly reason: 'incomplete' | 'invalid' | 'unsupported';
+
+  constructor(reason: RootRuntimeOpenError['reason'], cause?: unknown) {
+    super(`Patchpit root is ${reason}`, cause === undefined ? {} : { cause });
+    this.name = 'RootRuntimeOpenError';
+    this.reason = reason;
+  }
+}
 
 export type RootSeedFile = {
   readonly linkId: string;
@@ -89,17 +103,23 @@ type RootOptions = {
   readonly folders: readonly RootSeedFolder[];
   readonly initialContext: string;
   readonly documentContextFolderId?: string;
+  readonly onDocumentCreated?: (sourceId: AutomergeUrl) => void;
 };
 
 export const createRoot = async (options: RootOptions) => {
-  const folderHandles = options.folders.map((folder) => options.repo.create(createAutomergeFolderDocument(
+  const createDocument = <Document extends object>(document: Document) => {
+    const handle = options.repo.create(document);
+    options.onDocumentCreated?.(handle.url);
+    return handle;
+  };
+  const folderHandles = options.folders.map((folder) => createDocument(createAutomergeFolderDocument(
     folder.name,
     folder.files.map((file): FolderLink => ({
       linkId: file.linkId,
       name: file.name,
       order: file.order,
       resourceRef: file.resourceUrl
-        ?? options.repo.create(file.text === undefined
+        ?? createDocument(file.text === undefined
           ? createAutomergeBinaryFileDocument(file.bytes, fileMetadata(file))
           : createAutomergeTextFileDocument(file.text, fileMetadata(file))).url,
       typeHint: 'file',
@@ -112,11 +132,11 @@ export const createRoot = async (options: RootOptions) => {
   if (options.documentContextFolderId !== undefined && documentContext === undefined) {
     throw new Error('Initial document context folder is unavailable');
   }
-  const workspace = options.repo.create(createWorkspaceDocument(
+  const workspace = createDocument(createWorkspaceDocument(
     options.initialContext,
     documentContext === undefined ? undefined : appContentUrl(documentContext),
   ));
-  const rootHandle = options.repo.create(createAutomergeFolderDocument('patchpit', [
+  const rootHandle = createDocument(createAutomergeRootDocument('patchpit', [
     folderLink(WORKSPACE_LINK_ID, 'workspace.am', 0, 'file', workspace.url),
     ...options.folders.map((folder, index) => folderLink(
       folder.folderId,
@@ -184,9 +204,15 @@ const openRootHandle = async (
   };
   const rootOpened = await openAutomergeFolderDatabase(asObjectHandle(rootHandle));
   if (!rootOpened.success) {
-    throw new Error('Patchpit root folder is unavailable', { cause: rootOpened.issues });
+    throw new RootRuntimeOpenError('invalid', rootOpened.issues);
   }
   const filesystem = rootOpened.value;
+  const declaredRoot = readRootDeclaration(rootHandle.doc());
+  if (declaredRoot.state === 'invalid' || declaredRoot.state === 'unsupported') {
+    filesystem.close();
+    throw new RootRuntimeOpenError(declaredRoot.state);
+  }
+  const rootDeclaration = declaredRoot.state === 'ready' ? declaredRoot.value : undefined;
   const openFolderSource = async ({ sourceId, signal: openSignal }: {
     readonly sourceId: string;
     readonly signal: AbortSignal;
@@ -243,17 +269,19 @@ const openRootHandle = async (
     handles.set(workspaceLink.resourceRef, asObjectHandle(workspaceHandle));
   } catch (error) {
     closeResourceRuntime();
-    throw error;
+    throw error instanceof RootRuntimeOpenError
+      ? error
+      : new RootRuntimeOpenError('incomplete', error);
   }
   const workspaceRuntime = await openWorkspaceRuntime(workspaceHandle).catch((error: unknown) => {
     closeResourceRuntime();
-    throw error;
+    throw new RootRuntimeOpenError('invalid', error);
   });
   const initialWorkspace = workspaceRuntime.getSnapshot();
   if (initialWorkspace.state !== 'ready') {
     workspaceRuntime.close();
     closeResourceRuntime();
-    throw new Error('Patchpit workspace is unavailable');
+    throw new RootRuntimeOpenError('incomplete');
   }
   const initialPaneIds = paneIdsInLayoutOrder(initialWorkspace.workspace);
   const initialContextPane = initialWorkspace.workspace.nodes[initialPaneIds.at(-1) ?? ''];
@@ -436,6 +464,7 @@ const openRootHandle = async (
   ]]);
   return {
     rootUrl: rootHandle.url,
+    rootDeclaration,
     resourceViews,
     resourceQuery,
     workspaceRuntime,

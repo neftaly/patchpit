@@ -324,20 +324,24 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
   readonly title: string;
 }) {
   const [installation, setInstallation] = useState<{
-    readonly state: 'loading' | 'unavailable';
+    readonly state: 'loading';
+    readonly stage: 'snapshot' | 'mount';
+  } | {
+    readonly state: 'unavailable';
   } | {
     readonly state: 'ready';
     readonly frameAttributes: SandboxFrameAttributes;
-  }>({ state: 'loading' });
+  }>({ state: 'loading', stage: 'snapshot' });
   const removeInteractionListeners = useRef<() => void>(() => undefined);
   const closeEditorPort = useRef<() => void>(() => undefined);
   useEffect(() => {
     removeInteractionListeners.current();
     removeInteractionListeners.current = () => undefined;
     const controller = new AbortController();
-    setInstallation({ state: 'loading' });
+    setInstallation({ state: 'loading', stage: 'snapshot' });
     const mountPromise = contentRuntime.createAppSnapshot(rootFolderRef, controller.signal).then(async (snapshot) => {
       if (snapshot.state !== 'ready') throw new Error('Sandbox app snapshot is unavailable');
+      if (!controller.signal.aborted) setInstallation({ state: 'loading', stage: 'mount' });
       return sandboxHost.install({
         entry: snapshot.entry,
         files: snapshot.files.map((file) => ({
@@ -366,7 +370,9 @@ function SandboxApp({ contentRuntime, onInteract, rootFolderRef, sandboxHost, ti
     };
   }, [contentRuntime, rootFolderRef, sandboxHost]);
   return installation.state !== 'ready'
-    ? installation.state === 'unavailable' ? <p role="alert">App unavailable.</p> : null
+    ? installation.state === 'unavailable'
+      ? <p role="alert">App unavailable.</p>
+      : <p data-sandbox-stage={installation.stage} role="status">Loading app…</p>
     : (
         <iframe
           className="sandbox-app"
