@@ -1,7 +1,6 @@
 import {
   TarstateParseError,
   type Artifact,
-  type ArtifactKind,
   type ArtifactRef,
   type ParseResult,
 } from '@tarstate/core';
@@ -115,8 +114,11 @@ export const workspacePresenceSourceMetadata = {
   schemas: workspacePresenceAttachment.artifacts,
 } as const;
 
-function artifact<Type extends Artifact>(reference: ArtifactRef, kind: ArtifactKind): Type {
-  return value(catalog.artifact(reference, kind)) as Type;
+function artifact<Type extends Pick<Artifact, 'kind'>>(
+  reference: ArtifactRef,
+  kind: Type['kind'],
+): Type {
+  return value(catalog.artifact(reference, kind)) as unknown as Type;
 }
 
 function attachment(
